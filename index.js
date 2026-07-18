@@ -85,31 +85,37 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             messages.push({ role: 'assistant', content: prefill });
             const MAX_STEPS = 5;
             let step = 0;
+            let accumulatedTrace = "";
             while (step < MAX_STEPS) {
                 step++;
                 onEvent({ type: 'think_start' });
                 try {
                     const response = await this.adapter.generateCompletion(messages, 1500, true, (text, reasoning) => {
-                        const fullText = `<agent_cot>\n${text}`;
+                        const fullText = accumulatedTrace + `<agent_cot>\n${text}`;
                         onEvent({ type: 'stream_chunk', text: fullText, reasoning });
                     });
                     onEvent({ type: 'think_end', data: response.reasoning });
-                    const text = `<agent_cot>\n${response.text}`;
-                    messages.push({ role: 'assistant', content: response.text }); // Tiếp tục ngữ cảnh thì chỉ cần response.text? Không, LLM đã coi prefill là một phần của câu trả lời trước, nhưng ở đây Kaiz loop thêm message mới. Tốt nhất push text thô của LLM hoặc cả cụm.
-                    // Thật ra ST API sẽ tính prefill là 1 phần. Nhưng messages.push content response.text thôi là đủ vì step sau LLM sẽ thấy: prefill -> response -> user...
-                    const toolCalls = this.parseToolCalls(response.text);
+                    const text = response.text;
+                    messages.push({ role: 'assistant', content: text });
+                    const toolCalls = this.parseToolCalls(text);
                     if (toolCalls.length === 0) {
-                        let cleanText = text.trim();
+                        accumulatedTrace += `<agent_cot>\n${text}`;
+                        let cleanText = accumulatedTrace.trim();
                         if (!cleanText && response.reasoning)
-                            cleanText = text;
+                            cleanText = accumulatedTrace;
                         onEvent({ type: 'final_answer', text: cleanText });
                         break;
                     }
+                    accumulatedTrace += `<agent_cot>\n${text}\n`;
                     let toolResultsText = "";
                     for (const call of toolCalls) {
                         onEvent({ type: 'tool_call', data: call });
+                        accumulatedTrace += `<div style="color:#e67e22; font-size:12px; margin-top:5px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${call.name}</b>...</div>\n`;
+                        onEvent({ type: 'stream_chunk', text: accumulatedTrace });
                         const result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
                         onEvent({ type: 'tool_result', data: { name: call.name, result } });
+                        accumulatedTrace += `<div style="color:#2ecc71; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-check"></i> Tool finished.</div>\n`;
+                        onEvent({ type: 'stream_chunk', text: accumulatedTrace });
                         toolResultsText += `<tool_result name="${call.name}">\n${result.content}\n</tool_result>\n`;
                     }
                     messages.push({ role: 'user', content: toolResultsText });
@@ -1085,22 +1091,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const historyMsgs = stateManager.currentChatId ? await stateManager.db.getMessages(stateManager.currentChatId) : [];
                 await loop.run(historyMsgs, async (event) => {
                     if (event.type === 'stream_chunk') {
-                        if (event.reasoning) {
-                            agentContentBox.html(`<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div><div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating tools...</div>`);
+                        let htmlToRender = event.text ? formatMessage(event.text, false) : '';
+                        if (event.reasoning && !event.text) {
+                            htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
                         }
-                        else if (event.text) {
-                            agentContentBox.html(formatMessage(event.text, false));
+                        if (!htmlToRender) {
+                            htmlToRender = `<div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating...</div>`;
                         }
+                        agentContentBox.html(htmlToRender);
                     }
                     else if (event.type === 'final_answer') {
                         agentContentBox.html(formatMessage(event.text || '', true));
                         fullAgentResponse = event.text || '';
-                    }
-                    else if (event.type === 'tool_call') {
-                        agentContentBox.html(`<div style="color:#e67e22; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${event.data.name}</b>...</div>`);
-                    }
-                    else if (event.type === 'tool_result') {
-                        agentContentBox.append(`<div style="color:#2ecc71; font-size:12px; margin-top:5px;"><i class="fa-solid fa-check"></i> Tool finished.</div>`);
                     }
                     else if (event.type === 'error') {
                         agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);

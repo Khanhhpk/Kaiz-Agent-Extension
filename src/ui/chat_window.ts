@@ -191,18 +191,17 @@ export class ChatWindowUI {
 
             await loop.run(historyMsgs, async (event) => {
                 if (event.type === 'stream_chunk') {
-                    if (event.reasoning) {
-                        agentContentBox.html(`<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div><div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating tools...</div>`);
-                    } else if (event.text) {
-                        agentContentBox.html(formatMessage(event.text, false));
+                    let htmlToRender = event.text ? formatMessage(event.text, false) : '';
+                    if (event.reasoning && !event.text) {
+                        htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
                     }
+                    if (!htmlToRender) {
+                        htmlToRender = `<div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating...</div>`;
+                    }
+                    agentContentBox.html(htmlToRender);
                 } else if (event.type === 'final_answer') {
                     agentContentBox.html(formatMessage(event.text || '', true));
                     fullAgentResponse = event.text || '';
-                } else if (event.type === 'tool_call') {
-                    agentContentBox.html(`<div style="color:#e67e22; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${event.data.name}</b>...</div>`);
-                } else if (event.type === 'tool_result') {
-                    agentContentBox.append(`<div style="color:#2ecc71; font-size:12px; margin-top:5px;"><i class="fa-solid fa-check"></i> Tool finished.</div>`);
                 } else if (event.type === 'error') {
                     agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
                     fullAgentResponse = `[Error] ${event.text}`;

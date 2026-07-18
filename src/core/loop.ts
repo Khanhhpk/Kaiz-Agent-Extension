@@ -97,6 +97,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         const MAX_STEPS = 5;
         let step = 0;
+        let accumulatedTrace = "";
 
         while (step < MAX_STEPS) {
             step++;
@@ -104,30 +105,38 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             
             try {
                 const response = await this.adapter.generateCompletion(messages, 1500, true, (text, reasoning) => {
-                    const fullText = `<agent_cot>\n${text}`;
+                    const fullText = accumulatedTrace + `<agent_cot>\n${text}`;
                     onEvent({ type: 'stream_chunk', text: fullText, reasoning });
                 });
                 onEvent({ type: 'think_end', data: response.reasoning });
 
-                const text = `<agent_cot>\n${response.text}`;
-                messages.push({ role: 'assistant', content: response.text }); // Tiếp tục ngữ cảnh thì chỉ cần response.text? Không, LLM đã coi prefill là một phần của câu trả lời trước, nhưng ở đây Kaiz loop thêm message mới. Tốt nhất push text thô của LLM hoặc cả cụm.
-                // Thật ra ST API sẽ tính prefill là 1 phần. Nhưng messages.push content response.text thôi là đủ vì step sau LLM sẽ thấy: prefill -> response -> user...
+                const text = response.text;
+                messages.push({ role: 'assistant', content: text });
 
-                const toolCalls = this.parseToolCalls(response.text);
+                const toolCalls = this.parseToolCalls(text);
                 
                 if (toolCalls.length === 0) {
-                    let cleanText = text.trim();
-                    if (!cleanText && response.reasoning) cleanText = text;
+                    accumulatedTrace += `<agent_cot>\n${text}`;
+                    let cleanText = accumulatedTrace.trim();
+                    if (!cleanText && response.reasoning) cleanText = accumulatedTrace;
                     
                     onEvent({ type: 'final_answer', text: cleanText });
                     break;
                 }
 
+                accumulatedTrace += `<agent_cot>\n${text}\n`;
+                
                 let toolResultsText = "";
                 for (const call of toolCalls) {
                     onEvent({ type: 'tool_call', data: call });
+                    accumulatedTrace += `<div style="color:#e67e22; font-size:12px; margin-top:5px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${call.name}</b>...</div>\n`;
+                    onEvent({ type: 'stream_chunk', text: accumulatedTrace });
+
                     const result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
                     onEvent({ type: 'tool_result', data: { name: call.name, result } });
+
+                    accumulatedTrace += `<div style="color:#2ecc71; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-check"></i> Tool finished.</div>\n`;
+                    onEvent({ type: 'stream_chunk', text: accumulatedTrace });
                     
                     toolResultsText += `<tool_result name="${call.name}">\n${result.content}\n</tool_result>\n`;
                 }
