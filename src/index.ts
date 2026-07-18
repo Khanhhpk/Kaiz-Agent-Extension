@@ -195,13 +195,13 @@ function initDebugger(registry: ToolRegistry, adapter: SillyTavernAdapter) {
 
     // Mở modal
     btn.on('click', () => {
-        modal.removeClass('kaiz-hidden');
+        modal.show();
         renderToolList();
     });
 
     // Đóng modal
     closeBtn.on('click', () => {
-        modal.addClass('kaiz-hidden');
+        modal.hide();
     });
 
     function renderToolList() {
