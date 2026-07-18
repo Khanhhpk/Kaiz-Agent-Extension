@@ -963,38 +963,38 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const btn = $('#kaiz-floating-btn');
             const win = $('#kaiz-chat-window');
             const closeBtn = $('#kaiz-chat-close');
-            // --- Bổ sung nút và khung Debug ---
-            closeBtn.before('<i id="kaiz-chat-debug-btn" class="fa-solid fa-bug interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Debug Information"></i>');
-            const debugBtn = $('#kaiz-chat-debug-btn');
-            if ($('#kaiz-debug-modal').length === 0) {
+            // --- Bổ sung nút và khung Log Request ---
+            closeBtn.before('<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>');
+            const logBtn = $('#kaiz-chat-log-btn');
+            if ($('#kaiz-log-modal').length === 0) {
                 $('body').append(`
-                <div id="kaiz-debug-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:80%; height:80%; background:#1e1e1e; color:#fff; z-index:10000; border-radius:10px; flex-direction:column; box-shadow:0 0 20px rgba(0,0,0,0.8);">
+                <div id="kaiz-log-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:80%; height:80%; background:#1e1e1e; color:#fff; z-index:10000; border-radius:10px; flex-direction:column; box-shadow:0 0 20px rgba(0,0,0,0.8);">
                     <div style="padding:15px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0;">Agent Debug Information</h3>
-                        <i id="kaiz-debug-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:20px;"></i>
+                        <h3 style="margin:0;">Agent Request Logs</h3>
+                        <i id="kaiz-log-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:20px;"></i>
                     </div>
                     <div style="display:flex; flex:1; overflow:hidden;">
                         <div style="flex:1; border-right:1px solid #333; padding:15px; overflow-y:auto; display:flex; flex-direction:column;">
                             <h4 style="margin-top:0;">Messages Sent (JSON)</h4>
-                            <pre id="kaiz-debug-sent" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
+                            <pre id="kaiz-log-sent" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
                         </div>
                         <div style="flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column;">
                             <h4 style="margin-top:0;">Raw Response Received</h4>
-                            <pre id="kaiz-debug-recv" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
+                            <pre id="kaiz-log-recv" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
                         </div>
                     </div>
                 </div>
             `);
             }
-            let lastDebugSent = "No data yet.";
-            let lastDebugRecv = "No data yet.";
-            $('#kaiz-debug-close').on('click', () => {
-                $('#kaiz-debug-modal').css('display', 'none');
+            let lastLogSent = "No data yet.";
+            let lastLogRecv = "No data yet.";
+            $('#kaiz-log-close').on('click', () => {
+                $('#kaiz-log-modal').css('display', 'none');
             });
-            debugBtn.on('click', () => {
-                $('#kaiz-debug-sent').text(lastDebugSent);
-                $('#kaiz-debug-recv').text(lastDebugRecv);
-                $('#kaiz-debug-modal').css('display', 'flex');
+            logBtn.on('click', () => {
+                $('#kaiz-log-sent').text(lastLogSent);
+                $('#kaiz-log-recv').text(lastLogRecv);
+                $('#kaiz-log-modal').css('display', 'flex');
             });
             // ------------------------------------
             const input = $('#kaiz-chat-input');
@@ -1199,8 +1199,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         await stateManager.addMessage('agent', `[Error] ${event.text}`);
                     }
                     else if (event.type === 'debug') {
-                        lastDebugSent = JSON.stringify(event.data.messages, null, 2);
-                        lastDebugRecv = event.data.responseText;
+                        lastLogSent = JSON.stringify(event.data.messages, null, 2);
+                        lastLogRecv = event.data.responseText;
                     }
                 });
                 sendBtn.prop('disabled', false);
