@@ -97,25 +97,19 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 try {
                     let currentText = "";
                     const response = await this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
-                        let cleanChunk = text.replace(/<agent_cot>/g, '').trimStart();
-                        currentText = `<agent_cot>\n${cleanChunk}`;
+                        currentText = text;
                         await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
                     });
                     await onEvent({ type: 'think_end', data: response.reasoning });
                     const text = response.text;
                     messages.push({ role: 'assistant', content: text });
+                    await onEvent({ type: 'debug', data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text } });
                     const toolCalls = this.parseToolCalls(text);
-                    let cleanFinalText = text.replace(/<agent_cot>/g, '').trimStart();
                     if (toolCalls.length === 0) {
-                        if (!cleanFinalText && response.reasoning) {
-                            await onEvent({ type: 'step_end', text: `<agent_cot>\n`, isFinal: true });
-                        }
-                        else {
-                            await onEvent({ type: 'step_end', text: `<agent_cot>\n${cleanFinalText}`, isFinal: true });
-                        }
+                        await onEvent({ type: 'step_end', text: text, isFinal: true });
                         break;
                     }
-                    await onEvent({ type: 'step_end', text: `<agent_cot>\n${cleanFinalText}`, isFinal: false });
+                    await onEvent({ type: 'step_end', text: text, isFinal: false });
                     // Cơ chế Autonomous Agency: Chỉ thực thi 1 tool mỗi vòng lặp
                     const call = toolCalls[0];
                     await onEvent({ type: 'tool_call', data: call });
@@ -957,6 +951,40 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const btn = $('#kaiz-floating-btn');
             const win = $('#kaiz-chat-window');
             const closeBtn = $('#kaiz-chat-close');
+            // --- Bổ sung nút và khung Debug ---
+            closeBtn.before('<i id="kaiz-chat-debug-btn" class="fa-solid fa-bug interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Debug Information"></i>');
+            const debugBtn = $('#kaiz-chat-debug-btn');
+            if ($('#kaiz-debug-modal').length === 0) {
+                $('body').append(`
+                <div id="kaiz-debug-modal" class="kaiz-hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:80%; height:80%; background:#1e1e1e; color:#fff; z-index:10000; border-radius:10px; display:flex; flex-direction:column; box-shadow:0 0 20px rgba(0,0,0,0.8);">
+                    <div style="padding:15px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
+                        <h3 style="margin:0;">Agent Debug Information</h3>
+                        <i id="kaiz-debug-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:20px;"></i>
+                    </div>
+                    <div style="display:flex; flex:1; overflow:hidden;">
+                        <div style="flex:1; border-right:1px solid #333; padding:15px; overflow-y:auto; display:flex; flex-direction:column;">
+                            <h4 style="margin-top:0;">Messages Sent (JSON)</h4>
+                            <pre id="kaiz-debug-sent" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
+                        </div>
+                        <div style="flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column;">
+                            <h4 style="margin-top:0;">Raw Response Received</h4>
+                            <pre id="kaiz-debug-recv" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
+                        </div>
+                    </div>
+                </div>
+            `);
+            }
+            let lastDebugSent = "No data yet.";
+            let lastDebugRecv = "No data yet.";
+            $('#kaiz-debug-close').on('click', () => {
+                $('#kaiz-debug-modal').addClass('kaiz-hidden');
+            });
+            debugBtn.on('click', () => {
+                $('#kaiz-debug-sent').text(lastDebugSent);
+                $('#kaiz-debug-recv').text(lastDebugRecv);
+                $('#kaiz-debug-modal').removeClass('kaiz-hidden');
+            });
+            // ------------------------------------
             const input = $('#kaiz-chat-input');
             const sendBtn = $('#kaiz-chat-send');
             const history = $('#kaiz-chat-history');
@@ -1043,10 +1071,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const detailsTag = isFinal
                     ? '<details class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">'
                     : '<details open class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">';
-                html = html.replace(/<agent_cot>/g, detailsTag + '<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">');
-                html = html.replace(/<\/agent_cot>/g, '</div></details>');
-                if (html.includes('<details') && !html.includes('</details>')) {
-                    html += '</div></details>';
+                const closeIndex = html.indexOf('</agent_cot>');
+                if (closeIndex !== -1) {
+                    const cotContent = html.substring(0, closeIndex);
+                    const restContent = html.substring(closeIndex + '</agent_cot>'.length);
+                    html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${cotContent}</div></details>${restContent}`;
+                }
+                else {
+                    html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${html}</div></details>`;
                 }
                 return html.replace(/\n/g, '<br>');
             };
@@ -1153,6 +1185,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             addMessageToDOM('agent', `<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
                         }
                         await stateManager.addMessage('agent', `[Error] ${event.text}`);
+                    }
+                    else if (event.type === 'debug') {
+                        lastDebugSent = JSON.stringify(event.data.messages, null, 2);
+                        lastDebugRecv = event.data.responseText;
                     }
                 });
                 sendBtn.prop('disabled', false);

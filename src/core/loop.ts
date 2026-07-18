@@ -2,7 +2,7 @@ import { SillyTavernAdapter, Message } from "../adapters/st_adapter";
 import { ToolRegistry } from "./tool_registry";
 
 export interface AgentEvent {
-    type: 'think_start' | 'think_end' | 'step_start' | 'step_end' | 'stream_chunk' | 'tool_call' | 'tool_result' | 'error';
+    type: 'think_start' | 'think_end' | 'step_start' | 'step_end' | 'stream_chunk' | 'tool_call' | 'tool_result' | 'error' | 'debug';
     data?: any;
     text?: string;
     reasoning?: string | null;
@@ -113,29 +113,24 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 let currentText = "";
                 const response = await this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
-                    let cleanChunk = text.replace(/<agent_cot>/g, '').trimStart();
-                    currentText = `<agent_cot>\n${cleanChunk}`;
+                    currentText = text;
                     await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
                 });
                 await onEvent({ type: 'think_end', data: response.reasoning });
 
                 const text = response.text;
                 messages.push({ role: 'assistant', content: text });
+                
+                await onEvent({ type: 'debug', data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text } });
 
                 const toolCalls = this.parseToolCalls(text);
                 
-                let cleanFinalText = text.replace(/<agent_cot>/g, '').trimStart();
-                
                 if (toolCalls.length === 0) {
-                    if (!cleanFinalText && response.reasoning) {
-                        await onEvent({ type: 'step_end', text: `<agent_cot>\n`, isFinal: true });
-                    } else {
-                        await onEvent({ type: 'step_end', text: `<agent_cot>\n${cleanFinalText}`, isFinal: true });
-                    }
+                    await onEvent({ type: 'step_end', text: text, isFinal: true });
                     break;
                 }
 
-                await onEvent({ type: 'step_end', text: `<agent_cot>\n${cleanFinalText}`, isFinal: false });
+                await onEvent({ type: 'step_end', text: text, isFinal: false });
                 
                 // Cơ chế Autonomous Agency: Chỉ thực thi 1 tool mỗi vòng lặp
                 const call = toolCalls[0];
