@@ -243,10 +243,99 @@
                 $('#kaiz-fetch-models').find('i').removeClass('fa-spin');
             }
         });
+        // 3. Nạp giao diện Khung Chat Độc Lập (Floating UI)
+        try {
+            const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
+            if (kaizWindowHtml) {
+                $('body').append(kaizWindowHtml);
+                initKaizUI();
+            }
+            else {
+                console.error("[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.");
+            }
+        }
+        catch (e) {
+            console.error("[KaizAgent] Failed to load kaiz_window template:", e);
+        }
         const registry = new ToolRegistry();
         // Đăng ký các công cụ
         registerDefaultTools(registry);
         console.log("[KaizAgent] Core initialized successfully.");
     });
+    // Hàm khởi tạo các sự kiện cho UI
+    function initKaizUI() {
+        const $ = jQuery;
+        const btn = $('#kaiz-floating-btn');
+        const win = $('#kaiz-chat-window');
+        const closeBtn = $('#kaiz-chat-close');
+        const input = $('#kaiz-chat-input');
+        const sendBtn = $('#kaiz-chat-send');
+        const history = $('#kaiz-chat-history');
+        // Toggle cửa sổ
+        btn.on('click', () => {
+            win.removeClass('kaiz-hidden');
+        });
+        closeBtn.on('click', () => {
+            win.addClass('kaiz-hidden');
+        });
+        // Xử lý gửi tin nhắn UI (tạm thời echo lại)
+        const sendMessage = () => {
+            const text = String(input.val()).trim();
+            if (!text)
+                return;
+            // Xoá input
+            input.val('');
+            // Thêm tin nhắn của User
+            history.append(`
+            <div class="kaiz-msg kaiz-msg-user">
+                <div class="kaiz-msg-avatar"><i class="fa-solid fa-user"></i></div>
+                <div class="kaiz-msg-content">${text}</div>
+            </div>
+        `);
+            // TODO: Chèn Agent Loop tại đây!
+            // Cuộn xuống cuối
+            history.scrollTop(history[0].scrollHeight);
+        };
+        sendBtn.on('click', sendMessage);
+        input.on('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        // Kéo thả cửa sổ cơ bản (Draggable)
+        let isDragging = false;
+        let offsetX = 0;
+        let offsetY = 0;
+        const header = document.getElementById('kaiz-chat-header');
+        const windowEl = document.getElementById('kaiz-chat-window');
+        if (header && windowEl) {
+            header.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                offsetX = e.clientX - windowEl.getBoundingClientRect().left;
+                offsetY = e.clientY - windowEl.getBoundingClientRect().top;
+                windowEl.style.transition = 'none'; // Tắt animation khi drag
+            });
+            document.addEventListener('mousemove', (e) => {
+                if (!isDragging)
+                    return;
+                const x = e.clientX - offsetX;
+                const y = e.clientY - offsetY;
+                // Giữ trong màn hình
+                const maxX = window.innerWidth - windowEl.offsetWidth;
+                const maxY = window.innerHeight - windowEl.offsetHeight;
+                windowEl.style.right = 'auto';
+                windowEl.style.bottom = 'auto';
+                windowEl.style.left = `${Math.max(0, Math.min(x, maxX))}px`;
+                windowEl.style.top = `${Math.max(0, Math.min(y, maxY))}px`;
+            });
+            document.addEventListener('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    windowEl.style.transition = 'opacity 0.3s ease, transform 0.3s ease, visibility 0.3s';
+                }
+            });
+        }
+    }
 
 })();
