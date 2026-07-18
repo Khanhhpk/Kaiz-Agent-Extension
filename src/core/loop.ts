@@ -113,7 +113,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 let currentText = "";
                 const response = await this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
-                    currentText = `<agent_cot>\n${text}`;
+                    let cleanChunk = text.replace(/<agent_cot>/g, '').trimStart();
+                    currentText = `<agent_cot>\n${cleanChunk}`;
                     await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
                 });
                 await onEvent({ type: 'think_end', data: response.reasoning });
@@ -123,15 +124,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
                 const toolCalls = this.parseToolCalls(text);
                 
+                let cleanFinalText = text.replace(/<agent_cot>/g, '').trimStart();
+                
                 if (toolCalls.length === 0) {
-                    let cleanText = `<agent_cot>\n${text}`.trim();
-                    if (!cleanText && response.reasoning) cleanText = `<agent_cot>\n`;
-                    
-                    await onEvent({ type: 'step_end', text: cleanText, isFinal: true });
+                    if (!cleanFinalText && response.reasoning) {
+                        await onEvent({ type: 'step_end', text: `<agent_cot>\n`, isFinal: true });
+                    } else {
+                        await onEvent({ type: 'step_end', text: `<agent_cot>\n${cleanFinalText}`, isFinal: true });
+                    }
                     break;
                 }
 
-                await onEvent({ type: 'step_end', text: `<agent_cot>\n${text}`, isFinal: false });
+                await onEvent({ type: 'step_end', text: `<agent_cot>\n${cleanFinalText}`, isFinal: false });
                 
                 // Cơ chế Autonomous Agency: Chỉ thực thi 1 tool mỗi vòng lặp
                 const call = toolCalls[0];
