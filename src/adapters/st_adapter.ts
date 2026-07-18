@@ -255,7 +255,7 @@ export class SillyTavernAdapter {
     public sendSystemMessage(message: string) {
         const ctx = SillyTavern.getContext();
         if (typeof ctx.sendSystemMessage === 'function') {
-            ctx.sendSystemMessage('sys', message);
+            ctx.sendSystemMessage('generic', message);
         } else {
             console.error('[KaizAgent] sendSystemMessage not available in ST Context.');
         }

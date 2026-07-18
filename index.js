@@ -553,7 +553,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         sendSystemMessage(message) {
             const ctx = SillyTavern.getContext();
             if (typeof ctx.sendSystemMessage === 'function') {
-                ctx.sendSystemMessage('sys', message);
+                ctx.sendSystemMessage('generic', message);
             }
             else {
                 console.error('[KaizAgent] sendSystemMessage not available in ST Context.');
