@@ -26,29 +26,35 @@ jQuery(async () => {
     }
     const settings = ctx.extensionSettings[EXT_NAME];
 
-    // Nạp giao diện settings.html
+    // 1. Tìm chính xác thư mục extension (để load settings.html)
     let extPath = 'third-party/Kaiz-Agent-Extension';
     try {
-        const scripts = document.getElementsByTagName('script');
-        for (let i = 0; i < scripts.length; i++) {
-            const src = scripts[i].src;
-            if (src && src.includes('Kaiz-Agent-Extension/index.js')) {
-                const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+?)\//);
-                if (match) extPath = match[1];
-                break;
+        if (document.currentScript && (document.currentScript as HTMLScriptElement).src) {
+            const match = new URL((document.currentScript as HTMLScriptElement).src).pathname.match(/\/scripts\/extensions\/(.+?)\//);
+            if (match) extPath = match[1];
+        } else {
+            const scripts = document.getElementsByTagName('script');
+            for (let i = 0; i < scripts.length; i++) {
+                const src = scripts[i].src;
+                if (src && src.toLowerCase().includes('kaiz')) {
+                    const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+?)\//);
+                    if (match) { extPath = match[1]; break; }
+                }
             }
         }
     } catch(e) {
-        console.warn("[KaizAgent] Failed to resolve extension path automatically, using fallback.");
+        console.warn("[KaizAgent] Path resolution failed, using fallback:", e);
     }
 
+    console.log(`[KaizAgent] Resolved extension path: ${extPath}`);
+
+    // 2. Nạp giao diện settings.html
     try {
         const html = await $.get(`/scripts/extensions/${extPath}/settings.html`);
         $('#extensions_settings').append(html);
     } catch (e) {
-        console.error("[KaizAgent] Failed to load settings.html:", e);
-        toastr.error("Kaiz Agent: Failed to load UI settings.");
-        return; // Dừng lại nếu không load được UI
+        console.error("[KaizAgent] Failed to load settings.html from", `/scripts/extensions/${extPath}/settings.html`, e);
+        return;
     }
 
     // Gán giá trị mặc định lên UI
