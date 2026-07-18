@@ -1,6 +1,105 @@
 (function () {
     'use strict';
 
+    class AgentLoop {
+        adapter;
+        toolRegistry;
+        constructor(adapter, toolRegistry) {
+            this.adapter = adapter;
+            this.toolRegistry = toolRegistry;
+        }
+        generateSystemPrompt() {
+            const schemas = this.toolRegistry.getAllSchemas();
+            let prompt = `You are Kaiz Agent, an AI assistant built to operate within the SillyTavern environment.
+You can help the user by answering questions, chatting, or using tools to interact with SillyTavern.
+
+AVAILABLE TOOLS:
+`;
+            schemas.forEach(s => {
+                prompt += `<tool>
+<name>${s.name}</name>
+<description>${s.description}</description>
+<parameters>${JSON.stringify(s.parameters)}</parameters>
+</tool>
+`;
+            });
+            prompt += `
+INSTRUCTIONS FOR TOOL USAGE:
+To use a tool, you MUST use the following exact XML format. You can use multiple tools at once by providing multiple <tool_call> blocks.
+<tool_call name="tool_name">
+{"param1": "value"}
+</tool_call>
+
+If you use a tool, do not provide the final answer yet. Wait for the user (the system) to provide the <tool_result> before answering.
+If you do NOT need a tool, just answer normally.`;
+            return prompt;
+        }
+        parseToolCalls(text) {
+            const regex = /<tool_call\s+name="([^"]+)">([\s\S]*?)<\/tool_call>/g;
+            const tools = [];
+            let match;
+            while ((match = regex.exec(text)) !== null) {
+                const name = match[1];
+                const argsStr = match[2].trim();
+                try {
+                    const args = JSON.parse(argsStr);
+                    tools.push({ name, args, fullMatch: match[0] });
+                }
+                catch (e) {
+                    console.error(`[AgentLoop] Failed to parse JSON for tool ${name}:`, argsStr);
+                }
+            }
+            return tools;
+        }
+        async run(userPrompt, onEvent) {
+            console.log(`[AgentLoop] Starting run with prompt: ${userPrompt}`);
+            const messages = [
+                { role: 'system', content: this.generateSystemPrompt() },
+                { role: 'user', content: userPrompt }
+            ];
+            const MAX_STEPS = 5;
+            let step = 0;
+            while (step < MAX_STEPS) {
+                step++;
+                onEvent({ type: 'think_start' });
+                try {
+                    const response = await this.adapter.generateCompletion(messages, 1500, false);
+                    onEvent({ type: 'think_end', data: response.reasoning });
+                    const text = response.text;
+                    messages.push({ role: 'assistant', content: text });
+                    const toolCalls = this.parseToolCalls(text);
+                    if (toolCalls.length === 0) {
+                        // LLM did not call any tools, so this is the final answer
+                        // Lọc bỏ reasoning blocks (ví dụ <think>) nếu có để hiển thị gọn gàng
+                        let cleanText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+                        if (!cleanText && response.reasoning)
+                            cleanText = text; // Fallback
+                        onEvent({ type: 'final_answer', text: cleanText });
+                        break;
+                    }
+                    // Thực thi các tool
+                    let toolResultsText = "";
+                    for (const call of toolCalls) {
+                        onEvent({ type: 'tool_call', data: call });
+                        const result = await this.toolRegistry.executeTool(call.name, call.args);
+                        onEvent({ type: 'tool_result', data: { name: call.name, result } });
+                        toolResultsText += `<tool_result name="${call.name}">\n${result.content}\n</tool_result>\n`;
+                    }
+                    // Gắn tool result vào context và tiếp tục loop
+                    messages.push({ role: 'user', content: toolResultsText });
+                }
+                catch (e) {
+                    console.error("[AgentLoop] Error during completion:", e);
+                    onEvent({ type: 'error', text: e.message || String(e) });
+                    break;
+                }
+            }
+            if (step >= MAX_STEPS) {
+                onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
+            }
+        }
+    }
+
     /**
      * Tool Registry
      * Quản lý và đăng ký các công cụ (Tools) cho Agent.
@@ -96,6 +195,228 @@
     function registerDefaultTools(registry) {
         registry.registerTool(getCharInfoTool);
         // Sau này có thể thêm registerTool(searchChatTool), v.v.
+    }
+
+    /**
+     * SillyTavern Adapter
+     * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
+     */
+    class SillyTavernAdapter {
+        constructor() { }
+        /**
+         * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
+         */
+        async generateCompletion(messages, maxTokens, stream = false) {
+            console.log("[KaizAgent] Calling ST generateCompletion...");
+            const ctx = SillyTavern.getContext();
+            const settings = ctx.extensionSettings['kaiz_agent'] || {};
+            const abort = new AbortController();
+            // 1. Nếu bật tính năng Custom Endpoint, ta gọi trực tiếp (bypass ST)
+            if (settings.useCustomEndpoint && settings.customUrl) {
+                console.log("[KaizAgent] Using Custom Endpoint:", settings.customUrl);
+                let text = '';
+                let reasoning = null;
+                let isMaxTokens = false;
+                try {
+                    let url = settings.customUrl;
+                    if (!url.endsWith('/chat/completions')) {
+                        url = url.replace(/\/$/, '') + '/chat/completions';
+                    }
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (settings.customKey)
+                        headers['Authorization'] = `Bearer ${settings.customKey}`;
+                    const payload = {
+                        model: settings.customModel || 'gpt-3.5-turbo',
+                        messages: messages,
+                        max_tokens: maxTokens,
+                        stream: stream
+                    };
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify(payload),
+                        signal: abort.signal
+                    });
+                    if (!res.ok) {
+                        const errText = await res.text().catch(() => res.statusText);
+                        throw new Error(`Custom API Error ${res.status}: ${errText}`);
+                    }
+                    if (stream) {
+                        const reader = res.body?.getReader();
+                        const decoder = new TextDecoder("utf-8");
+                        let buffer = "";
+                        if (reader) {
+                            while (true) {
+                                const { done, value } = await reader.read();
+                                if (done)
+                                    break;
+                                buffer += decoder.decode(value, { stream: true });
+                                const lines = buffer.split('\n');
+                                buffer = lines.pop() || "";
+                                for (const line of lines) {
+                                    const l = line.trim();
+                                    if (!l || l.startsWith(':') || l === 'data: [DONE]')
+                                        continue;
+                                    if (l.startsWith('data: ')) {
+                                        try {
+                                            const data = JSON.parse(l.slice(6));
+                                            // Ghi nhận lý do kết thúc (max tokens)
+                                            const finish = data.choices?.[0]?.finish_reason;
+                                            if (finish === 'length' || finish === 'max_tokens')
+                                                isMaxTokens = true;
+                                            // Trích xuất text và reasoning
+                                            const delta = data.choices?.[0]?.delta || {};
+                                            if (delta.content)
+                                                text += delta.content;
+                                            if (delta.reasoning || delta.reasoning_content) {
+                                                reasoning = (reasoning || '') + (delta.reasoning || delta.reasoning_content);
+                                            }
+                                            if (data.thinking)
+                                                reasoning = (reasoning || '') + data.thinking;
+                                        }
+                                        catch (e) { }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else {
+                        const data = await res.json();
+                        const finish = data.choices?.[0]?.finish_reason;
+                        if (finish === 'length' || finish === 'max_tokens')
+                            isMaxTokens = true;
+                        const msg = data.choices?.[0]?.message || {};
+                        text = msg.content || '';
+                        if (msg.reasoning || msg.reasoning_content) {
+                            reasoning = msg.reasoning || msg.reasoning_content;
+                        }
+                        if (data.thinking)
+                            reasoning = (reasoning || '') + data.thinking;
+                    }
+                    return { text: text.trim(), reasoning, isMaxTokens };
+                }
+                catch (e) {
+                    console.error("[KaizAgent] Custom Endpoint error:", e);
+                    throw e;
+                }
+            }
+            // 2. Nếu không bật Custom Endpoint, sử dụng ConnectionManager mặc định của SillyTavern
+            const service = ctx.ConnectionManagerRequestService;
+            let asyncGeneratorFn;
+            try {
+                // Ưu tiên sử dụng ConnectionManager (nếu có Profile được chọn)
+                let profileId = ctx.extensionSettings?.connectionManager?.selectedProfile || document.getElementById('connection_profiles')?.value;
+                if (profileId && service && typeof service.sendRequest === 'function') {
+                    asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
+                        stream: stream,
+                        signal: abort.signal,
+                        extractData: false,
+                        includePreset: true
+                    });
+                }
+                else {
+                    // Fallback sang API trực tiếp (OpenAI / TextGen) nếu không xài ConnectionManager
+                    const mainApi = window.main_api || ctx.main_api;
+                    if (mainApi === 'openai' && ctx.ChatCompletionService) {
+                        const oaiSettings = window.oai_settings || ctx.oai_settings || {};
+                        asyncGeneratorFn = await ctx.ChatCompletionService.processRequest({
+                            messages: messages,
+                            max_tokens: maxTokens,
+                            stream: stream
+                        }, { presetName: oaiSettings.preset_settings_openai }, false, abort.signal);
+                    }
+                    else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
+                        const textGenSettings = window.textgenerationwebui_settings || ctx.textgenerationwebui_settings || {};
+                        asyncGeneratorFn = await ctx.TextCompletionService.processRequest({
+                            prompt: messages,
+                            max_tokens: maxTokens,
+                            stream: stream
+                        }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, abort.signal);
+                    }
+                    else {
+                        throw new Error('No active API connection found in SillyTavern. Please configure LLM settings.');
+                    }
+                }
+                let text = '';
+                let reasoning = null;
+                const isGen = typeof asyncGeneratorFn === 'function' ||
+                    (asyncGeneratorFn != null && typeof asyncGeneratorFn[Symbol.asyncIterator] === 'function') ||
+                    (asyncGeneratorFn != null && typeof asyncGeneratorFn.next === 'function');
+                let lastValue = null;
+                if (!isGen) {
+                    const value = asyncGeneratorFn;
+                    if (typeof value === 'string') {
+                        text = value.trim();
+                    }
+                    else {
+                        // Trích xuất text từ response ST
+                        text = value?.text || value?.content || value?.message?.content || value?.choices?.[0]?.message?.content || '';
+                    }
+                    const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
+                    const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
+                    return { text: text.trim(), reasoning, isMaxTokens };
+                }
+                const gen = typeof asyncGeneratorFn === 'function' ? asyncGeneratorFn() : asyncGeneratorFn;
+                while (true) {
+                    const { value, done } = await gen.next();
+                    if (done) {
+                        if (value)
+                            lastValue = value;
+                        break;
+                    }
+                    lastValue = value;
+                    // ST có nhiều format stream tuỳ thuộc API
+                    let chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
+                    // Hỗ trợ Gemini/Claude thought block đơn giản
+                    if (value?.thinking)
+                        reasoning = (reasoning || '') + value.thinking;
+                    if (chunkText)
+                        text += chunkText;
+                }
+                const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
+                const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
+                return { text: text.trim(), reasoning, isMaxTokens };
+            }
+            catch (e) {
+                console.error("[KaizAgent] generateCompletion error:", e);
+                throw e;
+            }
+        }
+        /**
+         * Lấy lịch sử đoạn chat hiện tại (bỏ qua những tin nhắn ẩn)
+         */
+        getChatContext(depth = 20) {
+            const ctx = SillyTavern.getContext();
+            if (!ctx.chat)
+                return [];
+            const total = ctx.chat.length;
+            const startIndex = Math.max(0, total - depth);
+            return ctx.chat.slice(startIndex)
+                .filter((m) => !m.is_system && !m.is_hidden && !(m.extra && m.extra.is_hidden))
+                .map((m, i) => ({
+                role: m.is_user ? 'user' : 'assistant',
+                name: m.is_user ? (ctx.name1 || 'User') : (m.name || ctx.name2 || 'Character'),
+                content: typeof m.mes === 'string' ? m.mes : '',
+                chatIndex: startIndex + i
+            }));
+        }
+        /**
+         * Lấy thông tin về nhân vật đang chat
+         */
+        getCharInfo() {
+            const ctx = SillyTavern.getContext();
+            const char = ctx.characters?.[ctx.characterId];
+            if (!char)
+                return null;
+            const d = char.data || {};
+            return {
+                name: char.name || 'Unknown',
+                description: d.description || char.description || '',
+                personality: d.personality || char.personality || '',
+                scenario: d.scenario || char.scenario || '',
+                system_prompt: d.system_prompt || char.system_prompt || '',
+            };
+        }
     }
 
     const EXT_NAME = 'kaiz_agent';
@@ -256,7 +577,11 @@
             const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
             if (kaizWindowHtml) {
                 $('body').append(kaizWindowHtml);
-                initKaizUI();
+                const adapter = new SillyTavernAdapter();
+                const registry = new ToolRegistry();
+                registerDefaultTools(registry);
+                const loop = new AgentLoop(adapter, registry);
+                initKaizUI(loop);
             }
             else {
                 console.error("[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.");
@@ -265,13 +590,10 @@
         catch (e) {
             console.error("[KaizAgent] Failed to load kaiz_window template:", e);
         }
-        const registry = new ToolRegistry();
-        // Đăng ký các công cụ
-        registerDefaultTools(registry);
         console.log("[KaizAgent] Core initialized successfully.");
     });
     // Hàm khởi tạo các sự kiện cho UI
-    function initKaizUI() {
+    function initKaizUI(loop) {
         const $ = jQuery;
         const btn = $('#kaiz-floating-btn');
         const win = $('#kaiz-chat-window');
@@ -286,23 +608,67 @@
         closeBtn.on('click', () => {
             win.addClass('kaiz-hidden');
         });
-        // Xử lý gửi tin nhắn UI (tạm thời echo lại)
-        const sendMessage = () => {
+        // Hàm tiện ích thêm tin nhắn
+        const addMessage = (role, htmlContent) => {
+            let avatar = '';
+            let extraClass = '';
+            if (role === 'user') {
+                avatar = '<i class="fa-solid fa-user"></i>';
+                extraClass = 'kaiz-msg-user';
+            }
+            else if (role === 'agent') {
+                avatar = '<i class="fa-solid fa-robot"></i>';
+                extraClass = 'kaiz-msg-agent';
+            }
+            else {
+                avatar = '<i class="fa-solid fa-gear"></i>';
+                extraClass = 'kaiz-msg-agent'; // Style tạm cho system
+            }
+            history.append(`
+            <div class="kaiz-msg ${extraClass}">
+                <div class="kaiz-msg-avatar">${avatar}</div>
+                <div class="kaiz-msg-content">${htmlContent}</div>
+            </div>
+        `);
+            history.scrollTop(history[0].scrollHeight);
+        };
+        // Xử lý gửi tin nhắn UI
+        const sendMessage = async () => {
             const text = String(input.val()).trim();
             if (!text)
                 return;
-            // Xoá input
             input.val('');
-            // Thêm tin nhắn của User
-            history.append(`
-            <div class="kaiz-msg kaiz-msg-user">
-                <div class="kaiz-msg-avatar"><i class="fa-solid fa-user"></i></div>
-                <div class="kaiz-msg-content">${text}</div>
-            </div>
-        `);
-            // TODO: Chèn Agent Loop tại đây!
-            // Cuộn xuống cuối
-            history.scrollTop(history[0].scrollHeight);
+            addMessage('user', text);
+            let thinkingMsgId = 'kaiz-think-' + Date.now();
+            await loop.run(text, (event) => {
+                switch (event.type) {
+                    case 'think_start':
+                        addMessage('agent', `<span id="${thinkingMsgId}"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...</span>`);
+                        break;
+                    case 'think_end':
+                        $(`#${thinkingMsgId}`).remove();
+                        break;
+                    case 'tool_call':
+                        addMessage('system', `<i>Đang gọi công cụ: <b>${event.data.name}</b>...</i>`);
+                        break;
+                    case 'tool_result':
+                        if (event.data.result.isError) {
+                            addMessage('system', `<i style="color:#ff5e5e">Lỗi công cụ ${event.data.name}: ${event.data.result.content}</i>`);
+                        }
+                        else {
+                            addMessage('system', `<i style="color:#92FE9D">Công cụ ${event.data.name} thực thi thành công.</i>`);
+                        }
+                        // Tạo block mới cho lần suy nghĩ tiếp theo
+                        thinkingMsgId = 'kaiz-think-' + Date.now();
+                        break;
+                    case 'final_answer':
+                        addMessage('agent', event.text || '');
+                        break;
+                    case 'error':
+                        addMessage('system', `<span style="color:#ff5e5e"><b>Lỗi:</b> ${event.text}</span>`);
+                        break;
+                }
+            });
         };
         sendBtn.on('click', sendMessage);
         input.on('keydown', (e) => {

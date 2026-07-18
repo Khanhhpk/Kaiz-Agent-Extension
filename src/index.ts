@@ -163,7 +163,13 @@ jQuery(async () => {
         const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
         if (kaizWindowHtml) {
             $('body').append(kaizWindowHtml);
-            initKaizUI();
+            
+            const adapter = new SillyTavernAdapter();
+            const registry = new ToolRegistry();
+            registerDefaultTools(registry);
+            const loop = new AgentLoop(adapter, registry);
+            
+            initKaizUI(loop);
         } else {
             console.error("[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.");
         }
@@ -171,19 +177,11 @@ jQuery(async () => {
         console.error("[KaizAgent] Failed to load kaiz_window template:", e);
     }
     
-    const adapter = new SillyTavernAdapter();
-    const registry = new ToolRegistry();
-    
-    // Đăng ký các công cụ
-    registerDefaultTools(registry);
-    
-    const loop = new AgentLoop(adapter, registry);
-
     console.log("[KaizAgent] Core initialized successfully.");
 });
 
 // Hàm khởi tạo các sự kiện cho UI
-function initKaizUI() {
+function initKaizUI(loop: AgentLoop) {
     const $ = jQuery;
     const btn = $('#kaiz-floating-btn');
     const win = $('#kaiz-chat-window');
@@ -201,26 +199,68 @@ function initKaizUI() {
         win.addClass('kaiz-hidden');
     });
 
-    // Xử lý gửi tin nhắn UI (tạm thời echo lại)
-    const sendMessage = () => {
+    // Hàm tiện ích thêm tin nhắn
+    const addMessage = (role: 'user' | 'agent' | 'system', htmlContent: string) => {
+        let avatar = '';
+        let extraClass = '';
+        if (role === 'user') {
+            avatar = '<i class="fa-solid fa-user"></i>';
+            extraClass = 'kaiz-msg-user';
+        } else if (role === 'agent') {
+            avatar = '<i class="fa-solid fa-robot"></i>';
+            extraClass = 'kaiz-msg-agent';
+        } else {
+            avatar = '<i class="fa-solid fa-gear"></i>';
+            extraClass = 'kaiz-msg-agent'; // Style tạm cho system
+        }
+
+        history.append(`
+            <div class="kaiz-msg ${extraClass}">
+                <div class="kaiz-msg-avatar">${avatar}</div>
+                <div class="kaiz-msg-content">${htmlContent}</div>
+            </div>
+        `);
+        history.scrollTop(history[0].scrollHeight);
+    };
+
+    // Xử lý gửi tin nhắn UI
+    const sendMessage = async () => {
         const text = String(input.val()).trim();
         if (!text) return;
 
-        // Xoá input
         input.val('');
+        addMessage('user', text);
         
-        // Thêm tin nhắn của User
-        history.append(`
-            <div class="kaiz-msg kaiz-msg-user">
-                <div class="kaiz-msg-avatar"><i class="fa-solid fa-user"></i></div>
-                <div class="kaiz-msg-content">${text}</div>
-            </div>
-        `);
+        let thinkingMsgId = 'kaiz-think-' + Date.now();
         
-        // TODO: Chèn Agent Loop tại đây!
-        
-        // Cuộn xuống cuối
-        history.scrollTop(history[0].scrollHeight);
+        await loop.run(text, (event) => {
+            switch(event.type) {
+                case 'think_start':
+                    addMessage('agent', `<span id="${thinkingMsgId}"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...</span>`);
+                    break;
+                case 'think_end':
+                    $(`#${thinkingMsgId}`).remove();
+                    break;
+                case 'tool_call':
+                    addMessage('system', `<i>Đang gọi công cụ: <b>${event.data.name}</b>...</i>`);
+                    break;
+                case 'tool_result':
+                    if (event.data.result.isError) {
+                        addMessage('system', `<i style="color:#ff5e5e">Lỗi công cụ ${event.data.name}: ${event.data.result.content}</i>`);
+                    } else {
+                        addMessage('system', `<i style="color:#92FE9D">Công cụ ${event.data.name} thực thi thành công.</i>`);
+                    }
+                    // Tạo block mới cho lần suy nghĩ tiếp theo
+                    thinkingMsgId = 'kaiz-think-' + Date.now();
+                    break;
+                case 'final_answer':
+                    addMessage('agent', event.text || '');
+                    break;
+                case 'error':
+                    addMessage('system', `<span style="color:#ff5e5e"><b>Lỗi:</b> ${event.text}</span>`);
+                    break;
+            }
+        });
     };
 
     sendBtn.on('click', sendMessage);
