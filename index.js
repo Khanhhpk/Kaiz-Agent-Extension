@@ -968,7 +968,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const debugBtn = $('#kaiz-chat-debug-btn');
             if ($('#kaiz-debug-modal').length === 0) {
                 $('body').append(`
-                <div id="kaiz-debug-modal" class="kaiz-hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:80%; height:80%; background:#1e1e1e; color:#fff; z-index:10000; border-radius:10px; display:flex; flex-direction:column; box-shadow:0 0 20px rgba(0,0,0,0.8);">
+                <div id="kaiz-debug-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:80%; height:80%; background:#1e1e1e; color:#fff; z-index:10000; border-radius:10px; flex-direction:column; box-shadow:0 0 20px rgba(0,0,0,0.8);">
                     <div style="padding:15px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
                         <h3 style="margin:0;">Agent Debug Information</h3>
                         <i id="kaiz-debug-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:20px;"></i>
@@ -989,12 +989,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             let lastDebugSent = "No data yet.";
             let lastDebugRecv = "No data yet.";
             $('#kaiz-debug-close').on('click', () => {
-                $('#kaiz-debug-modal').addClass('kaiz-hidden');
+                $('#kaiz-debug-modal').css('display', 'none');
             });
             debugBtn.on('click', () => {
                 $('#kaiz-debug-sent').text(lastDebugSent);
                 $('#kaiz-debug-recv').text(lastDebugRecv);
-                $('#kaiz-debug-modal').removeClass('kaiz-hidden');
+                $('#kaiz-debug-modal').css('display', 'flex');
             });
             // ------------------------------------
             const input = $('#kaiz-chat-input');
