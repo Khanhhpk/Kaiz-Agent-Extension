@@ -6,12 +6,34 @@ import { SillyTavernAdapter } from "./adapters/st_adapter";
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
 
+// 1. Tìm chính xác thư mục extension (phải đặt NGOÀI async callback để document.currentScript hoạt động)
+let extPath = 'third-party/Kaiz-Agent-Extension';
+try {
+    if (document.currentScript && (document.currentScript as HTMLScriptElement).src) {
+        const match = new URL((document.currentScript as HTMLScriptElement).src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+        if (match) extPath = match[1];
+    } else {
+        const scripts = document.getElementsByTagName('script');
+        for (let i = 0; i < scripts.length; i++) {
+            const src = scripts[i].src;
+            // Tránh nhầm lẫn với kaiz-collection, ta check chính xác tên repo hoặc ít nhất là 'agent'
+            if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+                if (match) { extPath = match[1]; break; }
+            }
+        }
+    }
+} catch(e) {
+    console.warn("[KaizAgent] Path resolution failed, using fallback:", e);
+}
+
 declare const jQuery: any;
 declare const SillyTavern: any;
 declare const toastr: any;
 
 jQuery(async () => {
     console.log("[KaizAgent] Initializing extension core...");
+    console.log(`[KaizAgent] Resolved extension path: ${extPath}`);
     const $ = jQuery;
     const ctx = SillyTavern.getContext();
     
@@ -26,29 +48,7 @@ jQuery(async () => {
     }
     const settings = ctx.extensionSettings[EXT_NAME];
 
-    // 1. Tìm chính xác thư mục extension (để load settings.html)
-    let extPath = 'third-party/Kaiz-Agent-Extension';
-    try {
-        if (document.currentScript && (document.currentScript as HTMLScriptElement).src) {
-            const match = new URL((document.currentScript as HTMLScriptElement).src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
-            if (match) extPath = match[1];
-        } else {
-            const scripts = document.getElementsByTagName('script');
-            for (let i = 0; i < scripts.length; i++) {
-                const src = scripts[i].src;
-                if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz')) {
-                    const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
-                    if (match) { extPath = match[1]; break; }
-                }
-            }
-        }
-    } catch(e) {
-        console.warn("[KaizAgent] Path resolution failed, using fallback:", e);
-    }
-
-    console.log(`[KaizAgent] Resolved extension path: ${extPath}`);
-
-    // 2. Nạp giao diện settings.html sử dụng hàm chuẩn của SillyTavern giống ST-Copilot
+    // 2. Nạp giao diện settings.html
     const container = document.getElementById('extensions_settings') || document.getElementById('extensions_settings2');
     if (container) {
         try {
