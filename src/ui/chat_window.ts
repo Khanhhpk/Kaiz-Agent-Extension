@@ -179,18 +179,26 @@ export class ChatWindowUI {
                 chatTitle.text(text.substring(0, 30) + (text.length > 30 ? '...' : ''));
             }
 
-            // Spinner cho agent
-            const agentMsgId = addMessageToDOM('agent', '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>');
-            const agentContentBox = $(`#${agentMsgId}`);
-
             sendBtn.prop('disabled', true);
-            let fullAgentResponse = '';
+            
+            const ctx = (window as any).SillyTavern.getContext();
+            const extSettings = ctx.extensionSettings['kaiz-agent-extension'] || {};
+            const maxLoops = extSettings.maxAgentLoops || 5;
 
             // Lấy toàn bộ lịch sử (hoặc tối đa N tin) từ DB để truyền cho AI
             const historyMsgs = stateManager.currentChatId ? await stateManager.db.getMessages(stateManager.currentChatId) : [];
 
-            await loop.run(historyMsgs, async (event) => {
-                if (event.type === 'stream_chunk') {
+            let agentMsgId = "";
+            let agentContentBox: any = null;
+            let currentStepResponse = "";
+
+            await loop.run(historyMsgs, maxLoops, async (event) => {
+                if (event.type === 'step_start') {
+                    agentMsgId = addMessageToDOM('agent', '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>');
+                    agentContentBox = $(`#${agentMsgId}`);
+                    currentStepResponse = "";
+                } else if (event.type === 'stream_chunk') {
+                    if (!agentContentBox) return;
                     let htmlToRender = event.text ? formatMessage(event.text, false) : '';
                     if (event.reasoning && !event.text) {
                         htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
@@ -199,17 +207,24 @@ export class ChatWindowUI {
                         htmlToRender = `<div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating...</div>`;
                     }
                     agentContentBox.html(htmlToRender);
-                } else if (event.type === 'final_answer') {
+                } else if (event.type === 'step_end') {
+                    if (!agentContentBox) return;
                     agentContentBox.html(formatMessage(event.text || '', true));
-                    fullAgentResponse = event.text || '';
+                    currentStepResponse = event.text || '';
+                    await stateManager.addMessage('agent', currentStepResponse);
+                    agentContentBox = null;
+                } else if (event.type === 'tool_result') {
+                    addMessageToDOM('user', event.text || '');
+                    await stateManager.addMessage('user', event.text || '');
                 } else if (event.type === 'error') {
-                    agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
-                    fullAgentResponse = `[Error] ${event.text}`;
+                    if (agentContentBox) {
+                        agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
+                    } else {
+                        addMessageToDOM('agent', `<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
+                    }
+                    await stateManager.addMessage('agent', `[Error] ${event.text}`);
                 }
             });
-            
-            // Lưu câu trả lời cuối vào DB
-            await stateManager.addMessage('agent', fullAgentResponse || 'Done.');
 
             sendBtn.prop('disabled', false);
             input.focus();

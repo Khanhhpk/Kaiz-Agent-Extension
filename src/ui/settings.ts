@@ -59,6 +59,12 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
         });
 
+        $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);
+        $('#kaiz-max-loops').on('input', function(this: HTMLInputElement) {
+            settings.maxAgentLoops = parseInt(this.value, 10) || 5;
+            ctx.saveSettingsDebounced();
+        });
+
         // Lắng nghe chọn từ Dropdown -> Cập nhật Input
         $('#kaiz-custom-model').on('change', function(this: HTMLSelectElement) {
             if (this.value) {

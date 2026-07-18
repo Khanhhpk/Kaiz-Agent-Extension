@@ -46,7 +46,8 @@ jQuery(async () => {
             useCustomEndpoint: false,
             customUrl: 'http://localhost:5000/v1',
             customKey: '',
-            customModel: ''
+            customModel: '',
+            maxAgentLoops: 5
         };
     }
 
