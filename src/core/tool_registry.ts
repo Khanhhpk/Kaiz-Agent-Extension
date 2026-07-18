@@ -29,6 +29,7 @@ export interface ToolResult {
 
 export interface ITool {
     schema: ToolSchema;
+    requiredFeatures?: string[];
     execute: (args: Record<string, any>, context?: any) => Promise<ToolResult>;
 }
 
@@ -51,6 +52,13 @@ export class ToolRegistry {
      */
     public getAllSchemas(): ToolSchema[] {
         return Array.from(this.tools.values()).map(t => t.schema);
+    }
+
+    /**
+     * Lấy danh sách tất cả các tools (phục vụ Debug)
+     */
+    public getAllTools(): ITool[] {
+        return Array.from(this.tools.values());
     }
 
     /**

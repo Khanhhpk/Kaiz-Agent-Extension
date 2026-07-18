@@ -10,6 +10,7 @@ export const getCharInfoTool: ITool = {
             properties: {} // Không yêu cầu tham số
         }
     },
+    requiredFeatures: ['characters'],
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         if (!context || !context.adapter) {
             return {

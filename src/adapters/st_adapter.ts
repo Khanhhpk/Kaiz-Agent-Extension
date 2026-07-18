@@ -17,6 +17,14 @@ export class SillyTavernAdapter {
     constructor() {}
 
     /**
+     * Kiểm tra xem ST có hỗ trợ tính năng này không (dùng cho dryRun)
+     */
+    public hasFeature(featureName: string): boolean {
+        const ctx = SillyTavern.getContext();
+        return typeof ctx[featureName] === 'function' || ctx[featureName] !== undefined;
+    }
+
+    /**
      * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
      */
     public async generateCompletion(messages: Message[], maxTokens: number, stream: boolean = false, onUpdate?: (text: string, reasoning: string | null) => void): Promise<{ text: string; reasoning: string | null; isMaxTokens: boolean }> {
@@ -239,5 +247,29 @@ export class SillyTavernAdapter {
             scenario: d.scenario || char.scenario || '',
             system_prompt: d.system_prompt || char.system_prompt || '',
         };
+    }
+
+    /**
+     * Gửi tin nhắn hệ thống (không lưu vào lịch sử nhân vật)
+     */
+    public sendSystemMessage(message: string) {
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.sendSystemMessage === 'function') {
+            ctx.sendSystemMessage('sys', message);
+        } else {
+            console.error('[KaizAgent] sendSystemMessage not available in ST Context.');
+        }
+    }
+
+    /**
+     * Xóa tin nhắn cuối cùng
+     */
+    public deleteLastMessage() {
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.deleteLastMessage === 'function') {
+            ctx.deleteLastMessage();
+        } else {
+            console.error('[KaizAgent] deleteLastMessage not available in ST Context.');
+        }
     }
 }
