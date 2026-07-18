@@ -74,8 +74,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 { role: 'system', content: layer2_sandbox_permissions },
                 { role: 'system', content: this.generateSystemPrompt() },
             ];
-            // Lấy 10 tin nhắn gần nhất để làm ngữ cảnh (tránh quá dài)
-            const recentHistory = history.slice(-10);
+            // Lấy toàn bộ lịch sử (bỏ giới hạn tin nhắn)
+            const recentHistory = history;
             let pinnedUserGoal = "";
             for (let i = recentHistory.length - 1; i >= 0; i--) {
                 if (recentHistory[i].role === 'user') {
