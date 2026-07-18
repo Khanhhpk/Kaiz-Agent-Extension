@@ -33,6 +33,17 @@
     100% { transform: scale(1); }
 }
 
+/* Spinner */
+.kaiz-spinner i {
+    animation: kaiz-spin-anim 1s linear infinite;
+    display: inline-block;
+}
+
+@keyframes kaiz-spin-anim {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
 /* Khung Chat */
 .kaiz-chat-window {
     position: fixed;
