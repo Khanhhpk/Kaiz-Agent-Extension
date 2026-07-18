@@ -115,8 +115,31 @@
         }
         const settings = ctx.extensionSettings[EXT_NAME];
         // Nạp giao diện settings.html
-        const html = await $.get(`${ctx.extensionFolderPath}/settings.html`);
-        $('#extensions_settings').append(html);
+        let extPath = 'third-party/Kaiz-Agent-Extension';
+        try {
+            const scripts = document.getElementsByTagName('script');
+            for (let i = 0; i < scripts.length; i++) {
+                const src = scripts[i].src;
+                if (src && src.includes('Kaiz-Agent-Extension/index.js')) {
+                    const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+?)\//);
+                    if (match)
+                        extPath = match[1];
+                    break;
+                }
+            }
+        }
+        catch (e) {
+            console.warn("[KaizAgent] Failed to resolve extension path automatically, using fallback.");
+        }
+        try {
+            const html = await $.get(`/scripts/extensions/${extPath}/settings.html`);
+            $('#extensions_settings').append(html);
+        }
+        catch (e) {
+            console.error("[KaizAgent] Failed to load settings.html:", e);
+            toastr.error("Kaiz Agent: Failed to load UI settings.");
+            return; // Dừng lại nếu không load được UI
+        }
         // Gán giá trị mặc định lên UI
         $('#kaiz-use-custom-endpoint').prop('checked', settings.useCustomEndpoint);
         $('#kaiz-custom-url').val(settings.customUrl);
