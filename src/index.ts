@@ -243,23 +243,25 @@ function initKaizUI(loop: AgentLoop) {
                 case 'stream_chunk':
                     if (currentAgentMsgId) {
                         let content = event.text || '';
-                        // Lọc thẻ tool_call để không hiện mã XML rác trên UI
+                        
+                        // Lọc các thẻ rác trong lúc streaming để không hiển thị lên UI
                         content = content.replace(/<tool_call[\s\S]*?<\/tool_call>/g, '');
-                        // Nếu đang có text
+                        content = content.replace(/<tool_call[\s\S]*/g, ''); // Lọc thẻ chưa đóng
+                        content = content.replace(/<think>[\s\S]*?<\/think>/g, '');
+                        content = content.replace(/<think>[\s\S]*/g, ''); // Lọc thẻ think chưa đóng
+                        
                         if (content.trim()) {
-                            // Dùng marked.parse nếu SillyTavern đã load, nếu không thì dùng thô
-                            // Nhưng tạm thời render thô kèm <br>
                             $(`#${currentAgentMsgId}`).html(content.replace(/\n/g, '<br>'));
                         } else if (event.reasoning) {
-                            $(`#${currentAgentMsgId}`).html(`<span style="color:#aaa"><i>Đang suy nghĩ...</i></span>`);
+                            $(`#${currentAgentMsgId}`).html(`<span class="kaiz-spinner" style="color:#aaa"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...</span>`);
                         }
                         history.scrollTop(history[0].scrollHeight);
                     }
                     break;
                 case 'think_end':
-                    // Nếu sau khi nghĩ xong mà không có chữ nào (chỉ có tool call), ta có thể xoá luôn cái bong bóng này để dọn dẹp
-                    const finalHtml = $(`#${currentAgentMsgId}`).html();
-                    if (!finalHtml || finalHtml.includes('fa-circle-notch')) {
+                    // Xoá bong bóng nếu nó trống rỗng hoặc chỉ chứa icon spinner (nghĩa là nó chỉ gọi tool chứ không nói gì)
+                    const finalHtml = $(`#${currentAgentMsgId}`).html() || '';
+                    if (!finalHtml.trim() || finalHtml.includes('fa-circle-notch') || finalHtml.includes('kaiz-spinner')) {
                         $(`#container-${currentAgentMsgId}`).remove();
                     }
                     break;

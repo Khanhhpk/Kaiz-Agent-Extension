@@ -94,7 +94,7 @@ If you do NOT need a tool, just answer normally.`;
                 let toolResultsText = "";
                 for (const call of toolCalls) {
                     onEvent({ type: 'tool_call', data: call });
-                    const result = await this.toolRegistry.executeTool(call.name, call.args);
+                    const result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
                     onEvent({ type: 'tool_result', data: { name: call.name, result } });
                     
                     toolResultsText += `<tool_result name="${call.name}">\n${result.content}\n</tool_result>\n`;
