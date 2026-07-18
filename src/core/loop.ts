@@ -87,7 +87,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         // Lấy 10 tin nhắn gần nhất để làm ngữ cảnh (tránh quá dài)
         const recentHistory = history.slice(-10);
         for (const msg of recentHistory) {
-            messages.push({ role: msg.role as 'user'|'assistant'|'system', content: msg.content });
+            const apiRole = msg.role === 'agent' ? 'assistant' : msg.role;
+            messages.push({ role: apiRole as 'user'|'assistant'|'system', content: msg.content });
         }
 
         // Layer 3: Assistant Prefill Seeding (Mồi nhử bẻ khóa bộ lọc & Ép buộc CoT)
