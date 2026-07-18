@@ -149,6 +149,15 @@ jQuery(async () => {
         }
     });
 
+    // Nạp style.css thủ công (phòng trường hợp ST không tự load file mới tạo sau khi Update)
+    const cssPath = `/scripts/extensions/${extPath}/style.css`;
+    if (!$(`link[href="${cssPath}"]`).length) {
+        $('<link>')
+            .appendTo('head')
+            .attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
+        console.log(`[KaizAgent] Injected style.css manually.`);
+    }
+
     // 3. Nạp giao diện Khung Chat Độc Lập (Floating UI)
     try {
         const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
