@@ -2,9 +2,10 @@ import { SillyTavernAdapter, Message } from "../adapters/st_adapter";
 import { ToolRegistry } from "./tool_registry";
 
 export interface AgentEvent {
-    type: 'think_start' | 'think_end' | 'tool_call' | 'tool_result' | 'final_answer' | 'error';
+    type: 'think_start' | 'think_end' | 'stream_chunk' | 'tool_call' | 'tool_result' | 'final_answer' | 'error';
     data?: any;
     text?: string;
+    reasoning?: string | null;
 }
 
 export class AgentLoop {
@@ -72,7 +73,9 @@ If you do NOT need a tool, just answer normally.`;
             onEvent({ type: 'think_start' });
             
             try {
-                const response = await this.adapter.generateCompletion(messages, 1500, false);
+                const response = await this.adapter.generateCompletion(messages, 1500, true, (text, reasoning) => {
+                    onEvent({ type: 'stream_chunk', text, reasoning });
+                });
                 onEvent({ type: 'think_end', data: response.reasoning });
 
                 const text = response.text;
@@ -81,16 +84,13 @@ If you do NOT need a tool, just answer normally.`;
                 const toolCalls = this.parseToolCalls(text);
                 
                 if (toolCalls.length === 0) {
-                    // LLM did not call any tools, so this is the final answer
-                    // Lọc bỏ reasoning blocks (ví dụ <think>) nếu có để hiển thị gọn gàng
                     let cleanText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
-                    if (!cleanText && response.reasoning) cleanText = text; // Fallback
+                    if (!cleanText && response.reasoning) cleanText = text;
                     
                     onEvent({ type: 'final_answer', text: cleanText });
                     break;
                 }
 
-                // Thực thi các tool
                 let toolResultsText = "";
                 for (const call of toolCalls) {
                     onEvent({ type: 'tool_call', data: call });
@@ -100,7 +100,6 @@ If you do NOT need a tool, just answer normally.`;
                     toolResultsText += `<tool_result name="${call.name}">\n${result.content}\n</tool_result>\n`;
                 }
 
-                // Gắn tool result vào context và tiếp tục loop
                 messages.push({ role: 'user', content: toolResultsText });
 
             } catch (e: any) {

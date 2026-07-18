@@ -63,21 +63,20 @@ If you do NOT need a tool, just answer normally.`;
                 step++;
                 onEvent({ type: 'think_start' });
                 try {
-                    const response = await this.adapter.generateCompletion(messages, 1500, false);
+                    const response = await this.adapter.generateCompletion(messages, 1500, true, (text, reasoning) => {
+                        onEvent({ type: 'stream_chunk', text, reasoning });
+                    });
                     onEvent({ type: 'think_end', data: response.reasoning });
                     const text = response.text;
                     messages.push({ role: 'assistant', content: text });
                     const toolCalls = this.parseToolCalls(text);
                     if (toolCalls.length === 0) {
-                        // LLM did not call any tools, so this is the final answer
-                        // Lọc bỏ reasoning blocks (ví dụ <think>) nếu có để hiển thị gọn gàng
                         let cleanText = text.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
                         if (!cleanText && response.reasoning)
-                            cleanText = text; // Fallback
+                            cleanText = text;
                         onEvent({ type: 'final_answer', text: cleanText });
                         break;
                     }
-                    // Thực thi các tool
                     let toolResultsText = "";
                     for (const call of toolCalls) {
                         onEvent({ type: 'tool_call', data: call });
@@ -85,7 +84,6 @@ If you do NOT need a tool, just answer normally.`;
                         onEvent({ type: 'tool_result', data: { name: call.name, result } });
                         toolResultsText += `<tool_result name="${call.name}">\n${result.content}\n</tool_result>\n`;
                     }
-                    // Gắn tool result vào context và tiếp tục loop
                     messages.push({ role: 'user', content: toolResultsText });
                 }
                 catch (e) {
@@ -206,7 +204,7 @@ If you do NOT need a tool, just answer normally.`;
         /**
          * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
          */
-        async generateCompletion(messages, maxTokens, stream = false) {
+        async generateCompletion(messages, maxTokens, stream = false, onUpdate) {
             console.log("[KaizAgent] Calling ST generateCompletion...");
             const ctx = SillyTavern.getContext();
             const settings = ctx.extensionSettings['kaiz_agent'] || {};
@@ -260,11 +258,9 @@ If you do NOT need a tool, just answer normally.`;
                                     if (l.startsWith('data: ')) {
                                         try {
                                             const data = JSON.parse(l.slice(6));
-                                            // Ghi nhận lý do kết thúc (max tokens)
                                             const finish = data.choices?.[0]?.finish_reason;
                                             if (finish === 'length' || finish === 'max_tokens')
                                                 isMaxTokens = true;
-                                            // Trích xuất text và reasoning
                                             const delta = data.choices?.[0]?.delta || {};
                                             if (delta.content)
                                                 text += delta.content;
@@ -273,6 +269,8 @@ If you do NOT need a tool, just answer normally.`;
                                             }
                                             if (data.thinking)
                                                 reasoning = (reasoning || '') + data.thinking;
+                                            if (onUpdate)
+                                                onUpdate(text, reasoning);
                                         }
                                         catch (e) { }
                                     }
@@ -292,6 +290,8 @@ If you do NOT need a tool, just answer normally.`;
                         }
                         if (data.thinking)
                             reasoning = (reasoning || '') + data.thinking;
+                        if (onUpdate)
+                            onUpdate(text, reasoning);
                     }
                     return { text: text.trim(), reasoning, isMaxTokens };
                 }
@@ -304,7 +304,6 @@ If you do NOT need a tool, just answer normally.`;
             const service = ctx.ConnectionManagerRequestService;
             let asyncGeneratorFn;
             try {
-                // Ưu tiên sử dụng ConnectionManager (nếu có Profile được chọn)
                 let profileId = ctx.extensionSettings?.connectionManager?.selectedProfile || document.getElementById('connection_profiles')?.value;
                 if (profileId && service && typeof service.sendRequest === 'function') {
                     asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
@@ -315,7 +314,6 @@ If you do NOT need a tool, just answer normally.`;
                     });
                 }
                 else {
-                    // Fallback sang API trực tiếp (OpenAI / TextGen) nếu không xài ConnectionManager
                     const mainApi = window.main_api || ctx.main_api;
                     if (mainApi === 'openai' && ctx.ChatCompletionService) {
                         const oaiSettings = window.oai_settings || ctx.oai_settings || {};
@@ -349,11 +347,12 @@ If you do NOT need a tool, just answer normally.`;
                         text = value.trim();
                     }
                     else {
-                        // Trích xuất text từ response ST
                         text = value?.text || value?.content || value?.message?.content || value?.choices?.[0]?.message?.content || '';
                     }
                     const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
                     const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
+                    if (onUpdate)
+                        onUpdate(text, reasoning);
                     return { text: text.trim(), reasoning, isMaxTokens };
                 }
                 const gen = typeof asyncGeneratorFn === 'function' ? asyncGeneratorFn() : asyncGeneratorFn;
@@ -365,13 +364,13 @@ If you do NOT need a tool, just answer normally.`;
                         break;
                     }
                     lastValue = value;
-                    // ST có nhiều format stream tuỳ thuộc API
                     let chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
-                    // Hỗ trợ Gemini/Claude thought block đơn giản
                     if (value?.thinking)
                         reasoning = (reasoning || '') + value.thinking;
                     if (chunkText)
                         text += chunkText;
+                    if (onUpdate)
+                        onUpdate(text, reasoning);
                 }
                 const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
                 const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
@@ -608,7 +607,7 @@ If you do NOT need a tool, just answer normally.`;
         closeBtn.on('click', () => {
             win.addClass('kaiz-hidden');
         });
-        // Hàm tiện ích thêm tin nhắn
+        // Hàm tiện ích thêm tin nhắn, trả về ID của block content để dễ update sau này
         const addMessage = (role, htmlContent) => {
             let avatar = '';
             let extraClass = '';
@@ -622,15 +621,17 @@ If you do NOT need a tool, just answer normally.`;
             }
             else {
                 avatar = '<i class="fa-solid fa-gear"></i>';
-                extraClass = 'kaiz-msg-agent'; // Style tạm cho system
+                extraClass = 'kaiz-msg-agent';
             }
+            const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
             history.append(`
-            <div class="kaiz-msg ${extraClass}">
+            <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
                 <div class="kaiz-msg-avatar">${avatar}</div>
-                <div class="kaiz-msg-content">${htmlContent}</div>
+                <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
             </div>
         `);
             history.scrollTop(history[0].scrollHeight);
+            return msgId;
         };
         // Xử lý gửi tin nhắn UI
         const sendMessage = async () => {
@@ -639,14 +640,35 @@ If you do NOT need a tool, just answer normally.`;
                 return;
             input.val('');
             addMessage('user', text);
-            let thinkingMsgId = 'kaiz-think-' + Date.now();
+            let currentAgentMsgId = '';
             await loop.run(text, (event) => {
                 switch (event.type) {
                     case 'think_start':
-                        addMessage('agent', `<span id="${thinkingMsgId}"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...</span>`);
+                        currentAgentMsgId = addMessage('agent', `<span class="kaiz-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...</span>`);
+                        break;
+                    case 'stream_chunk':
+                        if (currentAgentMsgId) {
+                            let content = event.text || '';
+                            // Lọc thẻ tool_call để không hiện mã XML rác trên UI
+                            content = content.replace(/<tool_call[\s\S]*?<\/tool_call>/g, '');
+                            // Nếu đang có text
+                            if (content.trim()) {
+                                // Dùng marked.parse nếu SillyTavern đã load, nếu không thì dùng thô
+                                // Nhưng tạm thời render thô kèm <br>
+                                $(`#${currentAgentMsgId}`).html(content.replace(/\n/g, '<br>'));
+                            }
+                            else if (event.reasoning) {
+                                $(`#${currentAgentMsgId}`).html(`<span style="color:#aaa"><i>Đang suy nghĩ...</i></span>`);
+                            }
+                            history.scrollTop(history[0].scrollHeight);
+                        }
                         break;
                     case 'think_end':
-                        $(`#${thinkingMsgId}`).remove();
+                        // Nếu sau khi nghĩ xong mà không có chữ nào (chỉ có tool call), ta có thể xoá luôn cái bong bóng này để dọn dẹp
+                        const finalHtml = $(`#${currentAgentMsgId}`).html();
+                        if (!finalHtml || finalHtml.includes('fa-circle-notch')) {
+                            $(`#container-${currentAgentMsgId}`).remove();
+                        }
                         break;
                     case 'tool_call':
                         addMessage('system', `<i>Đang gọi công cụ: <b>${event.data.name}</b>...</i>`);
@@ -658,11 +680,13 @@ If you do NOT need a tool, just answer normally.`;
                         else {
                             addMessage('system', `<i style="color:#92FE9D">Công cụ ${event.data.name} thực thi thành công.</i>`);
                         }
-                        // Tạo block mới cho lần suy nghĩ tiếp theo
-                        thinkingMsgId = 'kaiz-think-' + Date.now();
                         break;
                     case 'final_answer':
-                        addMessage('agent', event.text || '');
+                        // Final answer thực chất đã được stream_chunk render. 
+                        // Nhưng nếu chưa có (vì lý do nào đó), render lại chốt sổ
+                        if (currentAgentMsgId && event.text && !$(`#${currentAgentMsgId}`).text().trim()) {
+                            $(`#${currentAgentMsgId}`).html((event.text || '').replace(/\n/g, '<br>'));
+                        }
                         break;
                     case 'error':
                         addMessage('system', `<span style="color:#ff5e5e"><b>Lỗi:</b> ${event.text}</span>`);

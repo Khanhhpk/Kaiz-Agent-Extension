@@ -19,7 +19,7 @@ export class SillyTavernAdapter {
     /**
      * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
      */
-    public async generateCompletion(messages: Message[], maxTokens: number, stream: boolean = false): Promise<{ text: string; reasoning: string | null; isMaxTokens: boolean }> {
+    public async generateCompletion(messages: Message[], maxTokens: number, stream: boolean = false, onUpdate?: (text: string, reasoning: string | null) => void): Promise<{ text: string; reasoning: string | null; isMaxTokens: boolean }> {
         console.log("[KaizAgent] Calling ST generateCompletion...");
         const ctx = SillyTavern.getContext();
         const settings = ctx.extensionSettings['kaiz_agent'] || {};
@@ -81,17 +81,17 @@ export class SillyTavernAdapter {
                                     try {
                                         const data = JSON.parse(l.slice(6));
                                         
-                                        // Ghi nhận lý do kết thúc (max tokens)
                                         const finish = data.choices?.[0]?.finish_reason;
                                         if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
 
-                                        // Trích xuất text và reasoning
                                         const delta = data.choices?.[0]?.delta || {};
                                         if (delta.content) text += delta.content;
                                         if (delta.reasoning || delta.reasoning_content) {
                                             reasoning = (reasoning || '') + (delta.reasoning || delta.reasoning_content);
                                         }
                                         if (data.thinking) reasoning = (reasoning || '') + data.thinking;
+                                        
+                                        if (onUpdate) onUpdate(text, reasoning);
                                     } catch (e) {}
                                 }
                             }
@@ -108,6 +108,7 @@ export class SillyTavernAdapter {
                         reasoning = msg.reasoning || msg.reasoning_content;
                     }
                     if (data.thinking) reasoning = (reasoning || '') + data.thinking;
+                    if (onUpdate) onUpdate(text, reasoning);
                 }
 
                 return { text: text.trim(), reasoning, isMaxTokens };
@@ -123,7 +124,6 @@ export class SillyTavernAdapter {
         let asyncGeneratorFn: any;
 
         try {
-            // Ưu tiên sử dụng ConnectionManager (nếu có Profile được chọn)
             let profileId = ctx.extensionSettings?.connectionManager?.selectedProfile || document.getElementById('connection_profiles')?.value;
             
             if (profileId && service && typeof service.sendRequest === 'function') {
@@ -134,7 +134,6 @@ export class SillyTavernAdapter {
                     includePreset: true
                 });
             } else {
-                // Fallback sang API trực tiếp (OpenAI / TextGen) nếu không xài ConnectionManager
                 const mainApi = window.main_api || ctx.main_api;
                 if (mainApi === 'openai' && ctx.ChatCompletionService) {
                     const oaiSettings = window.oai_settings || ctx.oai_settings || {};
@@ -169,11 +168,11 @@ export class SillyTavernAdapter {
                 if (typeof value === 'string') {
                     text = value.trim();
                 } else {
-                    // Trích xuất text từ response ST
                     text = value?.text || value?.content || value?.message?.content || value?.choices?.[0]?.message?.content || '';
                 }
                 const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
                 const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
+                if (onUpdate) onUpdate(text, reasoning);
                 return { text: text.trim(), reasoning, isMaxTokens };
             }
 
@@ -186,12 +185,12 @@ export class SillyTavernAdapter {
                 }
                 lastValue = value;
                 
-                // ST có nhiều format stream tuỳ thuộc API
                 let chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
-                // Hỗ trợ Gemini/Claude thought block đơn giản
                 if (value?.thinking) reasoning = (reasoning || '') + value.thinking;
                 
                 if (chunkText) text += chunkText;
+                
+                if (onUpdate) onUpdate(text, reasoning);
             }
 
             const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;

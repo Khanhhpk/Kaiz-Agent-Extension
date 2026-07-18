@@ -199,8 +199,8 @@ function initKaizUI(loop: AgentLoop) {
         win.addClass('kaiz-hidden');
     });
 
-    // Hàm tiện ích thêm tin nhắn
-    const addMessage = (role: 'user' | 'agent' | 'system', htmlContent: string) => {
+    // Hàm tiện ích thêm tin nhắn, trả về ID của block content để dễ update sau này
+    const addMessage = (role: 'user' | 'agent' | 'system', htmlContent: string): string => {
         let avatar = '';
         let extraClass = '';
         if (role === 'user') {
@@ -211,16 +211,18 @@ function initKaizUI(loop: AgentLoop) {
             extraClass = 'kaiz-msg-agent';
         } else {
             avatar = '<i class="fa-solid fa-gear"></i>';
-            extraClass = 'kaiz-msg-agent'; // Style tạm cho system
+            extraClass = 'kaiz-msg-agent'; 
         }
 
+        const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
         history.append(`
-            <div class="kaiz-msg ${extraClass}">
+            <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
                 <div class="kaiz-msg-avatar">${avatar}</div>
-                <div class="kaiz-msg-content">${htmlContent}</div>
+                <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
             </div>
         `);
         history.scrollTop(history[0].scrollHeight);
+        return msgId;
     };
 
     // Xử lý gửi tin nhắn UI
@@ -231,15 +233,35 @@ function initKaizUI(loop: AgentLoop) {
         input.val('');
         addMessage('user', text);
         
-        let thinkingMsgId = 'kaiz-think-' + Date.now();
+        let currentAgentMsgId = '';
         
         await loop.run(text, (event) => {
             switch(event.type) {
                 case 'think_start':
-                    addMessage('agent', `<span id="${thinkingMsgId}"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...</span>`);
+                    currentAgentMsgId = addMessage('agent', `<span class="kaiz-spinner"><i class="fa-solid fa-circle-notch fa-spin"></i> Đang suy nghĩ...</span>`);
+                    break;
+                case 'stream_chunk':
+                    if (currentAgentMsgId) {
+                        let content = event.text || '';
+                        // Lọc thẻ tool_call để không hiện mã XML rác trên UI
+                        content = content.replace(/<tool_call[\s\S]*?<\/tool_call>/g, '');
+                        // Nếu đang có text
+                        if (content.trim()) {
+                            // Dùng marked.parse nếu SillyTavern đã load, nếu không thì dùng thô
+                            // Nhưng tạm thời render thô kèm <br>
+                            $(`#${currentAgentMsgId}`).html(content.replace(/\n/g, '<br>'));
+                        } else if (event.reasoning) {
+                            $(`#${currentAgentMsgId}`).html(`<span style="color:#aaa"><i>Đang suy nghĩ...</i></span>`);
+                        }
+                        history.scrollTop(history[0].scrollHeight);
+                    }
                     break;
                 case 'think_end':
-                    $(`#${thinkingMsgId}`).remove();
+                    // Nếu sau khi nghĩ xong mà không có chữ nào (chỉ có tool call), ta có thể xoá luôn cái bong bóng này để dọn dẹp
+                    const finalHtml = $(`#${currentAgentMsgId}`).html();
+                    if (!finalHtml || finalHtml.includes('fa-circle-notch')) {
+                        $(`#container-${currentAgentMsgId}`).remove();
+                    }
                     break;
                 case 'tool_call':
                     addMessage('system', `<i>Đang gọi công cụ: <b>${event.data.name}</b>...</i>`);
@@ -250,11 +272,13 @@ function initKaizUI(loop: AgentLoop) {
                     } else {
                         addMessage('system', `<i style="color:#92FE9D">Công cụ ${event.data.name} thực thi thành công.</i>`);
                     }
-                    // Tạo block mới cho lần suy nghĩ tiếp theo
-                    thinkingMsgId = 'kaiz-think-' + Date.now();
                     break;
                 case 'final_answer':
-                    addMessage('agent', event.text || '');
+                    // Final answer thực chất đã được stream_chunk render. 
+                    // Nhưng nếu chưa có (vì lý do nào đó), render lại chốt sổ
+                    if (currentAgentMsgId && event.text && !$(`#${currentAgentMsgId}`).text().trim()) {
+                        $(`#${currentAgentMsgId}`).html((event.text || '').replace(/\n/g, '<br>'));
+                    }
                     break;
                 case 'error':
                     addMessage('system', `<span style="color:#ff5e5e"><b>Lỗi:</b> ${event.text}</span>`);
