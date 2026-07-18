@@ -100,6 +100,23 @@ export class ChatWindowUI {
             });
         }
 
+        // Hàm tiện ích format tin nhắn
+        const formatMessage = (text: string, isFinal: boolean): string => {
+            let html = text || '';
+            const detailsTag = isFinal 
+                ? '<details class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">'
+                : '<details open class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">';
+                
+            html = html.replace(/<agent_cot>/g, detailsTag + '<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">');
+            html = html.replace(/<\/agent_cot>/g, '</div></details>');
+            
+            if (html.includes('<details') && !html.includes('</details>')) {
+                html += '</div></details>';
+            }
+
+            return html.replace(/\n/g, '<br>');
+        };
+
         // Lắng nghe StateManager
         stateManager.onChatsListUpdated = (chats) => {
             renderChatList(chats);
@@ -112,7 +129,8 @@ export class ChatWindowUI {
             }
             
             for (const msg of messages) {
-                addMessageToDOM(msg.role, msg.content, false);
+                const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : msg.content.replace(/\n/g, '<br>');
+                addMessageToDOM(msg.role, formatted, false);
             }
         };
 
@@ -176,10 +194,10 @@ export class ChatWindowUI {
                     if (event.reasoning) {
                         agentContentBox.html(`<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div><div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating tools...</div>`);
                     } else if (event.text) {
-                        agentContentBox.html(event.text.replace(/\n/g, '<br>'));
+                        agentContentBox.html(formatMessage(event.text, false));
                     }
                 } else if (event.type === 'final_answer') {
-                    agentContentBox.html((event.text || '').replace(/\n/g, '<br>'));
+                    agentContentBox.html(formatMessage(event.text || '', true));
                     fullAgentResponse = event.text || '';
                 } else if (event.type === 'tool_call') {
                     agentContentBox.html(`<div style="color:#e67e22; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${event.data.name}</b>...</div>`);
