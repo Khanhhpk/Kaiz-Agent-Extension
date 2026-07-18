@@ -118,7 +118,7 @@
         let extPath = 'third-party/Kaiz-Agent-Extension';
         try {
             if (document.currentScript && document.currentScript.src) {
-                const match = new URL(document.currentScript.src).pathname.match(/\/scripts\/extensions\/(.+?)\//);
+                const match = new URL(document.currentScript.src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
                 if (match)
                     extPath = match[1];
             }
@@ -126,8 +126,8 @@
                 const scripts = document.getElementsByTagName('script');
                 for (let i = 0; i < scripts.length; i++) {
                     const src = scripts[i].src;
-                    if (src && src.toLowerCase().includes('kaiz')) {
-                        const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+?)\//);
+                    if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz')) {
+                        const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
                         if (match) {
                             extPath = match[1];
                             break;
@@ -140,13 +140,26 @@
             console.warn("[KaizAgent] Path resolution failed, using fallback:", e);
         }
         console.log(`[KaizAgent] Resolved extension path: ${extPath}`);
-        // 2. Nạp giao diện settings.html
-        try {
-            const html = await $.get(`/scripts/extensions/${extPath}/settings.html`);
-            $('#extensions_settings').append(html);
+        // 2. Nạp giao diện settings.html sử dụng hàm chuẩn của SillyTavern giống ST-Copilot
+        const container = document.getElementById('extensions_settings') || document.getElementById('extensions_settings2');
+        if (container) {
+            try {
+                const html = await ctx.renderExtensionTemplateAsync(extPath, 'settings');
+                if (html) {
+                    container.insertAdjacentHTML('beforeend', html);
+                }
+                else {
+                    throw new Error("renderExtensionTemplateAsync returned empty html.");
+                }
+            }
+            catch (e) {
+                console.error("[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:", e);
+                toastr.error("Kaiz Agent: Failed to load UI settings.");
+                return;
+            }
         }
-        catch (e) {
-            console.error("[KaizAgent] Failed to load settings.html from", `/scripts/extensions/${extPath}/settings.html`, e);
+        else {
+            console.error("[KaizAgent] Could not find #extensions_settings container.");
             return;
         }
         // Gán giá trị mặc định lên UI
