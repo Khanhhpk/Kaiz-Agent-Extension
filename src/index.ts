@@ -1,5 +1,6 @@
 import { AgentLoop } from "./core/loop";
 import { ToolRegistry } from "./core/tool_registry";
+import { registerDefaultTools } from "./core/tools";
 import { SillyTavernAdapter } from "./adapters/st_adapter";
 
 console.log("[KaizAgent] Extension loaded into browser.");
@@ -11,8 +12,13 @@ jQuery(async () => {
     
     const adapter = new SillyTavernAdapter();
     const registry = new ToolRegistry();
+    
+    // Đăng ký các công cụ
+    registerDefaultTools(registry);
+    
     const loop = new AgentLoop(adapter, registry);
 
     console.log("[KaizAgent] Core initialized successfully.");
 });
+
 
