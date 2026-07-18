@@ -70,7 +70,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         return tools;
     }
 
-    public async run(history: any[], maxSteps: number, onEvent: (event: AgentEvent) => void) {
+    public async run(history: any[], maxSteps: number, onEvent: (event: AgentEvent) => void | Promise<void>) {
         console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
         
         // Layer 1: System Identity & Technical Sandbox
@@ -100,15 +100,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         while (step < maxSteps) {
             step++;
-            onEvent({ type: 'step_start' });
+            await onEvent({ type: 'step_start' });
             
             try {
                 let currentText = "";
-                const response = await this.adapter.generateCompletion(messages, 1500, true, (text, reasoning) => {
+                const response = await this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
                     currentText = `<agent_cot>\n${text}`;
-                    onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+                    await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
                 });
-                onEvent({ type: 'think_end', data: response.reasoning });
+                await onEvent({ type: 'think_end', data: response.reasoning });
 
                 const text = response.text;
                 messages.push({ role: 'assistant', content: text });
@@ -119,20 +119,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     let cleanText = `<agent_cot>\n${text}`.trim();
                     if (!cleanText && response.reasoning) cleanText = `<agent_cot>\n`;
                     
-                    onEvent({ type: 'step_end', text: cleanText, isFinal: true });
+                    await onEvent({ type: 'step_end', text: cleanText, isFinal: true });
                     break;
                 }
 
-                onEvent({ type: 'step_end', text: `<agent_cot>\n${text}`, isFinal: false });
+                await onEvent({ type: 'step_end', text: `<agent_cot>\n${text}`, isFinal: false });
                 
                 let toolResultsText = "";
                 for (const call of toolCalls) {
-                    onEvent({ type: 'tool_call', data: call });
+                    await onEvent({ type: 'tool_call', data: call });
 
                     const result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
                     
                     const displayResult = `{"message": ${JSON.stringify(result.content)}}\n\n<div style="color:#e67e22; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${call.name}</b>...</div>\n<div style="color:#2ecc71; font-size:12px; margin-top:5px;"><i class="fa-solid fa-check"></i> Tool finished.</div>`;
-                    onEvent({ type: 'tool_result', data: { name: call.name, result }, text: displayResult });
+                    await onEvent({ type: 'tool_result', data: { name: call.name, result }, text: displayResult });
                     
                     toolResultsText += `<tool_result name="${call.name}">\n${result.content}\n</tool_result>\n`;
                 }
@@ -141,13 +141,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
             } catch (e: any) {
                 console.error("[AgentLoop] Error during completion:", e);
-                onEvent({ type: 'error', text: e.message || String(e) });
+                await onEvent({ type: 'error', text: e.message || String(e) });
                 break;
             }
         }
 
         if (step >= maxSteps) {
-            onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
+            await onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
         }
     }
 }
