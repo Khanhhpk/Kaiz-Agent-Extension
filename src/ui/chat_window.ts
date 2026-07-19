@@ -159,6 +159,21 @@ export class ChatWindowUI {
             return html.replace(/\n/g, '<br>');
         };
 
+        // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
+        const formatUserMessage = (text: string): string => {
+            if (text.startsWith('[Tool Result')) {
+                const isError = text.includes('CÓ LỖI/ERROR');
+                const color = isError ? '#e74c3c' : '#2ecc71';
+                const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
+                
+                return `<details class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid ${color};">
+<summary style="cursor: pointer; color: ${color}; font-size: 12px; font-weight: bold;"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
+<div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${text.replace(/\n/g, '<br>')}</div>
+</details>`;
+            }
+            return text.replace(/\n/g, '<br>');
+        };
+
         // Lắng nghe StateManager
         stateManager.onChatsListUpdated = (chats) => {
             renderChatList(chats);
@@ -171,7 +186,7 @@ export class ChatWindowUI {
             }
             
             for (const msg of messages) {
-                const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : msg.content.replace(/\n/g, '<br>');
+                const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
                 addMessageToDOM(msg.role, formatted, false);
             }
         };
@@ -256,7 +271,8 @@ export class ChatWindowUI {
                     await stateManager.addMessage('agent', currentStepResponse);
                     agentContentBox = null;
                 } else if (event.type === 'tool_result') {
-                    addMessageToDOM('user', event.text || '');
+                    const formatted = formatUserMessage(event.text || '');
+                    addMessageToDOM('user', formatted);
                     await stateManager.addMessage('user', event.text || '');
                 } else if (event.type === 'error') {
                     if (agentContentBox) {

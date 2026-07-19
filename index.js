@@ -136,14 +136,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         result = { content: err.message || String(err), isError: true };
                         hasError = true;
                     }
-                    const displayResult = `{"message": ${JSON.stringify(result.content)}}\n\n<div style="color:#e67e22; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${call.name}</b>...</div>\n<div style="color:#2ecc71; font-size:12px; margin-top:5px;"><i class="fa-solid fa-check"></i> Tool finished.</div>`;
-                    await onEvent({ type: 'tool_result', data: { name: call.name, result }, text: displayResult });
                     const resultsFormatted = `[Tool: ${call.name}]\nRESULT: ${result.content}`;
                     let pinnedGoalSection = pinnedUserGoal ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!` : '';
                     const feedbackBase = hasError
                         ? `[Tool Result - CÓ LỖI/ERROR] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI: Tool vừa gọi bị lỗi. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
                         : `[Tool Result - THÀNH CÔNG] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n👉 HỆ THỐNG AGENTIC LOOP ĐANG HOẠT ĐỘNG: Lượt tool vừa thành công và vòng lặp tiếp theo đã tự động kích hoạt!\n- Nếu nhiệm vụ ban đầu vẫn chưa hoàn thành: HÃY TIẾP TỤC gọi tool thực thi công việc tiếp theo ngay lập tức!\n- Nếu đã hoàn thành 100% yêu cầu: HÃY DỪNG LẠI (chỉ chat, không gọi tool nữa) để báo kết quả.`;
-                    internalHistory.push({ role: 'user', content: feedbackBase + pinnedGoalSection });
+                    const finalFeedback = feedbackBase + pinnedGoalSection;
+                    await onEvent({ type: 'tool_result', data: { name: call.name, result }, text: finalFeedback });
+                    internalHistory.push({ role: 'user', content: finalFeedback });
                 }
                 catch (e) {
                     console.error("[AgentLoop] Error during completion:", e);
@@ -1094,6 +1094,19 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 return html.replace(/\n/g, '<br>');
             };
+            // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
+            const formatUserMessage = (text) => {
+                if (text.startsWith('[Tool Result')) {
+                    const isError = text.includes('CÓ LỖI/ERROR');
+                    const color = isError ? '#e74c3c' : '#2ecc71';
+                    const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
+                    return `<details class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid ${color};">
+<summary style="cursor: pointer; color: ${color}; font-size: 12px; font-weight: bold;"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
+<div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${text.replace(/\n/g, '<br>')}</div>
+</details>`;
+                }
+                return text.replace(/\n/g, '<br>');
+            };
             // Lắng nghe StateManager
             stateManager.onChatsListUpdated = (chats) => {
                 renderChatList(chats);
@@ -1104,7 +1117,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     chatTitle.text('Kaiz Agent');
                 }
                 for (const msg of messages) {
-                    const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : msg.content.replace(/\n/g, '<br>');
+                    const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
                     addMessageToDOM(msg.role, formatted, false);
                 }
             };
@@ -1186,7 +1199,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         agentContentBox = null;
                     }
                     else if (event.type === 'tool_result') {
-                        addMessageToDOM('user', event.text || '');
+                        const formatted = formatUserMessage(event.text || '');
+                        addMessageToDOM('user', formatted);
                         await stateManager.addMessage('user', event.text || '');
                     }
                     else if (event.type === 'error') {

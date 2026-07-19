@@ -160,9 +160,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     hasError = true;
                 }
                 
-                const displayResult = `{"message": ${JSON.stringify(result.content)}}\n\n<div style="color:#e67e22; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-wrench"></i> Calling <b>${call.name}</b>...</div>\n<div style="color:#2ecc71; font-size:12px; margin-top:5px;"><i class="fa-solid fa-check"></i> Tool finished.</div>`;
-                await onEvent({ type: 'tool_result', data: { name: call.name, result }, text: displayResult });
-                
                 const resultsFormatted = `[Tool: ${call.name}]\nRESULT: ${result.content}`;
                 
                 let pinnedGoalSection = pinnedUserGoal ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!` : '';
@@ -171,7 +168,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     ? `[Tool Result - CÓ LỖI/ERROR] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI: Tool vừa gọi bị lỗi. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
                     : `[Tool Result - THÀNH CÔNG] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n👉 HỆ THỐNG AGENTIC LOOP ĐANG HOẠT ĐỘNG: Lượt tool vừa thành công và vòng lặp tiếp theo đã tự động kích hoạt!\n- Nếu nhiệm vụ ban đầu vẫn chưa hoàn thành: HÃY TIẾP TỤC gọi tool thực thi công việc tiếp theo ngay lập tức!\n- Nếu đã hoàn thành 100% yêu cầu: HÃY DỪNG LẠI (chỉ chat, không gọi tool nữa) để báo kết quả.`;
 
-                internalHistory.push({ role: 'user', content: feedbackBase + pinnedGoalSection });
+                const finalFeedback = feedbackBase + pinnedGoalSection;
+
+                await onEvent({ type: 'tool_result', data: { name: call.name, result }, text: finalFeedback });
+
+                internalHistory.push({ role: 'user', content: finalFeedback });
 
             } catch (e: any) {
                 console.error("[AgentLoop] Error during completion:", e);
