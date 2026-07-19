@@ -1043,6 +1043,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 setTimeout(() => { ensureInBounds(btn); }, 500);
                 btn.draggable({
+                    containment: 'window',
                     scroll: false,
                     stop: function () {
                         const pos = ensureInBounds($(this));

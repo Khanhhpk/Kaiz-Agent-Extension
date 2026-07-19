@@ -86,6 +86,7 @@ export class ChatWindowUI {
             setTimeout(() => { ensureInBounds(btn); }, 500);
 
             btn.draggable({
+                containment: 'window',
                 scroll: false,
                 stop: function() {
                     const pos = ensureInBounds($(this));
