@@ -1,4 +1,4 @@
-import { ITool, ToolContext } from './types';
+import { ITool, ToolContext } from '../types';
 
 export const editUserPersonaTool: ITool = {
     schema: {
