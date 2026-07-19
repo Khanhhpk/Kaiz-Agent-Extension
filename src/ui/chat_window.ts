@@ -143,17 +143,52 @@ export class ChatWindowUI {
         // Hàm tiện ích format tin nhắn
         const formatMessage = (text: string, isFinal: boolean): string => {
             let html = text || '';
+
             const detailsTag = isFinal 
                 ? '<details class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">'
                 : '<details open class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">';
                 
             const closeIndex = html.indexOf('</agent_cot>');
             if (closeIndex !== -1) {
-                const cotContent = html.substring(0, closeIndex);
-                const restContent = html.substring(closeIndex + '</agent_cot>'.length);
+                const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                let restContent = html.substring(closeIndex + '</agent_cot>'.length);
+                
+                // Protect tool calls
+                const toolCalls: string[] = [];
+                restContent = restContent.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
+                    const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const toolHtml = `<details class="kaiz-tool-call" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #3498db;"><summary style="cursor: pointer; color: #3498db; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap; font-family: monospace;">${cleanContent}</div></details>`;
+                    toolCalls.push(toolHtml);
+                    return `__TOOL_CALL_${toolCalls.length - 1}__`;
+                });
+                
+                // Escape the rest
+                restContent = restContent.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                // Restore tool calls
+                for (let i = 0; i < toolCalls.length; i++) {
+                    restContent = restContent.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
+                }
+                
                 html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${cotContent}</div></details>${restContent}`;
+            } else if (html.includes('<agent_cot>')) {
+                 const cotContent = html.replace('<agent_cot>', '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                 html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${cotContent}</div></details>`;
             } else {
-                html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${html}</div></details>`;
+                 // No agent_cot
+                const toolCalls: string[] = [];
+                html = html.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
+                    const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const toolHtml = `<details class="kaiz-tool-call" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #3498db;"><summary style="cursor: pointer; color: #3498db; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap; font-family: monospace;">${cleanContent}</div></details>`;
+                    toolCalls.push(toolHtml);
+                    return `__TOOL_CALL_${toolCalls.length - 1}__`;
+                });
+                
+                html = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
+                for (let i = 0; i < toolCalls.length; i++) {
+                    html = html.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
+                }
             }
 
             return html.replace(/\n/g, '<br>');
