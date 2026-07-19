@@ -2,8 +2,10 @@ declare const jQuery: any;
 declare const SillyTavern: any;
 declare const toastr: any;
 
+import { ToolRegistry } from "../core/tool_registry";
+
 export class SettingsUI {
-    public static async init(extPath: string, EXT_NAME: string) {
+    public static async init(extPath: string, EXT_NAME: string, registry: ToolRegistry) {
         const $ = jQuery;
         const ctx = SillyTavern.getContext();
 
@@ -59,11 +61,68 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
         });
 
-        $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);
         $('#kaiz-max-loops').on('input', function(this: HTMLInputElement) {
             settings.maxAgentLoops = parseInt(this.value, 10) || 5;
             ctx.saveSettingsDebounced();
         });
+
+        // --- TOOLS MANAGER LOGIC ---
+        const $toolsList = $('#kaiz-tools-list');
+        const tools = registry.getAllTools();
+        
+        function renderTools(filterText = '') {
+            $toolsList.empty();
+            const lowerFilter = filterText.toLowerCase();
+            
+            tools.forEach(tool => {
+                const name = tool.schema.name;
+                const desc = tool.schema.description;
+                
+                if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+                    return; // Bỏ qua nếu không khớp filter
+                }
+                
+                const isEnabled = !settings.disabledTools[name];
+                
+                const $toolItem = $(`
+                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                        <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} style="margin-top: 3px;" />
+                        <div style="flex: 1;">
+                            <label for="kaiz-tool-toggle-${name}" style="font-weight: bold; cursor: pointer; color: ${isEnabled ? '#fff' : '#888'}; display: block;">${name}</label>
+                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                        </div>
+                    </div>
+                `);
+                
+                $toolsList.append($toolItem);
+            });
+            
+            // Gắn sự kiện toggle
+            $('.kaiz-tool-toggle').on('change', function(this: HTMLInputElement) {
+                const toolName = $(this).data('tool');
+                const isChecked = this.checked;
+                
+                if (isChecked) {
+                    delete settings.disabledTools[toolName];
+                } else {
+                    settings.disabledTools[toolName] = true;
+                }
+                ctx.saveSettingsDebounced();
+                
+                // Đổi màu nhãn
+                const $label = $(`label[for="kaiz-tool-toggle-${toolName}"]`);
+                $label.css('color', isChecked ? '#fff' : '#888');
+            });
+        }
+        
+        // Render lần đầu
+        renderTools();
+        
+        // Bắt sự kiện Search
+        $('#kaiz-tools-search').on('input', function(this: HTMLInputElement) {
+            renderTools(this.value);
+        });
+        // --- END TOOLS MANAGER LOGIC ---
 
         // Lắng nghe chọn từ Dropdown -> Cập nhật Input
         $('#kaiz-custom-model').on('change', function(this: HTMLSelectElement) {

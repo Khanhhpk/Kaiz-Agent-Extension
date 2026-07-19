@@ -47,8 +47,11 @@ jQuery(async () => {
             customUrl: 'http://localhost:5000/v1',
             customKey: '',
             customModel: '',
-            maxAgentLoops: 5
+            maxAgentLoops: 5,
+            disabledTools: {}
         };
+    } else if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
+        ctx.extensionSettings[EXT_NAME].disabledTools = {};
     }
 
     // Nạp style.css thủ công
@@ -59,8 +62,13 @@ jQuery(async () => {
             .attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
     }
 
+    // Khởi tạo Core
+    const adapter = new SillyTavernAdapter();
+    const registry = new ToolRegistry();
+    registerDefaultTools(registry);
+
     // 1. Nạp giao diện Settings
-    await SettingsUI.init(extPath, EXT_NAME);
+    await SettingsUI.init(extPath, EXT_NAME, registry);
 
     // 2. Nạp giao diện Khung Chat Độc Lập
     try {
@@ -68,10 +76,6 @@ jQuery(async () => {
         if (kaizWindowHtml) {
             $('body').append(kaizWindowHtml);
             
-            // Khởi tạo Core
-            const adapter = new SillyTavernAdapter();
-            const registry = new ToolRegistry();
-            registerDefaultTools(registry);
             const loop = new AgentLoop(adapter, registry);
             
             const stateManager = new StateManager();

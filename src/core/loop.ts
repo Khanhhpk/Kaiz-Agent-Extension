@@ -13,7 +13,10 @@ export class AgentLoop {
     constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry) {}
 
     private generateSystemPrompt(maxSteps: number): string {
-        const schemas = this.toolRegistry.getAllSchemas();
+        const ctx = (window as any).SillyTavern.getContext();
+        const disabledTools = ctx.extensionSettings?.kaiz_agent?.disabledTools || {};
+        const schemas = this.toolRegistry.getAllSchemas().filter(s => !disabledTools[s.name]);
+        
         let prompt = `Bạn là Kaiz Agent, một trợ lý AI được xây dựng để hoạt động bên trong môi trường SillyTavern.
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
 (LƯU Ý QUAN TRỌNG: SỐ MAX AGENT FLOW / AGENT LOOP HIỆN TẠI LÀ: ${maxSteps}. Hãy phân bổ kế hoạch thực thi công việc sao cho hợp lý trong giới hạn số vòng lặp này.)

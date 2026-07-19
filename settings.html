@@ -46,6 +46,15 @@
 
                 <!-- Nút Debug -->
                 <div style="margin-top: 15px;">
+                    <div class="scp-settings-flat-title"><i class="fa-solid fa-screwdriver-wrench"></i> Tools Manager</div>
+                    <label style="font-size:11px; color:#888; display:block; margin-bottom:4px">Search and toggle tools</label>
+                    <input id="kaiz-tools-search" type="text" class="text_pole" placeholder="Search tool name or description..." style="margin-bottom:8px" />
+                    <div id="kaiz-tools-list" style="max-height: 250px; overflow-y: auto; padding: 5px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; display: flex; flex-direction: column; gap: 8px;">
+                        <!-- Danh sách Tool render ở đây -->
+                    </div>
+                </div>
+
+                <div style="margin-top: 15px; margin-bottom: 10px;">
                     <button id="kaiz-debug-btn" class="menu_button interactable">
                         <i class="fa-solid fa-bug"></i> Debug Tools
                     </button>

@@ -9,7 +9,9 @@
             this.toolRegistry = toolRegistry;
         }
         generateSystemPrompt(maxSteps) {
-            const schemas = this.toolRegistry.getAllSchemas();
+            const ctx = window.SillyTavern.getContext();
+            const disabledTools = ctx.extensionSettings?.kaiz_agent?.disabledTools || {};
+            const schemas = this.toolRegistry.getAllSchemas().filter(s => !disabledTools[s.name]);
             let prompt = `Bạn là Kaiz Agent, một trợ lý AI được xây dựng để hoạt động bên trong môi trường SillyTavern.
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
 (LƯU Ý QUAN TRỌNG: SỐ MAX AGENT FLOW / AGENT LOOP HIỆN TẠI LÀ: ${maxSteps}. Hãy phân bổ kế hoạch thực thi công việc sao cho hợp lý trong giới hạn số vòng lặp này.)
@@ -1183,7 +1185,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     }
 
     class SettingsUI {
-        static async init(extPath, EXT_NAME) {
+        static async init(extPath, EXT_NAME, registry) {
             const $ = jQuery;
             const ctx = SillyTavern.getContext();
             // 2. Nạp giao diện settings.html
@@ -1239,11 +1241,57 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     settings.customModel = this.value;
                 ctx.saveSettingsDebounced();
             });
-            $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);
             $('#kaiz-max-loops').on('input', function () {
                 settings.maxAgentLoops = parseInt(this.value, 10) || 5;
                 ctx.saveSettingsDebounced();
             });
+            // --- TOOLS MANAGER LOGIC ---
+            const $toolsList = $('#kaiz-tools-list');
+            const tools = registry.getAllTools();
+            function renderTools(filterText = '') {
+                $toolsList.empty();
+                const lowerFilter = filterText.toLowerCase();
+                tools.forEach(tool => {
+                    const name = tool.schema.name;
+                    const desc = tool.schema.description;
+                    if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+                        return; // Bỏ qua nếu không khớp filter
+                    }
+                    const isEnabled = !settings.disabledTools[name];
+                    const $toolItem = $(`
+                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                        <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} style="margin-top: 3px;" />
+                        <div style="flex: 1;">
+                            <label for="kaiz-tool-toggle-${name}" style="font-weight: bold; cursor: pointer; color: ${isEnabled ? '#fff' : '#888'}; display: block;">${name}</label>
+                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                        </div>
+                    </div>
+                `);
+                    $toolsList.append($toolItem);
+                });
+                // Gắn sự kiện toggle
+                $('.kaiz-tool-toggle').on('change', function () {
+                    const toolName = $(this).data('tool');
+                    const isChecked = this.checked;
+                    if (isChecked) {
+                        delete settings.disabledTools[toolName];
+                    }
+                    else {
+                        settings.disabledTools[toolName] = true;
+                    }
+                    ctx.saveSettingsDebounced();
+                    // Đổi màu nhãn
+                    const $label = $(`label[for="kaiz-tool-toggle-${toolName}"]`);
+                    $label.css('color', isChecked ? '#fff' : '#888');
+                });
+            }
+            // Render lần đầu
+            renderTools();
+            // Bắt sự kiện Search
+            $('#kaiz-tools-search').on('input', function () {
+                renderTools(this.value);
+            });
+            // --- END TOOLS MANAGER LOGIC ---
             // Lắng nghe chọn từ Dropdown -> Cập nhật Input
             $('#kaiz-custom-model').on('change', function () {
                 if (this.value) {
@@ -1837,8 +1885,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 customUrl: 'http://localhost:5000/v1',
                 customKey: '',
                 customModel: '',
-                maxAgentLoops: 5
+                maxAgentLoops: 5,
+                disabledTools: {}
             };
+        }
+        else if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
+            ctx.extensionSettings[EXT_NAME].disabledTools = {};
         }
         // Nạp style.css thủ công
         const cssPath = `/scripts/extensions/${extPath}/style.css`;
@@ -1847,17 +1899,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 .appendTo('head')
                 .attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
         }
+        // Khởi tạo Core
+        const adapter = new SillyTavernAdapter();
+        const registry = new ToolRegistry();
+        registerDefaultTools(registry);
         // 1. Nạp giao diện Settings
-        await SettingsUI.init(extPath, EXT_NAME);
+        await SettingsUI.init(extPath, EXT_NAME, registry);
         // 2. Nạp giao diện Khung Chat Độc Lập
         try {
             const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
             if (kaizWindowHtml) {
                 $('body').append(kaizWindowHtml);
-                // Khởi tạo Core
-                const adapter = new SillyTavernAdapter();
-                const registry = new ToolRegistry();
-                registerDefaultTools(registry);
                 const loop = new AgentLoop(adapter, registry);
                 const stateManager = new StateManager();
                 await stateManager.init(); // Tải DB và danh sách chat
