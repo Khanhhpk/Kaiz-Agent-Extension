@@ -165,16 +165,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const call = toolCalls[i];
                     await onEvent({ type: 'tool_call', data: call });
 
-                    let result;
+                    let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
                     let isToolError = false;
-                    try {
-                        result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
-                        if (result.isError) {
-                            hasError = true;
-                            isToolError = true;
-                        }
-                    } catch (err: any) {
-                        result = { content: err.message || String(err), isError: true };
+                    if (result.isError) {
                         hasError = true;
                         isToolError = true;
                     }

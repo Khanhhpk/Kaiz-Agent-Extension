@@ -254,3 +254,141 @@
 .kaiz-chat-send:active {
     transform: translateY(0);
 }
+
+/* Agent Log Modal */
+.kaiz-log-modal {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 80%;
+    height: 80%;
+    background: #1e1e1e;
+    color: #fff;
+    z-index: 10000;
+    border-radius: 10px;
+    flex-direction: column;
+    box-shadow: 0 0 20px rgba(0,0,0,0.8);
+}
+
+.kaiz-log-header {
+    padding: 15px;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.kaiz-log-title {
+    margin: 0;
+}
+
+.kaiz-log-close {
+    cursor: pointer;
+    font-size: 20px;
+}
+
+.kaiz-log-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.kaiz-log-pane-left {
+    flex: 1;
+    border-right: 1px solid #333;
+    padding: 15px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.kaiz-log-pane-right {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.kaiz-log-pane-title {
+    margin-top: 0;
+}
+
+.kaiz-log-pre {
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: #111;
+    padding: 10px;
+    border-radius: 5px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+/* Chat Blocks */
+.kaiz-cot-block {
+    margin-bottom: 10px;
+    background: rgba(0,0,0,0.2);
+    padding: 8px;
+    border-radius: 5px;
+    border-left: 3px solid #f39c12;
+}
+
+.kaiz-cot-summary {
+    cursor: pointer;
+    color: #f39c12;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.kaiz-cot-content {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 5px;
+    white-space: pre-wrap;
+}
+
+.kaiz-tool-call-block {
+    margin-bottom: 10px;
+    background: rgba(0,0,0,0.2);
+    padding: 8px;
+    border-radius: 5px;
+    border-left: 3px solid #3498db;
+}
+
+.kaiz-tool-summary {
+    cursor: pointer;
+    color: #3498db;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.kaiz-tool-content {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 5px;
+    white-space: pre-wrap;
+    font-family: monospace;
+}
+
+.kaiz-system-result-block {
+    margin-bottom: 10px;
+    background: rgba(0,0,0,0.2);
+    padding: 8px;
+    border-radius: 5px;
+}
+
+.kaiz-system-summary {
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.kaiz-system-content {
+    font-size: 12px;
+    color: #aaa;
+    margin-top: 5px;
+    white-space: pre-wrap;
+}

@@ -154,8 +154,8 @@ export class KaizDB {
             const msg: ChatMessage = { chatId, role, content, timestamp: Date.now() };
             
             const request = store.add(msg);
-            request.onsuccess = () => {
-                this.updateChatTimestamp(chatId).catch(console.error);
+            request.onsuccess = async () => {
+                await this.updateChatTimestamp(chatId).catch(console.error);
                 resolve(request.result as number);
             };
             request.onerror = () => reject(request.error);

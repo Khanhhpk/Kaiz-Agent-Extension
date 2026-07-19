@@ -16,7 +16,6 @@ export const sendSystemMessageTool: ITool = {
             required: ['message']
         }
     },
-    requiredFeatures: ['sendSystemMessage'],
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         if (!context || !context.adapter) {
             return {

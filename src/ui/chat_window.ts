@@ -16,19 +16,19 @@ export class ChatWindowUI {
 
         if ($('#kaiz-log-modal').length === 0) {
             $('body').append(`
-                <div id="kaiz-log-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:80%; height:80%; background:#1e1e1e; color:#fff; z-index:10000; border-radius:10px; flex-direction:column; box-shadow:0 0 20px rgba(0,0,0,0.8);">
-                    <div style="padding:15px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;">
-                        <h3 style="margin:0;">Agent Request Logs</h3>
-                        <i id="kaiz-log-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:20px;"></i>
+                <div id="kaiz-log-modal" class="kaiz-log-modal">
+                    <div class="kaiz-log-header">
+                        <h3 class="kaiz-log-title">Agent Request Logs</h3>
+                        <i id="kaiz-log-close" class="fa-solid fa-xmark interactable kaiz-log-close"></i>
                     </div>
-                    <div style="display:flex; flex:1; overflow:hidden;">
-                        <div style="flex:1; border-right:1px solid #333; padding:15px; overflow-y:auto; display:flex; flex-direction:column;">
-                            <h4 style="margin-top:0;">Messages Sent (JSON)</h4>
-                            <pre id="kaiz-log-sent" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
+                    <div class="kaiz-log-body">
+                        <div class="kaiz-log-pane-left">
+                            <h4 class="kaiz-log-pane-title">Messages Sent (JSON)</h4>
+                            <pre id="kaiz-log-sent" class="kaiz-log-pre"></pre>
                         </div>
-                        <div style="flex:1; padding:15px; overflow-y:auto; display:flex; flex-direction:column;">
-                            <h4 style="margin-top:0;">Raw Response Received</h4>
-                            <pre id="kaiz-log-recv" style="font-size:12px; white-space:pre-wrap; word-wrap:break-word; background:#111; padding:10px; border-radius:5px; flex:1; overflow-y:auto;"></pre>
+                        <div class="kaiz-log-pane-right">
+                            <h4 class="kaiz-log-pane-title">Raw Response Received</h4>
+                            <pre id="kaiz-log-recv" class="kaiz-log-pre"></pre>
                         </div>
                     </div>
                 </div>
@@ -157,58 +157,47 @@ export class ChatWindowUI {
             });
         }
 
+        // Hàm tiện ích phân tích và render Tool Calls thành HTML
+        const parseToolCallsToHtml = (contentToParse: string): string => {
+            const toolCalls: string[] = [];
+            let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
+                const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
+                toolCalls.push(toolHtml);
+                return `__TOOL_CALL_${toolCalls.length - 1}__`;
+            });
+            
+            result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            for (let i = 0; i < toolCalls.length; i++) {
+                result = result.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
+            }
+            return result;
+        };
+
         // Hàm tiện ích format tin nhắn
         const formatMessage = (text: string, isFinal: boolean): string => {
             let html = text || '';
 
             const detailsTag = isFinal 
-                ? '<details class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">'
-                : '<details open class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #f39c12;">';
+                ? '<details class="kaiz-cot-block">'
+                : '<details open class="kaiz-cot-block">';
                 
             const closeIndex = html.indexOf('</agent_cot>');
             if (closeIndex !== -1) {
                 const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 let restContent = html.substring(closeIndex + '</agent_cot>'.length);
                 
-                // Protect tool calls
-                const toolCalls: string[] = [];
-                restContent = restContent.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
-                    const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    const toolHtml = `<details class="kaiz-tool-call" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #3498db;"><summary style="cursor: pointer; color: #3498db; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap; font-family: monospace;">${cleanContent}</div></details>`;
-                    toolCalls.push(toolHtml);
-                    return `__TOOL_CALL_${toolCalls.length - 1}__`;
-                });
+                restContent = parseToolCallsToHtml(restContent);
                 
-                // Escape the rest
-                restContent = restContent.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                
-                // Restore tool calls
-                for (let i = 0; i < toolCalls.length; i++) {
-                    restContent = restContent.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
-                }
-                
-                html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${cotContent}</div></details>${restContent}`;
+                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>${restContent}`;
             } else if (!isFinal) {
                  // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
                  const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                 html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${cotContent}</div></details>`;
+                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
                  // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                 // Xử lý như message bình thường
-
-                const toolCalls: string[] = [];
-                html = html.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
-                    const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    const toolHtml = `<details class="kaiz-tool-call" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid #3498db;"><summary style="cursor: pointer; color: #3498db; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap; font-family: monospace;">${cleanContent}</div></details>`;
-                    toolCalls.push(toolHtml);
-                    return `__TOOL_CALL_${toolCalls.length - 1}__`;
-                });
-                
-                html = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                
-                for (let i = 0; i < toolCalls.length; i++) {
-                    html = html.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
-                }
+                 html = parseToolCallsToHtml(html);
             }
 
             return html.replace(/\n/g, '<br>');
@@ -221,9 +210,9 @@ export class ChatWindowUI {
                 const color = isError ? '#e74c3c' : '#2ecc71';
                 const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
                 
-                return `<details class="kaiz-cot" style="margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; border-left: 3px solid ${color};">
-<summary style="cursor: pointer; color: ${color}; font-size: 12px; font-weight: bold;"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
-<div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${text.replace(/\n/g, '<br>')}</div>
+                return `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
+<summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
+<div class="kaiz-system-content">${text.replace(/\n/g, '<br>')}</div>
 </details>`;
             }
             return text.replace(/\n/g, '<br>');

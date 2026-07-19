@@ -15,7 +15,6 @@ export const getChatHistoryTool: ITool = {
             }
         }
     },
-    requiredFeatures: ['chat'],
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         if (!context || !context.adapter) {
             return {

@@ -29,7 +29,6 @@ export interface ToolResult {
 
 export interface ITool {
     schema: ToolSchema;
-    requiredFeatures?: string[];
     execute: (args: Record<string, any>, context?: any) => Promise<ToolResult>;
 }
 
