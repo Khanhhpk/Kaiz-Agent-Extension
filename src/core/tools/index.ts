@@ -4,6 +4,7 @@ import { deleteLastMessageTool } from './delete_message';
 import { getChatHistoryTool } from './get_chat_history';
 import { getUserPersonaTool } from './get_user_persona';
 import { getLorebookInfoTool } from './get_lorebook_info';
+import { manageLorebookEntryTool } from './manage_lorebook_entry';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -16,4 +17,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getChatHistoryTool);
     registry.registerTool(getUserPersonaTool);
     registry.registerTool(getLorebookInfoTool);
+    registry.registerTool(manageLorebookEntryTool);
 }

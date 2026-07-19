@@ -439,6 +439,80 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const manageLorebookEntryTool = {
+        schema: {
+            name: "manage_lorebook_entry",
+            description: "Quản lý (Thêm mới, Chỉnh sửa, hoặc Xóa) một mục (entry) trong Sổ tay thế giới (Lorebook / World Info). Lưu ý: Việc thay đổi sẽ được lưu ngay lập tức vào ổ cứng của hệ thống.",
+            parameters: {
+                type: "object",
+                properties: {
+                    action: {
+                        type: "string",
+                        enum: ["create", "edit", "delete"],
+                        description: "Hành động muốn thực hiện: create (Tạo mới), edit (Chỉnh sửa), delete (Xoá)."
+                    },
+                    book_name: {
+                        type: "string",
+                        description: "Tên của cuốn Lorebook chứa entry cần thao tác."
+                    },
+                    uid: {
+                        type: "string",
+                        description: "UID của Entry cần chỉnh sửa hoặc xoá. BẮT BUỘC nếu action là 'edit' hoặc 'delete'."
+                    },
+                    keys: {
+                        type: "array",
+                        items: { type: "string" },
+                        description: "(Tuỳ chọn) Danh sách các từ khóa kích hoạt entry này. Ví dụ: [\"apple\", \"banana\"]. (Dùng cho create/edit)"
+                    },
+                    content: {
+                        type: "string",
+                        description: "(Tuỳ chọn) Nội dung chính của entry. (Dùng cho create/edit)"
+                    },
+                    constant: {
+                        type: "boolean",
+                        description: "(Tuỳ chọn) Đặt thành true nếu muốn entry luôn luôn được kích hoạt bất chấp từ khóa. (Dùng cho create/edit)"
+                    },
+                    disable: {
+                        type: "boolean",
+                        description: "(Tuỳ chọn) Đặt thành true nếu muốn vô hiệu hoá entry. (Dùng cho create/edit)"
+                    },
+                    comment: {
+                        type: "string",
+                        description: "(Tuỳ chọn) Tên hoặc ghi chú nhỏ cho entry để dễ nhận biết. (Dùng cho create/edit)"
+                    }
+                },
+                required: ["action", "book_name"]
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) {
+                return {
+                    content: 'Error: Adapter not provided in context.',
+                    isError: true
+                };
+            }
+            if (!args.action || !['create', 'edit', 'delete'].includes(args.action)) {
+                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'create', 'edit', 'delete'." };
+            }
+            if (!args.book_name) {
+                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên cuốn Lorebook." };
+            }
+            if ((args.action === 'edit' || args.action === 'delete') && (args.uid === undefined || args.uid === null)) {
+                return { content: "[LỖI] Thiếu tham số 'uid'. Bạn bắt buộc phải cung cấp UID của entry nếu muốn edit hoặc delete." };
+            }
+            try {
+                const result = await context.adapter.manageLorebookEntry(args);
+                return { content: result };
+            }
+            catch (e) {
+                return {
+                    content: `[LỖI] Khi thực thi manageLorebookEntry: ${e.message}`,
+                    isError: true
+                };
+            }
+        }
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -449,6 +523,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(getChatHistoryTool);
         registry.registerTool(getUserPersonaTool);
         registry.registerTool(getLorebookInfoTool);
+        registry.registerTool(manageLorebookEntryTool);
     }
 
     /**
@@ -952,6 +1027,108 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 console.error('[KaizAgent] Lỗi khi lấy toàn bộ Lorebook:', e);
                 return `Lỗi khi lấy thông tin Lorebook: ${e.message}`;
+            }
+        }
+        /**
+         * Quản lý (Thêm/Sửa/Xóa) Lorebook Entry
+         */
+        async manageLorebookEntry(options) {
+            try {
+                const ctx = SillyTavern.getContext();
+                let ST_WorldInfo = null;
+                try {
+                    ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+                }
+                catch (e) {
+                    return "[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).";
+                }
+                if (typeof ST_WorldInfo.loadWorldInfo !== 'function' || typeof ST_WorldInfo.saveWorldInfo !== 'function') {
+                    return "[KaizAgent] Lỗi: API World Info không tồn tại trong phiên bản ST này.";
+                }
+                const data = await ST_WorldInfo.loadWorldInfo(options.book_name);
+                if (!data || !data.entries) {
+                    return `[KaizAgent] Lỗi: Không tìm thấy hoặc không thể tải Lorebook "${options.book_name}".`;
+                }
+                let resultMsg = "";
+                if (options.action === 'create') {
+                    if (typeof ST_WorldInfo.createWorldInfoEntry !== 'function') {
+                        return "[KaizAgent] Lỗi: Hàm createWorldInfoEntry không tồn tại.";
+                    }
+                    const newEntry = ST_WorldInfo.createWorldInfoEntry(options.book_name, data);
+                    if (!newEntry)
+                        return "[KaizAgent] Lỗi: Không thể tạo entry mới (có thể do lỗi getFreeWorldEntryUid).";
+                    if (options.keys !== undefined) {
+                        newEntry.key = options.keys;
+                        newEntry.keys = options.keys;
+                    }
+                    if (options.content !== undefined)
+                        newEntry.content = options.content;
+                    if (options.constant !== undefined)
+                        newEntry.constant = options.constant;
+                    if (options.disable !== undefined)
+                        newEntry.disable = options.disable;
+                    if (options.comment !== undefined) {
+                        newEntry.comment = options.comment;
+                        newEntry.name = options.comment;
+                    }
+                    resultMsg = `Đã tạo thành công Entry mới với UID: ${newEntry.uid} trong Lorebook "${options.book_name}".`;
+                }
+                else if (options.action === 'edit' || options.action === 'delete') {
+                    if (options.uid === undefined)
+                        return "[KaizAgent] Lỗi: Cần cung cấp uid để edit hoặc delete.";
+                    // Find entry by uid
+                    const entries = Object.entries(data.entries);
+                    let foundEntryKey = null;
+                    let foundEntry = null;
+                    for (const [key, val] of entries) {
+                        const e = val;
+                        const eUid = e.uid ?? e.id ?? key;
+                        if (String(eUid) === String(options.uid)) {
+                            foundEntryKey = key;
+                            foundEntry = e;
+                            break;
+                        }
+                    }
+                    if (!foundEntryKey || !foundEntry) {
+                        return `[KaizAgent] Lỗi: Không tìm thấy Entry có UID: ${options.uid} trong Lorebook "${options.book_name}".`;
+                    }
+                    if (options.action === 'delete') {
+                        if (typeof ST_WorldInfo.deleteWorldInfoEntry === 'function') {
+                            await ST_WorldInfo.deleteWorldInfoEntry(data, foundEntryKey, { silent: true });
+                        }
+                        else {
+                            delete data.entries[foundEntryKey];
+                        }
+                        resultMsg = `Đã xoá thành công Entry UID: ${options.uid} khỏi Lorebook "${options.book_name}".`;
+                    }
+                    else { // edit
+                        if (options.keys !== undefined) {
+                            foundEntry.key = options.keys;
+                            foundEntry.keys = options.keys;
+                        }
+                        if (options.content !== undefined)
+                            foundEntry.content = options.content;
+                        if (options.constant !== undefined)
+                            foundEntry.constant = options.constant;
+                        if (options.disable !== undefined)
+                            foundEntry.disable = options.disable;
+                        if (options.comment !== undefined) {
+                            foundEntry.comment = options.comment;
+                            foundEntry.name = options.comment;
+                        }
+                        resultMsg = `Đã cập nhật thành công Entry UID: ${options.uid} trong Lorebook "${options.book_name}".`;
+                    }
+                }
+                else {
+                    return `[KaizAgent] Lỗi: Action "${options.action}" không hợp lệ.`;
+                }
+                // Save
+                await ST_WorldInfo.saveWorldInfo(options.book_name, data, true);
+                return resultMsg;
+            }
+            catch (e) {
+                console.error('[KaizAgent] Lỗi khi manageLorebookEntry:', e);
+                return `Lỗi khi thực thi Lorebook Write Tool: ${e.message}`;
             }
         }
     }
