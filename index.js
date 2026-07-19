@@ -794,10 +794,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             console.error(`[KaizAgent] Failed to load lorebook ${name}:`, e);
                         }
                         if (data && data.entries) {
-                            const entries = Object.values(data.entries);
+                            const entries = Object.entries(data.entries);
                             let bookResult = `\n[Lorebook: ${name}]\n`;
                             let hasEntries = false;
-                            for (const entry of entries) {
+                            for (const [entryKey, entryVal] of entries) {
+                                const entry = entryVal;
                                 if (!entry || (!entry.content && options.mode !== 'summary'))
                                     continue;
                                 const isDisabled = entry.disable === true;
@@ -807,7 +808,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
                                 const type = entry.constant ? "CONSTANT" : "NORMAL";
                                 const status = isDisabled ? "TẮT" : "BẬT";
-                                const entryUid = entry.uid || entry.id || 'Unknown';
+                                const entryUid = entry.uid ?? entry.id ?? entryKey;
                                 const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
                                 // Xử lý các mode đặc biệt
                                 if (options.mode === 'by_uid') {
@@ -868,9 +869,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     result += "\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n";
                     if (character && character.data && character.data.character_book && character.data.character_book.entries) {
                         let bookResult = `\n[Character Lorebook: ${character.name}]\n`;
-                        const entries = character.data.character_book.entries;
+                        let entriesObj = character.data.character_book.entries;
+                        if (Array.isArray(entriesObj)) {
+                            entriesObj = Object.fromEntries(entriesObj.entries());
+                        }
+                        const entries = Object.entries(entriesObj);
                         let hasEntries = false;
-                        for (const entry of entries) {
+                        for (const [entryKey, entryVal] of entries) {
+                            const entry = entryVal;
                             if (!entry || (!entry.content && options.mode !== 'summary'))
                                 continue;
                             const isDisabled = entry.disable === true;
@@ -880,7 +886,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
                             const type = entry.constant ? "CONSTANT" : "NORMAL";
                             const status = isDisabled ? "TẮT" : "BẬT";
-                            const entryUid = entry.id || entry.uid || 'Unknown';
+                            const entryUid = entry.id ?? entry.uid ?? entryKey;
                             const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
                             // Xử lý các mode đặc biệt
                             if (options.mode === 'by_uid') {
