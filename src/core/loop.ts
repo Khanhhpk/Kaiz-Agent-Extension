@@ -147,31 +147,37 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
                 await onEvent({ type: 'step_end', text: text, isFinal: false });
                 
-                // Cơ chế Autonomous Agency: Chỉ thực thi 1 tool mỗi vòng lặp
-                const call = toolCalls[0];
-                await onEvent({ type: 'tool_call', data: call });
-
-                let result;
+                // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
+                let resultsFormatted = '';
                 let hasError = false;
-                try {
-                    result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
-                    if (result.isError) hasError = true;
-                } catch (err: any) {
-                    result = { content: err.message || String(err), isError: true };
-                    hasError = true;
+
+                for (let i = 0; i < toolCalls.length; i++) {
+                    const call = toolCalls[i];
+                    await onEvent({ type: 'tool_call', data: call });
+
+                    let result;
+                    try {
+                        result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
+                        if (result.isError) hasError = true;
+                    } catch (err: any) {
+                        result = { content: err.message || String(err), isError: true };
+                        hasError = true;
+                    }
+                    
+                    resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name}]\nRESULT:\n${result.content}\n\n`;
                 }
-                
-                const resultsFormatted = `[Tool: ${call.name}]\nRESULT: ${result.content}`;
+
+                resultsFormatted = resultsFormatted.trim();
                 
                 let pinnedGoalSection = pinnedUserGoal ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!` : '';
 
                 const feedbackBase = hasError
-                    ? `[Tool Result - CÓ LỖI/ERROR] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI: Tool vừa gọi bị lỗi. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
+                    ? `[Tool Result - CÓ LỖI/ERROR] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI: Có ít nhất 1 tool vừa gọi bị lỗi. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
                     : `[Tool Result - THÀNH CÔNG] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n👉 HỆ THỐNG AGENTIC LOOP ĐANG HOẠT ĐỘNG: Lượt tool vừa thành công và vòng lặp tiếp theo đã tự động kích hoạt!\n- Nếu nhiệm vụ ban đầu vẫn chưa hoàn thành: HÃY TIẾP TỤC gọi tool thực thi công việc tiếp theo ngay lập tức!\n- Nếu đã hoàn thành 100% yêu cầu: HÃY DỪNG LẠI (chỉ chat, không gọi tool nữa) để báo kết quả.`;
 
                 const finalFeedback = feedbackBase + pinnedGoalSection;
 
-                await onEvent({ type: 'tool_result', data: { name: call.name, result }, text: finalFeedback });
+                await onEvent({ type: 'tool_result', data: { name: 'Multiple Tools', result: resultsFormatted }, text: finalFeedback });
 
                 internalHistory.push({ role: 'user', content: finalFeedback });
 
