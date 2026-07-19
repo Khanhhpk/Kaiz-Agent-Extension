@@ -11,7 +11,7 @@ export const getLorebookInfoTool: ITool = {
                 mode: {
                     type: 'string',
                     enum: ['summary', 'all_full', 'char_full', 'by_name', 'search', 'by_uid', 'simulate'],
-                    description: 'Chế độ lấy dữ liệu. Chọn chế độ phù hợp với mục đích tra cứu.'
+                    description: 'Chế độ lấy dữ liệu. LƯU Ý: Chế độ "all_full" tốn rất nhiều token, CHỈ NÊN DÙNG khi đã thử các cách khác (search, simulate, by_uid) mà vẫn không tìm thấy thông tin người dùng cần.'
                 },
                 book_name: {
                     type: 'string',
