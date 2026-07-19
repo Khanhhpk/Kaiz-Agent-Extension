@@ -5,7 +5,6 @@ export interface AgentEvent {
     type: 'think_start' | 'think_end' | 'step_start' | 'step_end' | 'stream_chunk' | 'tool_call' | 'tool_result' | 'error' | 'debug';
     data?: any;
     text?: string;
-    saveText?: string;
     reasoning?: string | null;
     isFinal?: boolean;
 }
@@ -193,8 +192,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 await onEvent({ 
                     type: 'tool_result', 
                     data: { name: 'Multiple Tools', result: resultsFormatted }, 
-                    text: dbRawResult,
-                    saveText: dbRawResult
+                    text: dbRawResult
                 });
 
                 internalHistory.push({ role: 'user', content: dbRawResult });

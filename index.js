@@ -160,8 +160,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     await onEvent({
                         type: 'tool_result',
                         data: { name: 'Multiple Tools', result: resultsFormatted },
-                        text: dbRawResult,
-                        saveText: dbRawResult
+                        text: dbRawResult
                     });
                     internalHistory.push({ role: 'user', content: dbRawResult });
                 }
@@ -1261,7 +1260,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     else if (event.type === 'tool_result') {
                         const formatted = formatUserMessage(event.text || '');
                         addMessageToDOM('user', formatted);
-                        await stateManager.addMessage('user', event.saveText || event.text || '');
+                        await stateManager.addMessage('user', event.text || '');
                     }
                     else if (event.type === 'error') {
                         if (agentContentBox) {
