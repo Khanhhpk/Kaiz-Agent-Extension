@@ -691,8 +691,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
          */
         async getLorebookInfo() {
             const ctx = SillyTavern.getContext();
-            if (typeof ctx.getWorldInfoPrompt === 'function') {
-                return await Promise.resolve(ctx.getWorldInfoPrompt());
+            try {
+                if (typeof ctx.getWorldInfoPrompt === 'function') {
+                    const res = await Promise.resolve(ctx.getWorldInfoPrompt());
+                    if (res)
+                        return String(res);
+                }
+            }
+            catch (e) {
+                console.error('[KaizAgent] getWorldInfoPrompt error:', e);
+                // Lấy các key có chứa chữ world hoặc lore để debug
+                const keys = Object.keys(ctx).filter(k => k.toLowerCase().includes('world') || k.toLowerCase().includes('lore'));
+                const globalKeys = Object.keys(window).filter(k => k.toLowerCase().includes('world') || k.toLowerCase().includes('lore'));
+                return `Lỗi khi gọi getWorldInfoPrompt: ${e.message}\n` +
+                    `Gợi ý Debug Context Keys: ${keys.join(', ')}\n` +
+                    `Gợi ý Debug Window Keys: ${globalKeys.join(', ')}`;
             }
             return 'Lorebook API not available in this ST version.';
         }
