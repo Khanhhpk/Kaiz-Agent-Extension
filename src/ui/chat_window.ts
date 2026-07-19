@@ -53,6 +53,23 @@ export class ChatWindowUI {
         const sendBtn = $('#kaiz-chat-send');
         const history = $('#kaiz-chat-history');
         
+        // --- Drag Logic ---
+        if (typeof btn.draggable === 'function') {
+            btn.draggable({
+                containment: 'window',
+                scroll: false
+            });
+        }
+        
+        if (typeof win.draggable === 'function') {
+            win.draggable({
+                handle: '.kaiz-chat-header',
+                containment: 'window',
+                scroll: false
+            });
+        }
+        // ------------------
+
         // Sidebar elements
         const menuBtn = $('#kaiz-chat-menu-btn');
         const sidebar = $('#kaiz-chat-sidebar');

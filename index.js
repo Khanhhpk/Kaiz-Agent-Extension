@@ -782,18 +782,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async init() {
             await this.db.init();
             const chats = await this.db.getAllChats();
-            if (chats.length > 0) {
-                // Tự động load chat mới nhất
-                await this.switchChat(chats[0].id);
-            }
-            else {
-                // Hoặc để null, đợi người dùng gõ tin nhắn đầu tiên sẽ tạo chat
-                this.currentChatId = null;
-                if (this.onChatsListUpdated)
-                    this.onChatsListUpdated([]);
-                if (this.onChatSwitched)
-                    this.onChatSwitched(-1, []);
-            }
+            // Mặc định luôn là New Chat khi refresh trang
+            this.currentChatId = null;
+            if (this.onChatsListUpdated)
+                this.onChatsListUpdated(chats);
+            if (this.onChatSwitched)
+                this.onChatSwitched(-1, []);
         }
         async createNewChat(firstMessage) {
             // Tên chat dựa trên tin nhắn đầu tiên (cắt ngắn 30 ký tự)
@@ -1010,6 +1004,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const input = $('#kaiz-chat-input');
             const sendBtn = $('#kaiz-chat-send');
             const history = $('#kaiz-chat-history');
+            // --- Drag Logic ---
+            if (typeof btn.draggable === 'function') {
+                btn.draggable({
+                    containment: 'window',
+                    scroll: false
+                });
+            }
+            if (typeof win.draggable === 'function') {
+                win.draggable({
+                    handle: '.kaiz-chat-header',
+                    containment: 'window',
+                    scroll: false
+                });
+            }
+            // ------------------
             // Sidebar elements
             const menuBtn = $('#kaiz-chat-menu-btn');
             const sidebar = $('#kaiz-chat-sidebar');

@@ -16,15 +16,10 @@ export class StateManager {
         await this.db.init();
         const chats = await this.db.getAllChats();
         
-        if (chats.length > 0) {
-            // Tự động load chat mới nhất
-            await this.switchChat(chats[0].id!);
-        } else {
-            // Hoặc để null, đợi người dùng gõ tin nhắn đầu tiên sẽ tạo chat
-            this.currentChatId = null;
-            if (this.onChatsListUpdated) this.onChatsListUpdated([]);
-            if (this.onChatSwitched) this.onChatSwitched(-1, []);
-        }
+        // Mặc định luôn là New Chat khi refresh trang
+        this.currentChatId = null;
+        if (this.onChatsListUpdated) this.onChatsListUpdated(chats);
+        if (this.onChatSwitched) this.onChatSwitched(-1, []);
     }
 
     public async createNewChat(firstMessage: string): Promise<number> {
