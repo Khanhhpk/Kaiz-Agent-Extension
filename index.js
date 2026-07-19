@@ -351,6 +351,64 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const getUserPersonaTool = {
+        schema: {
+            name: 'get_user_persona',
+            description: 'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình. Dùng khi cần biết bạn đang giao tiếp với ai để xưng hô và cư xử cho đúng mực.',
+            parameters: {
+                type: 'object',
+                properties: {}
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) {
+                return {
+                    content: 'Error: Adapter not provided in context.',
+                    isError: true
+                };
+            }
+            try {
+                const personaText = await context.adapter.getUserPersona();
+                return { content: personaText };
+            }
+            catch (error) {
+                return {
+                    content: `Error getting User Persona: ${error.message || String(error)}`,
+                    isError: true
+                };
+            }
+        }
+    };
+
+    const getLorebookInfoTool = {
+        schema: {
+            name: 'get_lorebook_info',
+            description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info) đang được kích hoạt trong phòng chat. Sổ tay thế giới chứa các quy tắc ngầm, bối cảnh, thuật ngữ và thiết lập của vũ trụ hiện tại. Dùng khi bạn cần hiểu rõ thế giới quan xung quanh.',
+            parameters: {
+                type: 'object',
+                properties: {}
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) {
+                return {
+                    content: 'Error: Adapter not provided in context.',
+                    isError: true
+                };
+            }
+            try {
+                const lorebookText = await context.adapter.getLorebookInfo();
+                return { content: lorebookText || 'Không có Lorebook nào đang được kích hoạt hoặc Lorebook trống.' };
+            }
+            catch (error) {
+                return {
+                    content: `Error getting Lorebook info: ${error.message || String(error)}`,
+                    isError: true
+                };
+            }
+        }
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -359,6 +417,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(sendSystemMessageTool);
         registry.registerTool(deleteLastMessageTool);
         registry.registerTool(getChatHistoryTool);
+        registry.registerTool(getUserPersonaTool);
+        registry.registerTool(getLorebookInfoTool);
     }
 
     /**
@@ -612,6 +672,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             else {
                 console.error('[KaizAgent] deleteLastMessage not available in ST Context.');
             }
+        }
+        /**
+         * Lấy thông tin Persona của người dùng
+         */
+        async getUserPersona() {
+            const ctx = SillyTavern.getContext();
+            if (typeof ctx.substituteParams === 'function') {
+                // ST hỗ trợ macro {{persona}} để lấy User Persona description, và {{user}} cho tên
+                const name = await Promise.resolve(ctx.substituteParams('{{user}}'));
+                const personaText = await Promise.resolve(ctx.substituteParams('{{persona}}'));
+                return `Name: ${name}\nPersona Description:\n${personaText}`;
+            }
+            return 'No persona available or unsupported ST version.';
+        }
+        /**
+         * Lấy thông tin Lorebook (World Info) đang kích hoạt
+         */
+        async getLorebookInfo() {
+            const ctx = SillyTavern.getContext();
+            if (typeof ctx.getWorldInfoPrompt === 'function') {
+                return await Promise.resolve(ctx.getWorldInfoPrompt());
+            }
+            return 'Lorebook API not available in this ST version.';
         }
     }
 

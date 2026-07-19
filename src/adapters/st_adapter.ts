@@ -272,4 +272,29 @@ export class SillyTavernAdapter {
             console.error('[KaizAgent] deleteLastMessage not available in ST Context.');
         }
     }
+
+    /**
+     * Lấy thông tin Persona của người dùng
+     */
+    public async getUserPersona(): Promise<string> {
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.substituteParams === 'function') {
+            // ST hỗ trợ macro {{persona}} để lấy User Persona description, và {{user}} cho tên
+            const name = await Promise.resolve(ctx.substituteParams('{{user}}'));
+            const personaText = await Promise.resolve(ctx.substituteParams('{{persona}}'));
+            return `Name: ${name}\nPersona Description:\n${personaText}`;
+        }
+        return 'No persona available or unsupported ST version.';
+    }
+
+    /**
+     * Lấy thông tin Lorebook (World Info) đang kích hoạt
+     */
+    public async getLorebookInfo(): Promise<string> {
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.getWorldInfoPrompt === 'function') {
+            return await Promise.resolve(ctx.getWorldInfoPrompt());
+        }
+        return 'Lorebook API not available in this ST version.';
+    }
 }
