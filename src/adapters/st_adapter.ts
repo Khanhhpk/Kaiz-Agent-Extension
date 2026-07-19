@@ -293,32 +293,57 @@ export class SillyTavernAdapter {
     public async editUserPersona(newDescription: string, newName?: string): Promise<boolean> {
         try {
             const ctx = SillyTavern.getContext();
-            const w = window as any;
             
-            // Lấy ID persona đang active
-            const avatarId = w.user_avatar;
+            // Import module personas.js để lấy user_avatar (là ES module variable, không expose ra window)
+            let personasModule: any = null;
+            try {
+                personasModule = await new Function("return import('/scripts/personas.js')")();
+            } catch (e) {
+                console.warn("[KaizAgent] Could not import personas.js:", e);
+            }
+
+            // Lấy avatarId từ module hoặc fallback sang power_user settings
+            let avatarId: string = '';
+            if (personasModule && personasModule.user_avatar) {
+                avatarId = personasModule.user_avatar;
+            } else {
+                // Fallback: tìm avatarId bằng cách so sánh persona_description hiện tại trong settings
+                const powerUser = (ctx as any).powerUserSettings;
+                if (powerUser && powerUser.user_avatar) {
+                    avatarId = powerUser.user_avatar;
+                }
+            }
+
             if (!avatarId) {
                 console.error("[KaizAgent] No active user_avatar found.");
                 return false;
             }
 
-            if (!w.power_user || !w.power_user.personas || !w.power_user.personas[avatarId]) {
-                console.error("[KaizAgent] Persona data not found in power_user.");
+            const powerUser = (ctx as any).powerUserSettings;
+            if (!powerUser || !powerUser.personas) {
+                console.error("[KaizAgent] power_user.personas not accessible via context.");
                 return false;
+            }
+
+            if (!powerUser.personas[avatarId]) {
+                console.warn(`[KaizAgent] No persona entry found for avatarId=${avatarId}. Will attempt to create.`);
+                powerUser.personas[avatarId] = newName || 'User';
             }
 
             let hasUpdates = false;
 
             // Cập nhật tên
             if (newName && newName.trim() !== '') {
-                const oldName = w.power_user.personas[avatarId];
-                if (oldName !== newName) {
-                    w.power_user.personas[avatarId] = newName.trim();
+                const oldName = powerUser.personas[avatarId];
+                if (oldName !== newName.trim()) {
+                    powerUser.personas[avatarId] = newName.trim();
+                    // Sync name1 (display name in chat)
+                    const w = window as any;
                     if (typeof w.setUserName === 'function') {
                         w.setUserName(newName.trim());
                     }
-                    if (w.eventSource && w.event_types) {
-                        w.eventSource.emit(w.event_types.PERSONA_RENAMED, { avatarId, oldName, newName: newName.trim() });
+                    if (ctx.eventSource && ctx.eventTypes) {
+                        ctx.eventSource.emit(ctx.eventTypes.PERSONA_RENAMED, { avatarId, oldName, newName: newName.trim() });
                     }
                     hasUpdates = true;
                 }
@@ -326,23 +351,22 @@ export class SillyTavernAdapter {
 
             // Cập nhật mô tả
             if (newDescription !== undefined) {
-                if (w.power_user.persona_descriptions && w.power_user.persona_descriptions[avatarId]) {
-                    w.power_user.persona_descriptions[avatarId].description = newDescription;
+                if (powerUser.persona_descriptions && powerUser.persona_descriptions[avatarId]) {
+                    powerUser.persona_descriptions[avatarId].description = newDescription;
+                } else if (powerUser.persona_descriptions) {
+                    // Tạo entry mới nếu chưa có
+                    powerUser.persona_descriptions[avatarId] = { description: newDescription, position: 0, depth: 0, role: 0 };
                 }
-                w.power_user.persona_description = newDescription;
+                // Cập nhật shorthand được dùng ở nhiều nơi
+                powerUser.persona_description = newDescription;
                 hasUpdates = true;
             }
 
             // Lưu và kích hoạt thay đổi UI
             if (hasUpdates) {
-                if (typeof ctx.saveSettingsDebounced === 'function') {
-                    ctx.saveSettingsDebounced();
-                } else if (typeof w.saveSettingsDebounced === 'function') {
-                    w.saveSettingsDebounced();
-                }
-
-                if (w.eventSource && w.event_types) {
-                    w.eventSource.emit(w.event_types.PERSONA_CHANGED, avatarId);
+                ctx.saveSettingsDebounced();
+                if (ctx.eventSource && ctx.eventTypes) {
+                    ctx.eventSource.emit(ctx.eventTypes.PERSONA_CHANGED, avatarId);
                 }
             }
 
