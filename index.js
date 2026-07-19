@@ -395,6 +395,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     book_name: {
                         type: 'string',
                         description: 'Tên của cuốn Lorebook (bắt buộc nếu mode = by_name)'
+                    },
+                    include_disabled: {
+                        type: 'boolean',
+                        description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false - bỏ qua nội dung entry bị tắt trong chế độ full, nhưng ở chế độ summary thì vẫn hiện trạng thái)'
                     }
                 },
                 required: ['mode']
@@ -410,7 +414,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 const mode = args.mode || 'summary';
                 const bookName = args.book_name;
-                const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName });
+                const includeDisabled = args.include_disabled === true;
+                const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName, includeDisabled });
                 return { content: lorebookText || 'Không có Lorebook nào đang được kích hoạt hoặc Lorebook trống.' };
             }
             catch (error) {
@@ -785,16 +790,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             for (const entry of entries) {
                                 if (!entry || (!entry.content && options.mode !== 'summary'))
                                     continue;
+                                const isDisabled = entry.disable === true;
+                                if (isDisabled && options.mode !== 'summary' && !options.includeDisabled)
+                                    continue;
                                 hasEntries = true;
                                 const keysList = entry.key || entry.keys || [];
                                 const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
                                 const type = entry.constant ? "CONSTANT" : "NORMAL";
+                                const status = isDisabled ? "TẮT" : "BẬT";
                                 if (options.mode === 'summary') {
                                     const entryTitle = entry.comment || entry.name || `Entry #${entry.uid}`;
-                                    result += `- ${entryTitle} (${type}) | Keys: [${keys}]\n`;
+                                    result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
                                 }
                                 else {
-                                    result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                                    result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                                 }
                             }
                             if (!hasEntries) {
@@ -812,16 +821,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         for (const entry of entries) {
                             if (!entry || (!entry.content && options.mode !== 'summary'))
                                 continue;
+                            const isDisabled = entry.disable === true;
+                            if (isDisabled && options.mode !== 'summary' && !options.includeDisabled)
+                                continue;
                             hasEntries = true;
                             const keysList = entry.keys || entry.key || [];
                             const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
                             const type = entry.constant ? "CONSTANT" : "NORMAL";
+                            const status = isDisabled ? "TẮT" : "BẬT";
                             if (options.mode === 'summary') {
                                 const entryTitle = entry.comment || entry.name || `Entry #${entry.id || entry.uid || 'Unknown'}`;
-                                result += `- ${entryTitle} (${type}) | Keys: [${keys}]\n`;
+                                result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
                             }
                             else {
-                                result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                                result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                             }
                         }
                         if (!hasEntries) {

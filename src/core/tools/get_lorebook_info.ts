@@ -16,6 +16,10 @@ export const getLorebookInfoTool: ITool = {
                 book_name: {
                     type: 'string',
                     description: 'Tên của cuốn Lorebook (bắt buộc nếu mode = by_name)'
+                },
+                include_disabled: {
+                    type: 'boolean',
+                    description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false - bỏ qua nội dung entry bị tắt trong chế độ full, nhưng ở chế độ summary thì vẫn hiện trạng thái)'
                 }
             },
             required: ['mode']
@@ -32,7 +36,8 @@ export const getLorebookInfoTool: ITool = {
         try {
             const mode = args.mode || 'summary';
             const bookName = args.book_name;
-            const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName });
+            const includeDisabled = args.include_disabled === true;
+            const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName, includeDisabled });
             return { content: lorebookText || 'Không có Lorebook nào đang được kích hoạt hoặc Lorebook trống.' };
         } catch (error: any) {
             return {

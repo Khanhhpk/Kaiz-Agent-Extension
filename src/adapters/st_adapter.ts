@@ -291,7 +291,7 @@ export class SillyTavernAdapter {
      * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
      * @param options Các tùy chọn lọc dữ liệu
      */
-    public async getLorebookInfo(options: { mode: 'summary' | 'all_full' | 'char_full' | 'by_name', bookName?: string } = { mode: 'summary' }): Promise<string> {
+    public async getLorebookInfo(options: { mode: 'summary' | 'all_full' | 'char_full' | 'by_name', bookName?: string, includeDisabled?: boolean } = { mode: 'summary' }): Promise<string> {
         let result = "";
         try {
             const ctx = SillyTavern.getContext();
@@ -370,15 +370,20 @@ export class SillyTavernAdapter {
                         let hasEntries = false;
                         for (const entry of entries) {
                             if (!entry || (!entry.content && options.mode !== 'summary')) continue;
+                            const isDisabled = entry.disable === true;
+                            if (isDisabled && options.mode !== 'summary' && !options.includeDisabled) continue;
+
                             hasEntries = true;
                             const keysList = entry.key || entry.keys || [];
                             const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
                             const type = entry.constant ? "CONSTANT" : "NORMAL";
+                            const status = isDisabled ? "TẮT" : "BẬT";
+
                             if (options.mode === 'summary') {
                                 const entryTitle = entry.comment || entry.name || `Entry #${entry.uid}`;
-                                result += `- ${entryTitle} (${type}) | Keys: [${keys}]\n`;
+                                result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
                             } else {
-                                result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                                result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                             }
                         }
                         if (!hasEntries) {
@@ -396,15 +401,20 @@ export class SillyTavernAdapter {
                     let hasEntries = false;
                     for (const entry of entries) {
                         if (!entry || (!entry.content && options.mode !== 'summary')) continue;
+                        const isDisabled = entry.disable === true;
+                        if (isDisabled && options.mode !== 'summary' && !options.includeDisabled) continue;
+
                         hasEntries = true;
                         const keysList = entry.keys || entry.key || [];
                         const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
                         const type = entry.constant ? "CONSTANT" : "NORMAL";
+                        const status = isDisabled ? "TẮT" : "BẬT";
+
                         if (options.mode === 'summary') {
                             const entryTitle = entry.comment || entry.name || `Entry #${entry.id || entry.uid || 'Unknown'}`;
-                            result += `- ${entryTitle} (${type}) | Keys: [${keys}]\n`;
+                            result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
                         } else {
-                            result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                            result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                         }
                     }
                     if (!hasEntries) {
