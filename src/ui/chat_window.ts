@@ -113,6 +113,7 @@ export class ChatWindowUI {
             // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
             stateManager.currentChatId = null;
             chatTitle.text('New Chat');
+            addWelcomeMessage();
             
             // Xóa background selected ở chat list
             $('.kaiz-chat-item').css('background', 'transparent');
@@ -231,12 +232,24 @@ export class ChatWindowUI {
             history.empty();
             if (messages.length === 0 && chatId === -1) {
                 chatTitle.text('Kaiz Agent');
+                addWelcomeMessage();
+            } else if (messages.length === 0) {
+                addWelcomeMessage();
             }
             
             for (const msg of messages) {
                 const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
                 addMessageToDOM(msg.role, formatted, false);
             }
+        };
+
+        const addWelcomeMessage = () => {
+            const welcomeHtml = `
+            <div class="kaiz-msg kaiz-msg-agent">
+                <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
+                <div class="kaiz-msg-content">Xin chào! Tôi là <b>Kaiz Agent</b>. Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
+            </div>`;
+            history.append(welcomeHtml);
         };
 
         // Hàm tiện ích thêm tin nhắn DOM (không save DB)
