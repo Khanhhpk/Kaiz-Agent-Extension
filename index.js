@@ -1871,7 +1871,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 };
                 makeDraggable(btn, 'kaiz_btn_pos');
                 setTimeout(() => { ensureInBounds(btn); }, 500);
-                makeDraggable(win, 'kaiz_win_pos', { handle: '.kaiz-chat-header' });
+                makeDraggable(win, 'kaiz_win_pos', {
+                    handle: '.kaiz-chat-header',
+                    cancel: 'input,textarea,button,select,option,i'
+                });
             }
             let resizeTimeout;
             $(window).on('resize', () => {

@@ -109,7 +109,10 @@ export class ChatWindowUI {
             makeDraggable(btn, 'kaiz_btn_pos');
             setTimeout(() => { ensureInBounds(btn); }, 500);
 
-            makeDraggable(win, 'kaiz_win_pos', { handle: '.kaiz-chat-header' });
+            makeDraggable(win, 'kaiz_win_pos', { 
+                handle: '.kaiz-chat-header',
+                cancel: 'input,textarea,button,select,option,i'
+            });
         }
 
         let resizeTimeout: any;
