@@ -383,22 +383,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getLorebookInfoTool = {
         schema: {
             name: 'get_lorebook_info',
-            description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info) đang được kích hoạt trong phòng chat. Có 4 chế độ (mode): summary (tóm tắt toàn bộ danh sách entry), all_full (lấy chi tiết toàn bộ, tốn token), char_full (chỉ lấy chi tiết thẻ nhân vật), by_name (lấy chi tiết 1 cuốn Lorebook cụ thể).',
+            description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info) đang được kích hoạt trong phòng chat. Có 7 chế độ (mode): summary (tóm tắt danh sách), all_full (chi tiết toàn bộ), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn), search (tìm kiếm theo từ khóa), by_uid (lấy 1 entry qua UID), simulate (kiểm tra xem câu thoại nào kích hoạt entry nào).',
             parameters: {
                 type: 'object',
                 properties: {
                     mode: {
                         type: 'string',
-                        enum: ['summary', 'all_full', 'char_full', 'by_name'],
-                        description: 'Chế độ lấy dữ liệu. Mặc định là summary nếu chỉ cần tra cứu nhanh tên các entry.'
+                        enum: ['summary', 'all_full', 'char_full', 'by_name', 'search', 'by_uid', 'simulate'],
+                        description: 'Chế độ lấy dữ liệu. Chọn chế độ phù hợp với mục đích tra cứu.'
                     },
                     book_name: {
                         type: 'string',
                         description: 'Tên của cuốn Lorebook (bắt buộc nếu mode = by_name)'
                     },
+                    query: {
+                        type: 'string',
+                        description: 'Từ khóa cần tìm (nếu mode = search) hoặc đoạn hội thoại cần giả lập kiểm tra (nếu mode = simulate)'
+                    },
+                    uid: {
+                        type: 'string',
+                        description: 'UID của Entry cần lấy chi tiết (nếu mode = by_uid)'
+                    },
                     include_disabled: {
                         type: 'boolean',
-                        description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false - bỏ qua nội dung entry bị tắt trong chế độ full, nhưng ở chế độ summary thì vẫn hiện trạng thái)'
+                        description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false)'
                     }
                 },
                 required: ['mode']
@@ -414,8 +422,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 const mode = args.mode || 'summary';
                 const bookName = args.book_name;
+                const query = args.query;
+                const uid = args.uid;
                 const includeDisabled = args.include_disabled === true;
-                const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName, includeDisabled });
+                const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName, includeDisabled, query, uid });
                 return { content: lorebookText || 'Không có Lorebook nào đang được kích hoạt hoặc Lorebook trống.' };
             }
             catch (error) {
@@ -784,8 +794,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             console.error(`[KaizAgent] Failed to load lorebook ${name}:`, e);
                         }
                         if (data && data.entries) {
-                            result += `\n[Lorebook: ${name}]\n`;
                             const entries = Object.values(data.entries);
+                            let bookResult = `\n[Lorebook: ${name}]\n`;
                             let hasEntries = false;
                             for (const entry of entries) {
                                 if (!entry || (!entry.content && options.mode !== 'summary'))
@@ -793,21 +803,63 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 const isDisabled = entry.disable === true;
                                 if (isDisabled && options.mode !== 'summary' && !options.includeDisabled)
                                     continue;
-                                hasEntries = true;
                                 const keysList = entry.key || entry.keys || [];
-                                const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
+                                const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
                                 const type = entry.constant ? "CONSTANT" : "NORMAL";
                                 const status = isDisabled ? "TẮT" : "BẬT";
-                                if (options.mode === 'summary') {
-                                    const entryTitle = entry.comment || entry.name || `Entry #${entry.uid}`;
-                                    result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
+                                const entryUid = entry.uid || entry.id || 'Unknown';
+                                const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
+                                // Xử lý các mode đặc biệt
+                                if (options.mode === 'by_uid') {
+                                    if (String(entryUid) !== String(options.uid))
+                                        continue;
+                                }
+                                else if (options.mode === 'search') {
+                                    const q = (options.query || '').toLowerCase();
+                                    const c = (entry.content || '').toLowerCase();
+                                    const k = keys.toLowerCase();
+                                    const t = entryTitle.toLowerCase();
+                                    if (!c.includes(q) && !k.includes(q) && !t.includes(q))
+                                        continue;
+                                }
+                                else if (options.mode === 'simulate') {
+                                    const q = (options.query || '').toLowerCase();
+                                    let triggered = false;
+                                    const keysArray = Array.isArray(keysList) ? keysList : [keysList];
+                                    for (const key of keysArray) {
+                                        const kStr = String(key).toLowerCase().trim();
+                                        if (!kStr)
+                                            continue;
+                                        if (kStr.includes('&&')) {
+                                            const parts = kStr.split('&&').map(p => p.trim());
+                                            if (parts.every(p => q.includes(p))) {
+                                                triggered = true;
+                                                break;
+                                            }
+                                        }
+                                        else {
+                                            if (q.includes(kStr)) {
+                                                triggered = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    if (!triggered)
+                                        continue;
+                                }
+                                hasEntries = true;
+                                if (options.mode === 'summary' || options.mode === 'simulate') {
+                                    bookResult += `- ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n`;
                                 }
                                 else {
-                                    result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                                    bookResult += `- Entry ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                                 }
                             }
-                            if (!hasEntries) {
-                                result += "(Lorebook này rỗng hoặc không có entry hợp lệ)\n";
+                            if (hasEntries) {
+                                result += bookResult;
+                            }
+                            else if (options.mode === 'all_full' || options.mode === 'by_name' || options.mode === 'summary') {
+                                result += bookResult + "(Lorebook này rỗng hoặc không có entry phù hợp)\n";
                             }
                         }
                     }
@@ -815,7 +867,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (options.mode !== 'by_name') {
                     result += "\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n";
                     if (character && character.data && character.data.character_book && character.data.character_book.entries) {
-                        result += `\n[Character Lorebook: ${character.name}]\n`;
+                        let bookResult = `\n[Character Lorebook: ${character.name}]\n`;
                         const entries = character.data.character_book.entries;
                         let hasEntries = false;
                         for (const entry of entries) {
@@ -824,24 +876,66 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             const isDisabled = entry.disable === true;
                             if (isDisabled && options.mode !== 'summary' && !options.includeDisabled)
                                 continue;
-                            hasEntries = true;
                             const keysList = entry.keys || entry.key || [];
-                            const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
+                            const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
                             const type = entry.constant ? "CONSTANT" : "NORMAL";
                             const status = isDisabled ? "TẮT" : "BẬT";
-                            if (options.mode === 'summary') {
-                                const entryTitle = entry.comment || entry.name || `Entry #${entry.id || entry.uid || 'Unknown'}`;
-                                result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
+                            const entryUid = entry.id || entry.uid || 'Unknown';
+                            const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
+                            // Xử lý các mode đặc biệt
+                            if (options.mode === 'by_uid') {
+                                if (String(entryUid) !== String(options.uid))
+                                    continue;
+                            }
+                            else if (options.mode === 'search') {
+                                const q = (options.query || '').toLowerCase();
+                                const c = (entry.content || '').toLowerCase();
+                                const k = keys.toLowerCase();
+                                const t = entryTitle.toLowerCase();
+                                if (!c.includes(q) && !k.includes(q) && !t.includes(q))
+                                    continue;
+                            }
+                            else if (options.mode === 'simulate') {
+                                const q = (options.query || '').toLowerCase();
+                                let triggered = false;
+                                const keysArray = Array.isArray(keysList) ? keysList : [keysList];
+                                for (const key of keysArray) {
+                                    const kStr = String(key).toLowerCase().trim();
+                                    if (!kStr)
+                                        continue;
+                                    if (kStr.includes('&&')) {
+                                        const parts = kStr.split('&&').map(p => p.trim());
+                                        if (parts.every(p => q.includes(p))) {
+                                            triggered = true;
+                                            break;
+                                        }
+                                    }
+                                    else {
+                                        if (q.includes(kStr)) {
+                                            triggered = true;
+                                            break;
+                                        }
+                                    }
+                                }
+                                if (!triggered)
+                                    continue;
+                            }
+                            hasEntries = true;
+                            if (options.mode === 'summary' || options.mode === 'simulate') {
+                                bookResult += `- ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n`;
                             }
                             else {
-                                result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                                bookResult += `- Entry ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                             }
                         }
-                        if (!hasEntries) {
-                            result += "(Character Lorebook rỗng)\n";
+                        if (hasEntries) {
+                            result += bookResult;
+                        }
+                        else if (options.mode === 'all_full' || options.mode === 'char_full' || options.mode === 'summary') {
+                            result += bookResult + "(Character Lorebook rỗng hoặc không có entry phù hợp)\n";
                         }
                     }
-                    else {
+                    else if (options.mode === 'summary' || options.mode === 'all_full' || options.mode === 'char_full') {
                         result += "Nhân vật này không có Lorebook đi kèm thẻ.\n";
                     }
                 }

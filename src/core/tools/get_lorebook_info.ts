@@ -4,22 +4,30 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getLorebookInfoTool: ITool = {
     schema: {
         name: 'get_lorebook_info',
-        description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info) đang được kích hoạt trong phòng chat. Có 4 chế độ (mode): summary (tóm tắt toàn bộ danh sách entry), all_full (lấy chi tiết toàn bộ, tốn token), char_full (chỉ lấy chi tiết thẻ nhân vật), by_name (lấy chi tiết 1 cuốn Lorebook cụ thể).',
+        description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info) đang được kích hoạt trong phòng chat. Có 7 chế độ (mode): summary (tóm tắt danh sách), all_full (chi tiết toàn bộ), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn), search (tìm kiếm theo từ khóa), by_uid (lấy 1 entry qua UID), simulate (kiểm tra xem câu thoại nào kích hoạt entry nào).',
         parameters: {
             type: 'object',
             properties: {
                 mode: {
                     type: 'string',
-                    enum: ['summary', 'all_full', 'char_full', 'by_name'],
-                    description: 'Chế độ lấy dữ liệu. Mặc định là summary nếu chỉ cần tra cứu nhanh tên các entry.'
+                    enum: ['summary', 'all_full', 'char_full', 'by_name', 'search', 'by_uid', 'simulate'],
+                    description: 'Chế độ lấy dữ liệu. Chọn chế độ phù hợp với mục đích tra cứu.'
                 },
                 book_name: {
                     type: 'string',
                     description: 'Tên của cuốn Lorebook (bắt buộc nếu mode = by_name)'
                 },
+                query: {
+                    type: 'string',
+                    description: 'Từ khóa cần tìm (nếu mode = search) hoặc đoạn hội thoại cần giả lập kiểm tra (nếu mode = simulate)'
+                },
+                uid: {
+                    type: 'string',
+                    description: 'UID của Entry cần lấy chi tiết (nếu mode = by_uid)'
+                },
                 include_disabled: {
                     type: 'boolean',
-                    description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false - bỏ qua nội dung entry bị tắt trong chế độ full, nhưng ở chế độ summary thì vẫn hiện trạng thái)'
+                    description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false)'
                 }
             },
             required: ['mode']
@@ -36,8 +44,10 @@ export const getLorebookInfoTool: ITool = {
         try {
             const mode = args.mode || 'summary';
             const bookName = args.book_name;
+            const query = args.query;
+            const uid = args.uid;
             const includeDisabled = args.include_disabled === true;
-            const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName, includeDisabled });
+            const lorebookText = await context.adapter.getLorebookInfo({ mode, bookName, includeDisabled, query, uid });
             return { content: lorebookText || 'Không có Lorebook nào đang được kích hoạt hoặc Lorebook trống.' };
         } catch (error: any) {
             return {

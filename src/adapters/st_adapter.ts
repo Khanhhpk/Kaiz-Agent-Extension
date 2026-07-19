@@ -291,7 +291,7 @@ export class SillyTavernAdapter {
      * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
      * @param options Các tùy chọn lọc dữ liệu
      */
-    public async getLorebookInfo(options: { mode: 'summary' | 'all_full' | 'char_full' | 'by_name', bookName?: string, includeDisabled?: boolean } = { mode: 'summary' }): Promise<string> {
+    public async getLorebookInfo(options: { mode: 'summary' | 'all_full' | 'char_full' | 'by_name' | 'search' | 'by_uid' | 'simulate', bookName?: string, includeDisabled?: boolean, query?: string, uid?: string | number } = { mode: 'summary' }): Promise<string> {
         let result = "";
         try {
             const ctx = SillyTavern.getContext();
@@ -365,29 +365,58 @@ export class SillyTavernAdapter {
                     }
 
                     if (data && data.entries) {
-                        result += `\n[Lorebook: ${name}]\n`;
                         const entries = Object.values(data.entries) as any[];
+                        let bookResult = `\n[Lorebook: ${name}]\n`;
                         let hasEntries = false;
                         for (const entry of entries) {
                             if (!entry || (!entry.content && options.mode !== 'summary')) continue;
                             const isDisabled = entry.disable === true;
                             if (isDisabled && options.mode !== 'summary' && !options.includeDisabled) continue;
 
-                            hasEntries = true;
                             const keysList = entry.key || entry.keys || [];
-                            const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
+                            const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
                             const type = entry.constant ? "CONSTANT" : "NORMAL";
                             const status = isDisabled ? "TẮT" : "BẬT";
+                            const entryUid = entry.uid || entry.id || 'Unknown';
+                            const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
 
-                            if (options.mode === 'summary') {
-                                const entryTitle = entry.comment || entry.name || `Entry #${entry.uid}`;
-                                result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
+                            // Xử lý các mode đặc biệt
+                            if (options.mode === 'by_uid') {
+                                if (String(entryUid) !== String(options.uid)) continue;
+                            } else if (options.mode === 'search') {
+                                const q = (options.query || '').toLowerCase();
+                                const c = (entry.content || '').toLowerCase();
+                                const k = keys.toLowerCase();
+                                const t = entryTitle.toLowerCase();
+                                if (!c.includes(q) && !k.includes(q) && !t.includes(q)) continue;
+                            } else if (options.mode === 'simulate') {
+                                const q = (options.query || '').toLowerCase();
+                                let triggered = false;
+                                const keysArray = Array.isArray(keysList) ? keysList : [keysList];
+                                for (const key of keysArray) {
+                                    const kStr = String(key).toLowerCase().trim();
+                                    if (!kStr) continue;
+                                    if (kStr.includes('&&')) {
+                                        const parts = kStr.split('&&').map(p => p.trim());
+                                        if (parts.every(p => q.includes(p))) { triggered = true; break; }
+                                    } else {
+                                        if (q.includes(kStr)) { triggered = true; break; }
+                                    }
+                                }
+                                if (!triggered) continue;
+                            }
+
+                            hasEntries = true;
+                            if (options.mode === 'summary' || options.mode === 'simulate') {
+                                bookResult += `- ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n`;
                             } else {
-                                result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                                bookResult += `- Entry ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                             }
                         }
-                        if (!hasEntries) {
-                            result += "(Lorebook này rỗng hoặc không có entry hợp lệ)\n";
+                        if (hasEntries) {
+                            result += bookResult;
+                        } else if (options.mode === 'all_full' || options.mode === 'by_name' || options.mode === 'summary') {
+                            result += bookResult + "(Lorebook này rỗng hoặc không có entry phù hợp)\n";
                         }
                     }
                 }
@@ -396,7 +425,7 @@ export class SillyTavernAdapter {
             if (options.mode !== 'by_name') {
                 result += "\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n";
                 if (character && character.data && character.data.character_book && character.data.character_book.entries) {
-                    result += `\n[Character Lorebook: ${character.name}]\n`;
+                    let bookResult = `\n[Character Lorebook: ${character.name}]\n`;
                     const entries = character.data.character_book.entries;
                     let hasEntries = false;
                     for (const entry of entries) {
@@ -404,23 +433,52 @@ export class SillyTavernAdapter {
                         const isDisabled = entry.disable === true;
                         if (isDisabled && options.mode !== 'summary' && !options.includeDisabled) continue;
 
-                        hasEntries = true;
                         const keysList = entry.keys || entry.key || [];
-                        const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
+                        const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
                         const type = entry.constant ? "CONSTANT" : "NORMAL";
                         const status = isDisabled ? "TẮT" : "BẬT";
+                        const entryUid = entry.id || entry.uid || 'Unknown';
+                        const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
 
-                        if (options.mode === 'summary') {
-                            const entryTitle = entry.comment || entry.name || `Entry #${entry.id || entry.uid || 'Unknown'}`;
-                            result += `- ${entryTitle} (${type}) [${status}] | Keys: [${keys}]\n`;
+                        // Xử lý các mode đặc biệt
+                        if (options.mode === 'by_uid') {
+                            if (String(entryUid) !== String(options.uid)) continue;
+                        } else if (options.mode === 'search') {
+                            const q = (options.query || '').toLowerCase();
+                            const c = (entry.content || '').toLowerCase();
+                            const k = keys.toLowerCase();
+                            const t = entryTitle.toLowerCase();
+                            if (!c.includes(q) && !k.includes(q) && !t.includes(q)) continue;
+                        } else if (options.mode === 'simulate') {
+                            const q = (options.query || '').toLowerCase();
+                            let triggered = false;
+                            const keysArray = Array.isArray(keysList) ? keysList : [keysList];
+                            for (const key of keysArray) {
+                                const kStr = String(key).toLowerCase().trim();
+                                if (!kStr) continue;
+                                if (kStr.includes('&&')) {
+                                    const parts = kStr.split('&&').map(p => p.trim());
+                                    if (parts.every(p => q.includes(p))) { triggered = true; break; }
+                                } else {
+                                    if (q.includes(kStr)) { triggered = true; break; }
+                                }
+                            }
+                            if (!triggered) continue;
+                        }
+
+                        hasEntries = true;
+                        if (options.mode === 'summary' || options.mode === 'simulate') {
+                            bookResult += `- ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n`;
                         } else {
-                            result += `- Entry (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                            bookResult += `- Entry ${entryTitle} (UID: ${entryUid}) (${type}) [${status}] | Keys: [${keys}]\n  Content: ${entry.content}\n`;
                         }
                     }
-                    if (!hasEntries) {
-                        result += "(Character Lorebook rỗng)\n";
+                    if (hasEntries) {
+                        result += bookResult;
+                    } else if (options.mode === 'all_full' || options.mode === 'char_full' || options.mode === 'summary') {
+                        result += bookResult + "(Character Lorebook rỗng hoặc không có entry phù hợp)\n";
                     }
-                } else {
+                } else if (options.mode === 'summary' || options.mode === 'all_full' || options.mode === 'char_full') {
                     result += "Nhân vật này không có Lorebook đi kèm thẻ.\n";
                 }
             }
