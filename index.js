@@ -473,6 +473,47 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const editUserPersonaTool = {
+        schema: {
+            name: 'edit_user_persona',
+            description: 'Chỉnh sửa và cập nhật hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    persona_description: {
+                        type: 'string',
+                        description: 'Nội dung mô tả tính cách, ngoại hình, bối cảnh mới của người dùng.'
+                    },
+                    persona_name: {
+                        type: 'string',
+                        description: 'Tên hiển thị mới của người dùng (Tùy chọn. Nếu không muốn đổi tên thì bỏ qua trường này).'
+                    }
+                },
+                required: ['persona_description']
+            }
+        },
+        execute: async (args, context) => {
+            try {
+                const success = await context.adapter.editUserPersona(args.persona_description, args.persona_name);
+                if (success) {
+                    return { content: `Successfully updated user persona.\nName: ${args.persona_name || '(unchanged)'}\nDescription: ${args.persona_description}` };
+                }
+                else {
+                    return {
+                        content: `Failed to update User Persona. (Maybe UI/Backend issues)`,
+                        isError: true
+                    };
+                }
+            }
+            catch (error) {
+                return {
+                    content: `Error updating User Persona: ${error.message || String(error)}`,
+                    isError: true
+                };
+            }
+        }
+    };
+
     const getLorebookInfoTool = {
         schema: {
             name: 'get_lorebook_info',
@@ -613,6 +654,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(deleteLastMessageTool);
         registry.registerTool(getChatHistoryTool);
         registry.registerTool(getUserPersonaTool);
+        registry.registerTool(editUserPersonaTool);
         registry.registerTool(getLorebookInfoTool);
         registry.registerTool(manageLorebookEntryTool);
         registry.registerTool(manageWorldbookTool);
@@ -882,6 +924,65 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return `Name: ${name}\nPersona Description:\n${personaText}`;
             }
             return 'No persona available or unsupported ST version.';
+        }
+        /**
+         * Chỉnh sửa Persona của người dùng
+         */
+        async editUserPersona(newDescription, newName) {
+            try {
+                const ctx = SillyTavern.getContext();
+                const w = window;
+                // Lấy ID persona đang active
+                const avatarId = w.user_avatar;
+                if (!avatarId) {
+                    console.error("[KaizAgent] No active user_avatar found.");
+                    return false;
+                }
+                if (!w.power_user || !w.power_user.personas || !w.power_user.personas[avatarId]) {
+                    console.error("[KaizAgent] Persona data not found in power_user.");
+                    return false;
+                }
+                let hasUpdates = false;
+                // Cập nhật tên
+                if (newName && newName.trim() !== '') {
+                    const oldName = w.power_user.personas[avatarId];
+                    if (oldName !== newName) {
+                        w.power_user.personas[avatarId] = newName.trim();
+                        if (typeof w.setUserName === 'function') {
+                            w.setUserName(newName.trim());
+                        }
+                        if (w.eventSource && w.event_types) {
+                            w.eventSource.emit(w.event_types.PERSONA_RENAMED, { avatarId, oldName, newName: newName.trim() });
+                        }
+                        hasUpdates = true;
+                    }
+                }
+                // Cập nhật mô tả
+                if (newDescription !== undefined) {
+                    if (w.power_user.persona_descriptions && w.power_user.persona_descriptions[avatarId]) {
+                        w.power_user.persona_descriptions[avatarId].description = newDescription;
+                    }
+                    w.power_user.persona_description = newDescription;
+                    hasUpdates = true;
+                }
+                // Lưu và kích hoạt thay đổi UI
+                if (hasUpdates) {
+                    if (typeof ctx.saveSettingsDebounced === 'function') {
+                        ctx.saveSettingsDebounced();
+                    }
+                    else if (typeof w.saveSettingsDebounced === 'function') {
+                        w.saveSettingsDebounced();
+                    }
+                    if (w.eventSource && w.event_types) {
+                        w.eventSource.emit(w.event_types.PERSONA_CHANGED, avatarId);
+                    }
+                }
+                return true;
+            }
+            catch (err) {
+                console.error("[KaizAgent] Error in editUserPersona:", err);
+                return false;
+            }
         }
         /**
          * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound

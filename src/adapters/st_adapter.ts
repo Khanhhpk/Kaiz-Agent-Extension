@@ -288,6 +288,72 @@ export class SillyTavernAdapter {
     }
 
     /**
+     * Chỉnh sửa Persona của người dùng
+     */
+    public async editUserPersona(newDescription: string, newName?: string): Promise<boolean> {
+        try {
+            const ctx = SillyTavern.getContext();
+            const w = window as any;
+            
+            // Lấy ID persona đang active
+            const avatarId = w.user_avatar;
+            if (!avatarId) {
+                console.error("[KaizAgent] No active user_avatar found.");
+                return false;
+            }
+
+            if (!w.power_user || !w.power_user.personas || !w.power_user.personas[avatarId]) {
+                console.error("[KaizAgent] Persona data not found in power_user.");
+                return false;
+            }
+
+            let hasUpdates = false;
+
+            // Cập nhật tên
+            if (newName && newName.trim() !== '') {
+                const oldName = w.power_user.personas[avatarId];
+                if (oldName !== newName) {
+                    w.power_user.personas[avatarId] = newName.trim();
+                    if (typeof w.setUserName === 'function') {
+                        w.setUserName(newName.trim());
+                    }
+                    if (w.eventSource && w.event_types) {
+                        w.eventSource.emit(w.event_types.PERSONA_RENAMED, { avatarId, oldName, newName: newName.trim() });
+                    }
+                    hasUpdates = true;
+                }
+            }
+
+            // Cập nhật mô tả
+            if (newDescription !== undefined) {
+                if (w.power_user.persona_descriptions && w.power_user.persona_descriptions[avatarId]) {
+                    w.power_user.persona_descriptions[avatarId].description = newDescription;
+                }
+                w.power_user.persona_description = newDescription;
+                hasUpdates = true;
+            }
+
+            // Lưu và kích hoạt thay đổi UI
+            if (hasUpdates) {
+                if (typeof ctx.saveSettingsDebounced === 'function') {
+                    ctx.saveSettingsDebounced();
+                } else if (typeof w.saveSettingsDebounced === 'function') {
+                    w.saveSettingsDebounced();
+                }
+
+                if (w.eventSource && w.event_types) {
+                    w.eventSource.emit(w.event_types.PERSONA_CHANGED, avatarId);
+                }
+            }
+
+            return true;
+        } catch (err) {
+            console.error("[KaizAgent] Error in editUserPersona:", err);
+            return false;
+        }
+    }
+
+    /**
      * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
      * @param options Các tùy chọn lọc dữ liệu
      */
