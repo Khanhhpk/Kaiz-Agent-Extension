@@ -1229,30 +1229,44 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return `[LỖI] Worldbook "${options.book_name}" không tồn tại.`;
                     const state = options.state;
                     const index = activeBooks.indexOf(options.book_name);
+                    const bookIndex = allBooks.indexOf(options.book_name);
+                    let changed = false;
                     if (state === 'enable') {
                         if (index === -1) {
                             activeBooks.push(options.book_name);
-                            if (saveSettingsDebounced)
-                                saveSettingsDebounced();
-                            return `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".`;
-                        }
-                        else {
-                            return `Worldbook "${options.book_name}" đã được bật từ trước.`;
+                            changed = true;
                         }
                     }
                     else if (state === 'disable') {
                         if (index !== -1) {
                             activeBooks.splice(index, 1);
-                            if (saveSettingsDebounced)
-                                saveSettingsDebounced();
-                            return `Đã TẮT kích hoạt toàn cục cho Worldbook "${options.book_name}".`;
-                        }
-                        else {
-                            return `Worldbook "${options.book_name}" đã tắt từ trước.`;
+                            changed = true;
                         }
                     }
                     else {
                         return "[LỖI] Tham số 'state' phải là 'enable' hoặc 'disable'.";
+                    }
+                    if (changed) {
+                        // Sync with ST UI so onWorldInfoChange handles it
+                        const $ = window.$;
+                        if ($) {
+                            const wiSelect = $('#world_info');
+                            if (wiSelect.length) {
+                                const option = wiSelect.find(`option[value='${bookIndex}']`);
+                                if (option.length) {
+                                    option.prop('selected', state === 'enable');
+                                    wiSelect.trigger('change');
+                                }
+                            }
+                        }
+                        if (saveSettingsDebounced)
+                            saveSettingsDebounced();
+                    }
+                    if (state === 'enable') {
+                        return index === -1 ? `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".` : `Worldbook "${options.book_name}" đã được bật từ trước.`;
+                    }
+                    else {
+                        return index !== -1 ? `Đã TẮT kích hoạt toàn cục cho Worldbook "${options.book_name}".` : `Worldbook "${options.book_name}" đã tắt từ trước.`;
                     }
                 }
                 if (options.action === 'create') {
