@@ -1,3 +1,4 @@
+import { marked } from 'marked';
 import { AgentLoop } from "../core/loop";
 import { StateManager } from "../core/state";
 
@@ -250,6 +251,56 @@ export class ChatWindowUI {
             return result;
         };
 
+        // Hàm render Mermaid (Lazy load)
+        const renderMermaid = async () => {
+            const mermaidBlocks = $('.kaiz-chat-history .language-mermaid');
+            if (mermaidBlocks.length === 0) return;
+
+            if (!(window as any).mermaid) {
+                // Tải lười thư viện Mermaid từ CDN
+                await new Promise<void>((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js';
+                    script.onload = () => {
+                        if ((window as any).mermaid) {
+                            (window as any).mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+                        }
+                        resolve();
+                    };
+                    script.onerror = reject;
+                    document.head.appendChild(script);
+                });
+            }
+
+            mermaidBlocks.each(function() {
+                const block = $(this);
+                if (block.hasClass('mermaid-rendered')) return;
+                
+                const code = block.text();
+                const id = 'mermaid-' + Date.now() + Math.floor(Math.random() * 1000);
+                
+                try {
+                    if ((window as any).mermaid) {
+                        (window as any).mermaid.render(id, code).then((result: any) => {
+                            const parentPre = block.parent('pre');
+                            if (parentPre.length) {
+                                parentPre.replaceWith(`<div class="kaiz-mermaid-container" style="text-align:center; margin:10px 0; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; overflow-x:auto;">${result.svg}</div>`);
+                            }
+                        }).catch((e: any) => {
+                            console.error("Mermaid render error", e);
+                            block.addClass('mermaid-rendered');
+                        });
+                    }
+                } catch (e) {
+                    console.error("Mermaid error", e);
+                    block.addClass('mermaid-rendered');
+                }
+            });
+        };
+
+        // Cấu hình marked để render break lines giống ST
+        marked.setOptions({ breaks: true });
+
         // Hàm tiện ích format tin nhắn
         const formatMessage = (text: string, isFinal: boolean): string => {
             let html = text || '';
@@ -267,7 +318,8 @@ export class ChatWindowUI {
                 
                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 if (restContent) {
-                    html += `<div style="margin-top: 8px;">${restContent}</div>`;
+                    const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                    html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                 }
             } else if (!isFinal) {
                  // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
@@ -275,12 +327,11 @@ export class ChatWindowUI {
                  html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
                  // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                 html = parseToolCallsToHtml(html.trim());
+                 let parsedContent = parseToolCallsToHtml(html.trim());
+                 html = `<div class="kaiz-markdown-body">${marked.parse(parsedContent)}</div>`;
             }
 
-            // Xóa các khoảng trống thừa (consecutive newlines) bị biến thành <br><br><br>
-            let finalHtml = html.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
-            return finalHtml;
+            return html;
         };
 
         // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
@@ -433,6 +484,9 @@ export class ChatWindowUI {
                     streamUpdatePending = false;
                     if (!agentContentBox) return;
                     agentContentBox.html(formatMessage(event.text || '', true));
+                    // Gọi render biểu đồ Mermaid
+                    renderMermaid();
+                    
                     currentStepResponse = event.text || '';
                     await stateManager.addMessage('agent', currentStepResponse);
                     agentContentBox = null;

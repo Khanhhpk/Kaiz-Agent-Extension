@@ -375,10 +375,60 @@
 }
 
 .kaiz-system-result-block {
+    margin: 10px 0;
+}
+
+/* Markdown Styles */
+.kaiz-markdown-body {
+    line-height: 1.5;
+    word-wrap: break-word;
+}
+.kaiz-markdown-body p {
+    margin: 0 0 10px 0;
+}
+.kaiz-markdown-body h1, .kaiz-markdown-body h2, .kaiz-markdown-body h3, .kaiz-markdown-body h4 {
+    margin-top: 15px;
     margin-bottom: 10px;
-    background: rgba(0,0,0,0.2);
-    padding: 8px;
-    border-radius: 5px;
+    font-weight: 600;
+}
+.kaiz-markdown-body h1 { font-size: 1.4em; }
+.kaiz-markdown-body h2 { font-size: 1.3em; }
+.kaiz-markdown-body h3 { font-size: 1.2em; }
+.kaiz-markdown-body h4 { font-size: 1.1em; }
+
+.kaiz-markdown-body ul, .kaiz-markdown-body ol {
+    margin: 0 0 10px 0;
+    padding-left: 20px;
+}
+.kaiz-markdown-body li {
+    margin-bottom: 5px;
+}
+.kaiz-markdown-body strong {
+    font-weight: 700;
+}
+.kaiz-markdown-body code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+.kaiz-markdown-body pre {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 10px;
+    border-radius: 6px;
+    overflow-x: auto;
+    margin: 10px 0;
+}
+.kaiz-markdown-body pre code {
+    background: transparent;
+    padding: 0;
+}
+.kaiz-markdown-body blockquote {
+    border-left: 3px solid rgba(255,255,255,0.3);
+    margin: 10px 0;
+    padding-left: 10px;
+    color: rgba(255,255,255,0.7);
 }
 
 .kaiz-system-summary {
