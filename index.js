@@ -1174,7 +1174,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     extraClass = 'kaiz-msg-user';
                 }
                 else if (role === 'agent') {
-                    avatar = '<i class="fa-solid fa-robot"></i>';
+                    avatar = '<i class="fa-solid fa-yin-yang"></i>';
                     extraClass = 'kaiz-msg-agent';
                 }
                 else {
