@@ -95,9 +95,9 @@ export class ChatWindowUI {
         function toggleSidebar() {
             isSidebarOpen = !isSidebarOpen;
             if (isSidebarOpen) {
-                sidebar.show();
+                sidebar.css('display', 'flex');
             } else {
-                sidebar.hide();
+                sidebar.css('display', 'none');
             }
         }
 

@@ -1041,10 +1041,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             function toggleSidebar() {
                 isSidebarOpen = !isSidebarOpen;
                 if (isSidebarOpen) {
-                    sidebar.show();
+                    sidebar.css('display', 'flex');
                 }
                 else {
-                    sidebar.hide();
+                    sidebar.css('display', 'none');
                 }
             }
             menuBtn.on('click', toggleSidebar);
