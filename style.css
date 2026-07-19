@@ -19,7 +19,7 @@
 }
 
 .kaiz-floating-btn:hover {
-    transform: scale(1.1) translateY(-4px);
+    transform: scale(1.15);
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7);
 }
 
