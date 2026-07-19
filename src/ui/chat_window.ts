@@ -56,7 +56,6 @@ export class ChatWindowUI {
         // --- Drag Logic ---
         if (typeof btn.draggable === 'function') {
             btn.draggable({
-                containment: 'window',
                 scroll: false
             });
         }
@@ -81,9 +80,14 @@ export class ChatWindowUI {
 
         // Toggle cửa sổ
         btn.on('click', () => {
-            win.removeClass('kaiz-hidden');
-            // Refresh list khi mở
-            stateManager.loadChatList().then(renderChatList);
+            if (win.hasClass('kaiz-hidden')) {
+                win.removeClass('kaiz-hidden');
+                // Refresh list khi mở
+                stateManager.loadChatList().then(renderChatList);
+            } else {
+                win.addClass('kaiz-hidden');
+                if (isSidebarOpen) toggleSidebar();
+            }
         });
 
         closeBtn.on('click', () => {
@@ -265,6 +269,7 @@ export class ChatWindowUI {
 
         // Xử lý gửi tin nhắn UI
         const sendMessage = async () => {
+            if (sendBtn.prop('disabled')) return;
             const text = String(input.val()).trim();
             if (!text) return;
 
