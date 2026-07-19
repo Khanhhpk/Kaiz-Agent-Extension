@@ -1103,12 +1103,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${cotContent}</div></details>${restContent}`;
                 }
-                else if (html.includes('<agent_cot>')) {
-                    const cotContent = html.replace('<agent_cot>', '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                else if (!isFinal) {
+                    // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
+                    const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     html = `${detailsTag}<summary style="cursor: pointer; color: #f39c12; font-size: 12px; font-weight: bold;"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div style="font-size: 12px; color: #aaa; margin-top: 5px; white-space: pre-wrap;">${cotContent}</div></details>`;
                 }
                 else {
-                    // No agent_cot
+                    // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
+                    // Xử lý như message bình thường
                     const toolCalls = [];
                     html = html.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
                         const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
