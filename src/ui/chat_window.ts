@@ -243,8 +243,7 @@ export class ChatWindowUI {
                 return `__TOOL_CALL_${toolCalls.length - 1}__`;
             });
             
-            result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
+            // KHÔNG escape < > ở đây, để dành cho marked.parse xử lý
             for (let i = 0; i < toolCalls.length; i++) {
                 result = result.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
             }
