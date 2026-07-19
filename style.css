@@ -3,15 +3,15 @@
     position: fixed;
     bottom: 30px;
     right: 30px;
-    width: 38px;
-    height: 38px;
+    width: 42px;
+    height: 42px;
     border-radius: 50%;
     background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
     color: #1a1a1a;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 18px;
     box-shadow: 0 8px 24px rgba(0, 201, 255, 0.4);
     cursor: pointer;
     z-index: 10000;
