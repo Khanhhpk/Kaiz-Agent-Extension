@@ -1838,6 +1838,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 return { left: newLeft, top: newTop };
             };
+            let isDraggingBtn = false;
             if (typeof $.fn.draggable === 'function') {
                 const makeDraggable = (el, storageKey, options = {}) => {
                     const savedPos = localStorage.getItem(storageKey);
@@ -1851,8 +1852,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     el.draggable({
                         containment: 'window',
                         scroll: false,
+                        distance: 5,
+                        start: function () {
+                            if (el.attr('id') === 'kaiz-floating-btn') {
+                                isDraggingBtn = true;
+                            }
+                        },
                         ...options,
                         stop: function () {
+                            if (el.attr('id') === 'kaiz-floating-btn') {
+                                setTimeout(() => { isDraggingBtn = false; }, 100);
+                            }
                             const pos = ensureInBounds($(this));
                             if (pos)
                                 localStorage.setItem(storageKey, JSON.stringify(pos));
@@ -1886,7 +1896,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const chatTitle = $('#kaiz-chat-title');
             let isSidebarOpen = false;
             // Toggle cửa sổ
-            btn.on('click', () => {
+            btn.on('click', (e) => {
+                if (isDraggingBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
                 if (win.hasClass('kaiz-hidden')) {
                     win.removeClass('kaiz-hidden');
                     setTimeout(() => {

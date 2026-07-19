@@ -75,6 +75,7 @@ export class ChatWindowUI {
             return { left: newLeft, top: newTop };
         };
 
+        let isDraggingBtn = false;
         if (typeof ($.fn as any).draggable === 'function') {
             const makeDraggable = (el: any, storageKey: string, options: any = {}) => {
                 const savedPos = localStorage.getItem(storageKey);
@@ -88,8 +89,17 @@ export class ChatWindowUI {
                 el.draggable({
                     containment: 'window',
                     scroll: false,
+                    distance: 5,
+                    start: function() {
+                        if (el.attr('id') === 'kaiz-floating-btn') {
+                            isDraggingBtn = true;
+                        }
+                    },
                     ...options,
                     stop: function() {
+                        if (el.attr('id') === 'kaiz-floating-btn') {
+                            setTimeout(() => { isDraggingBtn = false; }, 100);
+                        }
                         const pos = ensureInBounds($(this));
                         if (pos) localStorage.setItem(storageKey, JSON.stringify(pos));
                     }
@@ -127,7 +137,12 @@ export class ChatWindowUI {
         let isSidebarOpen = false;
 
         // Toggle cửa sổ
-        btn.on('click', () => {
+        btn.on('click', (e: any) => {
+            if (isDraggingBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
             if (win.hasClass('kaiz-hidden')) {
                 win.removeClass('kaiz-hidden');
                 setTimeout(() => {
