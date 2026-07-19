@@ -386,6 +386,31 @@ export class ChatWindowUI {
             let agentContentBox: any = null;
             let currentStepResponse = "";
 
+            let streamUpdatePending = false;
+            let lastStreamEvent: any = null;
+
+            const flushStreamUpdate = () => {
+                if (!lastStreamEvent || !agentContentBox) {
+                    streamUpdatePending = false;
+                    return;
+                }
+                const event = lastStreamEvent;
+                let htmlToRender = event.text ? formatMessage(event.text, false) : '';
+                if (event.reasoning && !event.text) {
+                    htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
+                }
+                if (!htmlToRender) {
+                    htmlToRender = `<div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating...</div>`;
+                }
+                agentContentBox.html(htmlToRender);
+                lastStreamEvent = null;
+                
+                // Giải phóng khóa sau khi browser render xong frame này
+                requestAnimationFrame(() => {
+                    streamUpdatePending = false;
+                });
+            };
+
             await loop.run(historyMsgs, maxLoops, async (event) => {
                 const btnIcon = $('#kaiz-floating-btn i');
                 const btnFloat = $('#kaiz-floating-btn');
@@ -398,15 +423,14 @@ export class ChatWindowUI {
                     currentStepResponse = "";
                 } else if (event.type === 'stream_chunk') {
                     if (!agentContentBox) return;
-                    let htmlToRender = event.text ? formatMessage(event.text, false) : '';
-                    if (event.reasoning && !event.text) {
-                        htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
+                    lastStreamEvent = event;
+                    if (!streamUpdatePending) {
+                        streamUpdatePending = true;
+                        requestAnimationFrame(flushStreamUpdate);
                     }
-                    if (!htmlToRender) {
-                        htmlToRender = `<div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating...</div>`;
-                    }
-                    agentContentBox.html(htmlToRender);
                 } else if (event.type === 'step_end') {
+                    lastStreamEvent = null;
+                    streamUpdatePending = false;
                     if (!agentContentBox) return;
                     agentContentBox.html(formatMessage(event.text || '', true));
                     currentStepResponse = event.text || '';
