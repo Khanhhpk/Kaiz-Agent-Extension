@@ -154,10 +154,24 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const safeMode = extSettings.safeMode;
                         const safeModeBlacklist = extSettings.safeModeBlacklist || {};
                         if (safeMode && safeModeBlacklist[call.name]) {
-                            const Popup = window.Popup;
-                            if (Popup && Popup.show && Popup.show.confirm) {
-                                const confirm = await Popup.show.confirm('Safe Mode Warning', `Agent Kaiz muốn tự động gọi công cụ: <b>${call.name}</b><br>Nhưng công cụ này nằm trong Blacklist của Safe Mode.<br><br>Bạn có cho phép thực thi không?`);
-                                if (!confirm) {
+                            try {
+                                // Import Popup from ST core dynamically
+                                const popupModule = await import('../../../../../../../scripts/popup.js');
+                                const Popup = popupModule.Popup;
+                                if (Popup && Popup.show && Popup.show.confirm) {
+                                    const confirmResult = await Popup.show.confirm('Safe Mode Warning', `Agent Kaiz muốn tự động gọi công cụ: <b>${call.name}</b><br>Nhưng công cụ này nằm trong Blacklist của Safe Mode.<br><br>Bạn có cho phép thực thi không?`);
+                                    if (confirmResult !== 1) { // POPUP_RESULT.AFFIRMATIVE is 1
+                                        const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                        await onEvent({ type: 'error', text: msg });
+                                        return; // Ngắt toàn bộ AgentLoop
+                                    }
+                                }
+                            }
+                            catch (e) {
+                                console.error("[KaizAgent] Failed to import popup.js for Safe Mode:", e);
+                                // Fallback to native confirm
+                                const nativeConfirm = confirm(`Safe Mode Warning\n\nAgent Kaiz muốn tự động gọi công cụ: ${call.name}\nNhưng công cụ này nằm trong Blacklist của Safe Mode.\n\nBạn có cho phép thực thi không?`);
+                                if (!nativeConfirm) {
                                     const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
                                     await onEvent({ type: 'error', text: msg });
                                     return; // Ngắt toàn bộ AgentLoop
