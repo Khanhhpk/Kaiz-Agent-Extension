@@ -21,7 +21,7 @@ export const editUserPersonaTool: ITool = {
         }
     },
 
-    execute: async (args: { persona_description: string, persona_name?: string }, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const success = await context.adapter.editUserPersona(args.persona_description, args.persona_name);
             if (success) {
