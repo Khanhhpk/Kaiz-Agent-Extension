@@ -156,15 +156,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     await onEvent({ type: 'tool_call', data: call });
 
                     let result;
+                    let isToolError = false;
                     try {
                         result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
-                        if (result.isError) hasError = true;
+                        if (result.isError) {
+                            hasError = true;
+                            isToolError = true;
+                        }
                     } catch (err: any) {
                         result = { content: err.message || String(err), isError: true };
                         hasError = true;
+                        isToolError = true;
                     }
                     
-                    resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name}]\nRESULT:\n${result.content}\n\n`;
+                    const statusText = isToolError ? "❌ LỖI (ERROR)" : "✅ THÀNH CÔNG (SUCCESS)";
+                    resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
                 }
 
                 resultsFormatted = resultsFormatted.trim();

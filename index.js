@@ -130,16 +130,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const call = toolCalls[i];
                         await onEvent({ type: 'tool_call', data: call });
                         let result;
+                        let isToolError = false;
                         try {
                             result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
-                            if (result.isError)
+                            if (result.isError) {
                                 hasError = true;
+                                isToolError = true;
+                            }
                         }
                         catch (err) {
                             result = { content: err.message || String(err), isError: true };
                             hasError = true;
+                            isToolError = true;
                         }
-                        resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name}]\nRESULT:\n${result.content}\n\n`;
+                        const statusText = isToolError ? "❌ LỖI (ERROR)" : "✅ THÀNH CÔNG (SUCCESS)";
+                        resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
                     }
                     resultsFormatted = resultsFormatted.trim();
                     let pinnedGoalSection = pinnedUserGoal ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!` : '';
