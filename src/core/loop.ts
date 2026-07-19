@@ -176,6 +176,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
                 for (let i = 0; i < toolCalls.length; i++) {
                     const call = toolCalls[i];
+                    
+                    // --- SAFE MODE CHECK ---
+                    const ctx = (window as any).SillyTavern.getContext();
+                    const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                    const safeMode = extSettings.safeMode;
+                    const safeModeBlacklist = extSettings.safeModeBlacklist || {};
+
+                    if (safeMode && safeModeBlacklist[call.name]) {
+                        const Popup = (window as any).Popup;
+                        if (Popup && Popup.show && Popup.show.confirm) {
+                            const confirm = await Popup.show.confirm('Safe Mode Warning', `Agent Kaiz muốn tự động gọi công cụ: <b>${call.name}</b><br>Nhưng công cụ này nằm trong Blacklist của Safe Mode.<br><br>Bạn có cho phép thực thi không?`);
+                            if (!confirm) {
+                                const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                await onEvent({ type: 'error', text: msg });
+                                return; // Ngắt toàn bộ AgentLoop
+                            }
+                        }
+                    }
+                    // --- END SAFE MODE CHECK ---
+
                     await onEvent({ type: 'tool_call', data: call });
 
                     let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });

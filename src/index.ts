@@ -48,10 +48,20 @@ jQuery(async () => {
             customKey: '',
             customModel: '',
             maxAgentLoops: 5,
-            disabledTools: {}
+            disabledTools: {},
+            safeMode: false,
+            safeModeBlacklist: {}
         };
-    } else if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
-        ctx.extensionSettings[EXT_NAME].disabledTools = {};
+    } else {
+        if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
+            ctx.extensionSettings[EXT_NAME].disabledTools = {};
+        }
+        if (ctx.extensionSettings[EXT_NAME].safeMode === undefined) {
+            ctx.extensionSettings[EXT_NAME].safeMode = false;
+        }
+        if (!ctx.extensionSettings[EXT_NAME].safeModeBlacklist) {
+            ctx.extensionSettings[EXT_NAME].safeModeBlacklist = {};
+        }
     }
 
     // Nạp style.css thủ công

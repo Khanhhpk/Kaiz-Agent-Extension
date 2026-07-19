@@ -148,6 +148,23 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     let hasError = false;
                     for (let i = 0; i < toolCalls.length; i++) {
                         const call = toolCalls[i];
+                        // --- SAFE MODE CHECK ---
+                        const ctx = window.SillyTavern.getContext();
+                        const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                        const safeMode = extSettings.safeMode;
+                        const safeModeBlacklist = extSettings.safeModeBlacklist || {};
+                        if (safeMode && safeModeBlacklist[call.name]) {
+                            const Popup = window.Popup;
+                            if (Popup && Popup.show && Popup.show.confirm) {
+                                const confirm = await Popup.show.confirm('Safe Mode Warning', `Agent Kaiz muốn tự động gọi công cụ: <b>${call.name}</b><br>Nhưng công cụ này nằm trong Blacklist của Safe Mode.<br><br>Bạn có cho phép thực thi không?`);
+                                if (!confirm) {
+                                    const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                    await onEvent({ type: 'error', text: msg });
+                                    return; // Ngắt toàn bộ AgentLoop
+                                }
+                            }
+                        }
+                        // --- END SAFE MODE CHECK ---
                         await onEvent({ type: 'tool_call', data: call });
                         let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
                         let isToolError = false;
@@ -1581,9 +1598,65 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 settings.maxAgentLoops = parseInt(this.value, 10) || 5;
                 ctx.saveSettingsDebounced();
             });
+            // --- SAFE MODE LOGIC ---
+            $('#kaiz-safe-mode').prop('checked', settings.safeMode);
+            if (settings.safeMode) {
+                $('#kaiz-safe-mode-group').show();
+            }
+            $('#kaiz-safe-mode').on('change', function () {
+                settings.safeMode = !!this.checked;
+                ctx.saveSettingsDebounced();
+                if (settings.safeMode) {
+                    $('#kaiz-safe-mode-group').slideDown();
+                }
+                else {
+                    $('#kaiz-safe-mode-group').slideUp();
+                }
+            });
+            const $safeToolsList = $('#kaiz-safe-tools-list');
+            const tools = registry.getAllTools();
+            function renderSafeTools(filterText = '') {
+                $safeToolsList.empty();
+                const lowerFilter = filterText.toLowerCase();
+                tools.forEach(tool => {
+                    const name = tool.schema.name;
+                    const desc = tool.schema.description;
+                    if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+                        return;
+                    }
+                    const isBlacklisted = !!settings.safeModeBlacklist[name];
+                    const $toolItem = $(`
+                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                        <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} style="margin-top: 3px;" />
+                        <div style="flex: 1;">
+                            <label for="kaiz-safe-tool-${name}" style="font-weight: bold; cursor: pointer; color: ${isBlacklisted ? '#e74c3c' : '#888'}; display: block;">${name}</label>
+                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                        </div>
+                    </div>
+                `);
+                    $safeToolsList.append($toolItem);
+                });
+                $('.kaiz-safe-tool-toggle').on('change', function () {
+                    const toolName = $(this).data('tool');
+                    const isChecked = this.checked;
+                    if (isChecked) {
+                        settings.safeModeBlacklist[toolName] = true;
+                    }
+                    else {
+                        delete settings.safeModeBlacklist[toolName];
+                    }
+                    ctx.saveSettingsDebounced();
+                    const $label = $(`label[for="kaiz-safe-tool-${toolName}"]`);
+                    $label.css('color', isChecked ? '#e74c3c' : '#888');
+                });
+            }
+            renderSafeTools();
+            $('#kaiz-safe-tools-search').on('input', function () {
+                renderSafeTools(this.value);
+            });
+            // --- END SAFE MODE LOGIC ---
             // --- TOOLS MANAGER LOGIC ---
             const $toolsList = $('#kaiz-tools-list');
-            const tools = registry.getAllTools();
             function renderTools(filterText = '') {
                 $toolsList.empty();
                 const lowerFilter = filterText.toLowerCase();
@@ -2222,11 +2295,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 customKey: '',
                 customModel: '',
                 maxAgentLoops: 5,
-                disabledTools: {}
+                disabledTools: {},
+                safeMode: false,
+                safeModeBlacklist: {}
             };
         }
-        else if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
-            ctx.extensionSettings[EXT_NAME].disabledTools = {};
+        else {
+            if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
+                ctx.extensionSettings[EXT_NAME].disabledTools = {};
+            }
+            if (ctx.extensionSettings[EXT_NAME].safeMode === undefined) {
+                ctx.extensionSettings[EXT_NAME].safeMode = false;
+            }
+            if (!ctx.extensionSettings[EXT_NAME].safeModeBlacklist) {
+                ctx.extensionSettings[EXT_NAME].safeModeBlacklist = {};
+            }
         }
         // Nạp style.css thủ công
         const cssPath = `/scripts/extensions/${extPath}/style.css`;

@@ -67,9 +67,74 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
         });
 
+        // --- SAFE MODE LOGIC ---
+        $('#kaiz-safe-mode').prop('checked', settings.safeMode);
+        if (settings.safeMode) {
+            $('#kaiz-safe-mode-group').show();
+        }
+        $('#kaiz-safe-mode').on('change', function(this: HTMLInputElement) {
+            settings.safeMode = !!this.checked;
+            ctx.saveSettingsDebounced();
+            if (settings.safeMode) {
+                $('#kaiz-safe-mode-group').slideDown();
+            } else {
+                $('#kaiz-safe-mode-group').slideUp();
+            }
+        });
+
+        const $safeToolsList = $('#kaiz-safe-tools-list');
+        const tools = registry.getAllTools();
+
+        function renderSafeTools(filterText = '') {
+            $safeToolsList.empty();
+            const lowerFilter = filterText.toLowerCase();
+            
+            tools.forEach(tool => {
+                const name = tool.schema.name;
+                const desc = tool.schema.description;
+                
+                if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+                    return;
+                }
+                
+                const isBlacklisted = !!settings.safeModeBlacklist[name];
+                
+                const $toolItem = $(`
+                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                        <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} style="margin-top: 3px;" />
+                        <div style="flex: 1;">
+                            <label for="kaiz-safe-tool-${name}" style="font-weight: bold; cursor: pointer; color: ${isBlacklisted ? '#e74c3c' : '#888'}; display: block;">${name}</label>
+                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                        </div>
+                    </div>
+                `);
+                
+                $safeToolsList.append($toolItem);
+            });
+            
+            $('.kaiz-safe-tool-toggle').on('change', function(this: HTMLInputElement) {
+                const toolName = $(this).data('tool');
+                const isChecked = this.checked;
+                
+                if (isChecked) {
+                    settings.safeModeBlacklist[toolName] = true;
+                } else {
+                    delete settings.safeModeBlacklist[toolName];
+                }
+                ctx.saveSettingsDebounced();
+                
+                const $label = $(`label[for="kaiz-safe-tool-${toolName}"]`);
+                $label.css('color', isChecked ? '#e74c3c' : '#888');
+            });
+        }
+        renderSafeTools();
+        $('#kaiz-safe-tools-search').on('input', function(this: HTMLInputElement) {
+            renderSafeTools(this.value);
+        });
+        // --- END SAFE MODE LOGIC ---
+
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
-        const tools = registry.getAllTools();
         
         function renderTools(filterText = '') {
             $toolsList.empty();
