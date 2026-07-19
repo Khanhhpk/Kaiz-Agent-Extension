@@ -1241,6 +1241,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     settings.customModel = this.value;
                 ctx.saveSettingsDebounced();
             });
+            $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);
             $('#kaiz-max-loops').on('input', function () {
                 settings.maxAgentLoops = parseInt(this.value, 10) || 5;
                 ctx.saveSettingsDebounced();
