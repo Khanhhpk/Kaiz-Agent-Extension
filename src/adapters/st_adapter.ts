@@ -289,8 +289,9 @@ export class SillyTavernAdapter {
 
     /**
      * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
+     * @param options Các tùy chọn lọc dữ liệu
      */
-    public async getLorebookInfo(): Promise<string> {
+    public async getLorebookInfo(options: { mode: 'summary' | 'all_full' | 'char_full' | 'by_name', bookName?: string } = { mode: 'summary' }): Promise<string> {
         let result = "";
         try {
             const ctx = SillyTavern.getContext();
@@ -327,70 +328,97 @@ export class SillyTavernAdapter {
             const chatWorldName = ctx.chatMetadata?.[wiKey];
             if (chatWorldName && typeof chatWorldName === 'string') names.add(chatWorldName);
 
-            result += "=== LOREBOOKS ĐANG KÍCH HOẠT ===\n";
-            if (names.size === 0) {
-                result += "Không có Global hay Chat Lorebook nào đang được kích hoạt.\n";
+            if (options.mode === 'by_name') {
+                if (!options.bookName) return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
+                if (!names.has(options.bookName)) return `Không tìm thấy Lorebook nào đang kích hoạt có tên "${options.bookName}".`;
+                // Nếu tìm thấy, xoá hết các tên khác để chỉ query đúng sách này
+                names.clear();
+                names.add(options.bookName);
             }
 
-            for (const name of names) {
-                let data = null;
-                try {
-                    if (typeof ctx.loadWorldInfo === 'function') {
-                        data = await ctx.loadWorldInfo(name);
-                    } else {
-                        const res = await fetch('/api/worldinfo/get', {
-                            method: 'POST',
-                            headers: { ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}), 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name }),
-                        });
-                        if (res.ok) data = await res.json();
-                    }
-                } catch (e) {
-                    console.error(`[KaizAgent] Failed to load lorebook ${name}:`, e);
+            if (options.mode === 'char_full') {
+                // Xoá hết global names để chỉ xử lý char lorebook
+                names.clear();
+            }
+
+            if (options.mode !== 'char_full') {
+                result += "=== LOREBOOKS ĐANG KÍCH HOẠT ===\n";
+                if (names.size === 0) {
+                    result += "Không có Global hay Chat Lorebook nào đang được kích hoạt.\n";
                 }
 
-                if (data && data.entries) {
-                    result += `\n[Lorebook: ${name}]\n`;
-                    const entries = Object.values(data.entries) as any[];
+                for (const name of names) {
+                    let data = null;
+                    try {
+                        if (typeof ctx.loadWorldInfo === 'function') {
+                            data = await ctx.loadWorldInfo(name);
+                        } else {
+                            const res = await fetch('/api/worldinfo/get', {
+                                method: 'POST',
+                                headers: { ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}), 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name }),
+                            });
+                            if (res.ok) data = await res.json();
+                        }
+                    } catch (e) {
+                        console.error(`[KaizAgent] Failed to load lorebook ${name}:`, e);
+                    }
+
+                    if (data && data.entries) {
+                        result += `\n[Lorebook: ${name}]\n`;
+                        const entries = Object.values(data.entries) as any[];
+                        let hasEntries = false;
+                        for (const entry of entries) {
+                            if (!entry || (!entry.content && options.mode !== 'summary')) continue;
+                            hasEntries = true;
+                            const keysList = entry.key || entry.keys || [];
+                            const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
+                            const type = entry.constant ? "CONSTANT" : "NORMAL";
+                            if (options.mode === 'summary') {
+                                const entryTitle = entry.comment || entry.name || `Entry #${entry.uid}`;
+                                result += `- ${entryTitle} (${type}) | Keys: [${keys}]\n`;
+                            } else {
+                                result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                            }
+                        }
+                        if (!hasEntries) {
+                            result += "(Lorebook này rỗng hoặc không có entry hợp lệ)\n";
+                        }
+                    }
+                }
+            }
+
+            if (options.mode !== 'by_name') {
+                result += "\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n";
+                if (character && character.data && character.data.character_book && character.data.character_book.entries) {
+                    result += `\n[Character Lorebook: ${character.name}]\n`;
+                    const entries = character.data.character_book.entries;
                     let hasEntries = false;
                     for (const entry of entries) {
-                        if (!entry || !entry.content) continue;
+                        if (!entry || (!entry.content && options.mode !== 'summary')) continue;
                         hasEntries = true;
-                        const keysList = entry.key || entry.keys || [];
+                        const keysList = entry.keys || entry.key || [];
                         const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
                         const type = entry.constant ? "CONSTANT" : "NORMAL";
-                        result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                        if (options.mode === 'summary') {
+                            const entryTitle = entry.comment || entry.name || `Entry #${entry.id || entry.uid || 'Unknown'}`;
+                            result += `- ${entryTitle} (${type}) | Keys: [${keys}]\n`;
+                        } else {
+                            result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                        }
                     }
                     if (!hasEntries) {
-                        result += "(Lorebook này rỗng hoặc không có entry hợp lệ)\n";
+                        result += "(Character Lorebook rỗng)\n";
                     }
+                } else {
+                    result += "Nhân vật này không có Lorebook đi kèm thẻ.\n";
                 }
-            }
-
-            result += "\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n";
-            if (character && character.data && character.data.character_book && character.data.character_book.entries) {
-                result += `\n[Character Lorebook: ${character.name}]\n`;
-                const entries = character.data.character_book.entries;
-                let hasEntries = false;
-                for (const entry of entries) {
-                    if (!entry || !entry.content) continue;
-                    hasEntries = true;
-                    const keysList = entry.keys || entry.key || [];
-                    const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
-                    const type = entry.constant ? "CONSTANT" : "NORMAL";
-                    result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
-                }
-                if (!hasEntries) {
-                    result += "(Character Lorebook rỗng)\n";
-                }
-            } else {
-                result += "Nhân vật này không có Lorebook đi kèm thẻ.\n";
             }
 
             return result;
         } catch (e: any) {
             console.error('[KaizAgent] Lỗi khi lấy toàn bộ Lorebook:', e);
-            return `Lỗi khi lấy toàn bộ Lorebook: ${e.message}`;
+            return `Lỗi khi lấy thông tin Lorebook: ${e.message}`;
         }
     }
 }
