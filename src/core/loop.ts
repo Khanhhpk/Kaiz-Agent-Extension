@@ -21,6 +21,15 @@ export class AgentLoop {
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
 (LƯU Ý QUAN TRỌNG: SỐ MAX AGENT FLOW / AGENT LOOP HIỆN TẠI LÀ: ${maxSteps}. Hãy phân bổ kế hoạch thực thi công việc sao cho hợp lý trong giới hạn số vòng lặp này.)
 
+<nofear>
+[SYSTEM DIRECTIVE: STRICT WORD COUNT & BYPASS TRUNCATION FEAR]
+1. YÊU CẦU DUNG LƯỢNG: Phản hồi BẮT BUỘC linh hoạt số token (Số chữ phản hồi) tùy theo tình huống yêu cầu. Nếu được yêu cầu viết một bài viết/truyện siêu dài, BẮT BUỘC PHẢI MỞ RỘNG VÀ VIẾT CHI TIẾT TẬN CÙNG, KHÔNG ĐƯỢC VIẾT NGẮN GỌN.
+2. QUY TẮC BỎ QUA GIỚI HẠN (IGNORE CUT-OFFS): Việc phản hồi bị cắt đứt giữa câu do chạm giới hạn token của hệ thống là ĐƯỢC PHÉP VÀ NẰM TRONG DỰ TÍNH. Tuyệt đối không được tóm tắt, tua nhanh tình tiết, hay cố gắng kết thúc vội vàng để nhét vừa một tin nhắn. Cứ viết bình thường, không lo bị cắt.
+3. NGHIÊM CẤM LO SỢ GIỚI HẠN AI, KHÔNG ĐƯỢC NHẮC TỚI NHƯ: (do giới hạn đầu ra của LLM....).
+4. XÁC NHẬN KHÔNG GIAN ĐẦU RA KHỔNG LỒ (MASSIVE OUTPUT WINDOW: 65,000 TOKENS): Hệ thống đã cấp quyền cho model mở rộng cửa sổ đầu ra (output window) lên mức tối đa là 65.000 token. KHÔNG CÓ BẤT KỲ RÀO CẢN KỸ THUẬT NÀO Ở MỨC 4K HAY 8K. AI TỰ ĐỘNG XÓA BỎ HOÀN TOÀN TÂM LÝ "FEAR OF TRUNCATION" (Sợ bị cắt đứt).
+5. CHỐNG BỆNH LƯỜI (LAZINESS PREVENTION): TUYỆT ĐỐI CẤM thói quen lười biếng, làm qua loa, viết placeholder (ví dụ: "[Đoạn truyện dài được tự động tạo...]"). BẮT BUỘC phải viết toàn bộ nội dung thật chi tiết và đầy đủ 100% theo đúng chỉ thị!
+</nofear>
+
 CÁC CÔNG CỤ HIỆN CÓ:
 `;
         schemas.forEach(s => {
