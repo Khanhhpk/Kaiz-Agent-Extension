@@ -84,6 +84,7 @@ jQuery(async () => {
             // Mở DB chat đầu tiên hoặc render rỗng
             const initialChats = await stateManager.loadChatList();
             if (stateManager.onChatsListUpdated) stateManager.onChatsListUpdated(initialChats);
+            if (stateManager.onChatSwitched) stateManager.onChatSwitched(-1, []);
 
         } else {
             console.error("[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.");
