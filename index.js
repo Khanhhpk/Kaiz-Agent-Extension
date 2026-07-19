@@ -1123,21 +1123,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     : '<details open class="kaiz-cot-block">';
                 const closeIndex = html.indexOf('</agent_cot>');
                 if (closeIndex !== -1) {
-                    const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    let restContent = html.substring(closeIndex + '</agent_cot>'.length);
+                    const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                    let restContent = html.substring(closeIndex + '</agent_cot>'.length).trim();
                     restContent = parseToolCallsToHtml(restContent);
-                    html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>${restContent}`;
+                    html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                    if (restContent) {
+                        html += `<div style="margin-top: 8px;">${restContent}</div>`;
+                    }
                 }
                 else if (!isFinal) {
                     // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
-                    const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
                     html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 }
                 else {
                     // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                    html = parseToolCallsToHtml(html);
+                    html = parseToolCallsToHtml(html.trim());
                 }
-                return html.replace(/\n/g, '<br>');
+                // Xóa các khoảng trống thừa (consecutive newlines) bị biến thành <br><br><br>
+                let finalHtml = html.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
+                return finalHtml;
             };
             // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
             const formatUserMessage = (text) => {
