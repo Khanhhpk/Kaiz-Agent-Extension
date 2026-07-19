@@ -311,6 +311,60 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const manageWorldbookTool = {
+        schema: {
+            name: "manage_worldbook",
+            description: "Quản lý các cuốn Sổ tay thế giới (Worldbook/Lorebook) ở mức toàn cục. Cho phép lấy danh sách toàn bộ worldbook đang có trong hệ thống, bật/tắt (kích hoạt) worldbook, và tạo mới một worldbook trống.",
+            parameters: {
+                type: "object",
+                properties: {
+                    action: {
+                        type: "string",
+                        enum: ["list_all", "toggle", "create"],
+                        description: "Hành động: list_all (Liệt kê tất cả book hiện có và trạng thái), toggle (Bật/tắt book), create (Tạo book mới)."
+                    },
+                    book_name: {
+                        type: "string",
+                        description: "Tên của cuốn Worldbook. BẮT BUỘC nếu action là 'toggle' hoặc 'create'."
+                    },
+                    state: {
+                        type: "string",
+                        enum: ["enable", "disable"],
+                        description: "Trạng thái muốn thiết lập (Bật hoặc Tắt). BẮT BUỘC nếu action là 'toggle'."
+                    }
+                },
+                required: ["action"]
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) {
+                return {
+                    content: 'Error: Adapter not provided in context.',
+                    isError: true
+                };
+            }
+            if (!args.action || !['list_all', 'toggle', 'create'].includes(args.action)) {
+                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'list_all', 'toggle', 'create'." };
+            }
+            if ((args.action === 'toggle' || args.action === 'create') && !args.book_name) {
+                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên Worldbook cho hành động này." };
+            }
+            if (args.action === 'toggle' && !args.state) {
+                return { content: "[LỖI] Thiếu tham số 'state'. Phải truyền 'enable' hoặc 'disable'." };
+            }
+            try {
+                const result = await context.adapter.manageWorldbook(args);
+                return { content: result };
+            }
+            catch (e) {
+                return {
+                    content: `[LỖI] Khi thực thi manageWorldbookTool: ${e.message}`,
+                    isError: true
+                };
+            }
+        }
+    };
+
     const deleteLastMessageTool = {
         schema: {
             name: 'delete_last_message',
@@ -534,6 +588,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(getUserPersonaTool);
         registry.registerTool(getLorebookInfoTool);
         registry.registerTool(manageLorebookEntryTool);
+        registry.registerTool(manageWorldbookTool);
     }
 
     /**
@@ -1139,6 +1194,85 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 console.error('[KaizAgent] Lỗi khi manageLorebookEntry:', e);
                 return `Lỗi khi thực thi Lorebook Write Tool: ${e.message}`;
+            }
+        }
+        /**
+         * Quản lý (Liệt kê, bật/tắt, tạo mới) cuốn Lorebook (Worldbook) ở mức toàn cục
+         */
+        async manageWorldbook(options) {
+            try {
+                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')().catch(() => null);
+                if (!ST_WorldInfo) {
+                    return "[LỖI] Không thể load module world-info.js của SillyTavern.";
+                }
+                const ST_Settings = await new Function('return import("/scripts/settings.js")')().catch(() => null);
+                const saveSettingsDebounced = ST_Settings?.saveSettingsDebounced || window.saveSettingsDebounced;
+                const allBooks = ST_WorldInfo.world_names || window.world_names || [];
+                const activeBooks = ST_WorldInfo.selected_world_info || window.selected_world_info || [];
+                if (options.action === 'list_all') {
+                    let result = "=== DANH SÁCH TOÀN BỘ WORLDBOOKS TRONG HỆ THỐNG ===\n";
+                    if (allBooks.length === 0) {
+                        result += "(Không có Worldbook nào)\n";
+                    }
+                    else {
+                        for (const name of allBooks) {
+                            const isActive = activeBooks.includes(name);
+                            result += `- ${name} [${isActive ? 'BẬT (Kích hoạt toàn cục)' : 'TẮT'}]\n`;
+                        }
+                    }
+                    return result;
+                }
+                if (options.action === 'toggle') {
+                    if (!options.book_name)
+                        return "[LỖI] Thiếu tham số book_name.";
+                    if (!allBooks.includes(options.book_name))
+                        return `[LỖI] Worldbook "${options.book_name}" không tồn tại.`;
+                    const state = options.state;
+                    const index = activeBooks.indexOf(options.book_name);
+                    if (state === 'enable') {
+                        if (index === -1) {
+                            activeBooks.push(options.book_name);
+                            if (saveSettingsDebounced)
+                                saveSettingsDebounced();
+                            return `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".`;
+                        }
+                        else {
+                            return `Worldbook "${options.book_name}" đã được bật từ trước.`;
+                        }
+                    }
+                    else if (state === 'disable') {
+                        if (index !== -1) {
+                            activeBooks.splice(index, 1);
+                            if (saveSettingsDebounced)
+                                saveSettingsDebounced();
+                            return `Đã TẮT kích hoạt toàn cục cho Worldbook "${options.book_name}".`;
+                        }
+                        else {
+                            return `Worldbook "${options.book_name}" đã tắt từ trước.`;
+                        }
+                    }
+                    else {
+                        return "[LỖI] Tham số 'state' phải là 'enable' hoặc 'disable'.";
+                    }
+                }
+                if (options.action === 'create') {
+                    if (!options.book_name)
+                        return "[LỖI] Thiếu tham số book_name.";
+                    if (allBooks.includes(options.book_name))
+                        return `[LỖI] Worldbook "${options.book_name}" đã tồn tại.`;
+                    if (typeof ST_WorldInfo.createNewWorldInfo === 'function') {
+                        await ST_WorldInfo.createNewWorldInfo(options.book_name, { interactive: false });
+                        return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
+                    }
+                    else {
+                        return "[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.";
+                    }
+                }
+                return `[LỖI] Action "${options.action}" không hợp lệ.`;
+            }
+            catch (e) {
+                console.error('[KaizAgent] Lỗi khi manageWorldbook:', e);
+                return `[LỖI] Khi thực thi manageWorldbook: ${e.message}`;
             }
         }
     }

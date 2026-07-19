@@ -1,5 +1,6 @@
 import { getCharInfoTool } from './get_char_info';
 import { sendSystemMessageTool } from './send_system_message';
+import { manageWorldbookTool } from './manage_worldbook';
 import { deleteLastMessageTool } from './delete_message';
 import { getChatHistoryTool } from './get_chat_history';
 import { getUserPersonaTool } from './get_user_persona';
@@ -18,4 +19,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getUserPersonaTool);
     registry.registerTool(getLorebookInfoTool);
     registry.registerTool(manageLorebookEntryTool);
+    registry.registerTool(manageWorldbookTool);
 }
