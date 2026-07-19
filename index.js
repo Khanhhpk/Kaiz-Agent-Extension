@@ -447,7 +447,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getUserPersonaTool = {
         schema: {
             name: 'get_user_persona',
-            description: 'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình. Dùng khi cần biết bạn đang giao tiếp với ai để xưng hô và cư xử cho đúng mực.',
+            description: 'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
             parameters: {
                 type: 'object',
                 properties: {}
