@@ -1838,45 +1838,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 return { left: newLeft, top: newTop };
             };
-            if (typeof btn.draggable === 'function') {
-                const savedBtnPos = localStorage.getItem('kaiz_btn_pos');
-                if (savedBtnPos) {
-                    try {
-                        const parsed = JSON.parse(savedBtnPos);
-                        btn.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
+            if (typeof $.fn.draggable === 'function') {
+                const makeDraggable = (el, storageKey, options = {}) => {
+                    const savedPos = localStorage.getItem(storageKey);
+                    if (savedPos) {
+                        try {
+                            const parsed = JSON.parse(savedPos);
+                            el.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
+                        }
+                        catch (e) { }
                     }
-                    catch (e) { }
-                }
+                    el.draggable({
+                        containment: 'window',
+                        scroll: false,
+                        ...options,
+                        stop: function () {
+                            const pos = ensureInBounds($(this));
+                            if (pos)
+                                localStorage.setItem(storageKey, JSON.stringify(pos));
+                        }
+                    });
+                };
+                makeDraggable(btn, 'kaiz_btn_pos');
                 setTimeout(() => { ensureInBounds(btn); }, 500);
-                btn.draggable({
-                    containment: 'window',
-                    scroll: false,
-                    stop: function () {
-                        const pos = ensureInBounds($(this));
-                        if (pos)
-                            localStorage.setItem('kaiz_btn_pos', JSON.stringify(pos));
-                    }
-                });
-            }
-            if (typeof win.draggable === 'function') {
-                const savedWinPos = localStorage.getItem('kaiz_win_pos');
-                if (savedWinPos) {
-                    try {
-                        const parsed = JSON.parse(savedWinPos);
-                        win.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
-                    }
-                    catch (e) { }
-                }
-                win.draggable({
-                    handle: '.kaiz-chat-header',
-                    containment: 'window',
-                    scroll: false,
-                    stop: function () {
-                        const pos = ensureInBounds($(this));
-                        if (pos)
-                            localStorage.setItem('kaiz_win_pos', JSON.stringify(pos));
-                    }
-                });
+                makeDraggable(win, 'kaiz_win_pos', { handle: '.kaiz-chat-header' });
             }
             let resizeTimeout;
             $(window).on('resize', () => {
