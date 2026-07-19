@@ -381,7 +381,12 @@ export class ChatWindowUI {
             let currentStepResponse = "";
 
             await loop.run(historyMsgs, maxLoops, async (event) => {
+                const btnIcon = $('#kaiz-floating-btn i');
+                const btnFloat = $('#kaiz-floating-btn');
+
                 if (event.type === 'step_start') {
+                    btnIcon.addClass('kaiz-icon-spin');
+                    btnFloat.removeClass('kaiz-btn-blink');
                     agentMsgId = addMessageToDOM('agent', '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>');
                     agentContentBox = $(`#${agentMsgId}`);
                     currentStepResponse = "";
@@ -405,6 +410,40 @@ export class ChatWindowUI {
                     const formatted = formatUserMessage(event.text || '');
                     addMessageToDOM('user', formatted);
                     await stateManager.addMessage('user', event.text || '');
+                } else if (event.type === 'tool_confirm') {
+                    btnIcon.removeClass('kaiz-icon-spin');
+                    btnFloat.addClass('kaiz-btn-blink');
+
+                    const call = event.data.call;
+                    const resolveFn = event.data.resolve;
+                    
+                    const confirmId = Date.now() + Math.floor(Math.random() * 1000);
+                    const html = `
+                        <div style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
+                            <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
+                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${call.name}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
+                            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                                <button id="kaiz-allow-${confirmId}" style="background: #2ecc71; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-check"></i> Allow</button>
+                                <button id="kaiz-deny-${confirmId}" style="background: #e74c3c; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Deny</button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    const domId = addMessageToDOM('agent', html);
+                    
+                    $(`#kaiz-allow-${confirmId}`).on('click', () => {
+                        $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${call.name}</div>`);
+                        btnIcon.addClass('kaiz-icon-spin');
+                        btnFloat.removeClass('kaiz-btn-blink');
+                        resolveFn(true);
+                    });
+                    
+                    $(`#kaiz-deny-${confirmId}`).on('click', () => {
+                        $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${call.name}</div>`);
+                        btnIcon.removeClass('kaiz-icon-spin');
+                        btnFloat.removeClass('kaiz-btn-blink');
+                        resolveFn(false);
+                    });
                 } else if (event.type === 'error') {
                     if (agentContentBox) {
                         agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
@@ -417,6 +456,9 @@ export class ChatWindowUI {
                     lastLogRecv = event.data.responseText;
                 }
             });
+            
+            $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+            $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
 
             sendBtn.prop('disabled', false);
             input.focus();

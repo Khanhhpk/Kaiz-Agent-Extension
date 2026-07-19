@@ -392,3 +392,18 @@
     margin-top: 5px;
     white-space: pre-wrap;
 }
+
+/* Icon animations */
+.kaiz-icon-spin {
+    animation: kaiz-spin-anim 1s linear infinite;
+}
+
+.kaiz-btn-blink {
+    animation: kaiz-blink-anim 1s infinite;
+}
+
+@keyframes kaiz-blink-anim {
+    0% { opacity: 1; transform: scale(1); box-shadow: 0 8px 24px rgba(243, 156, 18, 0.6); }
+    50% { opacity: 0.6; transform: scale(0.95); box-shadow: 0 4px 12px rgba(243, 156, 18, 0.2); }
+    100% { opacity: 1; transform: scale(1); box-shadow: 0 8px 24px rgba(243, 156, 18, 0.6); }
+}
