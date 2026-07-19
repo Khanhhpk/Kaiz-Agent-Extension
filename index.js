@@ -687,27 +687,65 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             return 'No persona available or unsupported ST version.';
         }
         /**
-         * Lấy thông tin Lorebook (World Info) đang kích hoạt
+         * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
          */
         async getLorebookInfo() {
-            const ctx = SillyTavern.getContext();
+            let result = "";
             try {
-                if (typeof ctx.getWorldInfoPrompt === 'function') {
-                    const res = await Promise.resolve(ctx.getWorldInfoPrompt());
-                    if (res)
-                        return String(res);
+                const win = window;
+                const worldNames = win.world_names || [];
+                const worldInfo = win.world_info || {};
+                result += "=== GLOBAL LOREBOOKS ===\n";
+                if (worldNames.length > 0) {
+                    for (const name of worldNames) {
+                        const book = worldInfo[name];
+                        if (book && book.entries) {
+                            result += `\n[Lorebook: ${name}]\n`;
+                            const entries = Object.values(book.entries);
+                            for (const entry of entries) {
+                                if (!entry || !entry.content)
+                                    continue;
+                                const keysList = entry.key || entry.keys || [];
+                                const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
+                                const type = entry.constant ? "CONSTANT" : "NORMAL";
+                                result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                            }
+                        }
+                    }
                 }
+                else {
+                    result += "Không có Global Lorebook nào đang được kích hoạt.\n";
+                }
+                result += "\n=== CHARACTER LOREBOOK ===\n";
+                const chid = win.this_chid;
+                const characters = win.characters || [];
+                if (chid !== undefined && characters[chid]) {
+                    const char = characters[chid];
+                    if (char.data && char.data.character_book && char.data.character_book.entries) {
+                        result += `\n[Character Lorebook: ${char.name}]\n`;
+                        const entries = char.data.character_book.entries;
+                        for (const entry of entries) {
+                            if (!entry || !entry.content)
+                                continue;
+                            const keysList = entry.keys || entry.key || [];
+                            const keys = Array.isArray(keysList) ? keysList.join(', ') : keysList;
+                            const type = entry.constant ? "CONSTANT" : "NORMAL";
+                            result += `- Entry (${type}) | Keys: [${keys}]\n  Content: ${entry.content}\n`;
+                        }
+                    }
+                    else {
+                        result += "Nhân vật này không có Lorebook đi kèm.\n";
+                    }
+                }
+                else {
+                    result += "Không có nhân vật nào được chọn (hoặc đang ở Group Chat không hỗ trợ Character Lorebook).\n";
+                }
+                return result;
             }
             catch (e) {
-                console.error('[KaizAgent] getWorldInfoPrompt error:', e);
-                // Lấy các key có chứa chữ world hoặc lore để debug
-                const keys = Object.keys(ctx).filter(k => k.toLowerCase().includes('world') || k.toLowerCase().includes('lore'));
-                const globalKeys = Object.keys(window).filter(k => k.toLowerCase().includes('world') || k.toLowerCase().includes('lore'));
-                return `Lỗi khi gọi getWorldInfoPrompt: ${e.message}\n` +
-                    `Gợi ý Debug Context Keys: ${keys.join(', ')}\n` +
-                    `Gợi ý Debug Window Keys: ${globalKeys.join(', ')}`;
+                console.error('[KaizAgent] Lỗi khi lấy toàn bộ Lorebook:', e);
+                return `Lỗi khi lấy toàn bộ Lorebook: ${e.message}`;
             }
-            return 'Lorebook API not available in this ST version.';
         }
     }
 
