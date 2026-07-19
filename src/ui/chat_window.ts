@@ -54,19 +54,74 @@ export class ChatWindowUI {
         const history = $('#kaiz-chat-history');
         
         // --- Drag Logic ---
+        const ensureInBounds = (el: any) => {
+            if (el.hasClass('kaiz-hidden')) return null;
+            const rect = el[0].getBoundingClientRect();
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            
+            let newLeft = rect.left;
+            let newTop = rect.top;
+            let updated = false;
+
+            if (newLeft < 0) { newLeft = 0; updated = true; }
+            if (newTop < 0) { newTop = 0; updated = true; }
+            if (newLeft + rect.width > w) { newLeft = w - rect.width; updated = true; }
+            if (newTop + rect.height > h) { newTop = h - rect.height; updated = true; }
+
+            if (updated) {
+                el.css({ right: 'auto', bottom: 'auto', left: newLeft + 'px', top: newTop + 'px' });
+            }
+            return { left: newLeft, top: newTop };
+        };
+
         if (typeof btn.draggable === 'function') {
+            const savedBtnPos = localStorage.getItem('kaiz_btn_pos');
+            if (savedBtnPos) {
+                try {
+                    const parsed = JSON.parse(savedBtnPos);
+                    btn.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
+                } catch(e) {}
+            }
+            setTimeout(() => { ensureInBounds(btn); }, 500);
+
             btn.draggable({
-                scroll: false
+                scroll: false,
+                stop: function() {
+                    const pos = ensureInBounds($(this));
+                    if (pos) localStorage.setItem('kaiz_btn_pos', JSON.stringify(pos));
+                }
             });
         }
         
         if (typeof win.draggable === 'function') {
+            const savedWinPos = localStorage.getItem('kaiz_win_pos');
+            if (savedWinPos) {
+                try {
+                    const parsed = JSON.parse(savedWinPos);
+                    win.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
+                } catch(e) {}
+            }
             win.draggable({
                 handle: '.kaiz-chat-header',
                 containment: 'window',
-                scroll: false
+                scroll: false,
+                stop: function() {
+                    const pos = ensureInBounds($(this));
+                    if (pos) localStorage.setItem('kaiz_win_pos', JSON.stringify(pos));
+                }
             });
         }
+
+        $(window).on('resize', () => {
+            const btnPos = ensureInBounds(btn);
+            if (btnPos) localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
+            
+            if (!win.hasClass('kaiz-hidden')) {
+                const winPos = ensureInBounds(win);
+                if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
+            }
+        });
         // ------------------
 
         // Sidebar elements
@@ -82,6 +137,10 @@ export class ChatWindowUI {
         btn.on('click', () => {
             if (win.hasClass('kaiz-hidden')) {
                 win.removeClass('kaiz-hidden');
+                setTimeout(() => {
+                    const winPos = ensureInBounds(win);
+                    if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
+                }, 350); // Chờ hiệu ứng CSS chạy xong
                 // Refresh list khi mở
                 stateManager.loadChatList().then(renderChatList);
             } else {
