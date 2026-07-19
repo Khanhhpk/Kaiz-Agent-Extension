@@ -277,7 +277,7 @@ export class ChatWindowUI {
             sendBtn.prop('disabled', true);
             
             const ctx = (window as any).SillyTavern.getContext();
-            const extSettings = ctx.extensionSettings['kaiz-agent-extension'] || {};
+            const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
             const maxLoops = extSettings.maxAgentLoops || 5;
 
             // Lấy toàn bộ lịch sử (hoặc tối đa N tin) từ DB để truyền cho AI
