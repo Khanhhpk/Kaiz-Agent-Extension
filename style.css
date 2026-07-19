@@ -6,13 +6,13 @@
     width: 42px;
     height: 42px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
-    color: #1a1a1a;
+    background: linear-gradient(135deg, #2b2b2b 0%, #000000 100%);
+    color: #ffffff;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 18px;
-    box-shadow: 0 8px 24px rgba(0, 201, 255, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
     cursor: pointer;
     z-index: 10000;
     transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -20,7 +20,7 @@
 
 .kaiz-floating-btn:hover {
     transform: scale(1.1) translateY(-4px);
-    box-shadow: 0 12px 28px rgba(0, 201, 255, 0.5);
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.7);
 }
 
 .kaiz-pulse {
@@ -96,11 +96,9 @@
     align-items: center;
     gap: 10px;
 }
-
 .kaiz-header-title i {
-    color: #00C9FF;
+    color: #ffffff;
 }
-
 .kaiz-header-actions i {
     color: rgba(255, 255, 255, 0.5);
     cursor: pointer;
@@ -163,8 +161,8 @@
 }
 
 .kaiz-msg-agent .kaiz-msg-avatar {
-    background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
-    color: #1a1a1a;
+    background: linear-gradient(135deg, #2b2b2b 0%, #000000 100%);
+    color: #ffffff;
 }
 
 .kaiz-msg-content {
@@ -179,8 +177,8 @@
 }
 
 .kaiz-msg-user .kaiz-msg-content {
-    background: rgba(0, 201, 255, 0.15);
-    border: 1px solid rgba(0, 201, 255, 0.2);
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-bottom-right-radius: 4px;
 }
 
@@ -217,7 +215,7 @@
 }
 
 .kaiz-chat-input:focus {
-    border-color: rgba(0, 201, 255, 0.4);
+    border-color: rgba(255, 255, 255, 0.4);
     background: rgba(255, 255, 255, 0.08);
 }
 
@@ -234,8 +232,8 @@
     width: 44px;
     height: 44px;
     border-radius: 12px;
-    background: linear-gradient(135deg, #00C9FF 0%, #92FE9D 100%);
-    color: #1a1a1a;
+    background: linear-gradient(135deg, #2b2b2b 0%, #000000 100%);
+    color: #ffffff;
     border: none;
     display: flex;
     align-items: center;
@@ -248,7 +246,7 @@
 
 .kaiz-chat-send:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 201, 255, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .kaiz-chat-send:active {
