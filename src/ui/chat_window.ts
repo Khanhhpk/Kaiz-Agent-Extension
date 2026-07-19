@@ -328,7 +328,7 @@ export class ChatWindowUI {
                 } else if (event.type === 'tool_result') {
                     const formatted = formatUserMessage(event.text || '');
                     addMessageToDOM('user', formatted);
-                    await stateManager.addMessage('user', event.text || '');
+                    await stateManager.addMessage('user', event.saveText || event.text || '');
                 } else if (event.type === 'error') {
                     if (agentContentBox) {
                         agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);

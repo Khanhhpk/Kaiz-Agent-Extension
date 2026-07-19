@@ -152,7 +152,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         ? `[Tool Result - CÓ LỖI/ERROR] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI: Có ít nhất 1 tool vừa gọi bị lỗi. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
                         : `[Tool Result - THÀNH CÔNG] (VÒNG LẶP: ${step}/${maxSteps})\n${resultsFormatted}\n\n👉 HỆ THỐNG AGENTIC LOOP ĐANG HOẠT ĐỘNG: Lượt tool vừa thành công và vòng lặp tiếp theo đã tự động kích hoạt!\n- Nếu nhiệm vụ ban đầu vẫn chưa hoàn thành: HÃY TIẾP TỤC gọi tool thực thi công việc tiếp theo ngay lập tức!\n- Nếu đã hoàn thành 100% yêu cầu: HÃY DỪNG LẠI (chỉ chat, không gọi tool nữa) để báo kết quả.`;
                     const finalFeedback = feedbackBase + pinnedGoalSection;
-                    await onEvent({ type: 'tool_result', data: { name: 'Multiple Tools', result: resultsFormatted }, text: finalFeedback });
+                    const dbRawResult = `[Tool Result - ${hasError ? 'CÓ LỖI/ERROR' : 'THÀNH CÔNG'}]\n${resultsFormatted}`;
+                    await onEvent({
+                        type: 'tool_result',
+                        data: { name: 'Multiple Tools', result: resultsFormatted },
+                        text: finalFeedback,
+                        saveText: dbRawResult
+                    });
                     internalHistory.push({ role: 'user', content: finalFeedback });
                 }
                 catch (e) {
@@ -1251,7 +1257,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     else if (event.type === 'tool_result') {
                         const formatted = formatUserMessage(event.text || '');
                         addMessageToDOM('user', formatted);
-                        await stateManager.addMessage('user', event.text || '');
+                        await stateManager.addMessage('user', event.saveText || event.text || '');
                     }
                     else if (event.type === 'error') {
                         if (agentContentBox) {

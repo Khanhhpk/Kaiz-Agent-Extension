@@ -5,6 +5,7 @@ export interface AgentEvent {
     type: 'think_start' | 'think_end' | 'step_start' | 'step_end' | 'stream_chunk' | 'tool_call' | 'tool_result' | 'error' | 'debug';
     data?: any;
     text?: string;
+    saveText?: string;
     reasoning?: string | null;
     isFinal?: boolean;
 }
@@ -183,7 +184,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
                 const finalFeedback = feedbackBase + pinnedGoalSection;
 
-                await onEvent({ type: 'tool_result', data: { name: 'Multiple Tools', result: resultsFormatted }, text: finalFeedback });
+                const dbRawResult = `[Tool Result - ${hasError ? 'CÓ LỖI/ERROR' : 'THÀNH CÔNG'}]\n${resultsFormatted}`;
+
+                await onEvent({ 
+                    type: 'tool_result', 
+                    data: { name: 'Multiple Tools', result: resultsFormatted }, 
+                    text: finalFeedback,
+                    saveText: dbRawResult
+                });
 
                 internalHistory.push({ role: 'user', content: finalFeedback });
 
