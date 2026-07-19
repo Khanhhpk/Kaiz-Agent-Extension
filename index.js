@@ -1071,15 +1071,19 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 });
             }
+            let resizeTimeout;
             $(window).on('resize', () => {
-                const btnPos = ensureInBounds(btn);
-                if (btnPos)
-                    localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
-                if (!win.hasClass('kaiz-hidden')) {
-                    const winPos = ensureInBounds(win);
-                    if (winPos)
-                        localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
-                }
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    const btnPos = ensureInBounds(btn);
+                    if (btnPos)
+                        localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
+                    if (!win.hasClass('kaiz-hidden')) {
+                        const winPos = ensureInBounds(win);
+                        if (winPos)
+                            localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
+                    }
+                }, 100);
             });
             // ------------------
             // Sidebar elements
