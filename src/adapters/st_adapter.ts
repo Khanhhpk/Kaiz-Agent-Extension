@@ -366,18 +366,35 @@ export class SillyTavernAdapter {
             if (hasUpdates) {
                 ctx.saveSettingsDebounced();
 
-                // Gọi trực tiếp các hàm UI của ST (không qua event vì persona_changed không có listener UI)
-                // reloadUserAvatar() — cập nhật avatar trong chat bubbles
-                // updatePersonaUIStates() — re-render panel danh sách Persona
+                // === SYNC DOM TRỰC TIẾP (giống ST gốc) ===
+                // 1. Update textarea #persona_description (cái ô mô tả lớn)
+                if (newDescription !== undefined) {
+                    const $textarea = (window as any).$('#persona_description');
+                    if ($textarea && $textarea.length) {
+                        $textarea.val(newDescription);
+                        // Trigger input event để ST cập nhật token count và trạng thái khác
+                        $textarea.trigger('input');
+                    }
+                }
+
+                // 2. Gọi hàm module để re-render UI panel
                 if (personasModule) {
+                    // reloadUserAvatar() — cập nhật avatar trong chat bubbles  
                     if (typeof personasModule.reloadUserAvatar === 'function') {
                         personasModule.reloadUserAvatar();
                     }
+                    // selectCurrentPersona() — cập nhật toàn bộ trạng thái hiển thị current persona
+                    // bao gồm description preview ở dưới tên trong list
+                    if (typeof personasModule.selectCurrentPersona === 'function') {
+                        await personasModule.selectCurrentPersona({ toastPersonaNameChange: false });
+                    }
+                    // updatePersonaUIStates() — re-render list (highlight, locked state...)
                     if (typeof personasModule.updatePersonaUIStates === 'function') {
                         personasModule.updatePersonaUIStates();
                     }
                 }
 
+                // 3. Phát event để các extension khác biết
                 if (ctx.eventSource && ctx.eventTypes) {
                     ctx.eventSource.emit(ctx.eventTypes.PERSONA_CHANGED, avatarId);
                 }
