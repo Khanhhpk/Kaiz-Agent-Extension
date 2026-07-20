@@ -1278,7 +1278,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
          */
         async manageLorebookEntry(options) {
             try {
-                const ctx = SillyTavern.getContext();
                 let ST_WorldInfo = null;
                 try {
                     ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
@@ -1289,6 +1288,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (typeof ST_WorldInfo.loadWorldInfo !== 'function' || typeof ST_WorldInfo.saveWorldInfo !== 'function') {
                     return "[KaizAgent] Lỗi: API World Info không tồn tại trong phiên bản ST này.";
                 }
+                // Ghi nhận WB có sẵn TRƯỚC khi load để phát hiện implicit creation
+                const existingBooks = [...(ST_WorldInfo.world_names || [])];
+                const isNewBook = !existingBooks.includes(options.book_name);
                 const data = await ST_WorldInfo.loadWorldInfo(options.book_name);
                 if (!data || !data.entries) {
                     return `[KaizAgent] Lỗi: Không tìm thấy hoặc không thể tải Lorebook "${options.book_name}".`;
@@ -1366,21 +1368,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 else {
                     return `[KaizAgent] Lỗi: Action "${options.action}" không hợp lệ.`;
                 }
-                // Save
+                // Save — saveWorldInfo đã tự emit WORLDINFO_UPDATED bên trong, không cần emit lại
                 await ST_WorldInfo.saveWorldInfo(options.book_name, data, true);
-                // === SYNC UI: Reload WB editor nếu đang mở ===
-                // reloadEditor(file) trigger lại '#world_editor_select'.trigger('change') nếu WB đang được chọn
+                // === SYNC UI ===
+                // 1. Nếu WB mới được tạo ngầm (implicit creation), refresh danh sách WB
+                if (isNewBook && typeof ST_WorldInfo.updateWorldInfoList === 'function') {
+                    await ST_WorldInfo.updateWorldInfoList();
+                    // Tự động chọn WB vừa tạo trong editor
+                    const newIdx = (ST_WorldInfo.world_names || []).indexOf(options.book_name);
+                    if (newIdx !== -1) {
+                        window.$?.('#world_editor_select')?.val(newIdx)?.trigger('change');
+                    }
+                }
+                // 2. Reload WB editor nếu WB đó đang được mở (không gây reload nếu WB khác)
                 if (typeof ST_WorldInfo.reloadEditor === 'function') {
                     ST_WorldInfo.reloadEditor(options.book_name);
                 }
-                // Emit event để ST biết WI đã thay đổi
-                try {
-                    const ctx = SillyTavern.getContext();
-                    if (ctx.eventSource && ctx.eventTypes?.WORLDINFO_UPDATED) {
-                        ctx.eventSource.emit(ctx.eventTypes.WORLDINFO_UPDATED, options.book_name);
-                    }
-                }
-                catch (_) { }
                 return resultMsg;
             }
             catch (e) {
@@ -1439,12 +1442,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return "[LỖI] Tham số 'state' phải là 'enable' hoặc 'disable'.";
                     }
                     if (changed) {
-                        // Sync with ST UI so onWorldInfoChange handles it
+                        // Sync UI: trigger change trên select element theo tên WB (không dùng index dễ sai)
                         const $ = window.$;
                         if ($) {
                             const wiSelect = $('#world_info');
                             if (wiSelect.length) {
-                                const option = wiSelect.find(`option[value='${bookIndex}']`);
+                                // Tìm option theo text/value khớp tên WB thay vì index
+                                const option = wiSelect.find('option').filter(function () {
+                                    return $(this).text().trim() === options.book_name ||
+                                        $(this).val() === String(bookIndex);
+                                });
                                 if (option.length) {
                                     option.prop('selected', state === 'enable');
                                     wiSelect.trigger('change');
@@ -1453,6 +1460,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                         if (saveSettingsDebounced)
                             saveSettingsDebounced();
+                        // Emit đúng event để "Active World(s)" panel và các extension refresh
+                        try {
+                            const ctx = SillyTavern.getContext();
+                            if (ctx.eventSource && ctx.eventTypes) {
+                                ctx.eventSource.emit(ctx.eventTypes.WORLDINFO_SETTINGS_UPDATED);
+                            }
+                        }
+                        catch (_) { }
                     }
                     if (state === 'enable') {
                         return index === -1 ? `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".` : `Worldbook "${options.book_name}" đã được bật từ trước.`;
