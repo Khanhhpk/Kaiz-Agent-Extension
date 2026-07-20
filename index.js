@@ -231,7 +231,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             return Array.from(this.tools.values()).map(t => t.schema);
         }
         /**
-         * Lấy danh sách tất cả các tools (phục vụ Debug)
+         * Lấy danh sách tất cả các tools (phục vụ Tool Check)
+         * @returns Array chứa thông tin các tool
          */
         getAllTools() {
             return Array.from(this.tools.values());
@@ -2675,11 +2676,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
     class ToolCheckerUI {
         static init(registry, adapter) {
             const $ = jQuery;
-            const btn = $('#kaiz-debug-btn');
-            const modal = $('#kaiz-debug-modal');
-            const closeBtn = $('#kaiz-debug-close');
-            const runBtn = $('#kaiz-debug-run');
-            const list = $('#kaiz-debug-list');
+            const btn = $('#kaiz-checker-btn');
+            const modal = $('#kaiz-checker-modal');
+            const closeBtn = $('#kaiz-checker-close');
+            const runBtn = $('#kaiz-checker-run');
+            const list = $('#kaiz-checker-list');
             const checkerInstance = new KaizToolChecker(registry, adapter);
             // Mở modal
             btn.on('click', () => {
@@ -2696,11 +2697,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 for (const t of tools) {
                     const name = t.schema.name;
                     list.append(`
-                    <div id="debug-tool-${name}" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px 12px; border-radius:5px;">
+                    <div id="checker-tool-${name}" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px 12px; border-radius:5px;">
                         <span><i class="fa-solid fa-wrench" style="margin-right:8px; opacity:0.7"></i>${name}</span>
                         <span class="status-icon" style="color:#aaa;"><i class="fa-solid fa-circle-question"></i> Pending</span>
                     </div>
-                    <div id="debug-tool-msg-${name}" style="font-size:11px; color:#aaa; margin-left:12px; margin-top:-4px; margin-bottom:4px; display:none;"></div>
+                    <div id="checker-tool-msg-${name}" style="font-size:11px; color:#aaa; margin-left:12px; margin-top:-4px; margin-bottom:4px; display:none;"></div>
                 `);
                 }
             }
@@ -2709,8 +2710,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 runBtn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Running...');
                 renderToolList(); // Reset list
                 await checkerInstance.runTests((toolName, status, message) => {
-                    const item = $(`#debug-tool-${toolName}`);
-                    const msgItem = $(`#debug-tool-msg-${toolName}`);
+                    const item = $(`#checker-tool-${toolName}`);
+                    const msgItem = $(`#checker-tool-msg-${toolName}`);
                     const statusSpan = item.find('.status-icon');
                     if (status === 'testing') {
                         statusSpan.html('<i class="fa-solid fa-spinner fa-spin" style="color:#f39c12"></i> Testing').css('color', '#f39c12');

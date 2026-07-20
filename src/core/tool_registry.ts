@@ -56,7 +56,8 @@ export class ToolRegistry {
     }
 
     /**
-     * Lấy danh sách tất cả các tools (phục vụ Debug)
+     * Lấy danh sách tất cả các tools (phục vụ Tool Check)
+     * @returns Array chứa thông tin các tool
      */
     public getAllTools(): ITool[] {
         return Array.from(this.tools.values());
