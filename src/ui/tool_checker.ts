@@ -1,10 +1,10 @@
-import { KaizDebugger } from "../core/debugger";
+import { KaizToolChecker } from "../core/tool_checker";
 import { ToolRegistry } from "../core/tool_registry";
 import { SillyTavernAdapter } from "../adapters/st_adapter";
 
 declare const jQuery: any;
 
-export class DebuggerUI {
+export class ToolCheckerUI {
     public static init(registry: ToolRegistry, adapter: SillyTavernAdapter) {
         const $ = jQuery;
         const btn = $('#kaiz-debug-btn');
@@ -13,7 +13,7 @@ export class DebuggerUI {
         const runBtn = $('#kaiz-debug-run');
         const list = $('#kaiz-debug-list');
 
-        const debuggerInstance = new KaizDebugger(registry, adapter);
+        const checkerInstance = new KaizToolChecker(registry, adapter);
 
         // Mở modal
         btn.on('click', () => {
@@ -46,7 +46,7 @@ export class DebuggerUI {
             runBtn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Running...');
             renderToolList(); // Reset list
             
-            await debuggerInstance.runTests((toolName, status, message) => {
+            await checkerInstance.runTests((toolName, status, message) => {
                 const item = $(`#debug-tool-${toolName}`);
                 const msgItem = $(`#debug-tool-msg-${toolName}`);
                 const statusSpan = item.find('.status-icon');

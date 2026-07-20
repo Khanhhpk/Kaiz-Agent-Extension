@@ -6,7 +6,7 @@ import { StateManager } from "./core/state";
 
 import { SettingsUI } from "./ui/settings";
 import { ChatWindowUI } from "./ui/chat_window";
-import { DebuggerUI } from "./ui/debugger";
+import { ToolCheckerUI } from "./ui/tool_checker";
 
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
@@ -93,7 +93,7 @@ jQuery(async () => {
 
             // Gắn kết UI
             ChatWindowUI.init(loop, stateManager);
-            DebuggerUI.init(registry, adapter);
+            ToolCheckerUI.init(registry, adapter);
 
             // Mở DB chat đầu tiên hoặc render rỗng
             const initialChats = await stateManager.loadChatList();

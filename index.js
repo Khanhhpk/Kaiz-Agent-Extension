@@ -2580,7 +2580,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         }
     }
 
-    class KaizDebugger {
+    class KaizToolChecker {
         registry;
         adapter;
         constructor(registry, adapter) {
@@ -2593,11 +2593,55 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const name = tool.schema.name;
                 updateUI(name, 'testing');
                 try {
-                    // Đánh chặn (Hook) kiểm tra tính năng gốc của ST thay vì execute
-                    updateUI(name, 'ok', '[DRY RUN] Tool registered successfully');
+                    let ok = true;
+                    let msg = 'Dependencies verified';
+                    switch (name) {
+                        case 'delete_last_message':
+                            if (!this.adapter.hasFeature('deleteLastMessage')) {
+                                throw new Error('ST API deleteLastMessage is missing');
+                            }
+                            break;
+                        case 'get_char_info':
+                            if (!this.adapter.hasFeature('characters')) {
+                                throw new Error('ST Context characters object is missing');
+                            }
+                            break;
+                        case 'get_chat_history':
+                            if (!this.adapter.hasFeature('chat')) {
+                                throw new Error('ST Context chat array is missing');
+                            }
+                            break;
+                        case 'send_system_message':
+                            if (!this.adapter.hasFeature('sendSystemMessage')) {
+                                throw new Error('ST API sendSystemMessage is missing');
+                            }
+                            break;
+                        case 'get_user_persona':
+                        case 'edit_user_persona':
+                            if (!this.adapter.hasFeature('substituteParams')) {
+                                throw new Error('ST API substituteParams is missing');
+                            }
+                            break;
+                        case 'get_lorebook_info':
+                        case 'manage_lorebook_entry':
+                        case 'manage_worldbook':
+                            try {
+                                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
+                                if (!ST_WorldInfo)
+                                    throw new Error('Module loaded but empty');
+                            }
+                            catch (e) {
+                                throw new Error('Failed to load /scripts/world-info.js - ' + e.message);
+                            }
+                            break;
+                        default:
+                            msg = 'Tool registered (no specific check)';
+                            break;
+                    }
+                    updateUI(name, 'ok', msg);
                 }
                 catch (e) {
-                    console.error(`[KaizDebugger] Tool ${name} threw an exception:`, e);
+                    console.error(`[KaizToolChecker] Tool ${name} failed check:`, e);
                     updateUI(name, 'error', e.message || String(e));
                 }
                 // Giả lập delay nhỏ cho UI có thời gian cập nhật mượt mà
@@ -2606,7 +2650,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         }
     }
 
-    class DebuggerUI {
+    class ToolCheckerUI {
         static init(registry, adapter) {
             const $ = jQuery;
             const btn = $('#kaiz-debug-btn');
@@ -2614,7 +2658,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const closeBtn = $('#kaiz-debug-close');
             const runBtn = $('#kaiz-debug-run');
             const list = $('#kaiz-debug-list');
-            const debuggerInstance = new KaizDebugger(registry, adapter);
+            const checkerInstance = new KaizToolChecker(registry, adapter);
             // Mở modal
             btn.on('click', () => {
                 modal.show();
@@ -2642,7 +2686,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             runBtn.on('click', async () => {
                 runBtn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Running...');
                 renderToolList(); // Reset list
-                await debuggerInstance.runTests((toolName, status, message) => {
+                await checkerInstance.runTests((toolName, status, message) => {
                     const item = $(`#debug-tool-${toolName}`);
                     const msgItem = $(`#debug-tool-msg-${toolName}`);
                     const statusSpan = item.find('.status-icon');
@@ -2747,7 +2791,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 await stateManager.init(); // Tải DB và danh sách chat
                 // Gắn kết UI
                 ChatWindowUI.init(loop, stateManager);
-                DebuggerUI.init(registry, adapter);
+                ToolCheckerUI.init(registry, adapter);
                 // Mở DB chat đầu tiên hoặc render rỗng
                 const initialChats = await stateManager.loadChatList();
                 if (stateManager.onChatsListUpdated)
