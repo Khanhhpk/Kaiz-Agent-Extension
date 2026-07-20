@@ -4,10 +4,10 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getCharInfoTool: ITool = {
     schema: {
         name: 'get_char_info',
-        description: 'Lấy thông tin của nhân vật đang chat hiện tại.',
+        description: 'Lấy thông tin chi tiết về thẻ nhân vật hiện tại đang chat (tên, tính cách, bối cảnh, v.v.). Dùng khi cần hiểu rõ về nhân vật bạn đang đóng vai hoặc nói chuyện cùng.',
         parameters: {
             type: 'object',
-            properties: {}
+            properties: {} // Không yêu cầu tham số
         }
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {

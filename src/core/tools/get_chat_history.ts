@@ -4,11 +4,14 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getChatHistoryTool: ITool = {
     schema: {
         name: 'get_chat_history',
-        description: 'Lấy các đoạn hội thoại gần nhất.',
+        description: 'Lấy lịch sử đoạn chat gần nhất giữa người dùng và nhân vật. Rất cần thiết khi bạn cần phân tích bối cảnh trước khi ra quyết định hoặc phản hồi.',
         parameters: {
             type: 'object',
             properties: {
-                depth: { type: 'number', description: 'Số lượng tin nhắn muốn lấy (mặc định 10).' }
+                depth: {
+                    type: 'number',
+                    description: 'Số lượng tin nhắn gần nhất cần lấy (Mặc định: 10)'
+                }
             }
         }
     },

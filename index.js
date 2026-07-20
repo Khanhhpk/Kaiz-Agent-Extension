@@ -275,10 +275,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getCharInfoTool = {
         schema: {
             name: 'get_char_info',
-            description: 'Lấy thông tin của nhân vật đang chat hiện tại.',
+            description: 'Lấy thông tin chi tiết về thẻ nhân vật hiện tại đang chat (tên, tính cách, bối cảnh, v.v.). Dùng khi cần hiểu rõ về nhân vật bạn đang đóng vai hoặc nói chuyện cùng.',
             parameters: {
                 type: 'object',
-                properties: {}
+                properties: {} // Không yêu cầu tham số
             }
         },
         validate: (context) => {
@@ -310,11 +310,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const sendSystemMessageTool = {
         schema: {
             name: 'send_system_message',
-            description: 'Gửi một tin nhắn hệ thống vô danh, không thêm vào lịch sử nhân vật.',
+            description: 'Gửi một tin nhắn hệ thống (system message) lên màn hình chat để thông báo cho người dùng. Tin nhắn này sẽ KHÔNG bị đưa vào lịch sử chat (không ảnh hưởng tới context của nhân vật). Dùng để báo cáo kết quả hoặc trạng thái cho người dùng.',
             parameters: {
                 type: 'object',
                 properties: {
-                    message: { type: 'string', description: 'Nội dung tin nhắn.' }
+                    message: {
+                        type: 'string',
+                        description: 'Nội dung tin nhắn cần hiển thị cho người dùng'
+                    }
                 },
                 required: ['message']
             }
@@ -440,11 +443,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getChatHistoryTool = {
         schema: {
             name: 'get_chat_history',
-            description: 'Lấy các đoạn hội thoại gần nhất.',
+            description: 'Lấy lịch sử đoạn chat gần nhất giữa người dùng và nhân vật. Rất cần thiết khi bạn cần phân tích bối cảnh trước khi ra quyết định hoặc phản hồi.',
             parameters: {
                 type: 'object',
                 properties: {
-                    depth: { type: 'number', description: 'Số lượng tin nhắn muốn lấy (mặc định 10).' }
+                    depth: {
+                        type: 'number',
+                        description: 'Số lượng tin nhắn gần nhất cần lấy (Mặc định: 10)'
+                    }
                 }
             }
         },
@@ -505,12 +511,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const editUserPersonaTool = {
         schema: {
             name: 'edit_user_persona',
-            description: 'Chỉnh sửa thông tin hồ sơ (Persona) của người dùng hiện tại.',
+            description: 'Chỉnh sửa và cập nhật hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
             parameters: {
                 type: 'object',
                 properties: {
-                    persona_name: { type: 'string', description: 'Tên mới của người dùng (tùy chọn, nếu không có thì giữ nguyên tên cũ).' },
-                    persona_description: { type: 'string', description: 'Đoạn mô tả ngoại hình, tính cách của người dùng. Viết tự do theo ngôi thứ 3 hoặc thứ 1 đều được.' }
+                    persona_description: {
+                        type: 'string',
+                        description: 'Nội dung mô tả tính cách, ngoại hình, bối cảnh mới của người dùng.'
+                    },
+                    persona_name: {
+                        type: 'string',
+                        description: 'Tên hiển thị mới của người dùng (Tùy chọn. Nếu không muốn đổi tên thì bỏ qua trường này).'
+                    }
                 },
                 required: ['persona_description']
             }

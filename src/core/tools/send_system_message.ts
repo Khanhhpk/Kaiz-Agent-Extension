@@ -4,11 +4,14 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const sendSystemMessageTool: ITool = {
     schema: {
         name: 'send_system_message',
-        description: 'Gửi một tin nhắn hệ thống vô danh, không thêm vào lịch sử nhân vật.',
+        description: 'Gửi một tin nhắn hệ thống (system message) lên màn hình chat để thông báo cho người dùng. Tin nhắn này sẽ KHÔNG bị đưa vào lịch sử chat (không ảnh hưởng tới context của nhân vật). Dùng để báo cáo kết quả hoặc trạng thái cho người dùng.',
         parameters: {
             type: 'object',
             properties: {
-                message: { type: 'string', description: 'Nội dung tin nhắn.' }
+                message: {
+                    type: 'string',
+                    description: 'Nội dung tin nhắn cần hiển thị cho người dùng'
+                }
             },
             required: ['message']
         }
