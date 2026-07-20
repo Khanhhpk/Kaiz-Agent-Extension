@@ -997,6 +997,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // Lưu và kích hoạt thay đổi UI
                 if (hasUpdates) {
                     ctx.saveSettingsDebounced();
+                    // Gọi trực tiếp các hàm UI của ST (không qua event vì persona_changed không có listener UI)
+                    // reloadUserAvatar() — cập nhật avatar trong chat bubbles
+                    // updatePersonaUIStates() — re-render panel danh sách Persona
+                    if (personasModule) {
+                        if (typeof personasModule.reloadUserAvatar === 'function') {
+                            personasModule.reloadUserAvatar();
+                        }
+                        if (typeof personasModule.updatePersonaUIStates === 'function') {
+                            personasModule.updatePersonaUIStates();
+                        }
+                    }
                     if (ctx.eventSource && ctx.eventTypes) {
                         ctx.eventSource.emit(ctx.eventTypes.PERSONA_CHANGED, avatarId);
                     }
