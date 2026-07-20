@@ -35,15 +35,15 @@ export const manageWorldbookTool: ITool = {
         }
 
         if (!args.action || !['list_all', 'toggle', 'create'].includes(args.action)) {
-            return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'list_all', 'toggle', 'create'." };
+            return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'list_all', 'toggle', 'create'.", isError: true };
         }
 
         if ((args.action === 'toggle' || args.action === 'create') && !args.book_name) {
-            return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên Worldbook cho hành động này." };
+            return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên Worldbook cho hành động này.", isError: true };
         }
 
         if (args.action === 'toggle' && !args.state) {
-            return { content: "[LỖI] Thiếu tham số 'state'. Phải truyền 'enable' hoặc 'disable'." };
+            return { content: "[LỖI] Thiếu tham số 'state'. Phải truyền 'enable' hoặc 'disable'.", isError: true };
         }
 
         try {

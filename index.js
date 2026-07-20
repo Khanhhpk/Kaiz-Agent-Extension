@@ -371,13 +371,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 };
             }
             if (!args.action || !['list_all', 'toggle', 'create'].includes(args.action)) {
-                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'list_all', 'toggle', 'create'." };
+                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'list_all', 'toggle', 'create'.", isError: true };
             }
             if ((args.action === 'toggle' || args.action === 'create') && !args.book_name) {
-                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên Worldbook cho hành động này." };
+                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên Worldbook cho hành động này.", isError: true };
             }
             if (args.action === 'toggle' && !args.state) {
-                return { content: "[LỖI] Thiếu tham số 'state'. Phải truyền 'enable' hoặc 'disable'." };
+                return { content: "[LỖI] Thiếu tham số 'state'. Phải truyền 'enable' hoặc 'disable'.", isError: true };
             }
             try {
                 const result = await context.adapter.manageWorldbook(args);
@@ -493,8 +493,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
         },
         execute: async (args, context) => {
+            // C1: Null-guard
+            if (!context || !context.adapter) {
+                return { content: 'Error: Adapter not provided in context.', isError: true };
+            }
+            // C2: Validate persona_description không rỗng/chỉ toàn khoảng trắng
+            const description = typeof args.persona_description === 'string' ? args.persona_description.trim() : '';
+            if (!description) {
+                return {
+                    content: '[LỖI] Tham số persona_description không được để trống. Hãy cung cấp mô tả persona đầy đủ.',
+                    isError: true
+                };
+            }
             try {
-                const success = await context.adapter.editUserPersona(args.persona_description, args.persona_name);
+                const success = await context.adapter.editUserPersona(description, args.persona_name);
                 if (success) {
                     return { content: `Successfully updated user persona.\nName: ${args.persona_name || '(unchanged)'}\nDescription: ${args.persona_description}` };
                 }
@@ -624,13 +636,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 };
             }
             if (!args.action || !['create', 'edit', 'delete'].includes(args.action)) {
-                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'create', 'edit', 'delete'." };
+                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'create', 'edit', 'delete'.", isError: true };
             }
             if (!args.book_name) {
-                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên cuốn Lorebook." };
+                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên cuốn Lorebook.", isError: true };
             }
             if ((args.action === 'edit' || args.action === 'delete') && (args.uid === undefined || args.uid === null)) {
-                return { content: "[LỖI] Thiếu tham số 'uid'. Bạn bắt buộc phải cung cấp UID của entry nếu muốn edit hoặc delete." };
+                return { content: "[LỖI] Thiếu tham số 'uid'. Bạn bắt buộc phải cung cấp UID của entry nếu muốn edit hoặc delete.", isError: true };
             }
             try {
                 const result = await context.adapter.manageLorebookEntry(args);
@@ -862,14 +874,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return [];
             const total = ctx.chat.length;
             const startIndex = Math.max(0, total - depth);
-            return ctx.chat.slice(startIndex)
-                .filter((m) => !m.is_system && !m.is_hidden && !(m.extra && m.extra.is_hidden))
-                .map((m, i) => ({
-                role: m.is_user ? 'user' : 'assistant',
-                name: m.is_user ? (ctx.name1 || 'User') : (m.name || ctx.name2 || 'Character'),
-                content: typeof m.mes === 'string' ? m.mes : '',
-                chatIndex: startIndex + i
-            }));
+            const slice = ctx.chat.slice(startIndex);
+            // H3: Track raw index trong slice (không phải filtered index) để chatIndex chính xác
+            const result = [];
+            for (let i = 0; i < slice.length; i++) {
+                const m = slice[i];
+                if (m.is_system || m.is_hidden || (m.extra && m.extra.is_hidden))
+                    continue;
+                result.push({
+                    role: m.is_user ? 'user' : 'assistant',
+                    name: m.is_user ? (ctx.name1 || 'User') : (m.name || ctx.name2 || 'Character'),
+                    content: typeof m.mes === 'string' ? m.mes : '',
+                    chatIndex: startIndex + i // index thật trong ctx.chat, không bị lệch bởi filter
+                });
+            }
+            return result;
         }
         /**
          * Lấy thông tin về nhân vật đang chat
@@ -918,9 +937,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async getUserPersona() {
             const ctx = SillyTavern.getContext();
             if (typeof ctx.substituteParams === 'function') {
-                // ST hỗ trợ macro {{persona}} để lấy User Persona description, và {{user}} cho tên
-                const name = await Promise.resolve(ctx.substituteParams('{{user}}'));
-                const personaText = await Promise.resolve(ctx.substituteParams('{{persona}}'));
+                const name = ctx.substituteParams('{{user}}');
+                const personaText = ctx.substituteParams('{{persona}}');
+                // M1: Nếu macro chưa được resolve (không có persona active), trả về thông báo rõ ràng
+                const hasUnresolvedPersona = personaText === '{{persona}}' || !personaText.trim();
+                if (hasUnresolvedPersona) {
+                    return `Name: ${name}\nPersona Description: (Chưa thiết lập — không có Persona nào đang được kích hoạt. Hãy chọn một Persona trong SillyTavern trước.)`;
+                }
                 return `Name: ${name}\nPersona Description:\n${personaText}`;
             }
             return 'No persona available or unsupported ST version.';
@@ -1411,17 +1434,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const allBooks = ST_WorldInfo.world_names || window.world_names || [];
                 const activeBooks = ST_WorldInfo.selected_world_info || window.selected_world_info || [];
                 if (options.action === 'list_all') {
-                    let result = "=== DANH SÁCH TOÀN BỘ WORLDBOOKS TRONG HỆ THỐNG ===\n";
-                    if (allBooks.length === 0) {
-                        result += "(Không có Worldbook nào)\n";
-                    }
-                    else {
-                        for (const name of allBooks) {
-                            const isActive = activeBooks.includes(name);
-                            result += `- ${name} [${isActive ? 'BẬT (Kích hoạt toàn cục)' : 'TẮT'}]\n`;
-                        }
-                    }
-                    return result;
+                    // M5: Trả về JSON thay vì plain text để LLM dễ parse tên sách và trạng thái
+                    const books = allBooks.map((name) => ({
+                        name,
+                        active_globally: activeBooks.includes(name)
+                    }));
+                    return JSON.stringify({ total: books.length, worldbooks: books }, null, 2);
                 }
                 if (options.action === 'toggle') {
                     if (!options.book_name)

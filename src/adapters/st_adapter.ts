@@ -220,15 +220,21 @@ export class SillyTavernAdapter {
 
         const total = ctx.chat.length;
         const startIndex = Math.max(0, total - depth);
-        
-        return ctx.chat.slice(startIndex)
-            .filter((m: any) => !m.is_system && !m.is_hidden && !(m.extra && m.extra.is_hidden))
-            .map((m: any, i: number) => ({
+        const slice = ctx.chat.slice(startIndex);
+
+        // H3: Track raw index trong slice (không phải filtered index) để chatIndex chính xác
+        const result: any[] = [];
+        for (let i = 0; i < slice.length; i++) {
+            const m = slice[i];
+            if (m.is_system || m.is_hidden || (m.extra && m.extra.is_hidden)) continue;
+            result.push({
                 role: m.is_user ? 'user' : 'assistant',
                 name: m.is_user ? (ctx.name1 || 'User') : (m.name || ctx.name2 || 'Character'),
                 content: typeof m.mes === 'string' ? m.mes : '',
-                chatIndex: startIndex + i
-            }));
+                chatIndex: startIndex + i  // index thật trong ctx.chat, không bị lệch bởi filter
+            });
+        }
+        return result;
     }
 
     /**
@@ -279,9 +285,14 @@ export class SillyTavernAdapter {
     public async getUserPersona(): Promise<string> {
         const ctx = SillyTavern.getContext();
         if (typeof ctx.substituteParams === 'function') {
-            // ST hỗ trợ macro {{persona}} để lấy User Persona description, và {{user}} cho tên
-            const name = await Promise.resolve(ctx.substituteParams('{{user}}'));
-            const personaText = await Promise.resolve(ctx.substituteParams('{{persona}}'));
+            const name = ctx.substituteParams('{{user}}');
+            const personaText = ctx.substituteParams('{{persona}}');
+
+            // M1: Nếu macro chưa được resolve (không có persona active), trả về thông báo rõ ràng
+            const hasUnresolvedPersona = personaText === '{{persona}}' || !personaText.trim();
+            if (hasUnresolvedPersona) {
+                return `Name: ${name}\nPersona Description: (Chưa thiết lập — không có Persona nào đang được kích hoạt. Hãy chọn một Persona trong SillyTavern trước.)`;
+            }
             return `Name: ${name}\nPersona Description:\n${personaText}`;
         }
         return 'No persona available or unsupported ST version.';
@@ -756,16 +767,12 @@ export class SillyTavernAdapter {
             const activeBooks = ST_WorldInfo.selected_world_info || (window as any).selected_world_info || [];
 
             if (options.action === 'list_all') {
-                let result = "=== DANH SÁCH TOÀN BỘ WORLDBOOKS TRONG HỆ THỐNG ===\n";
-                if (allBooks.length === 0) {
-                    result += "(Không có Worldbook nào)\n";
-                } else {
-                    for (const name of allBooks) {
-                        const isActive = activeBooks.includes(name);
-                        result += `- ${name} [${isActive ? 'BẬT (Kích hoạt toàn cục)' : 'TẮT'}]\n`;
-                    }
-                }
-                return result;
+                // M5: Trả về JSON thay vì plain text để LLM dễ parse tên sách và trạng thái
+                const books = allBooks.map((name: string) => ({
+                    name,
+                    active_globally: activeBooks.includes(name)
+                }));
+                return JSON.stringify({ total: books.length, worldbooks: books }, null, 2);
             }
 
             if (options.action === 'toggle') {

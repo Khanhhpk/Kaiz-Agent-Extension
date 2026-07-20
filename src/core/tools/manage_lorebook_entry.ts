@@ -55,13 +55,13 @@ export const manageLorebookEntryTool: ITool = {
         }
 
         if (!args.action || !['create', 'edit', 'delete'].includes(args.action)) {
-            return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'create', 'edit', 'delete'." };
+            return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'create', 'edit', 'delete'.", isError: true };
         }
         if (!args.book_name) {
-            return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên cuốn Lorebook." };
+            return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên cuốn Lorebook.", isError: true };
         }
         if ((args.action === 'edit' || args.action === 'delete') && (args.uid === undefined || args.uid === null)) {
-            return { content: "[LỖI] Thiếu tham số 'uid'. Bạn bắt buộc phải cung cấp UID của entry nếu muốn edit hoặc delete." };
+            return { content: "[LỖI] Thiếu tham số 'uid'. Bạn bắt buộc phải cung cấp UID của entry nếu muốn edit hoặc delete.", isError: true };
         }
 
         try {

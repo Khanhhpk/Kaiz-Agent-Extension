@@ -22,8 +22,22 @@ export const editUserPersonaTool: ITool = {
     },
 
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+        // C1: Null-guard
+        if (!context || !context.adapter) {
+            return { content: 'Error: Adapter not provided in context.', isError: true };
+        }
+
+        // C2: Validate persona_description không rỗng/chỉ toàn khoảng trắng
+        const description = typeof args.persona_description === 'string' ? args.persona_description.trim() : '';
+        if (!description) {
+            return {
+                content: '[LỖI] Tham số persona_description không được để trống. Hãy cung cấp mô tả persona đầy đủ.',
+                isError: true
+            };
+        }
+
         try {
-            const success = await context.adapter.editUserPersona(args.persona_description, args.persona_name);
+            const success = await context.adapter.editUserPersona(description, args.persona_name);
             if (success) {
                 return { content: `Successfully updated user persona.\nName: ${args.persona_name || '(unchanged)'}\nDescription: ${args.persona_description}` };
             } else {
