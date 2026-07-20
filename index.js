@@ -1371,17 +1371,23 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // Save — saveWorldInfo đã tự emit WORLDINFO_UPDATED bên trong, không cần emit lại
                 await ST_WorldInfo.saveWorldInfo(options.book_name, data, true);
                 // === SYNC UI ===
-                // 1. Nếu WB mới được tạo ngầm (implicit creation), refresh danh sách WB
+                // Hai path loại trừ nhau để tránh trigger #world_editor_select 2 lần
+                // (double trigger → editor render 2 lần → hiện 2 entry giống nhau)
                 if (isNewBook && typeof ST_WorldInfo.updateWorldInfoList === 'function') {
+                    // Path A: WB mới tạo ngầm → refresh list trước rồi mới chọn editor
+                    // KHÔNG gọi reloadEditor sau đây vì nó sẽ trigger change lần 2
                     await ST_WorldInfo.updateWorldInfoList();
-                    // Tự động chọn WB vừa tạo trong editor
                     const newIdx = (ST_WorldInfo.world_names || []).indexOf(options.book_name);
                     if (newIdx !== -1) {
                         window.$?.('#world_editor_select')?.val(newIdx)?.trigger('change');
                     }
+                    // Nếu không tìm thấy index dù vừa updateList → fallback reloadEditor
+                    else if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                        ST_WorldInfo.reloadEditor(options.book_name);
+                    }
                 }
-                // 2. Reload WB editor nếu WB đó đang được mở (không gây reload nếu WB khác)
-                if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                else if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                    // Path B: WB đã tồn tại → chỉ reload editor nếu đang mở, không gọi updateWorldInfoList
                     ST_WorldInfo.reloadEditor(options.book_name);
                 }
                 return resultMsg;
