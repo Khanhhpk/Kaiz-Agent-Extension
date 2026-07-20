@@ -4,10 +4,15 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getCharInfoTool: ITool = {
     schema: {
         name: 'get_char_info',
-        description: 'Lấy thông tin chi tiết về thẻ nhân vật hiện tại đang chat (tên, tính cách, bối cảnh, v.v.). Dùng khi cần hiểu rõ về nhân vật bạn đang đóng vai hoặc nói chuyện cùng.',
+        description: 'Lấy thông tin của nhân vật đang chat hiện tại.',
         parameters: {
             type: 'object',
-            properties: {} // Không yêu cầu tham số
+            properties: {}
+        }
+    },
+    validate: (context: { adapter: SillyTavernAdapter }) => {
+        if (!context.adapter.hasFeature('characters')) {
+            throw new Error('ST Context characters object is missing');
         }
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {

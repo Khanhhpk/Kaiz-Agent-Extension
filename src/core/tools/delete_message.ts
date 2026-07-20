@@ -10,6 +10,11 @@ export const deleteLastMessageTool: ITool = {
             properties: {} // Không yêu cầu tham số
         }
     },
+    validate: (context: { adapter: SillyTavernAdapter }) => {
+        if (!context.adapter.hasFeature('deleteLastMessage')) {
+            throw new Error('ST API deleteLastMessage is missing');
+        }
+    },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         if (!context || !context.adapter) {
             return {

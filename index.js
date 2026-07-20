@@ -275,10 +275,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getCharInfoTool = {
         schema: {
             name: 'get_char_info',
-            description: 'Lấy thông tin chi tiết về thẻ nhân vật hiện tại đang chat (tên, tính cách, bối cảnh, v.v.). Dùng khi cần hiểu rõ về nhân vật bạn đang đóng vai hoặc nói chuyện cùng.',
+            description: 'Lấy thông tin của nhân vật đang chat hiện tại.',
             parameters: {
                 type: 'object',
-                properties: {} // Không yêu cầu tham số
+                properties: {}
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context characters object is missing');
             }
         },
         execute: async (args, context) => {
@@ -305,16 +310,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const sendSystemMessageTool = {
         schema: {
             name: 'send_system_message',
-            description: 'Gửi một tin nhắn hệ thống (system message) lên màn hình chat để thông báo cho người dùng. Tin nhắn này sẽ KHÔNG bị đưa vào lịch sử chat (không ảnh hưởng tới context của nhân vật). Dùng để báo cáo kết quả hoặc trạng thái cho người dùng.',
+            description: 'Gửi một tin nhắn hệ thống vô danh, không thêm vào lịch sử nhân vật.',
             parameters: {
                 type: 'object',
                 properties: {
-                    message: {
-                        type: 'string',
-                        description: 'Nội dung tin nhắn cần hiển thị cho người dùng'
-                    }
+                    message: { type: 'string', description: 'Nội dung tin nhắn.' }
                 },
                 required: ['message']
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('sendSystemMessage')) {
+                throw new Error('ST API sendSystemMessage is missing');
             }
         },
         execute: async (args, context) => {
@@ -363,6 +370,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 required: ["action"]
             }
         },
+        validate: async () => {
+            try {
+                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
+                if (!ST_WorldInfo)
+                    throw new Error('Module loaded but empty');
+            }
+            catch (e) {
+                throw new Error('Failed to load /scripts/world-info.js - ' + e.message);
+            }
+        },
         execute: async (args, context) => {
             if (!context || !context.adapter) {
                 return {
@@ -401,6 +418,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {} // Không yêu cầu tham số
             }
         },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('deleteLastMessage')) {
+                throw new Error('ST API deleteLastMessage is missing');
+            }
+        },
         execute: async (args, context) => {
             if (!context || !context.adapter) {
                 return {
@@ -418,15 +440,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getChatHistoryTool = {
         schema: {
             name: 'get_chat_history',
-            description: 'Lấy lịch sử đoạn chat gần nhất giữa người dùng và nhân vật. Rất cần thiết khi bạn cần phân tích bối cảnh trước khi ra quyết định hoặc phản hồi.',
+            description: 'Lấy các đoạn hội thoại gần nhất.',
             parameters: {
                 type: 'object',
                 properties: {
-                    depth: {
-                        type: 'number',
-                        description: 'Số lượng tin nhắn gần nhất cần lấy (Mặc định: 10)'
-                    }
+                    depth: { type: 'number', description: 'Số lượng tin nhắn muốn lấy (mặc định 10).' }
                 }
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('chat')) {
+                throw new Error('ST Context chat array is missing');
             }
         },
         execute: async (args, context) => {
@@ -453,6 +477,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {}
             }
         },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('substituteParams')) {
+                throw new Error('ST API substituteParams is missing');
+            }
+        },
         execute: async (args, context) => {
             if (!context || !context.adapter) {
                 return {
@@ -476,20 +505,19 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const editUserPersonaTool = {
         schema: {
             name: 'edit_user_persona',
-            description: 'Chỉnh sửa và cập nhật hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+            description: 'Chỉnh sửa thông tin hồ sơ (Persona) của người dùng hiện tại.',
             parameters: {
                 type: 'object',
                 properties: {
-                    persona_description: {
-                        type: 'string',
-                        description: 'Nội dung mô tả tính cách, ngoại hình, bối cảnh mới của người dùng.'
-                    },
-                    persona_name: {
-                        type: 'string',
-                        description: 'Tên hiển thị mới của người dùng (Tùy chọn. Nếu không muốn đổi tên thì bỏ qua trường này).'
-                    }
+                    persona_name: { type: 'string', description: 'Tên mới của người dùng (tùy chọn, nếu không có thì giữ nguyên tên cũ).' },
+                    persona_description: { type: 'string', description: 'Đoạn mô tả ngoại hình, tính cách của người dùng. Viết tự do theo ngôi thứ 3 hoặc thứ 1 đều được.' }
                 },
                 required: ['persona_description']
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('substituteParams')) {
+                throw new Error('ST API substituteParams is missing');
             }
         },
         execute: async (args, context) => {
@@ -556,6 +584,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 },
                 required: ['mode']
+            }
+        },
+        validate: async () => {
+            try {
+                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
+                if (!ST_WorldInfo)
+                    throw new Error('Module loaded but empty');
+            }
+            catch (e) {
+                throw new Error('Failed to load /scripts/world-info.js - ' + e.message);
             }
         },
         execute: async (args, context) => {
@@ -626,6 +664,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 },
                 required: ["action", "book_name"]
+            }
+        },
+        validate: async () => {
+            try {
+                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
+                if (!ST_WorldInfo)
+                    throw new Error('Module loaded but empty');
+            }
+            catch (e) {
+                throw new Error('Failed to load /scripts/world-info.js - ' + e.message);
             }
         },
         execute: async (args, context) => {
@@ -2593,50 +2641,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const name = tool.schema.name;
                 updateUI(name, 'testing');
                 try {
-                    let ok = true;
                     let msg = 'Dependencies verified';
-                    switch (name) {
-                        case 'delete_last_message':
-                            if (!this.adapter.hasFeature('deleteLastMessage')) {
-                                throw new Error('ST API deleteLastMessage is missing');
-                            }
-                            break;
-                        case 'get_char_info':
-                            if (!this.adapter.hasFeature('characters')) {
-                                throw new Error('ST Context characters object is missing');
-                            }
-                            break;
-                        case 'get_chat_history':
-                            if (!this.adapter.hasFeature('chat')) {
-                                throw new Error('ST Context chat array is missing');
-                            }
-                            break;
-                        case 'send_system_message':
-                            if (!this.adapter.hasFeature('sendSystemMessage')) {
-                                throw new Error('ST API sendSystemMessage is missing');
-                            }
-                            break;
-                        case 'get_user_persona':
-                        case 'edit_user_persona':
-                            if (!this.adapter.hasFeature('substituteParams')) {
-                                throw new Error('ST API substituteParams is missing');
-                            }
-                            break;
-                        case 'get_lorebook_info':
-                        case 'manage_lorebook_entry':
-                        case 'manage_worldbook':
-                            try {
-                                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
-                                if (!ST_WorldInfo)
-                                    throw new Error('Module loaded but empty');
-                            }
-                            catch (e) {
-                                throw new Error('Failed to load /scripts/world-info.js - ' + e.message);
-                            }
-                            break;
-                        default:
-                            msg = 'Tool registered (no specific check)';
-                            break;
+                    if (tool.validate) {
+                        await tool.validate({ adapter: this.adapter });
+                    }
+                    else {
+                        msg = 'Tool registered (no specific check)';
                     }
                     updateUI(name, 'ok', msg);
                 }

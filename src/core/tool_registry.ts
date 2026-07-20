@@ -30,6 +30,7 @@ export interface ToolResult {
 
 export interface ITool {
     schema: ToolSchema;
+    validate?: (context?: any) => Promise<void> | void;
     execute: (args: Record<string, any>, context?: any) => Promise<ToolResult>;
 }
 

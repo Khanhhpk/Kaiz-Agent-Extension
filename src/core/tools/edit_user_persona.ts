@@ -4,23 +4,21 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const editUserPersonaTool: ITool = {
     schema: {
         name: 'edit_user_persona',
-        description: 'Chỉnh sửa và cập nhật hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+        description: 'Chỉnh sửa thông tin hồ sơ (Persona) của người dùng hiện tại.',
         parameters: {
             type: 'object',
             properties: {
-                persona_description: {
-                    type: 'string',
-                    description: 'Nội dung mô tả tính cách, ngoại hình, bối cảnh mới của người dùng.'
-                },
-                persona_name: {
-                    type: 'string',
-                    description: 'Tên hiển thị mới của người dùng (Tùy chọn. Nếu không muốn đổi tên thì bỏ qua trường này).'
-                }
+                persona_name: { type: 'string', description: 'Tên mới của người dùng (tùy chọn, nếu không có thì giữ nguyên tên cũ).' },
+                persona_description: { type: 'string', description: 'Đoạn mô tả ngoại hình, tính cách của người dùng. Viết tự do theo ngôi thứ 3 hoặc thứ 1 đều được.' }
             },
             required: ['persona_description']
         }
     },
-
+    validate: (context: { adapter: SillyTavernAdapter }) => {
+        if (!context.adapter.hasFeature('substituteParams')) {
+            throw new Error('ST API substituteParams is missing');
+        }
+    },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         // C1: Null-guard
         if (!context || !context.adapter) {

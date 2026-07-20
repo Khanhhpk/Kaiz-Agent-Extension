@@ -33,6 +33,14 @@ export const getLorebookInfoTool: ITool = {
             required: ['mode']
         }
     },
+    validate: async () => {
+        try {
+            const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
+            if (!ST_WorldInfo) throw new Error('Module loaded but empty');
+        } catch (e: any) {
+            throw new Error('Failed to load /scripts/world-info.js - ' + e.message);
+        }
+    },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         if (!context || !context.adapter) {
             return {
