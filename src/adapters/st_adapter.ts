@@ -280,6 +280,22 @@ export class SillyTavernAdapter {
     }
 
     /**
+     * Xóa một tin nhắn cụ thể dựa vào index
+     * @param index Vị trí của tin nhắn trong mảng chat (chatIndex)
+     */
+    public deleteMessageByIndex(index: number) {
+        const ctx = SillyTavern.getContext();
+        if (typeof ctx.deleteMessage === 'function') {
+            // ST_API: deleteMessage(id, swipeDeletionIndex = undefined, askConfirmation = false)
+            // id ở đây thường chính là index của mảng chat
+            ctx.deleteMessage(index, undefined, false);
+        } else {
+            console.error('[KaizAgent] deleteMessage not available in ST Context.');
+            throw new Error('API deleteMessage của ST không tồn tại.');
+        }
+    }
+
+    /**
      * Lấy thông tin Persona của người dùng
      */
     public async getUserPersona(): Promise<string> {
