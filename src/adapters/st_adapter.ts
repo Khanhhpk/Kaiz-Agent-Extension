@@ -707,6 +707,20 @@ export class SillyTavernAdapter {
 
             // Save
             await ST_WorldInfo.saveWorldInfo(options.book_name, data, true);
+
+            // === SYNC UI: Reload WB editor nếu đang mở ===
+            // reloadEditor(file) trigger lại '#world_editor_select'.trigger('change') nếu WB đang được chọn
+            if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                ST_WorldInfo.reloadEditor(options.book_name);
+            }
+            // Emit event để ST biết WI đã thay đổi
+            try {
+                const ctx = SillyTavern.getContext();
+                if (ctx.eventSource && ctx.eventTypes?.WORLDINFO_UPDATED) {
+                    ctx.eventSource.emit(ctx.eventTypes.WORLDINFO_UPDATED, options.book_name);
+                }
+            } catch (_) {}
+
             return resultMsg;
             
         } catch (e: any) {
@@ -796,6 +810,21 @@ export class SillyTavernAdapter {
 
                 if (typeof ST_WorldInfo.createNewWorldInfo === 'function') {
                     await ST_WorldInfo.createNewWorldInfo(options.book_name, { interactive: false });
+
+                    // === SYNC UI: Cập nhật danh sách WB trong dropdown và editor ===
+                    // updateWorldInfoList() fetch lại danh sách từ server và re-render
+                    if (typeof ST_WorldInfo.updateWorldInfoList === 'function') {
+                        await ST_WorldInfo.updateWorldInfoList();
+                    }
+                    // Tự động chọn WB vừa tạo trong editor nếu có thể
+                    const newIdx = (ST_WorldInfo.world_names || []).indexOf(options.book_name);
+                    if (newIdx !== -1) {
+                        const $ = (window as any).$;
+                        if ($) {
+                            $('#world_editor_select').val(newIdx).trigger('change');
+                        }
+                    }
+
                     return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
                 } else {
                     return "[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.";
