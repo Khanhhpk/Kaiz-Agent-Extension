@@ -4,7 +4,7 @@ import { StateManager } from "../state";
 export const renameAgentChatTool: ITool = {
     schema: {
         name: "rename_agent_chat",
-        description: "Rename a specific agent chat by ID, or the current active chat if no ID is provided.",
+        description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: "object",
             properties: {
@@ -32,7 +32,7 @@ export const renameAgentChatTool: ITool = {
 export const openNewAgentChatTool: ITool = {
     schema: {
         name: "open_new_agent_chat",
-        description: "Closes the current agent chat and opens a new blank chat session.",
+        description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: "object",
             properties: {}
@@ -56,7 +56,7 @@ export const openNewAgentChatTool: ITool = {
 export const listAgentChatsTool: ITool = {
     schema: {
         name: "list_agent_chats",
-        description: "List all existing agent chat sessions (ID, Name, Created At, Updated At).",
+        description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: "object",
             properties: {}
@@ -77,7 +77,7 @@ export const listAgentChatsTool: ITool = {
 export const deleteAgentChatTool: ITool = {
     schema: {
         name: "delete_agent_chat",
-        description: "Delete a specific agent chat by ID, or the current active chat if no ID is provided.",
+        description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: "object",
             properties: {

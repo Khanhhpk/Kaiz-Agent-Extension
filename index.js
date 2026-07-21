@@ -869,7 +869,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const renameAgentChatTool = {
         schema: {
             name: "rename_agent_chat",
-            description: "Rename a specific agent chat by ID, or the current active chat if no ID is provided.",
+            description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: "object",
                 properties: {
@@ -894,7 +894,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const openNewAgentChatTool = {
         schema: {
             name: "open_new_agent_chat",
-            description: "Closes the current agent chat and opens a new blank chat session.",
+            description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: "object",
                 properties: {}
@@ -917,7 +917,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const listAgentChatsTool = {
         schema: {
             name: "list_agent_chats",
-            description: "List all existing agent chat sessions (ID, Name, Created At, Updated At).",
+            description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: "object",
                 properties: {}
@@ -937,7 +937,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const deleteAgentChatTool = {
         schema: {
             name: "delete_agent_chat",
-            description: "Delete a specific agent chat by ID, or the current active chat if no ID is provided.",
+            description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: "object",
                 properties: {
