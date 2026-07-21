@@ -256,6 +256,28 @@
     transform: translateY(0);
 }
 
+/* Icon Picker */
+.kaiz-icon-picker-item {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+    color: #fff;
+}
+
+.kaiz-icon-picker-item:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.kaiz-icon-picker-item i {
+    width: 18px;
+    height: 18px;
+}
+
 /* Quick Prompts */
 .kaiz-quick-prompt-menu::-webkit-scrollbar {
     width: 4px;
