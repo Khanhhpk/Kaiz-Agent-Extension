@@ -563,10 +563,10 @@ export class ChatWindowUI {
                     streamUpdatePending = false;
                     
                     if (agentContentBox) {
-                        agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
+                        agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`);
                         agentContentBox = null; // Ng\u0103n b\u1ea5t k\u1ef3 callback n\u00e0o c\u00f2n s\u00f3t ghi \u0111\u00e8
                     } else {
-                        addMessageToDOM('agent', `<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
+                        addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`);
                     }
                     await stateManager.addMessage('agent', `[Error] ${event.text}`);
                 } else if (event.type === 'debug') {
