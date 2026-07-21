@@ -1231,13 +1231,44 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 });
                 if (results.length === 0) {
-                    // Fallback nếu Google thay đổi DOM: trả về chữ thô của thẻ body chứa chữ
-                    return {
-                        content: JSON.stringify({
-                            warning: "Không trích xuất được kết quả theo chuẩn, trả về text thô của trang",
-                            raw_text: doc.body.innerText.substring(0, 3000)
-                        })
-                    };
+                    console.log("[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo...");
+                    const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+                    const ddgRes = await fetch(ddgUrl);
+                    if (ddgRes.ok) {
+                        const ddgHtml = await ddgRes.text();
+                        const ddgDoc = parser.parseFromString(ddgHtml, "text/html");
+                        const ddgResults = ddgDoc.querySelectorAll('div.result');
+                        ddgResults.forEach(res => {
+                            const titleEl = res.querySelector('h2.result__title a');
+                            const snippetEl = res.querySelector('a.result__snippet');
+                            const urlEl = res.querySelector('a.result__url');
+                            if (titleEl && snippetEl && urlEl) {
+                                let link = urlEl.getAttribute('href') || '';
+                                // DuckDuckGo redirects via /l/?uddg=
+                                if (link.includes('uddg=')) {
+                                    const match = link.match(/uddg=([^&]+)/);
+                                    if (match)
+                                        link = decodeURIComponent(match[1]);
+                                }
+                                else if (link.startsWith('//')) {
+                                    link = 'https:' + link;
+                                }
+                                results.push({
+                                    title: titleEl.innerText.trim(),
+                                    url: link,
+                                    snippet: snippetEl.innerText.trim()
+                                });
+                            }
+                        });
+                    }
+                    if (results.length === 0) {
+                        return {
+                            content: JSON.stringify({
+                                warning: "Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang",
+                                raw_text: doc.body.innerText.substring(0, 3000)
+                            })
+                        };
+                    }
                 }
                 return {
                     content: JSON.stringify({
