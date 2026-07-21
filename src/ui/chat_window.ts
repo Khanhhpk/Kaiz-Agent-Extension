@@ -447,6 +447,9 @@ export class ChatWindowUI {
             }
 
             sendBtn.prop('disabled', true);
+            sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
+            sendBtn.prop('disabled', false); // Bật lại ngay để cho phép click Stop
+            sendBtn.addClass('kaiz-stop-mode');
             
             const ctx = (window as any).SillyTavern.getContext();
             const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
@@ -566,11 +569,19 @@ export class ChatWindowUI {
             $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
             $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
 
+            sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
+            sendBtn.removeClass('kaiz-stop-mode');
             sendBtn.prop('disabled', false);
             input.focus();
         };
 
-        sendBtn.on('click', sendMessage);
+        sendBtn.on('click', () => {
+            if (sendBtn.hasClass('kaiz-stop-mode')) {
+                loop.abort();
+                return;
+            }
+            sendMessage();
+        });
         input.on('keydown', (e: any) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();

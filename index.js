@@ -5,10 +5,20 @@
         adapter;
         toolRegistry;
         stateManager;
+        _aborted = false;
         constructor(adapter, toolRegistry, stateManager) {
             this.adapter = adapter;
             this.toolRegistry = toolRegistry;
             this.stateManager = stateManager;
+        }
+        /**
+         * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng ngay sau khi hoàn thành bước hiện tại.
+         */
+        abort() {
+            this._aborted = true;
+        }
+        get isRunning() {
+            return !this._aborted;
         }
         generateSystemPrompt(maxSteps) {
             const ctx = window.SillyTavern.getContext();
@@ -127,7 +137,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             let step = 0;
             let lastToolError = false;
+            this._aborted = false;
             while (step < maxSteps) {
+                // Kiểm tra cờ abort đầu mỗi vòng lặp
+                if (this._aborted) {
+                    await onEvent({ type: 'error', text: 'Agent đã bị người dùng hủy bỏ.' });
+                    break;
+                }
                 step++;
                 await onEvent({ type: 'step_start' });
                 try {
@@ -3132,6 +3148,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     chatTitle.text(text.substring(0, 30) + (text.length > 30 ? '...' : ''));
                 }
                 sendBtn.prop('disabled', true);
+                sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
+                sendBtn.prop('disabled', false); // Bật lại ngay để cho phép click Stop
+                sendBtn.addClass('kaiz-stop-mode');
                 const ctx = window.SillyTavern.getContext();
                 const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
                 const maxLoops = extSettings.maxAgentLoops || 5;
@@ -3244,10 +3263,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 });
                 $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
                 $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
+                sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
+                sendBtn.removeClass('kaiz-stop-mode');
                 sendBtn.prop('disabled', false);
                 input.focus();
             };
-            sendBtn.on('click', sendMessage);
+            sendBtn.on('click', () => {
+                if (sendBtn.hasClass('kaiz-stop-mode')) {
+                    loop.abort();
+                    return;
+                }
+                sendMessage();
+            });
             input.on('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();

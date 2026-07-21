@@ -10,7 +10,20 @@ export interface AgentEvent {
 }
 
 export class AgentLoop {
+    private _aborted = false;
+    
     constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry, private stateManager: StateManager) {}
+
+    /**
+     * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng ngay sau khi hoàn thành bước hiện tại.
+     */
+    public abort(): void {
+        this._aborted = true;
+    }
+
+    public get isRunning(): boolean {
+        return !this._aborted;
+    }
 
     private generateSystemPrompt(maxSteps: number): string {
         const ctx = (window as any).SillyTavern.getContext();
@@ -142,8 +155,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         let step = 0;
         let lastToolError = false;
+        this._aborted = false;
 
         while (step < maxSteps) {
+            // Kiểm tra cờ abort đầu mỗi vòng lặp
+            if (this._aborted) {
+                await onEvent({ type: 'error', text: 'Agent đã bị người dùng hủy bỏ.' });
+                break;
+            }
             step++;
             await onEvent({ type: 'step_start' });
             
