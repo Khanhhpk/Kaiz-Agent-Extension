@@ -242,7 +242,7 @@ export class SillyTavernAdapter {
                     <h3 style="margin:0; color:#fff; font-size:18px;"><i class="fa-solid fa-list-ol"></i> Quick Chat Preview (Total: ${chat.length})</h3>
                     <i id="kaiz-chat-preview-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; color:#ccc; font-size:20px;"></i>
                 </div>
-                <div style="padding:15px; overflow-y:auto; flex:1; min-height:0; background:#1e1e1e;">`;
+                <div style="padding:15px; overflow-y:auto; flex:0 1 auto; min-height:0; background:#1e1e1e;">`;
 
         for (let i = 0; i < chat.length; i++) {
             const msg = chat[i];

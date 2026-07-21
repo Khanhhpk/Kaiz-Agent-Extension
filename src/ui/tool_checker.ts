@@ -17,7 +17,7 @@ export class ToolCheckerUI {
                         <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-wrench"></i> Tool Checker</h3>
                         <i id="kaiz-checker-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:18px;"></i>
                     </div>
-                    <div id="kaiz-checker-list" style="overflow-y:auto; flex:1; min-height:0; display:flex; flex-direction:column; gap:8px;">
+                    <div id="kaiz-checker-list" style="overflow-y:auto; flex:0 1 auto; min-height:0; display:flex; flex-direction:column; gap:8px;">
                     </div>
                     <div style="margin-top:15px; text-align:right; flex-shrink:0;">
                         <button id="kaiz-checker-run" class="menu_button interactable"><i class="fa-solid fa-play"></i> Run Tests</button>
