@@ -10,8 +10,8 @@ export const manageChatTextTool: ITool = {
             properties: {
                 action: {
                     type: 'string',
-                    enum: ['find_and_highlight', 'find_and_replace'],
-                    description: 'Hành động cần thực hiện. find_and_highlight sẽ làm sáng rực khung chat chứa từ khóa. find_and_replace sẽ thay thế chữ trực tiếp.'
+                    enum: ['find_and_highlight', 'find_and_replace', 'clear_highlight'],
+                    description: 'Hành động cần thực hiện. find_and_highlight: làm sáng khung chat. find_and_replace: thay thế chữ. clear_highlight: Xóa toàn bộ highlight hiện tại.'
                 },
                 query: {
                     type: 'string',
@@ -26,7 +26,7 @@ export const manageChatTextTool: ITool = {
                     description: 'Set thành true nếu query là một biểu thức Regex. Mặc định là false (tìm chuỗi chính xác).'
                 }
             },
-            required: ['action', 'query']
+            required: ['action']
         }
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
@@ -40,12 +40,16 @@ export const manageChatTextTool: ITool = {
         const replacement = args.replacement || '';
         const isRegex = args.is_regex === true;
         
-        if (!query) {
+        if (action !== 'clear_highlight' && !query) {
             return { content: 'Lỗi: Thiếu tham số query (từ khóa cần tìm).', isError: true };
         }
         
         try {
-            if (action === 'find_and_highlight') {
+            if (action === 'clear_highlight') {
+                context.adapter.clearHighlight();
+                return { content: 'Thành công: Đã xóa toàn bộ highlight trên màn hình.' };
+            }
+            else if (action === 'find_and_highlight') {
                 const count = context.adapter.findAndHighlight(query, isRegex);
                 return { content: `Thành công: Đã tìm thấy và bôi sáng ${count} tin nhắn chứa từ khóa "${query}".` };
             } 

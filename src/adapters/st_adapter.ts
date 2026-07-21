@@ -1059,6 +1059,15 @@ export class SillyTavernAdapter {
     }
 
     /**
+     * Xóa toàn bộ highlight trên UI
+     */
+    public clearHighlight(): void {
+        const $ = (window as any).$;
+        if (!$) return;
+        $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '').css('background-color', '');
+    }
+
+    /**
      * Tìm và bôi sáng (highlight block) trên UI
      */
     public findAndHighlight(query: string, isRegex: boolean = false): number {
@@ -1077,7 +1086,7 @@ export class SillyTavernAdapter {
         if (!$) return 0;
 
         // Xóa các highlight cũ
-        $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '').css('background-color', '');
+        this.clearHighlight();
         
         for (let i = 0; i < ctx.chat.length; i++) {
             const m = ctx.chat[i];
