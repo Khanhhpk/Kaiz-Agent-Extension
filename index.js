@@ -2042,8 +2042,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (mesBlock.length) {
                         mesBlock.addClass('kaiz-highlight-block');
                         mesBlock.css({
-                            'box-shadow': '0 0 15px 5px rgba(255, 204, 0, 0.6)',
-                            'border': '1px solid rgba(255, 204, 0, 0.8)',
+                            'box-shadow': '0 0 25px 8px rgba(255, 215, 0, 0.8)',
+                            'border': '3px solid rgba(255, 215, 0, 1)',
+                            'background-color': 'rgba(255, 215, 0, 0.15)',
                             'transition': 'all 0.5s ease'
                         });
                     }
