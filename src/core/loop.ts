@@ -285,7 +285,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
                         result = { content: call.parseError, isError: true };
                     } else {
-                        result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
+                        try {
+                            result = await Promise.race([
+                                this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager }),
+                                new Promise<any>((_, reject) => {
+                                    this._forceAbortReject = reject;
+                                })
+                            ]);
+                        } finally {
+                            this._forceAbortReject = null;
+                        }
                     }
                     if (this._forceAborted) throw new Error('FORCE_ABORT');
                     let isToolError = false;
