@@ -12,6 +12,7 @@ import { manageChatTextTool } from './chat_text_editor';
 import { quickChatPreviewTool } from './quick_chat_preview';
 import { renameAgentChatTool, openNewAgentChatTool, listAgentChatsTool, deleteAgentChatTool } from './agent_chat_manager';
 import { scrapeWebpageTool } from './scrape_webpage';
+import { searchGoogleTool } from './search_google';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -35,4 +36,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(deleteAgentChatTool);
     registry.registerTool(manageChatTextTool);
     registry.registerTool(scrapeWebpageTool);
+    registry.registerTool(searchGoogleTool);
 }
