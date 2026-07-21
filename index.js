@@ -10,6 +10,7 @@
         _aborted = false;
         _forceAborted = false;
         _forceAbortReject = null;
+        _safeModeReject = null;
         _currentAbortController = null;
         constructor(adapter, toolRegistry, stateManager) {
             this.adapter = adapter;
@@ -31,6 +32,10 @@
             if (this._forceAbortReject) {
                 this._forceAbortReject(new Error('FORCE_ABORT'));
                 this._forceAbortReject = null;
+            }
+            if (this._safeModeReject) {
+                this._safeModeReject(new Error('FORCE_ABORT'));
+                this._safeModeReject = null;
             }
             if (this._currentAbortController) {
                 this._currentAbortController.abort('FORCE_ABORT');
@@ -211,24 +216,34 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const safeMode = extSettings.safeMode;
                         const safeModeBlacklist = extSettings.safeModeBlacklist || {};
                         if (safeMode && safeModeBlacklist[call.name]) {
+                            let confirmResult = false;
                             try {
-                                const confirmResult = await new Promise((resolve) => {
-                                    onEvent({
-                                        type: 'tool_confirm',
-                                        data: { call, resolve }
-                                    });
-                                });
-                                if (!confirmResult) {
-                                    const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
-                                    await onEvent({ type: 'error', text: msg });
-                                    return; // Ngắt toàn bộ AgentLoop
-                                }
+                                confirmResult = await Promise.race([
+                                    new Promise((resolve) => {
+                                        onEvent({
+                                            type: 'tool_confirm',
+                                            data: { call, resolve }
+                                        });
+                                    }),
+                                    new Promise((_, reject) => {
+                                        this._safeModeReject = reject;
+                                    })
+                                ]);
+                                this._safeModeReject = null;
                             }
                             catch (e) {
+                                this._safeModeReject = null;
+                                if (e.message === 'FORCE_ABORT')
+                                    throw e;
                                 console.error("[KaizAgent] Lỗi khi tạo tool_confirm event:", e);
                                 const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
                                 await onEvent({ type: 'error', text: msg });
-                                return;
+                                break;
+                            }
+                            if (!confirmResult) {
+                                const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                await onEvent({ type: 'error', text: msg });
+                                break;
                             }
                         }
                         // --- END SAFE MODE CHECK ---
@@ -3279,12 +3294,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     `;
                         const domId = addMessageToDOM('agent', html);
                         $(`#kaiz-allow-${confirmId}`).on('click', () => {
+                            if (!loop.isRunning)
+                                return;
                             $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${call.name}</div>`);
                             btnIcon.addClass('kaiz-icon-spin');
                             btnFloat.removeClass('kaiz-btn-blink');
                             resolveFn(true);
                         });
                         $(`#kaiz-deny-${confirmId}`).on('click', () => {
+                            if (!loop.isRunning)
+                                return;
                             $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${call.name}</div>`);
                             btnIcon.removeClass('kaiz-icon-spin');
                             btnFloat.removeClass('kaiz-btn-blink');

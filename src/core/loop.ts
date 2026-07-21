@@ -16,6 +16,7 @@ export class AgentLoop {
     private _aborted = false;
     private _forceAborted = false;
     private _forceAbortReject: ((reason: any) => void) | null = null;
+    private _safeModeReject: ((reason: any) => void) | null = null;
     private _currentAbortController: AbortController | null = null;
     
     constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry, private stateManager: StateManager) {}
@@ -36,6 +37,10 @@ export class AgentLoop {
         if (this._forceAbortReject) {
             this._forceAbortReject(new Error('FORCE_ABORT'));
             this._forceAbortReject = null;
+        }
+        if (this._safeModeReject) {
+            this._safeModeReject(new Error('FORCE_ABORT'));
+            this._safeModeReject = null;
         }
         if (this._currentAbortController) {
             this._currentAbortController.abort('FORCE_ABORT');
@@ -242,24 +247,33 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const safeModeBlacklist = extSettings.safeModeBlacklist || {};
 
                     if (safeMode && safeModeBlacklist[call.name]) {
+                        let confirmResult = false;
                         try {
-                            const confirmResult = await new Promise<boolean>((resolve) => {
-                                onEvent({ 
-                                    type: 'tool_confirm', 
-                                    data: { call, resolve } 
-                                });
-                            });
-                            
-                            if (!confirmResult) {
-                                const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
-                                await onEvent({ type: 'error', text: msg });
-                                return; // Ngắt toàn bộ AgentLoop
-                            }
-                        } catch (e) {
+                            confirmResult = await Promise.race([
+                                new Promise<boolean>((resolve) => {
+                                    onEvent({ 
+                                        type: 'tool_confirm', 
+                                        data: { call, resolve } 
+                                    });
+                                }),
+                                new Promise<boolean>((_, reject) => {
+                                    this._safeModeReject = reject;
+                                })
+                            ]);
+                            this._safeModeReject = null;
+                        } catch (e: any) {
+                            this._safeModeReject = null;
+                            if (e.message === 'FORCE_ABORT') throw e;
                             console.error("[KaizAgent] Lỗi khi tạo tool_confirm event:", e);
                             const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
                             await onEvent({ type: 'error', text: msg });
-                            return;
+                            break;
+                        }
+                        
+                        if (!confirmResult) {
+                            const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                            await onEvent({ type: 'error', text: msg });
+                            break;
                         }
                     }
                     // --- END SAFE MODE CHECK ---

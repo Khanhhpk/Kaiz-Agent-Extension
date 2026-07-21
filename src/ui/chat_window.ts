@@ -541,6 +541,7 @@ export class ChatWindowUI {
                     const domId = addMessageToDOM('agent', html);
                     
                     $(`#kaiz-allow-${confirmId}`).on('click', () => {
+                        if (!loop.isRunning) return;
                         $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${call.name}</div>`);
                         btnIcon.addClass('kaiz-icon-spin');
                         btnFloat.removeClass('kaiz-btn-blink');
@@ -548,6 +549,7 @@ export class ChatWindowUI {
                     });
                     
                     $(`#kaiz-deny-${confirmId}`).on('click', () => {
+                        if (!loop.isRunning) return;
                         $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${call.name}</div>`);
                         btnIcon.removeClass('kaiz-icon-spin');
                         btnFloat.removeClass('kaiz-btn-blink');
