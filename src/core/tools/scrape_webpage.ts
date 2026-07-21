@@ -24,7 +24,7 @@ export const scrapeWebpageTool: ITool = {
 
             // Fetch directly (assuming user has CORS extension enabled)
             const response = await fetch(url, {
-                credentials: 'include',
+                credentials: 'omit',
                 headers: {
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
