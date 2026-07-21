@@ -8,6 +8,7 @@ import { getUserPersonaTool } from './get_user_persona';
 import { editUserPersonaTool } from './edit_user_persona';
 import { getLorebookInfoTool } from './get_lorebook_info';
 import { manageLorebookEntryTool } from './manage_lorebook_entry';
+import { quickChatPreviewTool } from './quick_chat_preview';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -24,4 +25,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getLorebookInfoTool);
     registry.registerTool(manageLorebookEntryTool);
     registry.registerTool(manageWorldbookTool);
+    registry.registerTool(quickChatPreviewTool);
 }

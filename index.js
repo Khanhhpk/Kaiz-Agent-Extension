@@ -492,13 +492,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getChatHistoryTool = {
         schema: {
             name: 'get_chat_history',
-            description: 'Lấy lịch sử đoạn chat gần nhất giữa người dùng và nhân vật. Rất cần thiết khi bạn cần phân tích bối cảnh trước khi ra quyết định hoặc phản hồi.',
+            description: 'Lấy lịch sử đoạn chat gần nhất giữa người dùng và nhân vật. TRICKS: Bạn có thể gọi công cụ này với depth = 0 để kiểm tra tổng số lượng tin nhắn (total_messages) hiện có trong chat mà không cần lấy nội dung chi tiết. Giúp bạn nắm được độ dài chat một cách tiết kiệm nhất.',
             parameters: {
                 type: 'object',
                 properties: {
                     depth: {
                         type: 'number',
-                        description: 'Số lượng tin nhắn gần nhất cần lấy (Mặc định: 10)'
+                        description: 'Số lượng tin nhắn gần nhất cần lấy (Mặc định: 10). Nếu truyền 0, chỉ trả về số lượng tin nhắn tổng cộng.'
                     }
                 }
             }
@@ -515,10 +515,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     isError: true
                 };
             }
-            const depth = args.depth || 10;
-            const history = context.adapter.getChatContext(depth);
+            const depth = typeof args.depth === 'number' ? args.depth : 10;
+            // Luôn đính kèm tổng số tin nhắn
+            const totalMessages = context.adapter.getChatLength();
+            // Nếu depth > 0 thì mới lấy dữ liệu chi tiết
+            const history = depth > 0 ? context.adapter.getChatContext(depth) : [];
             return {
-                content: JSON.stringify(history, null, 2)
+                content: JSON.stringify({
+                    total_messages: totalMessages,
+                    history: history
+                }, null, 2)
             };
         }
     };
@@ -766,6 +772,38 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const quickChatPreviewTool = {
+        schema: {
+            name: 'quick_chat_preview',
+            description: 'Mở bảng modal Quick Chat Preview trên giao diện người dùng. Bảng này liệt kê toàn bộ tin nhắn hiện tại ở dạng thu gọn để người dùng có thể xem nhanh tổng thể độ dài chat và vị trí các tin nhắn. LƯU Ý: Tool này KHÔNG trả về dữ liệu chat cho bạn, nó chỉ dùng để trigger giao diện cho người dùng xem.',
+            parameters: {
+                type: 'object',
+                properties: {}
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) {
+                return {
+                    content: 'Error: Adapter not provided in context.',
+                    isError: true
+                };
+            }
+            try {
+                // Gọi hàm mở Modal (đã định nghĩa trong Adapter)
+                context.adapter.showChatPreviewModal();
+                return {
+                    content: 'Quick Chat Preview modal đã được mở thành công trên màn hình người dùng.'
+                };
+            }
+            catch (e) {
+                return {
+                    content: `Error showing quick chat preview: ${e.message}`,
+                    isError: true
+                };
+            }
+        }
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -780,6 +818,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(getLorebookInfoTool);
         registry.registerTool(manageLorebookEntryTool);
         registry.registerTool(manageWorldbookTool);
+        registry.registerTool(quickChatPreviewTool);
     }
 
     /**
@@ -974,6 +1013,65 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 console.error("[KaizAgent] generateCompletion error:", e);
                 throw e;
             }
+        }
+        /**
+         * Lấy tổng số tin nhắn hiện tại trong chat
+         */
+        getChatLength() {
+            const ctx = SillyTavern.getContext();
+            if (!ctx.chat || !Array.isArray(ctx.chat))
+                return 0;
+            return ctx.chat.length;
+        }
+        /**
+         * Hiển thị bảng Preview thu gọn cho toàn bộ chat
+         */
+        showChatPreviewModal() {
+            const $ = window.$;
+            if (!$ || !$.fn) {
+                console.error('[KaizAgent] jQuery not found, cannot show preview modal.');
+                return;
+            }
+            const ctx = SillyTavern.getContext();
+            const chat = ctx.chat || [];
+            $('#kaiz-chat-preview-modal').remove();
+            let html = `
+        <div id="kaiz-chat-preview-modal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; display:flex; justify-content:center; align-items:center;">
+            <div style="background:#222; border-radius:10px; width:80%; max-width:800px; height:80%; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
+                <div style="padding:15px; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#333;">
+                    <h3 style="margin:0; color:#fff; font-size:18px;"><i class="fa-solid fa-list-ol"></i> Quick Chat Preview (Total: ${chat.length})</h3>
+                    <i id="kaiz-chat-preview-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; color:#ccc; font-size:20px;"></i>
+                </div>
+                <div style="padding:15px; overflow-y:auto; flex:1; background:#1e1e1e;">`;
+            for (let i = 0; i < chat.length; i++) {
+                const msg = chat[i];
+                let text = typeof msg.mes === 'string' ? msg.mes : '';
+                const isTooLong = text.length > 100;
+                const previewText = isTooLong ? text.substring(0, 100) + '...' : text;
+                const safePreview = previewText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const safeFull = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const name = msg.is_user ? (ctx.name1 || 'User') : (msg.name || ctx.name2 || 'Char');
+                const color = msg.is_user ? '#3498db' : '#e74c3c';
+                const hiddenTag = msg.is_hidden || (msg.extra && msg.extra.is_hidden) ? ' <span style="background:#f39c12; color:#fff; padding:2px 5px; border-radius:3px; font-size:10px; margin-left:5px;">Hidden</span>' : '';
+                html += `
+            <details style="margin-bottom:10px; background:#2a2a2a; border-radius:5px; padding:10px; border-left:3px solid ${color};">
+                <summary style="cursor:pointer; outline:none; font-weight:bold; color:#ddd; font-size:14px; user-select:none;">
+                    [#${i}] ${name}${hiddenTag}: <span style="font-weight:normal; color:#aaa; margin-left:5px;">${safePreview}</span>
+                </summary>
+                <div style="margin-top:10px; padding-top:10px; border-top:1px solid #444; color:#ccc; font-size:13px; white-space:pre-wrap;">${safeFull}</div>
+            </details>`;
+            }
+            if (chat.length === 0) {
+                html += `<div style="color:#aaa; text-align:center;">No messages in chat.</div>`;
+            }
+            html += `
+                </div>
+            </div>
+        </div>`;
+            $('body').append(html);
+            $('#kaiz-chat-preview-close').on('click', () => {
+                $('#kaiz-chat-preview-modal').remove();
+            });
         }
         /**
          * Lấy lịch sử đoạn chat hiện tại (bỏ qua những tin nhắn ẩn)
