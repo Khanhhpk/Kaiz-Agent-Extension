@@ -1077,7 +1077,7 @@ export class SillyTavernAdapter {
         if (!$) return 0;
 
         // Xóa các highlight cũ
-        $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '');
+        $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '').css('background-color', '');
         
         for (let i = 0; i < ctx.chat.length; i++) {
             const m = ctx.chat[i];
