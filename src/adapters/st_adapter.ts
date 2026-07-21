@@ -492,7 +492,10 @@ export class SillyTavernAdapter {
 
             // Lưu và kích hoạt thay đổi UI
             if (hasUpdates) {
-                ctx.saveSettingsDebounced();
+                const saveSettings = ctx.saveSettingsDebounced || (window as any).saveSettingsDebounced;
+                if (typeof saveSettings === 'function') {
+                    saveSettings();
+                }
 
                 // === SYNC DOM TRỰC TIẾP (giống ST gốc) ===
                 // 1. Update textarea #persona_description (cái ô mô tả lớn)
@@ -1050,21 +1053,21 @@ export class SillyTavernAdapter {
                 const matchStart = match.index;
                 const matchText = match[0];
                 
-                // 1. SAFEGUARD: Bỏ qua nếu nằm trong thẻ HTML <...> hoặc macro {{...}}
-                const lastHtmlOpen = m.mes.lastIndexOf('<', matchStart);
-                const lastHtmlClose = m.mes.lastIndexOf('>', matchStart);
-                const isInsideHtml = lastHtmlOpen > lastHtmlClose;
-                
-                const lastMacroOpen = m.mes.lastIndexOf('{{', matchStart);
-                const lastMacroClose = m.mes.lastIndexOf('}}', matchStart);
-                const isInsideMacro = lastMacroOpen > lastMacroClose;
-                
-                if (isInsideHtml || isInsideMacro) {
-                    // Bỏ qua, giữ nguyên text
-                    resultText += m.mes.substring(lastIndex, regex.lastIndex);
-                    lastIndex = regex.lastIndex;
-                    continue;
-                }
+                // SAFEGUARD DISABLED: Tạm tắt để cho phép người dùng sửa cả nội dung HTML nếu cần.
+                // Nếu cần bật lại, uncomment đoạn dưới đây.
+                // const lastHtmlOpen = m.mes.lastIndexOf('<', matchStart);
+                // const lastHtmlClose = m.mes.lastIndexOf('>', matchStart);
+                // const isInsideHtml = lastHtmlOpen > lastHtmlClose;
+                // 
+                // const lastMacroOpen = m.mes.lastIndexOf('{{', matchStart);
+                // const lastMacroClose = m.mes.lastIndexOf('}}', matchStart);
+                // const isInsideMacro = lastMacroOpen > lastMacroClose;
+                // 
+                // if (isInsideHtml || isInsideMacro) {
+                //     resultText += m.mes.substring(lastIndex, regex.lastIndex);
+                //     lastIndex = regex.lastIndex;
+                //     continue;
+                // }
                 
                 // Thay thế
                 const prefix = m.mes.substring(lastIndex, matchStart);

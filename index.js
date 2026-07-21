@@ -74,6 +74,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 catch (e) {
                     console.error(`[AgentLoop] Failed to parse JSON for tool ${name}:`, argsStr);
+                    // Đẩy lỗi parse vào danh sách thay vì bỏ qua âm thầm
+                    tools.push({ name, args: {}, fullMatch: match[0], parseError: `JSON không hợp lệ cho tool "${name}". Nội dung nhận được: ${argsStr.substring(0, 200)}. Hãy kiểm tra lại cú pháp JSON và gọi lại tool.` });
                 }
             }
             return tools;
@@ -178,7 +180,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                         // --- END SAFE MODE CHECK ---
                         await onEvent({ type: 'tool_call', data: call });
-                        let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
+                        let result;
+                        if (call.parseError) {
+                            // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
+                            result = { content: call.parseError, isError: true };
+                        }
+                        else {
+                            result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
+                        }
                         let isToolError = false;
                         if (result.isError) {
                             hasError = true;
@@ -1463,7 +1472,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 // Lưu và kích hoạt thay đổi UI
                 if (hasUpdates) {
-                    ctx.saveSettingsDebounced();
+                    const saveSettings = ctx.saveSettingsDebounced || window.saveSettingsDebounced;
+                    if (typeof saveSettings === 'function') {
+                        saveSettings();
+                    }
                     // === SYNC DOM TRỰC TIẾP (giống ST gốc) ===
                     // 1. Update textarea #persona_description (cái ô mô tả lớn)
                     if (newDescription !== undefined) {
@@ -2030,19 +2042,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 while ((match = regex.exec(m.mes)) !== null) {
                     const matchStart = match.index;
                     const matchText = match[0];
-                    // 1. SAFEGUARD: Bỏ qua nếu nằm trong thẻ HTML <...> hoặc macro {{...}}
-                    const lastHtmlOpen = m.mes.lastIndexOf('<', matchStart);
-                    const lastHtmlClose = m.mes.lastIndexOf('>', matchStart);
-                    const isInsideHtml = lastHtmlOpen > lastHtmlClose;
-                    const lastMacroOpen = m.mes.lastIndexOf('{{', matchStart);
-                    const lastMacroClose = m.mes.lastIndexOf('}}', matchStart);
-                    const isInsideMacro = lastMacroOpen > lastMacroClose;
-                    if (isInsideHtml || isInsideMacro) {
-                        // Bỏ qua, giữ nguyên text
-                        resultText += m.mes.substring(lastIndex, regex.lastIndex);
-                        lastIndex = regex.lastIndex;
-                        continue;
-                    }
+                    // SAFEGUARD DISABLED: Tạm tắt để cho phép người dùng sửa cả nội dung HTML nếu cần.
+                    // Nếu cần bật lại, uncomment đoạn dưới đây.
+                    // const lastHtmlOpen = m.mes.lastIndexOf('<', matchStart);
+                    // const lastHtmlClose = m.mes.lastIndexOf('>', matchStart);
+                    // const isInsideHtml = lastHtmlOpen > lastHtmlClose;
+                    // 
+                    // const lastMacroOpen = m.mes.lastIndexOf('{{', matchStart);
+                    // const lastMacroClose = m.mes.lastIndexOf('}}', matchStart);
+                    // const isInsideMacro = lastMacroOpen > lastMacroClose;
+                    // 
+                    // if (isInsideHtml || isInsideMacro) {
+                    //     resultText += m.mes.substring(lastIndex, regex.lastIndex);
+                    //     lastIndex = regex.lastIndex;
+                    //     continue;
+                    // }
                     // Thay thế
                     const prefix = m.mes.substring(lastIndex, matchStart);
                     resultText += prefix + replacement;

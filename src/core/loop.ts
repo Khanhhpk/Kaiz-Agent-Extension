@@ -67,9 +67,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         return prompt;
     }
 
-    private parseToolCalls(text: string): { name: string; args: any; fullMatch: string }[] {
+    private parseToolCalls(text: string): { name: string; args: any; fullMatch: string; parseError?: string }[] {
         const regex = /<tool_call\s+name="([^"]+)">([\s\S]*?)<\/tool_call>/g;
-        const tools = [];
+        const tools: { name: string; args: any; fullMatch: string; parseError?: string }[] = [];
         let match;
         while ((match = regex.exec(text)) !== null) {
             const name = match[1];
@@ -79,6 +79,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 tools.push({ name, args, fullMatch: match[0] });
             } catch (e) {
                 console.error(`[AgentLoop] Failed to parse JSON for tool ${name}:`, argsStr);
+                // Đẩy lỗi parse vào danh sách thay vì bỏ qua âm thầm
+                tools.push({ name, args: {}, fullMatch: match[0], parseError: `JSON không hợp lệ cho tool "${name}". Nội dung nhận được: ${argsStr.substring(0, 200)}. Hãy kiểm tra lại cú pháp JSON và gọi lại tool.` });
             }
         }
         return tools;
@@ -208,7 +210,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
                     await onEvent({ type: 'tool_call', data: call });
 
-                    let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
+                    let result;
+                    if (call.parseError) {
+                        // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
+                        result = { content: call.parseError, isError: true };
+                    } else {
+                        result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
+                    }
                     let isToolError = false;
                     if (result.isError) {
                         hasError = true;

@@ -37,7 +37,7 @@ export const deleteMessageByIndexTool: ITool = {
 
         try {
             // Sửa tên phương thức được gọi sang phương thức mới hỗ trợ mảng
-            (context.adapter as any).deleteMessagesByIndices(indices);
+            context.adapter.deleteMessagesByIndices(indices);
             return {
                 content: `Messages at indices [${indices.join(', ')}] deleted successfully.`
             };
