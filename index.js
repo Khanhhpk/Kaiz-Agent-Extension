@@ -2641,7 +2641,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 lucideIconsList.forEach(iconName => {
                     iconsHtml += `<div class="kaiz-icon-picker-item interactable" data-icon="${iconName}" title="${iconName}"><i data-lucide="${iconName}"></i></div>`;
                 });
-                $('body').append(`
+                $('#kaiz-quick-prompts-list').parent().append(`
                 <dialog id="kaiz-icon-picker" style="background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:10px; width:300px; box-sizing:border-box; box-shadow:0 10px 25px rgba(0,0,0,0.5); color:#fff; margin:0;">
                     <div style="font-weight:bold; margin-bottom:10px; font-size:12px; color:#888; display:flex; justify-content:space-between;">
                         <span>Select Icon</span>
