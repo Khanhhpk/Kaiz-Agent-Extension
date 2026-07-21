@@ -27,11 +27,12 @@ export class SillyTavernAdapter {
     /**
      * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
      */
-    public async generateCompletion(messages: Message[], maxTokens: number, stream: boolean = false, onUpdate?: (text: string, reasoning: string | null) => void): Promise<{ text: string; reasoning: string | null; isMaxTokens: boolean }> {
+    public async generateCompletion(messages: Message[], maxTokens: number, stream: boolean = false, onUpdate?: (text: string, reasoning: string | null) => void, signal?: AbortSignal): Promise<{ text: string; reasoning: string | null; isMaxTokens: boolean }> {
         console.log("[KaizAgent] Calling ST generateCompletion...");
         const ctx = SillyTavern.getContext();
         const settings = ctx.extensionSettings['kaiz_agent'] || {};
         const abort = new AbortController();
+        const effectiveSignal = signal || abort.signal;
 
         // 1. Nếu bật tính năng Custom Endpoint, ta gọi trực tiếp (bypass ST)
         if (settings.useCustomEndpoint && settings.customUrl) {
@@ -60,7 +61,7 @@ export class SillyTavernAdapter {
                     method: 'POST',
                     headers,
                     body: JSON.stringify(payload),
-                    signal: abort.signal
+                    signal: effectiveSignal
                 });
 
                 if (!res.ok) {
@@ -137,7 +138,7 @@ export class SillyTavernAdapter {
             if (profileId && service && typeof service.sendRequest === 'function') {
                 asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
                     stream: stream,
-                    signal: abort.signal,
+                    signal: effectiveSignal,
                     extractData: false,
                     includePreset: true
                 });

@@ -13,6 +13,7 @@ export class AgentLoop {
     private _aborted = false;
     private _forceAborted = false;
     private _forceAbortReject: ((reason: any) => void) | null = null;
+    private _currentAbortController: AbortController | null = null;
     
     constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry, private stateManager: StateManager) {}
 
@@ -32,6 +33,9 @@ export class AgentLoop {
         if (this._forceAbortReject) {
             this._forceAbortReject(new Error('FORCE_ABORT'));
             this._forceAbortReject = null;
+        }
+        if (this._currentAbortController) {
+            this._currentAbortController.abort('FORCE_ABORT');
         }
     }
 
@@ -189,11 +193,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const messages = this.buildMessages(internalHistory, maxSteps, step, pinnedUserGoal, lastToolError);
 
                 let currentText = "";
+                this._currentAbortController = new AbortController();
                 const response = await Promise.race([
                     this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
                         currentText = text;
                         await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                    }),
+                    }, this._currentAbortController.signal),
                     new Promise<never>((_, reject) => {
                         this._forceAbortReject = reject;
                     })
@@ -290,7 +295,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
             } catch (e: any) {
                 this._forceAbortReject = null;
-                const isForceAbort = e.message === 'FORCE_ABORT';
+                const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
                 const errorMsg = isForceAbort 
                     ? '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.'
                     : (e.message || String(e));

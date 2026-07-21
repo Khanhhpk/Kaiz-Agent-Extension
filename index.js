@@ -8,6 +8,7 @@
         _aborted = false;
         _forceAborted = false;
         _forceAbortReject = null;
+        _currentAbortController = null;
         constructor(adapter, toolRegistry, stateManager) {
             this.adapter = adapter;
             this.toolRegistry = toolRegistry;
@@ -28,6 +29,9 @@
             if (this._forceAbortReject) {
                 this._forceAbortReject(new Error('FORCE_ABORT'));
                 this._forceAbortReject = null;
+            }
+            if (this._currentAbortController) {
+                this._currentAbortController.abort('FORCE_ABORT');
             }
         }
         get isRunning() {
@@ -167,11 +171,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 try {
                     const messages = this.buildMessages(internalHistory, maxSteps, step, pinnedUserGoal, lastToolError);
                     let currentText = "";
+                    this._currentAbortController = new AbortController();
                     const response = await Promise.race([
                         this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
                             currentText = text;
                             await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                        }),
+                        }, this._currentAbortController.signal),
                         new Promise((_, reject) => {
                             this._forceAbortReject = reject;
                         })
@@ -254,7 +259,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 catch (e) {
                     this._forceAbortReject = null;
-                    const isForceAbort = e.message === 'FORCE_ABORT';
+                    const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
                     const errorMsg = isForceAbort
                         ? '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.'
                         : (e.message || String(e));
@@ -1090,11 +1095,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         /**
          * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
          */
-        async generateCompletion(messages, maxTokens, stream = false, onUpdate) {
+        async generateCompletion(messages, maxTokens, stream = false, onUpdate, signal) {
             console.log("[KaizAgent] Calling ST generateCompletion...");
             const ctx = SillyTavern.getContext();
             const settings = ctx.extensionSettings['kaiz_agent'] || {};
             const abort = new AbortController();
+            const effectiveSignal = signal || abort.signal;
             // 1. Nếu bật tính năng Custom Endpoint, ta gọi trực tiếp (bypass ST)
             if (settings.useCustomEndpoint && settings.customUrl) {
                 console.log("[KaizAgent] Using Custom Endpoint:", settings.customUrl);
@@ -1119,7 +1125,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         method: 'POST',
                         headers,
                         body: JSON.stringify(payload),
-                        signal: abort.signal
+                        signal: effectiveSignal
                     });
                     if (!res.ok) {
                         const errText = await res.text().catch(() => res.statusText);
@@ -1194,7 +1200,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (profileId && service && typeof service.sendRequest === 'function') {
                     asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
                         stream: stream,
-                        signal: abort.signal,
+                        signal: effectiveSignal,
                         extractData: false,
                         includePreset: true
                     });
