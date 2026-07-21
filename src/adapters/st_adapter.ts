@@ -237,7 +237,7 @@ export class SillyTavernAdapter {
 
         let html = `
         <div id="kaiz-chat-preview-modal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; display:flex; justify-content:center; align-items:center;">
-            <div style="background:#222; border-radius:10px; width:80%; max-width:800px; height:80%; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
+            <div style="background:#222; border-radius:10px; width:100%; max-width:90vw; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
                 <div style="padding:15px; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#333;">
                     <h3 style="margin:0; color:#fff; font-size:18px;"><i class="fa-solid fa-list-ol"></i> Quick Chat Preview (Total: ${chat.length})</h3>
                     <i id="kaiz-chat-preview-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; color:#ccc; font-size:20px;"></i>
