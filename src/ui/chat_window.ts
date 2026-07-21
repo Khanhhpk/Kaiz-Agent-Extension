@@ -191,6 +191,39 @@ export class ChatWindowUI {
             toggleSidebar();
         });
 
+        // Cài đặt Event Delegation cho danh sách chat (chỉ gán 1 lần duy nhất)
+        chatList.on('click', '.kaiz-chat-item', function(this: HTMLElement, e: any) {
+            if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
+            const id = parseInt($(this).attr('data-id') || '0', 10);
+            if (id) {
+                stateManager.switchChat(id);
+                chatTitle.text($(this).find('span').text());
+                toggleSidebar();
+            }
+        });
+
+        chatList.on('click', '.kaiz-chat-delete', async function(this: HTMLElement, e: any) {
+            e.stopPropagation();
+            const id = parseInt($(this).attr('data-id') || '0', 10);
+            if (id) {
+                if (confirm('Delete this chat?')) {
+                    await stateManager.deleteChat(id);
+                }
+            }
+        });
+
+        chatList.on('click', '.kaiz-chat-edit', async function(this: HTMLElement, e: any) {
+            e.stopPropagation();
+            const id = parseInt($(this).attr('data-id') || '0', 10);
+            const currentName = $(this).attr('data-name') || '';
+            if (id) {
+                const newName = prompt('Enter new chat name:', currentName);
+                if (newName !== null && newName.trim() !== '') {
+                    await stateManager.updateChatName(id, newName.trim());
+                }
+            }
+        });
+
         // Hàm render Chat List
         function renderChatList(chats: any[]) {
             chatList.empty();
@@ -213,41 +246,6 @@ export class ChatWindowUI {
                     </div>
                 `);
             }
-
-            // Click vào chat item
-            $('.kaiz-chat-item').on('click', function(this: HTMLElement, e: any) {
-                if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
-                const id = parseInt($(this).attr('data-id') || '0', 10);
-                if (id) {
-                    stateManager.switchChat(id);
-                    chatTitle.text($(this).find('span').text());
-                    toggleSidebar();
-                }
-            });
-
-            // Click xóa
-            $('.kaiz-chat-delete').on('click', async function(this: HTMLElement, e: any) {
-                e.stopPropagation();
-                const id = parseInt($(this).attr('data-id') || '0', 10);
-                if (id) {
-                    if (confirm('Delete this chat?')) {
-                        await stateManager.deleteChat(id);
-                    }
-                }
-            });
-
-            // Click sửa
-            $('.kaiz-chat-edit').on('click', async function(this: HTMLElement, e: any) {
-                e.stopPropagation();
-                const id = parseInt($(this).attr('data-id') || '0', 10);
-                const currentName = $(this).attr('data-name') || '';
-                if (id) {
-                    const newName = prompt('Enter new chat name:', currentName);
-                    if (newName !== null && newName.trim() !== '') {
-                        await stateManager.updateChatName(id, newName.trim());
-                    }
-                }
-            });
         }
 
         // Hàm tiện ích phân tích và render Tool Calls thành HTML
@@ -288,7 +286,7 @@ export class ChatWindowUI {
                 });
             }
 
-            mermaidBlocks.each(function() {
+            mermaidBlocks.each(function(this: any) {
                 const block = $(this);
                 if (block.hasClass('mermaid-rendered')) return;
                 
@@ -576,7 +574,7 @@ export class ChatWindowUI {
             });
             
             // Dọn dẹp tất cả các hộp thoại safe mode bị treo (do abort hoặc lỗi)
-            $('.kaiz-safe-mode-pending').each(function() {
+            $('.kaiz-safe-mode-pending').each(function(this: any) {
                 $(this).html(`<div style="color: #95a5a6; font-style: italic;"><i class="fa-solid fa-ban"></i> Đã hủy xác nhận công cụ (Tiến trình bị ngắt).</div>`);
                 $(this).removeClass('kaiz-safe-mode-pending');
             });
