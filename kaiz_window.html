@@ -29,7 +29,15 @@
         <!-- Tin nhắn sẽ được nhúng vào đây -->
     </div>
     
-    <div class="kaiz-chat-input-area">
+    <div class="kaiz-chat-input-area" style="position: relative;">
+        <!-- Quick Prompts Menu -->
+        <div id="kaiz-quick-prompt-menu" class="kaiz-quick-prompt-menu" style="display: none; position: absolute; bottom: 100%; left: 16px; margin-bottom: 10px; background: rgba(20, 25, 35, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; width: 250px; max-height: 200px; overflow-y: auto; z-index: 10003; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+            <!-- Menu items will be injected here -->
+        </div>
+
+        <button id="kaiz-quick-prompt-btn" class="kaiz-chat-send" style="background: rgba(255,255,255,0.1); color: #f1c40f;" title="Quick Prompts">
+            <i class="fa-solid fa-bolt"></i>
+        </button>
         <textarea id="kaiz-chat-input" class="kaiz-chat-input" placeholder="Nhập yêu cầu của bạn (Shift+Enter để xuống dòng)..." rows="1"></textarea>
         <button id="kaiz-chat-send" class="kaiz-chat-send">
             <i class="fa-solid fa-paper-plane"></i>

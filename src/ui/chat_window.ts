@@ -50,7 +50,59 @@ export class ChatWindowUI {
         });
         // ------------------------------------
 
+        // --- Quick Prompts Logic ---
+        const quickPromptBtn = $('#kaiz-quick-prompt-btn');
+        const quickPromptMenu = $('#kaiz-quick-prompt-menu');
         const input = $('#kaiz-chat-input');
+        
+        function populateQuickPrompts() {
+            quickPromptMenu.empty();
+            const ctx = (window as any).SillyTavern.getContext();
+            const settings = ctx.extensionSettings['kaiz_agent'] || {};
+            const prompts = settings.quickPrompts || [];
+            
+            if (prompts.length === 0) {
+                quickPromptMenu.append('<div style="padding: 10px; color: #888; text-align: center; font-size: 12px;">No quick prompts configured. Add them in Settings.</div>');
+                return;
+            }
+            
+            prompts.forEach((qp: any) => {
+                const $item = $(`
+                    <div class="kaiz-quick-prompt-item">
+                        <div class="kaiz-qp-item-icon">${qp.icon || '⚡'}</div>
+                        <div class="kaiz-qp-item-name" title="${qp.name}">${qp.name || 'Prompt'}</div>
+                    </div>
+                `);
+                $item.on('click', () => {
+                    const currentText = String(input.val() || '');
+                    // Nếu đã có text, nối thêm dòng mới, nếu không thì chèn thẳng
+                    const newText = currentText ? currentText + (currentText.endsWith('\n') ? '' : '\n') + qp.prompt : qp.prompt;
+                    input.val(newText).trigger('input');
+                    input.focus();
+                    quickPromptMenu.hide();
+                });
+                quickPromptMenu.append($item);
+            });
+        }
+        
+        quickPromptBtn.on('click', (e: any) => {
+            e.stopPropagation();
+            if (quickPromptMenu.is(':visible')) {
+                quickPromptMenu.hide();
+            } else {
+                populateQuickPrompts();
+                quickPromptMenu.css('display', 'flex'); // Flex to support column layout
+            }
+        });
+        
+        // Đóng menu khi click ra ngoài
+        $(document).on('click', (e: any) => {
+            if (!$(e.target).closest('#kaiz-quick-prompt-btn').length && !$(e.target).closest('#kaiz-quick-prompt-menu').length) {
+                quickPromptMenu.hide();
+            }
+        });
+        // ------------------------------------
+
         const sendBtn = $('#kaiz-chat-send');
         const history = $('#kaiz-chat-history');
         

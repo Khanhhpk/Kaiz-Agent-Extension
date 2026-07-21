@@ -50,7 +50,8 @@ jQuery(async () => {
             maxAgentLoops: 5,
             disabledTools: {},
             safeMode: false,
-            safeModeBlacklist: {}
+            safeModeBlacklist: {},
+            quickPrompts: []
         };
     } else {
         if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
@@ -61,6 +62,9 @@ jQuery(async () => {
         }
         if (!ctx.extensionSettings[EXT_NAME].safeModeBlacklist) {
             ctx.extensionSettings[EXT_NAME].safeModeBlacklist = {};
+        }
+        if (!ctx.extensionSettings[EXT_NAME].quickPrompts) {
+            ctx.extensionSettings[EXT_NAME].quickPrompts = [];
         }
     }
 

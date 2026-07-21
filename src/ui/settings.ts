@@ -133,6 +133,95 @@ export class SettingsUI {
         });
         // --- END SAFE MODE LOGIC ---
 
+        // --- QUICK PROMPTS LOGIC ---
+        const $quickPromptsList = $('#kaiz-quick-prompts-list');
+        const $addQuickPromptBtn = $('#kaiz-add-quick-prompt-btn');
+
+        function renderQuickPrompts() {
+            $quickPromptsList.empty();
+            const quickPrompts = settings.quickPrompts || [];
+            
+            if (quickPrompts.length === 0) {
+                $quickPromptsList.append('<div style="text-align:center; color:#888; font-size:12px; padding:10px;">No quick prompts added yet.</div>');
+                return;
+            }
+
+            quickPrompts.forEach((qp: any, index: number) => {
+                const $item = $(`
+                    <div class="kaiz-qp-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <input type="text" class="text_pole kaiz-qp-icon" data-index="${index}" value="${qp.icon || '⚡'}" placeholder="Icon" style="width: 40px; text-align: center;" title="Emoji or Icon">
+                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${qp.name || ''}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
+                            <div style="display: flex; gap: 5px;">
+                                <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
+                                <button class="menu_button interactable kaiz-qp-down" data-index="${index}" style="padding: 5px 10px;" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
+                                <button class="menu_button interactable kaiz-qp-del" data-index="${index}" style="padding: 5px 10px; color: #e74c3c;" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                        <div>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${qp.prompt || ''}</textarea>
+                        </div>
+                    </div>
+                `);
+                $quickPromptsList.append($item);
+            });
+
+            // Gắn sự kiện thay đổi
+            $('.kaiz-qp-icon, .kaiz-qp-name, .kaiz-qp-text').on('input', function(this: HTMLInputElement | HTMLTextAreaElement) {
+                const index = parseInt($(this).data('index'), 10);
+                if (settings.quickPrompts[index]) {
+                    if ($(this).hasClass('kaiz-qp-icon')) settings.quickPrompts[index].icon = $(this).val();
+                    if ($(this).hasClass('kaiz-qp-name')) settings.quickPrompts[index].name = $(this).val();
+                    if ($(this).hasClass('kaiz-qp-text')) settings.quickPrompts[index].prompt = $(this).val();
+                    ctx.saveSettingsDebounced();
+                }
+            });
+
+            $('.kaiz-qp-up').on('click', function(this: HTMLButtonElement) {
+                const index = parseInt($(this).data('index'), 10);
+                if (index > 0) {
+                    const temp = settings.quickPrompts[index - 1];
+                    settings.quickPrompts[index - 1] = settings.quickPrompts[index];
+                    settings.quickPrompts[index] = temp;
+                    ctx.saveSettingsDebounced();
+                    renderQuickPrompts();
+                }
+            });
+
+            $('.kaiz-qp-down').on('click', function(this: HTMLButtonElement) {
+                const index = parseInt($(this).data('index'), 10);
+                if (index < settings.quickPrompts.length - 1) {
+                    const temp = settings.quickPrompts[index + 1];
+                    settings.quickPrompts[index + 1] = settings.quickPrompts[index];
+                    settings.quickPrompts[index] = temp;
+                    ctx.saveSettingsDebounced();
+                    renderQuickPrompts();
+                }
+            });
+
+            $('.kaiz-qp-del').on('click', function(this: HTMLButtonElement) {
+                const index = parseInt($(this).data('index'), 10);
+                if (confirm('Delete this quick prompt?')) {
+                    settings.quickPrompts.splice(index, 1);
+                    ctx.saveSettingsDebounced();
+                    renderQuickPrompts();
+                }
+            });
+        }
+
+        renderQuickPrompts();
+
+        $addQuickPromptBtn.on('click', () => {
+            if (!settings.quickPrompts) settings.quickPrompts = [];
+            settings.quickPrompts.push({ icon: '⚡', name: 'New Prompt', prompt: '' });
+            ctx.saveSettingsDebounced();
+            renderQuickPrompts();
+            // Scroll to bottom
+            const container = $quickPromptsList.parent();
+            container.scrollTop(container[0].scrollHeight);
+        });
+        // --- END QUICK PROMPTS LOGIC ---
+
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
         
