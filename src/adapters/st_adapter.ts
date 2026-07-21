@@ -983,4 +983,112 @@ export class SillyTavernAdapter {
             return `[LỖI] Khi thực thi manageWorldbook: ${e.message}`;
         }
     }
+
+    /**
+     * Escape chuỗi cho Regex
+     */
+    private escapeRegExp(string: string) {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& nghĩa là toàn bộ chuỗi match
+    }
+
+    /**
+     * Tìm và thay thế nội dung trực tiếp trong chat
+     */
+    public async findAndReplace(query: string, replacement: string, isRegex: boolean = false): Promise<number> {
+        const ctx = SillyTavern.getContext();
+        if (!ctx.chat || !Array.isArray(ctx.chat)) return 0;
+        
+        let count = 0;
+        let regex: RegExp;
+        try {
+            regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+        } catch (e) {
+            console.error("[KaizAgent] Invalid regex:", e);
+            throw new Error(`Regex không hợp lệ: ${e}`);
+        }
+        
+        const $ = (window as any).$;
+
+        for (let i = 0; i < ctx.chat.length; i++) {
+            const m = ctx.chat[i];
+            if (m.mes && regex.test(m.mes)) {
+                // Reset lastIndex for exact replacement
+                regex.lastIndex = 0;
+                m.mes = m.mes.replace(regex, replacement);
+                count++;
+                
+                // Update DOM immediately to avoid full reload
+                if ($) {
+                    const mesBlock = $(`#chat_mes_${i} .mes_text`);
+                    if (mesBlock.length) {
+                        const w = window as any;
+                        if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
+                            const formatted = w.MessageFormatting.formatMessage(m);
+                            mesBlock.html(formatted);
+                        } else if (typeof ctx.reloadCurrentChat === 'function') {
+                            // Fallback to full reload if formatter not found
+                            ctx.reloadCurrentChat();
+                            break; 
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Cố gắng save chat nếu có thay đổi
+        if (count > 0 && typeof ctx.saveChat === 'function') {
+            await ctx.saveChat();
+        }
+        
+        return count;
+    }
+
+    /**
+     * Tìm và bôi sáng (highlight block) trên UI
+     */
+    public findAndHighlight(query: string, isRegex: boolean = false): number {
+        const ctx = SillyTavern.getContext();
+        if (!ctx.chat || !Array.isArray(ctx.chat)) return 0;
+        
+        let count = 0;
+        let regex: RegExp;
+        try {
+            regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+        } catch (e) {
+            throw new Error(`Regex không hợp lệ: ${e}`);
+        }
+        
+        const $ = (window as any).$;
+        if (!$) return 0;
+
+        // Xóa các highlight cũ
+        $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '');
+        
+        for (let i = 0; i < ctx.chat.length; i++) {
+            const m = ctx.chat[i];
+            regex.lastIndex = 0; // reset
+            if (m.mes && regex.test(m.mes)) {
+                count++;
+                const mesBlock = $(`#chat_mes_${i}`);
+                if (mesBlock.length) {
+                    mesBlock.addClass('kaiz-highlight-block');
+                    mesBlock.css({
+                        'box-shadow': '0 0 15px 5px rgba(255, 204, 0, 0.6)',
+                        'border': '1px solid rgba(255, 204, 0, 0.8)',
+                        'transition': 'all 0.5s ease'
+                    });
+                }
+            }
+        }
+        
+        // Tự động cuộn đến tin nhắn đầu tiên tìm thấy
+        if (count > 0) {
+            const firstMatch = $('.kaiz-highlight-block').first();
+            if (firstMatch.length) {
+                firstMatch[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+        
+        return count;
+    }
 }

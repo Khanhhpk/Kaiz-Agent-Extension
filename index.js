@@ -774,6 +774,66 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const manageChatTextTool = {
+        schema: {
+            name: 'manage_chat_text',
+            description: 'Tìm kiếm, bôi sáng (highlight) hoặc thay thế (replace) văn bản hàng loạt trong chính đoạn chat hiện tại của SillyTavern. Tool này tác động TRỰC TIẾP lên mảng chat của SillyTavern và giao diện hiển thị. Mẹo: Bạn có thể đọc lịch sử bằng get_chat_history trước để lấy chính xác câu văn cần sửa rồi truyền vào tool này.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        enum: ['find_and_highlight', 'find_and_replace'],
+                        description: 'Hành động cần thực hiện. find_and_highlight sẽ làm sáng rực khung chat chứa từ khóa. find_and_replace sẽ thay thế chữ trực tiếp.'
+                    },
+                    query: {
+                        type: 'string',
+                        description: 'Từ khóa hoặc câu văn cần tìm.'
+                    },
+                    replacement: {
+                        type: 'string',
+                        description: 'Chuỗi thay thế (chỉ dùng khi action = find_and_replace). Mặc định là chuỗi rỗng nếu không truyền.'
+                    },
+                    is_regex: {
+                        type: 'boolean',
+                        description: 'Set thành true nếu query là một biểu thức Regex. Mặc định là false (tìm chuỗi chính xác).'
+                    }
+                },
+                required: ['action', 'query']
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('chat')) {
+                throw new Error('Tính năng chat không tồn tại hoặc phiên bản SillyTavern không hỗ trợ.');
+            }
+        },
+        execute: async (args, context) => {
+            const action = args.action;
+            const query = args.query;
+            const replacement = args.replacement || '';
+            const isRegex = args.is_regex === true;
+            if (!query) {
+                return { content: 'Lỗi: Thiếu tham số query (từ khóa cần tìm).', isError: true };
+            }
+            try {
+                if (action === 'find_and_highlight') {
+                    const count = context.adapter.findAndHighlight(query, isRegex);
+                    return { content: `Thành công: Đã tìm thấy và bôi sáng ${count} tin nhắn chứa từ khóa "${query}".` };
+                }
+                else if (action === 'find_and_replace') {
+                    const count = await context.adapter.findAndReplace(query, replacement, isRegex);
+                    return { content: `Thành công: Đã tìm thấy và thay thế nội dung trong ${count} tin nhắn.` };
+                }
+                else {
+                    return { content: `Lỗi: Hành động "${action}" không được hỗ trợ.`, isError: true };
+                }
+            }
+            catch (e) {
+                return { content: `Lỗi khi thực thi: ${e.message}`, isError: true };
+            }
+        }
+    };
+
     const quickChatPreviewTool = {
         schema: {
             name: 'quick_chat_preview',
@@ -916,6 +976,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(openNewAgentChatTool);
         registry.registerTool(listAgentChatsTool);
         registry.registerTool(deleteAgentChatTool);
+        registry.registerTool(manageChatTextTool);
     }
 
     /**
@@ -1880,6 +1941,105 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 console.error('[KaizAgent] Lỗi khi manageWorldbook:', e);
                 return `[LỖI] Khi thực thi manageWorldbook: ${e.message}`;
             }
+        }
+        /**
+         * Escape chuỗi cho Regex
+         */
+        escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& nghĩa là toàn bộ chuỗi match
+        }
+        /**
+         * Tìm và thay thế nội dung trực tiếp trong chat
+         */
+        async findAndReplace(query, replacement, isRegex = false) {
+            const ctx = SillyTavern.getContext();
+            if (!ctx.chat || !Array.isArray(ctx.chat))
+                return 0;
+            let count = 0;
+            let regex;
+            try {
+                regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+            }
+            catch (e) {
+                console.error("[KaizAgent] Invalid regex:", e);
+                throw new Error(`Regex không hợp lệ: ${e}`);
+            }
+            const $ = window.$;
+            for (let i = 0; i < ctx.chat.length; i++) {
+                const m = ctx.chat[i];
+                if (m.mes && regex.test(m.mes)) {
+                    // Reset lastIndex for exact replacement
+                    regex.lastIndex = 0;
+                    m.mes = m.mes.replace(regex, replacement);
+                    count++;
+                    // Update DOM immediately to avoid full reload
+                    if ($) {
+                        const mesBlock = $(`#chat_mes_${i} .mes_text`);
+                        if (mesBlock.length) {
+                            const w = window;
+                            if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
+                                const formatted = w.MessageFormatting.formatMessage(m);
+                                mesBlock.html(formatted);
+                            }
+                            else if (typeof ctx.reloadCurrentChat === 'function') {
+                                // Fallback to full reload if formatter not found
+                                ctx.reloadCurrentChat();
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            // Cố gắng save chat nếu có thay đổi
+            if (count > 0 && typeof ctx.saveChat === 'function') {
+                await ctx.saveChat();
+            }
+            return count;
+        }
+        /**
+         * Tìm và bôi sáng (highlight block) trên UI
+         */
+        findAndHighlight(query, isRegex = false) {
+            const ctx = SillyTavern.getContext();
+            if (!ctx.chat || !Array.isArray(ctx.chat))
+                return 0;
+            let count = 0;
+            let regex;
+            try {
+                regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+            }
+            catch (e) {
+                throw new Error(`Regex không hợp lệ: ${e}`);
+            }
+            const $ = window.$;
+            if (!$)
+                return 0;
+            // Xóa các highlight cũ
+            $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '');
+            for (let i = 0; i < ctx.chat.length; i++) {
+                const m = ctx.chat[i];
+                regex.lastIndex = 0; // reset
+                if (m.mes && regex.test(m.mes)) {
+                    count++;
+                    const mesBlock = $(`#chat_mes_${i}`);
+                    if (mesBlock.length) {
+                        mesBlock.addClass('kaiz-highlight-block');
+                        mesBlock.css({
+                            'box-shadow': '0 0 15px 5px rgba(255, 204, 0, 0.6)',
+                            'border': '1px solid rgba(255, 204, 0, 0.8)',
+                            'transition': 'all 0.5s ease'
+                        });
+                    }
+                }
+            }
+            // Tự động cuộn đến tin nhắn đầu tiên tìm thấy
+            if (count > 0) {
+                const firstMatch = $('.kaiz-highlight-block').first();
+                if (firstMatch.length) {
+                    firstMatch[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+            return count;
         }
     }
 
