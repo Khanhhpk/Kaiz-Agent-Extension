@@ -280,18 +280,33 @@ export class SillyTavernAdapter {
     }
 
     /**
-     * Xóa một tin nhắn cụ thể dựa vào index
-     * @param index Vị trí của tin nhắn trong mảng chat (chatIndex)
+     * Xóa một hoặc nhiều tin nhắn cụ thể dựa vào index
+     * @param indices Mảng các vị trí tin nhắn trong mảng chat (chatIndex)
      */
-    public deleteMessageByIndex(index: number) {
+    public deleteMessagesByIndices(indices: number[]) {
         const ctx = SillyTavern.getContext();
-        if (typeof ctx.deleteMessage === 'function') {
-            // ST_API: deleteMessage(id, swipeDeletionIndex = undefined, askConfirmation = false)
-            // id ở đây thường chính là index của mảng chat
-            ctx.deleteMessage(index, undefined, false);
-        } else {
+        if (typeof ctx.deleteMessage !== 'function') {
             console.error('[KaizAgent] deleteMessage not available in ST Context.');
             throw new Error('API deleteMessage của ST không tồn tại.');
+        }
+
+        if (!ctx.chat || !Array.isArray(ctx.chat)) {
+            throw new Error('Không thể đọc mảng chat hiện tại.');
+        }
+
+        // Lọc và validate (loại bỏ index lỗi, giới hạn trong mảng chat)
+        const validIndices = indices.filter(i => Number.isInteger(i) && i >= 0 && i < ctx.chat.length);
+        if (validIndices.length === 0) {
+            throw new Error('Không có index nào hợp lệ nằm trong giới hạn chat.');
+        }
+
+        // Loại bỏ trùng lặp và sắp xếp giảm dần (descending) để tránh index shifting
+        const uniqueSortedIndices = Array.from(new Set(validIndices)).sort((a, b) => b - a);
+
+        // Gọi xoá từng tin một (do ST không có hàm xoá mảng)
+        for (const index of uniqueSortedIndices) {
+            // ST_API: deleteMessage(id, swipeDeletionIndex = undefined, askConfirmation = false)
+            ctx.deleteMessage(index, undefined, false);
         }
     }
 

@@ -444,16 +444,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const deleteMessageByIndexTool = {
         schema: {
             name: 'delete_message_by_index',
-            description: 'Xóa một tin nhắn cụ thể trong đoạn chat dựa trên chatIndex. Dùng khi bạn cần xóa chính xác một tin nhắn (không phải tin cuối cùng) mà người dùng chỉ định.',
+            description: 'Xóa một hoặc nhiều tin nhắn cụ thể dựa trên chatIndex. LƯU Ý QUAN TRỌNG: TRƯỚC KHI GỌI CÔNG CỤ NÀY, BẠN PHẢI sử dụng công cụ get_chat_history để tìm xem nội dung tin nhắn nằm ở chatIndex số mấy. Tuyệt đối KHÔNG tự phỏng đoán chatIndex.',
             parameters: {
                 type: 'object',
                 properties: {
-                    index: {
-                        type: 'number',
-                        description: 'Chỉ số (chatIndex) của tin nhắn cần xóa. Bạn có thể tìm thấy index này bằng công cụ get_chat_history.'
+                    indices: {
+                        type: 'array',
+                        items: { type: 'number' },
+                        description: 'Mảng các chỉ số (chatIndex) của những tin nhắn cần xóa. Ví dụ: [12, 14].'
                     }
                 },
-                required: ['index']
+                required: ['indices']
             }
         },
         validate: (context) => {
@@ -463,27 +464,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
         execute: async (args, context) => {
             if (!context || !context.adapter) {
-                return {
-                    content: 'Error: Adapter not provided in context.',
-                    isError: true
-                };
+                return { content: 'Error: Adapter not provided in context.', isError: true };
             }
-            const index = args.index;
-            if (typeof index !== 'number') {
+            const indices = args.indices;
+            if (!Array.isArray(indices) || !indices.every(i => typeof i === 'number' && Number.isInteger(i))) {
                 return {
-                    content: 'Error: index must be a number.',
+                    content: 'Error: indices must be an array of integers.',
                     isError: true
                 };
             }
             try {
-                context.adapter.deleteMessageByIndex(index);
+                // Sửa tên phương thức được gọi sang phương thức mới hỗ trợ mảng
+                context.adapter.deleteMessagesByIndices(indices);
                 return {
-                    content: `Message at index ${index} deleted successfully.`
+                    content: `Messages at indices [${indices.join(', ')}] deleted successfully.`
                 };
             }
             catch (e) {
                 return {
-                    content: `Error deleting message: ${e.message}`,
+                    content: `Error deleting messages: ${e.message}`,
                     isError: true
                 };
             }
@@ -1043,19 +1042,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
         }
         /**
-         * Xóa một tin nhắn cụ thể dựa vào index
-         * @param index Vị trí của tin nhắn trong mảng chat (chatIndex)
+         * Xóa một hoặc nhiều tin nhắn cụ thể dựa vào index
+         * @param indices Mảng các vị trí tin nhắn trong mảng chat (chatIndex)
          */
-        deleteMessageByIndex(index) {
+        deleteMessagesByIndices(indices) {
             const ctx = SillyTavern.getContext();
-            if (typeof ctx.deleteMessage === 'function') {
-                // ST_API: deleteMessage(id, swipeDeletionIndex = undefined, askConfirmation = false)
-                // id ở đây thường chính là index của mảng chat
-                ctx.deleteMessage(index, undefined, false);
-            }
-            else {
+            if (typeof ctx.deleteMessage !== 'function') {
                 console.error('[KaizAgent] deleteMessage not available in ST Context.');
                 throw new Error('API deleteMessage của ST không tồn tại.');
+            }
+            if (!ctx.chat || !Array.isArray(ctx.chat)) {
+                throw new Error('Không thể đọc mảng chat hiện tại.');
+            }
+            // Lọc và validate (loại bỏ index lỗi, giới hạn trong mảng chat)
+            const validIndices = indices.filter(i => Number.isInteger(i) && i >= 0 && i < ctx.chat.length);
+            if (validIndices.length === 0) {
+                throw new Error('Không có index nào hợp lệ nằm trong giới hạn chat.');
+            }
+            // Loại bỏ trùng lặp và sắp xếp giảm dần (descending) để tránh index shifting
+            const uniqueSortedIndices = Array.from(new Set(validIndices)).sort((a, b) => b - a);
+            // Gọi xoá từng tin một (do ST không có hàm xoá mảng)
+            for (const index of uniqueSortedIndices) {
+                // ST_API: deleteMessage(id, swipeDeletionIndex = undefined, askConfirmation = false)
+                ctx.deleteMessage(index, undefined, false);
             }
         }
         /**

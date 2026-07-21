@@ -4,16 +4,17 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const deleteMessageByIndexTool: ITool = {
     schema: {
         name: 'delete_message_by_index',
-        description: 'Xóa một tin nhắn cụ thể trong đoạn chat dựa trên chatIndex. Dùng khi bạn cần xóa chính xác một tin nhắn (không phải tin cuối cùng) mà người dùng chỉ định.',
+        description: 'Xóa một hoặc nhiều tin nhắn cụ thể dựa trên chatIndex. LƯU Ý QUAN TRỌNG: TRƯỚC KHI GỌI CÔNG CỤ NÀY, BẠN PHẢI sử dụng công cụ get_chat_history để tìm xem nội dung tin nhắn nằm ở chatIndex số mấy. Tuyệt đối KHÔNG tự phỏng đoán chatIndex.',
         parameters: {
             type: 'object',
             properties: {
-                index: {
-                    type: 'number',
-                    description: 'Chỉ số (chatIndex) của tin nhắn cần xóa. Bạn có thể tìm thấy index này bằng công cụ get_chat_history.'
+                indices: {
+                    type: 'array',
+                    items: { type: 'number' },
+                    description: 'Mảng các chỉ số (chatIndex) của những tin nhắn cần xóa. Ví dụ: [12, 14].'
                 }
             },
-            required: ['index']
+            required: ['indices']
         }
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
@@ -23,28 +24,26 @@ export const deleteMessageByIndexTool: ITool = {
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         if (!context || !context.adapter) {
-            return {
-                content: 'Error: Adapter not provided in context.',
-                isError: true
-            };
+            return { content: 'Error: Adapter not provided in context.', isError: true };
         }
 
-        const index = args.index;
-        if (typeof index !== 'number') {
+        const indices = args.indices;
+        if (!Array.isArray(indices) || !indices.every(i => typeof i === 'number' && Number.isInteger(i))) {
             return {
-                content: 'Error: index must be a number.',
+                content: 'Error: indices must be an array of integers.',
                 isError: true
             };
         }
 
         try {
-            context.adapter.deleteMessageByIndex(index);
+            // Sửa tên phương thức được gọi sang phương thức mới hỗ trợ mảng
+            (context.adapter as any).deleteMessagesByIndices(indices);
             return {
-                content: `Message at index ${index} deleted successfully.`
+                content: `Messages at indices [${indices.join(', ')}] deleted successfully.`
             };
         } catch (e: any) {
              return {
-                 content: `Error deleting message: ${e.message}`,
+                 content: `Error deleting messages: ${e.message}`,
                  isError: true
              }
         }
