@@ -77,8 +77,8 @@ export const searchGoogleTool: ITool = {
             });
 
             if (results.length === 0) {
-                 console.log("[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo...");
-                 const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+                 console.log("[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo Lite...");
+                 const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
                  let ddgHtml = "";
                  try {
                      const ddgRes = await fetch(ddgUrl);
@@ -93,30 +93,24 @@ export const searchGoogleTool: ITool = {
 
                  if (ddgHtml) {
                      const ddgDoc = parser.parseFromString(ddgHtml, "text/html");
-                     // Dùng CSS selector rộng hơn để bao phủ nhiều class của DDG
-                     const ddgResults = ddgDoc.querySelectorAll('.result');
                      
-                     ddgResults.forEach(res => {
-                         const titleEl = res.querySelector('.result__title a');
-                         const snippetEl = res.querySelector('.result__snippet');
-                         const urlEl = res.querySelector('.result__url') || titleEl; // Fallback lấy href từ title nếu ko có url
-                         
-                         if (titleEl && snippetEl && urlEl) {
-                             let link = urlEl.getAttribute('href') || '';
-                             if (link.includes('uddg=')) {
-                                 const match = link.match(/uddg=([^&]+)/);
-                                 if (match) link = decodeURIComponent(match[1]);
-                             } else if (link.startsWith('//')) {
-                                 link = 'https:' + link;
-                             }
-                             
+                     // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
+                     const linkElements = ddgDoc.querySelectorAll('a.result-link');
+                     const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');
+                     
+                     for(let i = 0; i < linkElements.length; i++) {
+                         const aEl = linkElements[i];
+                         const snippetEl = snippetElements[i];
+                         if (aEl) {
+                             let link = aEl.getAttribute('href') || '';
+                             if (link.startsWith('//')) link = 'https:' + link;
                              results.push({
-                                 title: (titleEl as HTMLElement).innerText.trim(),
+                                 title: (aEl as HTMLElement).innerText.trim(),
                                  url: link,
-                                 snippet: (snippetEl as HTMLElement).innerText.trim()
+                                 snippet: snippetEl ? (snippetEl as HTMLElement).innerText.trim() : ""
                              });
                          }
-                     });
+                     }
                  }
                  
                  if (results.length === 0) {
