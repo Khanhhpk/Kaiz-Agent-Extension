@@ -154,25 +154,32 @@ export class SettingsUI {
                 iconsHtml += `<div class="kaiz-icon-picker-item interactable" data-icon="${iconName}" title="${iconName}"><i data-lucide="${iconName}"></i></div>`;
             });
             $('body').append(`
-                <div id="kaiz-icon-picker" style="display:none; position:fixed; background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:10px; width:300px; z-index:99999; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+                <div id="kaiz-icon-picker" style="display:none; position:fixed; background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:10px; width:300px; box-sizing:border-box; z-index:99999; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
                     <div style="font-weight:bold; margin-bottom:10px; font-size:12px; color:#888; display:flex; justify-content:space-between;">
                         <span>Select Icon</span>
                         <i class="fa-solid fa-xmark interactable" id="kaiz-close-icon-picker" style="cursor:pointer;"></i>
                     </div>
-                    <div style="display:grid; grid-template-columns:repeat(8, 1fr); gap:5px; max-height:200px; overflow-y:auto;" class="kaiz-icon-grid">
+                    <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; max-height:200px; overflow-y:auto; overflow-x:hidden;" class="kaiz-icon-grid">
                         ${iconsHtml}
                     </div>
                 </div>
             `);
 
+            // Ngăn click làm đóng menu extensions của ST
+            $('#kaiz-icon-picker').on('click', (e) => {
+                e.stopPropagation();
+            });
+
             // Sự kiện đóng picker
-            $('#kaiz-close-icon-picker').on('click', () => {
+            $('#kaiz-close-icon-picker').on('click', (e) => {
+                e.stopPropagation();
                 $('#kaiz-icon-picker').hide();
                 currentPickerIndex = null;
             });
 
             // Sự kiện chọn icon trong picker
-            $('.kaiz-icon-picker-item').on('click', function(this: HTMLElement) {
+            $('.kaiz-icon-picker-item').on('click', function(this: HTMLElement, e) {
+                e.stopPropagation();
                 const iconName = $(this).data('icon');
                 if (currentPickerIndex !== null && settings.quickPrompts[currentPickerIndex]) {
                     settings.quickPrompts[currentPickerIndex].icon = iconName;
@@ -244,6 +251,7 @@ export class SettingsUI {
 
             // Mở Picker
             $('.kaiz-qp-icon-btn').on('click', function(this: HTMLButtonElement, e: any) {
+                e.stopPropagation();
                 const index = parseInt($(this).data('index'), 10);
                 currentPickerIndex = index;
                 const offset = $(this).offset();
