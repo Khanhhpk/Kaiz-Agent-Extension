@@ -160,7 +160,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // Kiểm tra cờ abort đầu mỗi vòng lặp
                 if (this._aborted) {
                     if (this._forceAborted) {
-                        throw new Error('FORCE_ABORT');
+                        // Emit error event thay vì throw để tránh unhandled exception
+                        await onEvent({ type: 'error', text: '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.' });
+                        break;
                     }
                     const msg = 'Agent đã bị người dùng dừng lại (Soft Abort). Người dùng muốn dừng tiến trình hiện tại. Hãy chờ chỉ thị tiếp theo.';
                     await onEvent({ type: 'error', text: msg });
@@ -174,6 +176,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     this._currentAbortController = new AbortController();
                     const response = await Promise.race([
                         this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
+                            // Guard: không cập nhật UI nếu đã bị force abort
+                            if (this._forceAborted)
+                                return;
                             currentText = text;
                             await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
                         }, this._currentAbortController.signal),
@@ -182,6 +187,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         })
                     ]);
                     this._forceAbortReject = null;
+                    this._currentAbortController = null;
                     await onEvent({ type: 'think_end', data: response.reasoning });
                     const text = response.text;
                     internalHistory.push({ role: 'assistant', content: text });
@@ -259,6 +265,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 catch (e) {
                     this._forceAbortReject = null;
+                    this._currentAbortController = null;
                     const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
                     const errorMsg = isForceAbort
                         ? '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.'
@@ -3289,8 +3296,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         });
                     }
                     else if (event.type === 'error') {
+                        // Ng\u1eaft stream render ngay l\u1eadp t\u1ee9c \u0111\u1ec3 kh\u00f4ng b\u1ecb \u0111\u00e8 l\u00ean th\u00f4ng b\u00e1o l\u1ed7i
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
                         if (agentContentBox) {
                             agentContentBox.html(`<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);
+                            agentContentBox = null; // Ng\u0103n b\u1ea5t k\u1ef3 callback n\u00e0o c\u00f2n s\u00f3t ghi \u0111\u00e8
                         }
                         else {
                             addMessageToDOM('agent', `<div style="color:#e74c3c;"><i class="fa-solid fa-triangle-exclamation"></i> Error: ${event.text}</div>`);

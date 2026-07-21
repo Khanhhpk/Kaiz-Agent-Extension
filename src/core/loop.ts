@@ -180,7 +180,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             // Kiểm tra cờ abort đầu mỗi vòng lặp
             if (this._aborted) {
                 if (this._forceAborted) {
-                    throw new Error('FORCE_ABORT');
+                    // Emit error event thay vì throw để tránh unhandled exception
+                    await onEvent({ type: 'error', text: '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.' });
+                    break;
                 }
                 const msg = 'Agent đã bị người dùng dừng lại (Soft Abort). Người dùng muốn dừng tiến trình hiện tại. Hãy chờ chỉ thị tiếp theo.';
                 await onEvent({ type: 'error', text: msg });
@@ -196,6 +198,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 this._currentAbortController = new AbortController();
                 const response = await Promise.race([
                     this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
+                        // Guard: không cập nhật UI nếu đã bị force abort
+                        if (this._forceAborted) return;
                         currentText = text;
                         await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
                     }, this._currentAbortController.signal),
@@ -204,6 +208,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     })
                 ]);
                 this._forceAbortReject = null;
+                this._currentAbortController = null;
                 await onEvent({ type: 'think_end', data: response.reasoning });
 
                 const text = response.text;
@@ -295,6 +300,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
             } catch (e: any) {
                 this._forceAbortReject = null;
+                this._currentAbortController = null;
                 const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
                 const errorMsg = isForceAbort 
                     ? '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.'
