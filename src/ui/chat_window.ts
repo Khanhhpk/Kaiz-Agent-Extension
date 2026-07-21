@@ -569,7 +569,9 @@ export class ChatWindowUI {
             $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
             $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
 
-            sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
+            if (!sendBtn.hasClass('kaiz-force-aborted')) {
+                sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
+            }
             sendBtn.removeClass('kaiz-stop-mode');
             sendBtn.prop('disabled', false);
             input.focus();
@@ -582,17 +584,18 @@ export class ChatWindowUI {
             e.preventDefault();
 
             // Nhấn ngắn → gọi abort thường (chờ bước hiện tại xong)
-            // Giữ 1.5s → force abort (dừng ngay lập tức)
+            // Giữ 1s → force abort (dừng ngay lập tức)
             forceAbortTimer = setTimeout(() => {
                 forceAbortTimer = null;
+                sendBtn.addClass('kaiz-force-aborted');
                 loop.forceAbort();
                 // UI feedback
-                sendBtn.find('i').removeClass('fa-stop').addClass('fa-skull');
+                sendBtn.find('i').removeClass('fa-stop fa-paper-plane').addClass('fa-skull');
                 setTimeout(() => {
                     sendBtn.find('i').removeClass('fa-skull').addClass('fa-paper-plane');
-                    sendBtn.removeClass('kaiz-stop-mode');
+                    sendBtn.removeClass('kaiz-force-aborted');
                 }, 1500);
-            }, 1500);
+            }, 1000);
         });
 
         sendBtn.on('mouseup mouseleave touchend touchcancel', () => {

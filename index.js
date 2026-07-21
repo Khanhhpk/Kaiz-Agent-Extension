@@ -6,6 +6,7 @@
         toolRegistry;
         stateManager;
         _aborted = false;
+        _forceAborted = false;
         _forceAbortReject = null;
         constructor(adapter, toolRegistry, stateManager) {
             this.adapter = adapter;
@@ -23,6 +24,7 @@
          */
         forceAbort() {
             this._aborted = true;
+            this._forceAborted = true;
             if (this._forceAbortReject) {
                 this._forceAbortReject(new Error('FORCE_ABORT'));
                 this._forceAbortReject = null;
@@ -149,9 +151,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             let step = 0;
             let lastToolError = false;
             this._aborted = false;
+            this._forceAborted = false;
             while (step < maxSteps) {
                 // Kiểm tra cờ abort đầu mỗi vòng lặp
                 if (this._aborted) {
+                    if (this._forceAborted) {
+                        throw new Error('FORCE_ABORT');
+                    }
                     const msg = 'Agent đã bị người dùng dừng lại (Soft Abort). Người dùng muốn dừng tiến trình hiện tại. Hãy chờ chỉ thị tiếp theo.';
                     await onEvent({ type: 'error', text: msg });
                     break;
@@ -185,6 +191,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     let resultsFormatted = '';
                     let hasError = false;
                     for (let i = 0; i < toolCalls.length; i++) {
+                        if (this._forceAborted)
+                            throw new Error('FORCE_ABORT');
                         const call = toolCalls[i];
                         // --- SAFE MODE CHECK ---
                         const ctx = window.SillyTavern.getContext();
@@ -213,6 +221,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             }
                         }
                         // --- END SAFE MODE CHECK ---
+                        if (this._forceAborted)
+                            throw new Error('FORCE_ABORT');
                         await onEvent({ type: 'tool_call', data: call });
                         let result;
                         if (call.parseError) {
@@ -222,6 +232,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         else {
                             result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
                         }
+                        if (this._forceAborted)
+                            throw new Error('FORCE_ABORT');
                         let isToolError = false;
                         if (result.isError) {
                             hasError = true;
@@ -3286,7 +3298,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 });
                 $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
                 $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
-                sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
+                if (!sendBtn.hasClass('kaiz-force-aborted')) {
+                    sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
+                }
                 sendBtn.removeClass('kaiz-stop-mode');
                 sendBtn.prop('disabled', false);
                 input.focus();
@@ -3297,17 +3311,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     return;
                 e.preventDefault();
                 // Nhấn ngắn → gọi abort thường (chờ bước hiện tại xong)
-                // Giữ 1.5s → force abort (dừng ngay lập tức)
+                // Giữ 1s → force abort (dừng ngay lập tức)
                 forceAbortTimer = setTimeout(() => {
                     forceAbortTimer = null;
+                    sendBtn.addClass('kaiz-force-aborted');
                     loop.forceAbort();
                     // UI feedback
-                    sendBtn.find('i').removeClass('fa-stop').addClass('fa-skull');
+                    sendBtn.find('i').removeClass('fa-stop fa-paper-plane').addClass('fa-skull');
                     setTimeout(() => {
                         sendBtn.find('i').removeClass('fa-skull').addClass('fa-paper-plane');
-                        sendBtn.removeClass('kaiz-stop-mode');
+                        sendBtn.removeClass('kaiz-force-aborted');
                     }, 1500);
-                }, 1500);
+                }, 1000);
             });
             sendBtn.on('mouseup mouseleave touchend touchcancel', () => {
                 if (forceAbortTimer) {

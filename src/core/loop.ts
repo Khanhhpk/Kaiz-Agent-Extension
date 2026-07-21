@@ -11,6 +11,7 @@ export interface AgentEvent {
 
 export class AgentLoop {
     private _aborted = false;
+    private _forceAborted = false;
     private _forceAbortReject: ((reason: any) => void) | null = null;
     
     constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry, private stateManager: StateManager) {}
@@ -27,6 +28,7 @@ export class AgentLoop {
      */
     public forceAbort(): void {
         this._aborted = true;
+        this._forceAborted = true;
         if (this._forceAbortReject) {
             this._forceAbortReject(new Error('FORCE_ABORT'));
             this._forceAbortReject = null;
@@ -168,10 +170,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         let step = 0;
         let lastToolError = false;
         this._aborted = false;
+        this._forceAborted = false;
 
         while (step < maxSteps) {
             // Kiểm tra cờ abort đầu mỗi vòng lặp
             if (this._aborted) {
+                if (this._forceAborted) {
+                    throw new Error('FORCE_ABORT');
+                }
                 const msg = 'Agent đã bị người dùng dừng lại (Soft Abort). Người dùng muốn dừng tiến trình hiện tại. Hãy chờ chỉ thị tiếp theo.';
                 await onEvent({ type: 'error', text: msg });
                 break;
@@ -215,6 +221,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 let hasError = false;
 
                 for (let i = 0; i < toolCalls.length; i++) {
+                    if (this._forceAborted) throw new Error('FORCE_ABORT');
                     const call = toolCalls[i];
                     
                     // --- SAFE MODE CHECK ---
@@ -246,6 +253,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     // --- END SAFE MODE CHECK ---
 
+                    if (this._forceAborted) throw new Error('FORCE_ABORT');
                     await onEvent({ type: 'tool_call', data: call });
 
                     let result;
@@ -255,6 +263,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     } else {
                         result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
                     }
+                    if (this._forceAborted) throw new Error('FORCE_ABORT');
                     let isToolError = false;
                     if (result.isError) {
                         hasError = true;
