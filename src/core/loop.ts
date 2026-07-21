@@ -172,7 +172,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         while (step < maxSteps) {
             // Kiểm tra cờ abort đầu mỗi vòng lặp
             if (this._aborted) {
-                await onEvent({ type: 'error', text: 'Agent đã bị người dùng hủy bỏ.' });
+                const msg = 'Agent đã bị người dùng dừng lại (Soft Abort). Người dùng muốn dừng tiến trình hiện tại. Hãy chờ chỉ thị tiếp theo.';
+                await onEvent({ type: 'error', text: msg });
                 break;
             }
             step++;
@@ -282,7 +283,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 this._forceAbortReject = null;
                 const isForceAbort = e.message === 'FORCE_ABORT';
                 const errorMsg = isForceAbort 
-                    ? '⚠️ Agent đã bị cưỡng chế dừng bởi người dùng (Force Abort).'
+                    ? '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.'
                     : (e.message || String(e));
                 console.error("[AgentLoop] Error during completion:", e);
                 await onEvent({ type: 'error', text: errorMsg });
