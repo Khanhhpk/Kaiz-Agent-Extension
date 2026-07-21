@@ -3283,7 +3283,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         const resolveFn = event.data.resolve;
                         const confirmId = Date.now() + Math.floor(Math.random() * 1000);
                         const html = `
-                        <div style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
+                        <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
                             <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
                             <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${call.name}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
                             <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -3296,6 +3296,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         $(`#kaiz-allow-${confirmId}`).on('click', () => {
                             if (!loop.isRunning)
                                 return;
+                            $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
                             $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${call.name}</div>`);
                             btnIcon.addClass('kaiz-icon-spin');
                             btnFloat.removeClass('kaiz-btn-blink');
@@ -3304,6 +3305,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         $(`#kaiz-deny-${confirmId}`).on('click', () => {
                             if (!loop.isRunning)
                                 return;
+                            $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
                             $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${call.name}</div>`);
                             btnIcon.removeClass('kaiz-icon-spin');
                             btnFloat.removeClass('kaiz-btn-blink');
@@ -3327,6 +3329,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         lastLogSent = JSON.stringify(event.data.messages, null, 2);
                         lastLogRecv = event.data.responseText;
                     }
+                });
+                // Dọn dẹp tất cả các hộp thoại safe mode bị treo (do abort hoặc lỗi)
+                $('.kaiz-safe-mode-pending').each(function () {
+                    $(this).html(`<div style="color: #95a5a6; font-style: italic;"><i class="fa-solid fa-ban"></i> Đã hủy xác nhận công cụ (Tiến trình bị ngắt).</div>`);
+                    $(this).removeClass('kaiz-safe-mode-pending');
                 });
                 $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
                 $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
