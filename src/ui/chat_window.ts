@@ -67,9 +67,10 @@ export class ChatWindowUI {
             }
             
             prompts.forEach((qp: any) => {
+                const iconName = qp.icon || 'zap';
                 const $item = $(`
                     <div class="kaiz-quick-prompt-item">
-                        <div class="kaiz-qp-item-icon">${qp.icon || '⚡'}</div>
+                        <div class="kaiz-qp-item-icon" style="display: flex; justify-content: center; width: 20px;"><i data-lucide="${iconName}"></i></div>
                         <div class="kaiz-qp-item-name" title="${qp.name}">${qp.name || 'Prompt'}</div>
                     </div>
                 `);
@@ -83,6 +84,15 @@ export class ChatWindowUI {
                 });
                 quickPromptMenu.append($item);
             });
+            
+            // Yêu cầu Lucide vẽ SVG
+            if ((window as any).lucide) {
+                (window as any).lucide.createIcons();
+            } else {
+                setTimeout(() => {
+                    if ((window as any).lucide) (window as any).lucide.createIcons();
+                }, 100);
+            }
         }
         
         quickPromptBtn.on('click', (e: any) => {

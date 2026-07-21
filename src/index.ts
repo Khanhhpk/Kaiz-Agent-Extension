@@ -76,6 +76,13 @@ jQuery(async () => {
             .attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
     }
 
+    // Nạp thư viện Lucide Icon
+    if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !window.hasOwnProperty('lucide')) {
+        $('<script>')
+            .appendTo('head')
+            .attr({ src: 'https://unpkg.com/lucide@latest' });
+    }
+
     // Khởi tạo Core
     const adapter = new SillyTavernAdapter();
     const registry = new ToolRegistry();

@@ -137,6 +137,13 @@ export class SettingsUI {
         const $quickPromptsList = $('#kaiz-quick-prompts-list');
         const $addQuickPromptBtn = $('#kaiz-add-quick-prompt-btn');
 
+        const lucideIconsList = [
+            'zap', 'sparkles', 'wand-2', 'message-square', 'message-circle', 'book-open', 'scroll-text', 
+            'flame', 'moon', 'sun', 'star', 'sword', 'shield', 'feather', 'wind', 'droplets', 
+            'leaf', 'gem', 'crown', 'ghost', 'skull', 'heart', 'coffee', 'compass', 'map', 
+            'eye', 'camera', 'music', 'play', 'terminal', 'code', 'cpu', 'fingerprint'
+        ];
+
         function renderQuickPrompts() {
             $quickPromptsList.empty();
             const quickPrompts = settings.quickPrompts || [];
@@ -147,10 +154,31 @@ export class SettingsUI {
             }
 
             quickPrompts.forEach((qp: any, index: number) => {
+                const currentIcon = qp.icon || 'zap';
+                
+                let iconOptions = '';
+                lucideIconsList.forEach(iconName => {
+                    const selected = currentIcon === iconName ? 'selected' : '';
+                    iconOptions += `<option value="${iconName}" ${selected}>${iconName}</option>`;
+                });
+                
+                // Tránh lỗi khi render lần đầu nếu chưa có icon cũ trong list
+                if (!lucideIconsList.includes(currentIcon) && currentIcon !== '⚡') {
+                     iconOptions += `<option value="${currentIcon}" selected>${currentIcon}</option>`;
+                } else if (currentIcon === '⚡') { // Migrate từ icon text sang lucide
+                     iconOptions += `<option value="zap" selected>zap</option>`;
+                     qp.icon = 'zap';
+                }
+
                 const $item = $(`
                     <div class="kaiz-qp-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="text" class="text_pole kaiz-qp-icon" data-index="${index}" value="${qp.icon || '⚡'}" placeholder="Icon" style="width: 40px; text-align: center;" title="Emoji or Icon">
+                            <div class="kaiz-qp-icon-preview" style="width: 24px; display: flex; justify-content: center; color: #fff;">
+                                <i data-lucide="${qp.icon}"></i>
+                            </div>
+                            <select class="text_pole kaiz-qp-icon" data-index="${index}" style="width: 120px; cursor: pointer;" title="Select Icon">
+                                ${iconOptions}
+                            </select>
                             <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${qp.name || ''}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
                             <div style="display: flex; gap: 5px;">
                                 <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
@@ -166,11 +194,24 @@ export class SettingsUI {
                 $quickPromptsList.append($item);
             });
 
+            // Yêu cầu thư viện Lucide vẽ lại icon SVG
+            if ((window as any).lucide) {
+                (window as any).lucide.createIcons();
+            } else {
+                // Nếu thư viện chưa tải xong, thử lại sau 500ms
+                setTimeout(() => {
+                    if ((window as any).lucide) (window as any).lucide.createIcons();
+                }, 500);
+            }
+
             // Gắn sự kiện thay đổi
-            $('.kaiz-qp-icon, .kaiz-qp-name, .kaiz-qp-text').on('input', function(this: HTMLInputElement | HTMLTextAreaElement) {
+            $('.kaiz-qp-icon, .kaiz-qp-name, .kaiz-qp-text').on('change input', function(this: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement) {
                 const index = parseInt($(this).data('index'), 10);
                 if (settings.quickPrompts[index]) {
-                    if ($(this).hasClass('kaiz-qp-icon')) settings.quickPrompts[index].icon = $(this).val();
+                    if ($(this).hasClass('kaiz-qp-icon')) {
+                        settings.quickPrompts[index].icon = $(this).val();
+                        renderQuickPrompts(); // Render lại để cập nhật preview SVG
+                    }
                     if ($(this).hasClass('kaiz-qp-name')) settings.quickPrompts[index].name = $(this).val();
                     if ($(this).hasClass('kaiz-qp-text')) settings.quickPrompts[index].prompt = $(this).val();
                     ctx.saveSettingsDebounced();
@@ -213,7 +254,7 @@ export class SettingsUI {
 
         $addQuickPromptBtn.on('click', () => {
             if (!settings.quickPrompts) settings.quickPrompts = [];
-            settings.quickPrompts.push({ icon: '⚡', name: 'New Prompt', prompt: '' });
+            settings.quickPrompts.push({ icon: 'zap', name: 'New Prompt', prompt: '' });
             ctx.saveSettingsDebounced();
             renderQuickPrompts();
             // Scroll to bottom

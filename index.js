@@ -2627,6 +2627,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             // --- QUICK PROMPTS LOGIC ---
             const $quickPromptsList = $('#kaiz-quick-prompts-list');
             const $addQuickPromptBtn = $('#kaiz-add-quick-prompt-btn');
+            const lucideIconsList = [
+                'zap', 'sparkles', 'wand-2', 'message-square', 'message-circle', 'book-open', 'scroll-text',
+                'flame', 'moon', 'sun', 'star', 'sword', 'shield', 'feather', 'wind', 'droplets',
+                'leaf', 'gem', 'crown', 'ghost', 'skull', 'heart', 'coffee', 'compass', 'map',
+                'eye', 'camera', 'music', 'play', 'terminal', 'code', 'cpu', 'fingerprint'
+            ];
             function renderQuickPrompts() {
                 $quickPromptsList.empty();
                 const quickPrompts = settings.quickPrompts || [];
@@ -2635,10 +2641,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return;
                 }
                 quickPrompts.forEach((qp, index) => {
+                    const currentIcon = qp.icon || 'zap';
+                    let iconOptions = '';
+                    lucideIconsList.forEach(iconName => {
+                        const selected = currentIcon === iconName ? 'selected' : '';
+                        iconOptions += `<option value="${iconName}" ${selected}>${iconName}</option>`;
+                    });
+                    // Tránh lỗi khi render lần đầu nếu chưa có icon cũ trong list
+                    if (!lucideIconsList.includes(currentIcon) && currentIcon !== '⚡') {
+                        iconOptions += `<option value="${currentIcon}" selected>${currentIcon}</option>`;
+                    }
+                    else if (currentIcon === '⚡') { // Migrate từ icon text sang lucide
+                        iconOptions += `<option value="zap" selected>zap</option>`;
+                        qp.icon = 'zap';
+                    }
                     const $item = $(`
                     <div class="kaiz-qp-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
                         <div style="display: flex; gap: 10px; align-items: center;">
-                            <input type="text" class="text_pole kaiz-qp-icon" data-index="${index}" value="${qp.icon || '⚡'}" placeholder="Icon" style="width: 40px; text-align: center;" title="Emoji or Icon">
+                            <div class="kaiz-qp-icon-preview" style="width: 24px; display: flex; justify-content: center; color: #fff;">
+                                <i data-lucide="${qp.icon}"></i>
+                            </div>
+                            <select class="text_pole kaiz-qp-icon" data-index="${index}" style="width: 120px; cursor: pointer;" title="Select Icon">
+                                ${iconOptions}
+                            </select>
                             <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${qp.name || ''}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
                             <div style="display: flex; gap: 5px;">
                                 <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
@@ -2653,12 +2678,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 `);
                     $quickPromptsList.append($item);
                 });
+                // Yêu cầu thư viện Lucide vẽ lại icon SVG
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+                else {
+                    // Nếu thư viện chưa tải xong, thử lại sau 500ms
+                    setTimeout(() => {
+                        if (window.lucide)
+                            window.lucide.createIcons();
+                    }, 500);
+                }
                 // Gắn sự kiện thay đổi
-                $('.kaiz-qp-icon, .kaiz-qp-name, .kaiz-qp-text').on('input', function () {
+                $('.kaiz-qp-icon, .kaiz-qp-name, .kaiz-qp-text').on('change input', function () {
                     const index = parseInt($(this).data('index'), 10);
                     if (settings.quickPrompts[index]) {
-                        if ($(this).hasClass('kaiz-qp-icon'))
+                        if ($(this).hasClass('kaiz-qp-icon')) {
                             settings.quickPrompts[index].icon = $(this).val();
+                            renderQuickPrompts(); // Render lại để cập nhật preview SVG
+                        }
                         if ($(this).hasClass('kaiz-qp-name'))
                             settings.quickPrompts[index].name = $(this).val();
                         if ($(this).hasClass('kaiz-qp-text'))
@@ -2699,7 +2737,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             $addQuickPromptBtn.on('click', () => {
                 if (!settings.quickPrompts)
                     settings.quickPrompts = [];
-                settings.quickPrompts.push({ icon: '⚡', name: 'New Prompt', prompt: '' });
+                settings.quickPrompts.push({ icon: 'zap', name: 'New Prompt', prompt: '' });
                 ctx.saveSettingsDebounced();
                 renderQuickPrompts();
                 // Scroll to bottom
@@ -2937,9 +2975,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     return;
                 }
                 prompts.forEach((qp) => {
+                    const iconName = qp.icon || 'zap';
                     const $item = $(`
                     <div class="kaiz-quick-prompt-item">
-                        <div class="kaiz-qp-item-icon">${qp.icon || '⚡'}</div>
+                        <div class="kaiz-qp-item-icon" style="display: flex; justify-content: center; width: 20px;"><i data-lucide="${iconName}"></i></div>
                         <div class="kaiz-qp-item-name" title="${qp.name}">${qp.name || 'Prompt'}</div>
                     </div>
                 `);
@@ -2953,6 +2992,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     });
                     quickPromptMenu.append($item);
                 });
+                // Yêu cầu Lucide vẽ SVG
+                if (window.lucide) {
+                    window.lucide.createIcons();
+                }
+                else {
+                    setTimeout(() => {
+                        if (window.lucide)
+                            window.lucide.createIcons();
+                    }, 100);
+                }
             }
             quickPromptBtn.on('click', (e) => {
                 e.stopPropagation();
@@ -3725,6 +3774,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             $('<link>')
                 .appendTo('head')
                 .attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
+        }
+        // Nạp thư viện Lucide Icon
+        if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !window.hasOwnProperty('lucide')) {
+            $('<script>')
+                .appendTo('head')
+                .attr({ src: 'https://unpkg.com/lucide@latest' });
         }
         // Khởi tạo Core
         const adapter = new SillyTavernAdapter();
