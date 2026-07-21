@@ -232,11 +232,12 @@ export class ChatWindowUI {
                 return;
             }
 
+            let htmlBuffer = '';
             for (const chat of chats) {
                 const isSelected = chat.id === stateManager.currentChatId;
                 const bg = isSelected ? 'rgba(0, 201, 255, 0.2)' : 'transparent';
                 
-                chatList.append(`
+                htmlBuffer += `
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
                         <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${chat.name}</span>
                         <div>
@@ -244,8 +245,9 @@ export class ChatWindowUI {
                             <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
                         </div>
                     </div>
-                `);
+                `;
             }
+            chatList.append(htmlBuffer);
         }
 
         // Hàm tiện ích phân tích và render Tool Calls thành HTML
@@ -383,9 +385,25 @@ export class ChatWindowUI {
                 addWelcomeMessage();
             }
             
+            // Dùng HTML buffer để tránh Reflow/Repaint liên tục
+            let htmlBuffer = '';
             for (const msg of messages) {
                 const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
-                addMessageToDOM(msg.role, formatted, false);
+                const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
+                
+                let avatar = msg.role === 'user' ? '<i class="fa-solid fa-user"></i>' : (msg.role === 'agent' ? '<i class="fa-solid fa-yin-yang"></i>' : '<i class="fa-solid fa-gear"></i>');
+                let extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
+                
+                htmlBuffer += `
+                    <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
+                        <div class="kaiz-msg-avatar">${avatar}</div>
+                        <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                    </div>
+                `;
+            }
+            if (htmlBuffer) {
+                history.append(htmlBuffer);
+                history.scrollTop(history[0].scrollHeight);
             }
         };
 
