@@ -278,6 +278,10 @@
     height: 18px;
 }
 
+#kaiz-icon-picker::backdrop {
+    background: transparent;
+}
+
 /* Quick Prompts */
 .kaiz-quick-prompt-menu::-webkit-scrollbar {
     width: 4px;

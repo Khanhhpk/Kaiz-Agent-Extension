@@ -154,7 +154,7 @@ export class SettingsUI {
                 iconsHtml += `<div class="kaiz-icon-picker-item interactable" data-icon="${iconName}" title="${iconName}"><i data-lucide="${iconName}"></i></div>`;
             });
             $('body').append(`
-                <div id="kaiz-icon-picker" style="display:none; position:fixed; background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:10px; width:300px; box-sizing:border-box; z-index:99999; box-shadow:0 10px 25px rgba(0,0,0,0.5);">
+                <dialog id="kaiz-icon-picker" style="background:#1e1e1e; border:1px solid #333; border-radius:8px; padding:10px; width:300px; box-sizing:border-box; box-shadow:0 10px 25px rgba(0,0,0,0.5); color:#fff; margin:0;">
                     <div style="font-weight:bold; margin-bottom:10px; font-size:12px; color:#888; display:flex; justify-content:space-between;">
                         <span>Select Icon</span>
                         <i class="fa-solid fa-xmark interactable" id="kaiz-close-icon-picker" style="cursor:pointer;"></i>
@@ -162,18 +162,23 @@ export class SettingsUI {
                     <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:6px; max-height:200px; overflow-y:auto; overflow-x:hidden;" class="kaiz-icon-grid">
                         ${iconsHtml}
                     </div>
-                </div>
+                </dialog>
             `);
 
-            // Ngăn click làm đóng menu extensions của ST
-            $('#kaiz-icon-picker').on('click', (e: any) => {
-                e.stopPropagation();
+            const pickerDialog = document.getElementById('kaiz-icon-picker') as HTMLDialogElement;
+
+            // Đóng dialog khi click ra ngoài backdrop (tuỳ chọn)
+            pickerDialog.addEventListener('click', (e) => {
+                if (e.target === pickerDialog) {
+                    pickerDialog.close();
+                    currentPickerIndex = null;
+                }
             });
 
             // Sự kiện đóng picker
             $('#kaiz-close-icon-picker').on('click', (e: any) => {
                 e.stopPropagation();
-                $('#kaiz-icon-picker').hide();
+                pickerDialog.close();
                 currentPickerIndex = null;
             });
 
@@ -186,7 +191,7 @@ export class SettingsUI {
                     ctx.saveSettingsDebounced();
                     renderQuickPrompts();
                 }
-                $('#kaiz-icon-picker').hide();
+                pickerDialog.close();
                 currentPickerIndex = null;
             });
         }
@@ -255,12 +260,13 @@ export class SettingsUI {
                 const index = parseInt($(this).data('index'), 10);
                 currentPickerIndex = index;
                 const offset = $(this).offset();
-                if (offset) {
+                const pickerDialog = document.getElementById('kaiz-icon-picker') as HTMLDialogElement;
+                if (offset && pickerDialog) {
                     $('#kaiz-icon-picker').css({
                         top: offset.top + 40 + 'px',
-                        left: offset.left + 'px',
-                        display: 'block'
+                        left: offset.left + 'px'
                     });
+                    pickerDialog.showModal();
                 }
             });
 
