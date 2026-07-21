@@ -86,11 +86,11 @@ jQuery(async () => {
         if (kaizWindowHtml) {
             $('body').append(kaizWindowHtml);
             
-            const loop = new AgentLoop(adapter, registry);
-            
             const stateManager = new StateManager();
             await stateManager.init(); // Tải DB và danh sách chat
 
+            const loop = new AgentLoop(adapter, registry, stateManager);
+            
             // Gắn kết UI
             ChatWindowUI.init(loop, stateManager);
             ToolCheckerUI.init(registry, adapter);

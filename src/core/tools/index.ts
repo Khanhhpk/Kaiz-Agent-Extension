@@ -9,6 +9,7 @@ import { editUserPersonaTool } from './edit_user_persona';
 import { getLorebookInfoTool } from './get_lorebook_info';
 import { manageLorebookEntryTool } from './manage_lorebook_entry';
 import { quickChatPreviewTool } from './quick_chat_preview';
+import { renameAgentChatTool, openNewAgentChatTool, listAgentChatsTool, deleteAgentChatTool } from './agent_chat_manager';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -26,4 +27,8 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(manageLorebookEntryTool);
     registry.registerTool(manageWorldbookTool);
     registry.registerTool(quickChatPreviewTool);
+    registry.registerTool(renameAgentChatTool);
+    registry.registerTool(openNewAgentChatTool);
+    registry.registerTool(listAgentChatsTool);
+    registry.registerTool(deleteAgentChatTool);
 }

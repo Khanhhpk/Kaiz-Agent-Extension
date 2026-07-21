@@ -1,6 +1,6 @@
 import { SillyTavernAdapter, Message } from "../adapters/st_adapter";
 import { ToolRegistry } from "./tool_registry";
-
+import { StateManager } from "./state";
 export interface AgentEvent {
     type: 'think_start' | 'think_end' | 'step_start' | 'step_end' | 'stream_chunk' | 'tool_call' | 'tool_result' | 'tool_confirm' | 'error' | 'debug';
     data?: any;
@@ -10,7 +10,7 @@ export interface AgentEvent {
 }
 
 export class AgentLoop {
-    constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry) {}
+    constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry, private stateManager: StateManager) {}
 
     private generateSystemPrompt(maxSteps: number): string {
         const ctx = (window as any).SillyTavern.getContext();
@@ -208,7 +208,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
                     await onEvent({ type: 'tool_call', data: call });
 
-                    let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
+                    let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
                     let isToolError = false;
                     if (result.isError) {
                         hasError = true;

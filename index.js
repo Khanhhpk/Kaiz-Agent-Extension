@@ -4,9 +4,11 @@
     class AgentLoop {
         adapter;
         toolRegistry;
-        constructor(adapter, toolRegistry) {
+        stateManager;
+        constructor(adapter, toolRegistry, stateManager) {
             this.adapter = adapter;
             this.toolRegistry = toolRegistry;
+            this.stateManager = stateManager;
         }
         generateSystemPrompt(maxSteps) {
             const ctx = window.SillyTavern.getContext();
@@ -176,7 +178,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                         // --- END SAFE MODE CHECK ---
                         await onEvent({ type: 'tool_call', data: call });
-                        let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter });
+                        let result = await this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager });
                         let isToolError = false;
                         if (result.isError) {
                             hasError = true;
@@ -804,6 +806,106 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const renameAgentChatTool = {
+        schema: {
+            name: "rename_agent_chat",
+            description: "Rename a specific agent chat by ID, or the current active chat if no ID is provided.",
+            parameters: {
+                type: "object",
+                properties: {
+                    newName: { type: "string", description: "The new name for the chat." },
+                    chatId: { type: "number", description: "Optional. The ID of the chat to rename. If not provided, renames the current chat." }
+                },
+                required: ["newName"]
+            }
+        },
+        execute: async (args, context) => {
+            const stateManager = context?.stateManager;
+            if (!stateManager)
+                throw new Error("StateManager not available in context.");
+            const name = args.newName;
+            const id = args.chatId || stateManager.currentChatId;
+            if (!id)
+                return { content: "Error: No active chat to rename and no ID provided.", isError: true };
+            await stateManager.db.updateChatName(id, name);
+            // Refresh UI list
+            const chats = await stateManager.loadChatList();
+            if (stateManager.onChatsListUpdated)
+                stateManager.onChatsListUpdated(chats);
+            // Cập nhật lại UI nếu là chat hiện tại
+            if (id === stateManager.currentChatId) {
+                // Trigger switchChat để reload lại tiêu đề (chat window sẽ tự cập nhật)
+                await stateManager.switchChat(id);
+            }
+            return { content: `Successfully renamed chat ${id} to "${name}".` };
+        }
+    };
+    const openNewAgentChatTool = {
+        schema: {
+            name: "open_new_agent_chat",
+            description: "Closes the current agent chat and opens a new blank chat session.",
+            parameters: {
+                type: "object",
+                properties: {}
+            }
+        },
+        execute: async (args, context) => {
+            const stateManager = context?.stateManager;
+            if (!stateManager)
+                throw new Error("StateManager not available in context.");
+            stateManager.currentChatId = null;
+            if (stateManager.onChatSwitched)
+                stateManager.onChatSwitched(-1, []);
+            // Remove selection in list UI
+            const chats = await stateManager.loadChatList();
+            if (stateManager.onChatsListUpdated)
+                stateManager.onChatsListUpdated(chats);
+            return { content: "Successfully opened a new blank chat session." };
+        }
+    };
+    const listAgentChatsTool = {
+        schema: {
+            name: "list_agent_chats",
+            description: "List all existing agent chat sessions (ID, Name, Created At, Updated At).",
+            parameters: {
+                type: "object",
+                properties: {}
+            }
+        },
+        execute: async (args, context) => {
+            const stateManager = context?.stateManager;
+            if (!stateManager)
+                throw new Error("StateManager not available in context.");
+            const chats = await stateManager.loadChatList();
+            if (chats.length === 0)
+                return { content: "No chats found." };
+            const listStr = chats.map(c => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`).join('\n');
+            return { content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}` };
+        }
+    };
+    const deleteAgentChatTool = {
+        schema: {
+            name: "delete_agent_chat",
+            description: "Delete a specific agent chat by ID, or the current active chat if no ID is provided.",
+            parameters: {
+                type: "object",
+                properties: {
+                    chatId: { type: "number", description: "Optional. The ID of the chat to delete. If not provided, deletes the current chat." }
+                }
+            }
+        },
+        execute: async (args, context) => {
+            const stateManager = context?.stateManager;
+            if (!stateManager)
+                throw new Error("StateManager not available in context.");
+            const id = args.chatId || stateManager.currentChatId;
+            if (!id)
+                return { content: "Error: No active chat to delete and no ID provided.", isError: true };
+            await stateManager.deleteChat(id);
+            return { content: `Successfully deleted chat ${id}.` };
+        }
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -819,6 +921,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(manageLorebookEntryTool);
         registry.registerTool(manageWorldbookTool);
         registry.registerTool(quickChatPreviewTool);
+        registry.registerTool(renameAgentChatTool);
+        registry.registerTool(openNewAgentChatTool);
+        registry.registerTool(listAgentChatsTool);
+        registry.registerTool(deleteAgentChatTool);
     }
 
     /**
@@ -2505,15 +2611,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     const bg = isSelected ? 'rgba(0, 201, 255, 0.2)' : 'transparent';
                     chatList.append(`
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${chat.name}</span>
-                        <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
+                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${chat.name}</span>
+                        <div>
+                            <i class="fa-solid fa-pen kaiz-chat-edit" style="color:#f39c12; font-size:12px; margin-right:8px;" data-id="${chat.id}" data-name="${chat.name.replace(/"/g, '&quot;')}"></i>
+                            <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
+                        </div>
                     </div>
                 `);
                 }
                 // Click vào chat item
                 $('.kaiz-chat-item').on('click', function (e) {
-                    if ($(e.target).hasClass('kaiz-chat-delete'))
-                        return; // Bỏ qua nếu click nút xóa
+                    if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit'))
+                        return; // Bỏ qua nếu click nút xóa hoặc sửa
                     const id = parseInt($(this).attr('data-id') || '0', 10);
                     if (id) {
                         stateManager.switchChat(id);
@@ -2522,11 +2631,29 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     }
                 });
                 // Click xóa
-                $('.kaiz-chat-delete').on('click', async function () {
+                $('.kaiz-chat-delete').on('click', async function (e) {
+                    e.stopPropagation();
                     const id = parseInt($(this).attr('data-id') || '0', 10);
                     if (id) {
                         if (confirm('Delete this chat?')) {
                             await stateManager.deleteChat(id);
+                        }
+                    }
+                });
+                // Click sửa
+                $('.kaiz-chat-edit').on('click', async function (e) {
+                    e.stopPropagation();
+                    const id = parseInt($(this).attr('data-id') || '0', 10);
+                    const currentName = $(this).attr('data-name') || '';
+                    if (id) {
+                        const newName = prompt('Enter new chat name:', currentName);
+                        if (newName !== null && newName.trim() !== '') {
+                            await stateManager.db.updateChatName(id, newName.trim());
+                            const updatedChats = await stateManager.loadChatList();
+                            renderChatList(updatedChats);
+                            if (id === stateManager.currentChatId) {
+                                chatTitle.text(newName.trim());
+                            }
                         }
                     }
                 });
@@ -3020,9 +3147,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
             if (kaizWindowHtml) {
                 $('body').append(kaizWindowHtml);
-                const loop = new AgentLoop(adapter, registry);
                 const stateManager = new StateManager();
                 await stateManager.init(); // Tải DB và danh sách chat
+                const loop = new AgentLoop(adapter, registry, stateManager);
                 // Gắn kết UI
                 ChatWindowUI.init(loop, stateManager);
                 ToolCheckerUI.init(registry, adapter);

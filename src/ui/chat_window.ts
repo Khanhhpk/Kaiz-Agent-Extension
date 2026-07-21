@@ -205,15 +205,18 @@ export class ChatWindowUI {
                 
                 chatList.append(`
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:140px;">${chat.name}</span>
-                        <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
+                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${chat.name}</span>
+                        <div>
+                            <i class="fa-solid fa-pen kaiz-chat-edit" style="color:#f39c12; font-size:12px; margin-right:8px;" data-id="${chat.id}" data-name="${chat.name.replace(/"/g, '&quot;')}"></i>
+                            <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
+                        </div>
                     </div>
                 `);
             }
 
             // Click vào chat item
             $('.kaiz-chat-item').on('click', function(this: HTMLElement, e: any) {
-                if ($(e.target).hasClass('kaiz-chat-delete')) return; // Bỏ qua nếu click nút xóa
+                if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
                 const id = parseInt($(this).attr('data-id') || '0', 10);
                 if (id) {
                     stateManager.switchChat(id);
@@ -223,11 +226,30 @@ export class ChatWindowUI {
             });
 
             // Click xóa
-            $('.kaiz-chat-delete').on('click', async function(this: HTMLElement) {
+            $('.kaiz-chat-delete').on('click', async function(this: HTMLElement, e: any) {
+                e.stopPropagation();
                 const id = parseInt($(this).attr('data-id') || '0', 10);
                 if (id) {
                     if (confirm('Delete this chat?')) {
                         await stateManager.deleteChat(id);
+                    }
+                }
+            });
+
+            // Click sửa
+            $('.kaiz-chat-edit').on('click', async function(this: HTMLElement, e: any) {
+                e.stopPropagation();
+                const id = parseInt($(this).attr('data-id') || '0', 10);
+                const currentName = $(this).attr('data-name') || '';
+                if (id) {
+                    const newName = prompt('Enter new chat name:', currentName);
+                    if (newName !== null && newName.trim() !== '') {
+                        await stateManager.db.updateChatName(id, newName.trim());
+                        const updatedChats = await stateManager.loadChatList();
+                        renderChatList(updatedChats);
+                        if (id === stateManager.currentChatId) {
+                            chatTitle.text(newName.trim());
+                        }
                     }
                 }
             });
