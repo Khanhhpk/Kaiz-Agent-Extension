@@ -23,17 +23,7 @@ export const renameAgentChatTool: ITool = {
         
         if (!id) return { content: "Error: No active chat to rename and no ID provided.", isError: true };
         
-        await stateManager.db.updateChatName(id, name);
-        
-        // Refresh UI list
-        const chats = await stateManager.loadChatList();
-        if (stateManager.onChatsListUpdated) stateManager.onChatsListUpdated(chats);
-        
-        // Cập nhật lại UI nếu là chat hiện tại
-        if (id === stateManager.currentChatId) {
-            // Trigger switchChat để reload lại tiêu đề (chat window sẽ tự cập nhật)
-            await stateManager.switchChat(id);
-        }
+        await stateManager.updateChatName(id, name);
         
         return { content: `Successfully renamed chat ${id} to "${name}".` };
     }

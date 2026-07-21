@@ -827,16 +827,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const id = args.chatId || stateManager.currentChatId;
             if (!id)
                 return { content: "Error: No active chat to rename and no ID provided.", isError: true };
-            await stateManager.db.updateChatName(id, name);
-            // Refresh UI list
-            const chats = await stateManager.loadChatList();
-            if (stateManager.onChatsListUpdated)
-                stateManager.onChatsListUpdated(chats);
-            // Cập nhật lại UI nếu là chat hiện tại
-            if (id === stateManager.currentChatId) {
-                // Trigger switchChat để reload lại tiêu đề (chat window sẽ tự cập nhật)
-                await stateManager.switchChat(id);
-            }
+            await stateManager.updateChatName(id, name);
             return { content: `Successfully renamed chat ${id} to "${name}".` };
         }
     };
@@ -2050,6 +2041,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         // Callbacks cho UI
         onChatSwitched;
         onChatsListUpdated;
+        onChatRenamed;
         constructor() {
             this.db = new KaizDB();
         }
@@ -2104,6 +2096,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
         async loadChatList() {
             return await this.db.getAllChats();
+        }
+        async updateChatName(id, name) {
+            await this.db.updateChatName(id, name);
+            if (this.onChatRenamed)
+                this.onChatRenamed(id, name);
+            const chats = await this.db.getAllChats();
+            if (this.onChatsListUpdated)
+                this.onChatsListUpdated(chats);
         }
         async deleteChat(id) {
             await this.db.deleteChat(id);
@@ -2651,12 +2651,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     if (id) {
                         const newName = prompt('Enter new chat name:', currentName);
                         if (newName !== null && newName.trim() !== '') {
-                            await stateManager.db.updateChatName(id, newName.trim());
-                            const updatedChats = await stateManager.loadChatList();
-                            renderChatList(updatedChats);
-                            if (id === stateManager.currentChatId) {
-                                chatTitle.text(newName.trim());
-                            }
+                            await stateManager.updateChatName(id, newName.trim());
                         }
                     }
                 });
@@ -2768,6 +2763,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             // Lắng nghe StateManager
             stateManager.onChatsListUpdated = (chats) => {
                 renderChatList(chats);
+            };
+            stateManager.onChatRenamed = (id, newName) => {
+                if (id === stateManager.currentChatId) {
+                    chatTitle.text(newName);
+                }
             };
             stateManager.onChatSwitched = (chatId, messages) => {
                 history.empty();

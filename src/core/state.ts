@@ -7,6 +7,7 @@ export class StateManager {
     // Callbacks cho UI
     public onChatSwitched?: (chatId: number, messages: ChatMessage[]) => void;
     public onChatsListUpdated?: (chats: ChatSession[]) => void;
+    public onChatRenamed?: (id: number, newName: string) => void;
 
     constructor() {
         this.db = new KaizDB();
@@ -68,6 +69,13 @@ export class StateManager {
         return await this.db.getAllChats();
     }
     
+    public async updateChatName(id: number, name: string): Promise<void> {
+        await this.db.updateChatName(id, name);
+        if (this.onChatRenamed) this.onChatRenamed(id, name);
+        const chats = await this.db.getAllChats();
+        if (this.onChatsListUpdated) this.onChatsListUpdated(chats);
+    }
+
     public async deleteChat(id: number): Promise<void> {
         await this.db.deleteChat(id);
         const chats = await this.db.getAllChats();

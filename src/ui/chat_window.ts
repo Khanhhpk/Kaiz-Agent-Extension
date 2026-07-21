@@ -244,12 +244,7 @@ export class ChatWindowUI {
                 if (id) {
                     const newName = prompt('Enter new chat name:', currentName);
                     if (newName !== null && newName.trim() !== '') {
-                        await stateManager.db.updateChatName(id, newName.trim());
-                        const updatedChats = await stateManager.loadChatList();
-                        renderChatList(updatedChats);
-                        if (id === stateManager.currentChatId) {
-                            chatTitle.text(newName.trim());
-                        }
+                        await stateManager.updateChatName(id, newName.trim());
                     }
                 }
             });
@@ -373,6 +368,12 @@ export class ChatWindowUI {
         // Lắng nghe StateManager
         stateManager.onChatsListUpdated = (chats) => {
             renderChatList(chats);
+        };
+
+        stateManager.onChatRenamed = (id, newName) => {
+            if (id === stateManager.currentChatId) {
+                chatTitle.text(newName);
+            }
         };
 
         stateManager.onChatSwitched = (chatId, messages) => {
