@@ -52,7 +52,9 @@ export class StateManager {
         
         if (!chatId) {
             // Nếu chưa có chat nào (người dùng vừa mở app lên lúc trống), tạo chat mới với tin nhắn này làm tên
-            chatId = await this.createNewChat(role === 'user' ? content : 'New Chat');
+            let nameStr = role === 'user' ? content : 'New Chat';
+            if (nameStr.startsWith('[Tool')) nameStr = 'New Chat';
+            chatId = await this.createNewChat(nameStr);
         }
 
         await this.db.addMessage(chatId, role, content);

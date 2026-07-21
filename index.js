@@ -2091,7 +2091,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             let chatId = this.currentChatId;
             if (!chatId) {
                 // Nếu chưa có chat nào (người dùng vừa mở app lên lúc trống), tạo chat mới với tin nhắn này làm tên
-                chatId = await this.createNewChat(role === 'user' ? content : 'New Chat');
+                let nameStr = role === 'user' ? content : 'New Chat';
+                if (nameStr.startsWith('[Tool'))
+                    nameStr = 'New Chat';
+                chatId = await this.createNewChat(nameStr);
             }
             await this.db.addMessage(chatId, role, content);
             // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
