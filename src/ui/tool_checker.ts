@@ -11,15 +11,15 @@ export class ToolCheckerUI {
         
         if ($('#kaiz-checker-modal').length === 0) {
             const modalHtml = `
-            <div id="kaiz-checker-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; justify-content:center; align-items:center;">
-                <div style="width:400px; max-width:90vw; max-height:90vh; display:flex; flex-direction:column; background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor); border-radius:10px; padding:20px; color:var(--SmartThemeBodyColor); backdrop-filter:blur(10px); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px;">
+            <div id="kaiz-checker-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; padding:5vh 5vw; box-sizing:border-box;">
+                <div style="margin:auto; width:400px; max-width:100%; max-height:100%; display:flex; flex-direction:column; background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor); border-radius:10px; padding:20px; color:var(--SmartThemeBodyColor); backdrop-filter:blur(10px); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px; flex-shrink:0;">
                         <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-wrench"></i> Tool Checker</h3>
                         <i id="kaiz-checker-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:18px;"></i>
                     </div>
-                    <div id="kaiz-checker-list" style="overflow-y:auto; flex:1; display:flex; flex-direction:column; gap:8px;">
+                    <div id="kaiz-checker-list" style="overflow-y:auto; flex:1; min-height:0; display:flex; flex-direction:column; gap:8px;">
                     </div>
-                    <div style="margin-top:15px; text-align:right;">
+                    <div style="margin-top:15px; text-align:right; flex-shrink:0;">
                         <button id="kaiz-checker-run" class="menu_button interactable"><i class="fa-solid fa-play"></i> Run Tests</button>
                     </div>
                 </div>
