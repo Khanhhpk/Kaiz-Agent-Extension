@@ -11,8 +11,9 @@ export class ToolCheckerUI {
         
         if ($('#kaiz-checker-modal').length === 0) {
             const modalHtml = `
-            <div id="kaiz-checker-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999;">
-                <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:400px; height:70vh; max-height:500px; background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor); border-radius:10px; color:var(--SmartThemeBodyColor); backdrop-filter:blur(10px); box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden;">
+            <style>#kaiz-checker-modal::backdrop { background: rgba(0,0,0,0.6); }</style>
+            <dialog id="kaiz-checker-modal" style="padding:0; border:none; border-radius:10px; background:transparent; width:90vw; max-width:400px; height:70vh; max-height:500px; overflow:hidden;">
+                <div style="width:100%; height:100%; background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor); border-radius:10px; color:var(--SmartThemeBodyColor); backdrop-filter:blur(10px); display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
                     <div style="height:50px; padding:0 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); box-sizing:border-box;">
                         <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-wrench"></i> Tool Checker</h3>
                         <i id="kaiz-checker-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:18px;"></i>
@@ -23,7 +24,7 @@ export class ToolCheckerUI {
                         <button id="kaiz-checker-run" class="menu_button interactable"><i class="fa-solid fa-play"></i> Run Tests</button>
                     </div>
                 </div>
-            </div>`;
+            </dialog>`;
             $('body').append(modalHtml);
         }
 
@@ -36,13 +37,15 @@ export class ToolCheckerUI {
 
         // Mở modal
         btn.on('click', () => {
-            modal.show();
+            const dialog = document.getElementById('kaiz-checker-modal') as any;
+            if (!dialog.open) dialog.showModal();
             renderToolList();
         });
 
         // Đóng modal
         closeBtn.on('click', () => {
-            modal.hide();
+            const dialog = document.getElementById('kaiz-checker-modal') as any;
+            dialog.close();
         });
 
         function renderToolList() {

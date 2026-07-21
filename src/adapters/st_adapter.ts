@@ -236,8 +236,9 @@ export class SillyTavernAdapter {
         $('#kaiz-chat-preview-modal').remove();
 
         let html = `
-        <div id="kaiz-chat-preview-modal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; display:block;">
-            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#222; border-radius:10px; width:90%; max-width:800px; height:80vh; max-height:800px; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
+        <style>#kaiz-chat-preview-modal::backdrop { background: rgba(0,0,0,0.8); }</style>
+        <dialog id="kaiz-chat-preview-modal" style="padding:0; border:none; border-radius:10px; background:transparent; width:90vw; max-width:800px; height:80vh; max-height:800px; overflow:hidden;">
+            <div style="width:100%; height:100%; background:#222; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); border:1px solid #444; border-radius:10px;">
                 <div style="height:55px; padding:0 15px; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#333; box-sizing:border-box;">
                     <h3 style="margin:0; color:#fff; font-size:18px;"><i class="fa-solid fa-list-ol"></i> Quick Chat Preview (Total: ${chat.length})</h3>
                     <i id="kaiz-chat-preview-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; color:#ccc; font-size:20px;"></i>
@@ -246,38 +247,52 @@ export class SillyTavernAdapter {
 
         for (let i = 0; i < chat.length; i++) {
             const msg = chat[i];
-            let text = typeof msg.mes === 'string' ? msg.mes : '';
-            const isTooLong = text.length > 100;
-            const previewText = isTooLong ? text.substring(0, 100) + '...' : text;
+            const name = msg.name || 'System';
             
-            const safePreview = previewText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const safeFull = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            
-            const name = msg.is_user ? (ctx.name1 || 'User') : (msg.name || ctx.name2 || 'Char');
-            const color = msg.is_user ? '#3498db' : '#e74c3c';
-            const hiddenTag = msg.is_hidden || (msg.extra && msg.extra.is_hidden) ? ' <span style="background:#f39c12; color:#fff; padding:2px 5px; border-radius:3px; font-size:10px; margin-left:5px;">Hidden</span>' : '';
-            
+            // Lấy safe_preview
+            let preview = msg.mes || '';
+            if (preview.length > 50) preview = preview.substring(0, 50) + '...';
+            // Thoát HTML
+            preview = preview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            let fullText = (msg.mes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+
+            let headerColor = msg.is_user ? '#4dabf7' : '#a9e34b';
+            if (name === 'System' || msg.is_system) headerColor = '#ffd43b';
+
             html += `
-            <details style="margin-bottom:10px; background:#2a2a2a; border-radius:5px; padding:10px; border-left:3px solid ${color};">
-                <summary style="cursor:pointer; outline:none; font-weight:bold; color:#ddd; font-size:14px; user-select:none;">
-                    [#${i}] ${name}${hiddenTag}: <span style="font-weight:normal; color:#aaa; margin-left:5px;">${safePreview}</span>
-                </summary>
-                <div style="margin-top:10px; padding-top:10px; border-top:1px solid #444; color:#ccc; font-size:13px; white-space:pre-wrap;">${safeFull}</div>
-            </details>`;
+                <details style="margin-bottom:10px; background:#2a2a2a; border-radius:6px; border:1px solid #444; overflow:hidden;">
+                    <summary style="padding:10px; cursor:pointer; background:#333; display:flex; align-items:center; user-select:none; outline:none; color:#eee;">
+                        <div style="display:flex; flex-direction:column; gap:4px; width:100%;">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <b style="color:${headerColor}; font-size:14px;"><i class="fa-solid fa-user"></i> ${name}</b>
+                                <span style="font-size:12px; color:#888;">#${i} ${msg.is_system ? ' <span style="background:#444; padding:2px 6px; border-radius:4px; color:#ddd; font-size:11px;">Hidden</span>' : ''}</span>
+                            </div>
+                            <div style="font-size:13px; color:#aaa; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${preview}</div>
+                        </div>
+                    </summary>
+                    <div style="padding:12px; font-size:14px; line-height:1.5; color:#ddd; border-top:1px solid #444;">
+                        ${fullText}
+                    </div>
+                </details>
+            `;
         }
 
         if (chat.length === 0) {
-            html += `<div style="color:#aaa; text-align:center;">No messages in chat.</div>`;
+            html += `<div style="text-align:center; padding:20px; color:#888; font-style:italic;">No messages in chat history.</div>`;
         }
 
         html += `
                 </div>
             </div>
-        </div>`;
+        </dialog>`;
 
         $('body').append(html);
 
+        const dialog = document.getElementById('kaiz-chat-preview-modal') as any;
+        if (!dialog.open) dialog.showModal();
+
         $('#kaiz-chat-preview-close').on('click', () => {
+            dialog.close();
             $('#kaiz-chat-preview-modal').remove();
         });
     }
