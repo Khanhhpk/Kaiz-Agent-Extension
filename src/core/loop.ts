@@ -11,14 +11,26 @@ export interface AgentEvent {
 
 export class AgentLoop {
     private _aborted = false;
+    private _forceAbortReject: ((reason: any) => void) | null = null;
     
     constructor(private adapter: SillyTavernAdapter, private toolRegistry: ToolRegistry, private stateManager: StateManager) {}
 
     /**
-     * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng ngay sau khi hoàn thành bước hiện tại.
+     * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng sau khi hoàn thành bước hiện tại.
      */
     public abort(): void {
         this._aborted = true;
+    }
+
+    /**
+     * Cưỡng chế dừng ngay lập tức, kể cả khi đang chờ API trả về.
+     */
+    public forceAbort(): void {
+        this._aborted = true;
+        if (this._forceAbortReject) {
+            this._forceAbortReject(new Error('FORCE_ABORT'));
+            this._forceAbortReject = null;
+        }
     }
 
     public get isRunning(): boolean {
@@ -170,10 +182,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const messages = this.buildMessages(internalHistory, maxSteps, step, pinnedUserGoal, lastToolError);
 
                 let currentText = "";
-                const response = await this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
-                    currentText = text;
-                    await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                });
+                const response = await Promise.race([
+                    this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
+                        currentText = text;
+                        await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+                    }),
+                    new Promise<never>((_, reject) => {
+                        this._forceAbortReject = reject;
+                    })
+                ]);
+                this._forceAbortReject = null;
                 await onEvent({ type: 'think_end', data: response.reasoning });
 
                 const text = response.text;
@@ -261,8 +279,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 internalHistory.push({ role: 'user', content: dbRawResult });
 
             } catch (e: any) {
+                this._forceAbortReject = null;
+                const isForceAbort = e.message === 'FORCE_ABORT';
+                const errorMsg = isForceAbort 
+                    ? '⚠️ Agent đã bị cưỡng chế dừng bởi người dùng (Force Abort).'
+                    : (e.message || String(e));
                 console.error("[AgentLoop] Error during completion:", e);
-                await onEvent({ type: 'error', text: e.message || String(e) });
+                await onEvent({ type: 'error', text: errorMsg });
                 break;
             }
         }

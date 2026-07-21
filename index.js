@@ -6,16 +6,27 @@
         toolRegistry;
         stateManager;
         _aborted = false;
+        _forceAbortReject = null;
         constructor(adapter, toolRegistry, stateManager) {
             this.adapter = adapter;
             this.toolRegistry = toolRegistry;
             this.stateManager = stateManager;
         }
         /**
-         * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng ngay sau khi hoàn thành bước hiện tại.
+         * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng sau khi hoàn thành bước hiện tại.
          */
         abort() {
             this._aborted = true;
+        }
+        /**
+         * Cưỡng chế dừng ngay lập tức, kể cả khi đang chờ API trả về.
+         */
+        forceAbort() {
+            this._aborted = true;
+            if (this._forceAbortReject) {
+                this._forceAbortReject(new Error('FORCE_ABORT'));
+                this._forceAbortReject = null;
+            }
         }
         get isRunning() {
             return !this._aborted;
@@ -149,10 +160,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 try {
                     const messages = this.buildMessages(internalHistory, maxSteps, step, pinnedUserGoal, lastToolError);
                     let currentText = "";
-                    const response = await this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
-                        currentText = text;
-                        await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                    });
+                    const response = await Promise.race([
+                        this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
+                            currentText = text;
+                            await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+                        }),
+                        new Promise((_, reject) => {
+                            this._forceAbortReject = reject;
+                        })
+                    ]);
+                    this._forceAbortReject = null;
                     await onEvent({ type: 'think_end', data: response.reasoning });
                     const text = response.text;
                     internalHistory.push({ role: 'assistant', content: text });
@@ -223,8 +240,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     internalHistory.push({ role: 'user', content: dbRawResult });
                 }
                 catch (e) {
+                    this._forceAbortReject = null;
+                    const isForceAbort = e.message === 'FORCE_ABORT';
+                    const errorMsg = isForceAbort
+                        ? '⚠️ Agent đã bị cưỡng chế dừng bởi người dùng (Force Abort).'
+                        : (e.message || String(e));
                     console.error("[AgentLoop] Error during completion:", e);
-                    await onEvent({ type: 'error', text: e.message || String(e) });
+                    await onEvent({ type: 'error', text: errorMsg });
                     break;
                 }
             }
@@ -3268,9 +3290,37 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 sendBtn.prop('disabled', false);
                 input.focus();
             };
+            let forceAbortTimer = null;
+            sendBtn.on('mousedown touchstart', (e) => {
+                if (!sendBtn.hasClass('kaiz-stop-mode'))
+                    return;
+                e.preventDefault();
+                // Nhấn ngắn → gọi abort thường (chờ bước hiện tại xong)
+                // Giữ 1.5s → force abort (dừng ngay lập tức)
+                forceAbortTimer = setTimeout(() => {
+                    forceAbortTimer = null;
+                    loop.forceAbort();
+                    // UI feedback
+                    sendBtn.find('i').removeClass('fa-stop').addClass('fa-skull');
+                    setTimeout(() => {
+                        sendBtn.find('i').removeClass('fa-skull').addClass('fa-paper-plane');
+                        sendBtn.removeClass('kaiz-stop-mode');
+                    }, 1500);
+                }, 1500);
+            });
+            sendBtn.on('mouseup mouseleave touchend touchcancel', () => {
+                if (forceAbortTimer) {
+                    clearTimeout(forceAbortTimer);
+                    forceAbortTimer = null;
+                    // Nhả sớm → abort thường
+                    if (sendBtn.hasClass('kaiz-stop-mode')) {
+                        loop.abort();
+                    }
+                }
+            });
             sendBtn.on('click', () => {
                 if (sendBtn.hasClass('kaiz-stop-mode')) {
-                    loop.abort();
+                    // Không làm gì thêm, mousedown/mouseup đã xử lý
                     return;
                 }
                 sendMessage();

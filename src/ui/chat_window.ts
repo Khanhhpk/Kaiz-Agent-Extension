@@ -575,9 +575,40 @@ export class ChatWindowUI {
             input.focus();
         };
 
+        let forceAbortTimer: any = null;
+
+        sendBtn.on('mousedown touchstart', (e: any) => {
+            if (!sendBtn.hasClass('kaiz-stop-mode')) return;
+            e.preventDefault();
+
+            // Nhấn ngắn → gọi abort thường (chờ bước hiện tại xong)
+            // Giữ 1.5s → force abort (dừng ngay lập tức)
+            forceAbortTimer = setTimeout(() => {
+                forceAbortTimer = null;
+                loop.forceAbort();
+                // UI feedback
+                sendBtn.find('i').removeClass('fa-stop').addClass('fa-skull');
+                setTimeout(() => {
+                    sendBtn.find('i').removeClass('fa-skull').addClass('fa-paper-plane');
+                    sendBtn.removeClass('kaiz-stop-mode');
+                }, 1500);
+            }, 1500);
+        });
+
+        sendBtn.on('mouseup mouseleave touchend touchcancel', () => {
+            if (forceAbortTimer) {
+                clearTimeout(forceAbortTimer);
+                forceAbortTimer = null;
+                // Nhả sớm → abort thường
+                if (sendBtn.hasClass('kaiz-stop-mode')) {
+                    loop.abort();
+                }
+            }
+        });
+
         sendBtn.on('click', () => {
             if (sendBtn.hasClass('kaiz-stop-mode')) {
-                loop.abort();
+                // Không làm gì thêm, mousedown/mouseup đã xử lý
                 return;
             }
             sendMessage();
