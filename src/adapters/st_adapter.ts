@@ -992,16 +992,35 @@ export class SillyTavernAdapter {
     }
 
     /**
+     * Build regex cho find and replace / highlight
+     */
+    private buildRegex(query: string, isRegex: boolean, caseInsensitive: boolean, wholeWord: boolean): RegExp {
+        let pattern = isRegex ? query : this.escapeRegExp(query);
+        if (wholeWord) {
+            pattern = `\\b(?:${pattern})\\b`;
+        }
+        const flags = caseInsensitive ? 'gi' : 'g';
+        return new RegExp(pattern, flags);
+    }
+
+    /**
      * Tìm và thay thế nội dung trực tiếp trong chat
      */
-    public async findAndReplace(query: string, replacement: string, isRegex: boolean = false): Promise<number> {
+    public async findAndReplace(
+        query: string, 
+        replacement: string, 
+        isRegex: boolean = false,
+        caseInsensitive: boolean = false,
+        wholeWord: boolean = false,
+        dryRun: boolean = false
+    ): Promise<{ count: number; messages: { id: number; oldText: string; newText: string }[] }> {
         const ctx = SillyTavern.getContext();
-        if (!ctx.chat || !Array.isArray(ctx.chat)) return 0;
+        if (!ctx.chat || !Array.isArray(ctx.chat)) return { count: 0, messages: [] };
         
         let count = 0;
         let regex: RegExp;
         try {
-            regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+            regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
         } catch (e) {
             console.error("[KaizAgent] Invalid regex:", e);
             throw new Error(`Regex không hợp lệ: ${e}`);
@@ -1009,37 +1028,43 @@ export class SillyTavernAdapter {
         
         const $ = (window as any).$;
         let needReload = false;
+        const modifiedMessages: { id: number; oldText: string; newText: string }[] = [];
 
         for (let i = 0; i < ctx.chat.length; i++) {
             const m = ctx.chat[i];
             if (m.mes && regex.test(m.mes)) {
-                // Reset lastIndex for exact replacement
                 regex.lastIndex = 0;
-                m.mes = m.mes.replace(regex, replacement);
+                const oldText = m.mes;
+                const newText = m.mes.replace(regex, replacement);
+                
+                modifiedMessages.push({ id: i, oldText, newText });
                 count++;
                 
-                // Update DOM immediately to avoid full reload
-                if ($) {
-                    const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
-                    if (mesBlock.length) {
-                        const w = window as any;
-                        if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
-                            const formatted = w.MessageFormatting.formatMessage(m);
-                            mesBlock.html(formatted);
+                if (!dryRun) {
+                    m.mes = newText;
+                    // Update DOM immediately to avoid full reload
+                    if ($) {
+                        const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
+                        if (mesBlock.length) {
+                            const w = window as any;
+                            if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
+                                const formatted = w.MessageFormatting.formatMessage(m);
+                                mesBlock.html(formatted);
+                            } else {
+                                needReload = true;
+                            }
                         } else {
                             needReload = true;
                         }
                     } else {
                         needReload = true;
                     }
-                } else {
-                    needReload = true;
                 }
             }
         }
         
-        // Cố gắng save chat nếu có thay đổi
-        if (count > 0) {
+        // Cố gắng save chat nếu có thay đổi và không phải dry-run
+        if (!dryRun && count > 0) {
             if (typeof ctx.saveChat === 'function') {
                 await ctx.saveChat();
             }
@@ -1055,7 +1080,7 @@ export class SillyTavernAdapter {
             }
         }
         
-        return count;
+        return { count, messages: modifiedMessages };
     }
 
     /**
@@ -1070,29 +1095,37 @@ export class SillyTavernAdapter {
     /**
      * Tìm và bôi sáng (highlight block) trên UI
      */
-    public findAndHighlight(query: string, isRegex: boolean = false): number {
+    public findAndHighlight(
+        query: string, 
+        isRegex: boolean = false,
+        caseInsensitive: boolean = false,
+        wholeWord: boolean = false
+    ): { count: number; messageIds: number[] } {
         const ctx = SillyTavern.getContext();
-        if (!ctx.chat || !Array.isArray(ctx.chat)) return 0;
+        if (!ctx.chat || !Array.isArray(ctx.chat)) return { count: 0, messageIds: [] };
         
         let count = 0;
         let regex: RegExp;
         try {
-            regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+            regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
         } catch (e) {
             throw new Error(`Regex không hợp lệ: ${e}`);
         }
         
         const $ = (window as any).$;
-        if (!$) return 0;
+        if (!$) return { count: 0, messageIds: [] };
 
         // Xóa các highlight cũ
         this.clearHighlight();
+        
+        const messageIds: number[] = [];
         
         for (let i = 0; i < ctx.chat.length; i++) {
             const m = ctx.chat[i];
             regex.lastIndex = 0; // reset
             if (m.mes && regex.test(m.mes)) {
                 count++;
+                messageIds.push(i);
                 const mesBlock = $(`.mes[mesid="${i}"]`);
                 if (mesBlock.length) {
                     mesBlock.addClass('kaiz-highlight-block');
@@ -1114,6 +1147,6 @@ export class SillyTavernAdapter {
             }
         }
         
-        return count;
+        return { count, messageIds };
     }
 }

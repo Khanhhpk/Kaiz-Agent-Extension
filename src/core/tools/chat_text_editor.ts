@@ -24,6 +24,18 @@ export const manageChatTextTool: ITool = {
                 is_regex: {
                     type: 'boolean',
                     description: 'Set thành true nếu query là một biểu thức Regex. Mặc định là false (tìm chuỗi chính xác).'
+                },
+                whole_word: {
+                    type: 'boolean',
+                    description: 'Nếu true, chỉ tìm kiếm các từ độc lập (không nằm trong từ khác). Mặc định false.'
+                },
+                case_insensitive: {
+                    type: 'boolean',
+                    description: 'Nếu true, không phân biệt chữ hoa chữ thường. Mặc định false.'
+                },
+                dry_run: {
+                    type: 'boolean',
+                    description: 'Nếu true (chỉ dùng cho find_and_replace), sẽ CHỈ trả về danh sách các thay đổi dự kiến mà KHÔNG thực sự lưu thay đổi. Rất hữu ích để xem trước kết quả. Mặc định false.'
                 }
             },
             required: ['action']
@@ -39,6 +51,9 @@ export const manageChatTextTool: ITool = {
         const query = args.query;
         const replacement = args.replacement || '';
         const isRegex = args.is_regex === true;
+        const wholeWord = args.whole_word === true;
+        const caseInsensitive = args.case_insensitive === true;
+        const dryRun = args.dry_run === true;
         
         if (action !== 'clear_highlight' && !query) {
             return { content: 'Lỗi: Thiếu tham số query (từ khóa cần tìm).', isError: true };
@@ -50,12 +65,21 @@ export const manageChatTextTool: ITool = {
                 return { content: 'Thành công: Đã xóa toàn bộ highlight trên màn hình.' };
             }
             else if (action === 'find_and_highlight') {
-                const count = context.adapter.findAndHighlight(query, isRegex);
-                return { content: `Thành công: Đã tìm thấy và bôi sáng ${count} tin nhắn chứa từ khóa "${query}".` };
+                const result = context.adapter.findAndHighlight(query, isRegex, caseInsensitive, wholeWord);
+                return { content: `Thành công: Đã tìm thấy và bôi sáng ${result.count} tin nhắn chứa từ khóa "${query}".\nID các tin nhắn: ${result.messageIds.join(', ')}` };
             } 
             else if (action === 'find_and_replace') {
-                const count = await context.adapter.findAndReplace(query, replacement, isRegex);
-                return { content: `Thành công: Đã tìm thấy và thay thế nội dung trong ${count} tin nhắn.` };
+                const result = await context.adapter.findAndReplace(query, replacement, isRegex, caseInsensitive, wholeWord, dryRun);
+                if (dryRun) {
+                    let preview = `DRY-RUN (XEM TRƯỚC): Tìm thấy ${result.count} tin nhắn sẽ bị thay đổi.\n\n`;
+                    result.messages.forEach(m => {
+                        preview += `--- ID: ${m.id} ---\n- Cũ: ${m.oldText}\n+ Mới: ${m.newText}\n\n`;
+                    });
+                    return { content: preview };
+                } else {
+                    const ids = result.messages.map(m => m.id);
+                    return { content: `Thành công: Đã tìm thấy và thay thế nội dung trong ${result.count} tin nhắn.\nID các tin nhắn đã sửa: ${ids.join(', ')}` };
+                }
             }
             else {
                 return { content: `Lỗi: Hành động "${action}" không được hỗ trợ.`, isError: true };

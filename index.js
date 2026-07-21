@@ -797,6 +797,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     is_regex: {
                         type: 'boolean',
                         description: 'Set thành true nếu query là một biểu thức Regex. Mặc định là false (tìm chuỗi chính xác).'
+                    },
+                    whole_word: {
+                        type: 'boolean',
+                        description: 'Nếu true, chỉ tìm kiếm các từ độc lập (không nằm trong từ khác). Mặc định false.'
+                    },
+                    case_insensitive: {
+                        type: 'boolean',
+                        description: 'Nếu true, không phân biệt chữ hoa chữ thường. Mặc định false.'
+                    },
+                    dry_run: {
+                        type: 'boolean',
+                        description: 'Nếu true (chỉ dùng cho find_and_replace), sẽ CHỈ trả về danh sách các thay đổi dự kiến mà KHÔNG thực sự lưu thay đổi. Rất hữu ích để xem trước kết quả. Mặc định false.'
                     }
                 },
                 required: ['action']
@@ -812,6 +824,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const query = args.query;
             const replacement = args.replacement || '';
             const isRegex = args.is_regex === true;
+            const wholeWord = args.whole_word === true;
+            const caseInsensitive = args.case_insensitive === true;
+            const dryRun = args.dry_run === true;
             if (action !== 'clear_highlight' && !query) {
                 return { content: 'Lỗi: Thiếu tham số query (từ khóa cần tìm).', isError: true };
             }
@@ -821,12 +836,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return { content: 'Thành công: Đã xóa toàn bộ highlight trên màn hình.' };
                 }
                 else if (action === 'find_and_highlight') {
-                    const count = context.adapter.findAndHighlight(query, isRegex);
-                    return { content: `Thành công: Đã tìm thấy và bôi sáng ${count} tin nhắn chứa từ khóa "${query}".` };
+                    const result = context.adapter.findAndHighlight(query, isRegex, caseInsensitive, wholeWord);
+                    return { content: `Thành công: Đã tìm thấy và bôi sáng ${result.count} tin nhắn chứa từ khóa "${query}".\nID các tin nhắn: ${result.messageIds.join(', ')}` };
                 }
                 else if (action === 'find_and_replace') {
-                    const count = await context.adapter.findAndReplace(query, replacement, isRegex);
-                    return { content: `Thành công: Đã tìm thấy và thay thế nội dung trong ${count} tin nhắn.` };
+                    const result = await context.adapter.findAndReplace(query, replacement, isRegex, caseInsensitive, wholeWord, dryRun);
+                    if (dryRun) {
+                        let preview = `DRY-RUN (XEM TRƯỚC): Tìm thấy ${result.count} tin nhắn sẽ bị thay đổi.\n\n`;
+                        result.messages.forEach(m => {
+                            preview += `--- ID: ${m.id} ---\n- Cũ: ${m.oldText}\n+ Mới: ${m.newText}\n\n`;
+                        });
+                        return { content: preview };
+                    }
+                    else {
+                        const ids = result.messages.map(m => m.id);
+                        return { content: `Thành công: Đã tìm thấy và thay thế nội dung trong ${result.count} tin nhắn.\nID các tin nhắn đã sửa: ${ids.join(', ')}` };
+                    }
                 }
                 else {
                     return { content: `Lỗi: Hành động "${action}" không được hỗ trợ.`, isError: true };
@@ -1953,16 +1978,27 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& nghĩa là toàn bộ chuỗi match
         }
         /**
+         * Build regex cho find and replace / highlight
+         */
+        buildRegex(query, isRegex, caseInsensitive, wholeWord) {
+            let pattern = isRegex ? query : this.escapeRegExp(query);
+            if (wholeWord) {
+                pattern = `\\b(?:${pattern})\\b`;
+            }
+            const flags = caseInsensitive ? 'gi' : 'g';
+            return new RegExp(pattern, flags);
+        }
+        /**
          * Tìm và thay thế nội dung trực tiếp trong chat
          */
-        async findAndReplace(query, replacement, isRegex = false) {
+        async findAndReplace(query, replacement, isRegex = false, caseInsensitive = false, wholeWord = false, dryRun = false) {
             const ctx = SillyTavern.getContext();
             if (!ctx.chat || !Array.isArray(ctx.chat))
-                return 0;
+                return { count: 0, messages: [] };
             let count = 0;
             let regex;
             try {
-                regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+                regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
             }
             catch (e) {
                 console.error("[KaizAgent] Invalid regex:", e);
@@ -1970,21 +2006,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             const $ = window.$;
             let needReload = false;
+            const modifiedMessages = [];
             for (let i = 0; i < ctx.chat.length; i++) {
                 const m = ctx.chat[i];
                 if (m.mes && regex.test(m.mes)) {
-                    // Reset lastIndex for exact replacement
                     regex.lastIndex = 0;
-                    m.mes = m.mes.replace(regex, replacement);
+                    const oldText = m.mes;
+                    const newText = m.mes.replace(regex, replacement);
+                    modifiedMessages.push({ id: i, oldText, newText });
                     count++;
-                    // Update DOM immediately to avoid full reload
-                    if ($) {
-                        const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
-                        if (mesBlock.length) {
-                            const w = window;
-                            if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
-                                const formatted = w.MessageFormatting.formatMessage(m);
-                                mesBlock.html(formatted);
+                    if (!dryRun) {
+                        m.mes = newText;
+                        // Update DOM immediately to avoid full reload
+                        if ($) {
+                            const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
+                            if (mesBlock.length) {
+                                const w = window;
+                                if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
+                                    const formatted = w.MessageFormatting.formatMessage(m);
+                                    mesBlock.html(formatted);
+                                }
+                                else {
+                                    needReload = true;
+                                }
                             }
                             else {
                                 needReload = true;
@@ -1994,13 +2038,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             needReload = true;
                         }
                     }
-                    else {
-                        needReload = true;
-                    }
                 }
             }
-            // Cố gắng save chat nếu có thay đổi
-            if (count > 0) {
+            // Cố gắng save chat nếu có thay đổi và không phải dry-run
+            if (!dryRun && count > 0) {
                 if (typeof ctx.saveChat === 'function') {
                     await ctx.saveChat();
                 }
@@ -2015,7 +2056,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
             }
-            return count;
+            return { count, messages: modifiedMessages };
         }
         /**
          * Xóa toàn bộ highlight trên UI
@@ -2029,28 +2070,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         /**
          * Tìm và bôi sáng (highlight block) trên UI
          */
-        findAndHighlight(query, isRegex = false) {
+        findAndHighlight(query, isRegex = false, caseInsensitive = false, wholeWord = false) {
             const ctx = SillyTavern.getContext();
             if (!ctx.chat || !Array.isArray(ctx.chat))
-                return 0;
+                return { count: 0, messageIds: [] };
             let count = 0;
             let regex;
             try {
-                regex = isRegex ? new RegExp(query, 'g') : new RegExp(this.escapeRegExp(query), 'g');
+                regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
             }
             catch (e) {
                 throw new Error(`Regex không hợp lệ: ${e}`);
             }
             const $ = window.$;
             if (!$)
-                return 0;
+                return { count: 0, messageIds: [] };
             // Xóa các highlight cũ
             this.clearHighlight();
+            const messageIds = [];
             for (let i = 0; i < ctx.chat.length; i++) {
                 const m = ctx.chat[i];
                 regex.lastIndex = 0; // reset
                 if (m.mes && regex.test(m.mes)) {
                     count++;
+                    messageIds.push(i);
                     const mesBlock = $(`.mes[mesid="${i}"]`);
                     if (mesBlock.length) {
                         mesBlock.addClass('kaiz-highlight-block');
@@ -2070,7 +2113,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     firstMatch[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
                 }
             }
-            return count;
+            return { count, messageIds };
         }
     }
 
