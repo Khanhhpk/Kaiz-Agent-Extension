@@ -3263,7 +3263,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 chatList.append(htmlBuffer);
             }
             // Hàm tiện ích phân tích và render Tool Calls thành HTML
-            const parseToolCallsToHtml = (contentToParse) => {
+            const parseToolCallsToHtml = (contentToParse, escapeText = false) => {
                 const toolCalls = [];
                 let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
                     const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -3271,6 +3271,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     toolCalls.push(toolHtml);
                     return `__TOOL_CALL_${toolCalls.length - 1}__`;
                 });
+                if (escapeText) {
+                    result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                }
                 // KHÔNG escape < > ở đây, để dành cho marked.parse xử lý
                 for (let i = 0; i < toolCalls.length; i++) {
                     result = result.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
@@ -3334,10 +3337,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 if (closeIndex !== -1) {
                     const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
                     let restContent = html.substring(closeIndex + '</agent_cot>'.length).trim();
-                    restContent = parseToolCallsToHtml(restContent);
+                    restContent = parseToolCallsToHtml(restContent, !isFinal);
                     html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                     if (restContent) {
-                        const parsedMarkdown = isFinal ? g.parse(restContent) : restContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                        const parsedMarkdown = isFinal ? g.parse(restContent) : restContent;
                         html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                     }
                 }
@@ -3348,7 +3351,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
                 else {
                     // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                    let parsedContent = parseToolCallsToHtml(html.trim());
+                    let parsedContent = parseToolCallsToHtml(html.trim(), false);
                     html = `<div class="kaiz-markdown-body">${g.parse(parsedContent)}</div>`;
                 }
                 return html;

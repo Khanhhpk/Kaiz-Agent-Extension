@@ -313,7 +313,7 @@ export class ChatWindowUI {
         }
 
         // Hàm tiện ích phân tích và render Tool Calls thành HTML
-        const parseToolCallsToHtml = (contentToParse: string): string => {
+        const parseToolCallsToHtml = (contentToParse: string, escapeText: boolean = false): string => {
             const toolCalls: string[] = [];
             let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
                 const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -322,6 +322,10 @@ export class ChatWindowUI {
                 return `__TOOL_CALL_${toolCalls.length - 1}__`;
             });
             
+            if (escapeText) {
+                result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+            }
+
             // KHÔNG escape < > ở đây, để dành cho marked.parse xử lý
             for (let i = 0; i < toolCalls.length; i++) {
                 result = result.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
@@ -392,11 +396,11 @@ export class ChatWindowUI {
                 const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
                 let restContent = html.substring(closeIndex + '</agent_cot>'.length).trim();
                 
-                restContent = parseToolCallsToHtml(restContent);
+                restContent = parseToolCallsToHtml(restContent, !isFinal);
                 
                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 if (restContent) {
-                    const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                    const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent;
                     html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                 }
             } else if (!isFinal) {
@@ -405,7 +409,7 @@ export class ChatWindowUI {
                  html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
                  // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                 let parsedContent = parseToolCallsToHtml(html.trim());
+                 let parsedContent = parseToolCallsToHtml(html.trim(), false);
                  html = `<div class="kaiz-markdown-body">${marked.parse(parsedContent)}</div>`;
             }
 
