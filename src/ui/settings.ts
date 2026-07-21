@@ -166,19 +166,19 @@ export class SettingsUI {
             `);
 
             // Ngăn click làm đóng menu extensions của ST
-            $('#kaiz-icon-picker').on('click', (e) => {
+            $('#kaiz-icon-picker').on('click', (e: any) => {
                 e.stopPropagation();
             });
 
             // Sự kiện đóng picker
-            $('#kaiz-close-icon-picker').on('click', (e) => {
+            $('#kaiz-close-icon-picker').on('click', (e: any) => {
                 e.stopPropagation();
                 $('#kaiz-icon-picker').hide();
                 currentPickerIndex = null;
             });
 
             // Sự kiện chọn icon trong picker
-            $('.kaiz-icon-picker-item').on('click', function(this: HTMLElement, e) {
+            $('.kaiz-icon-picker-item').on('click', function(this: HTMLElement, e: any) {
                 e.stopPropagation();
                 const iconName = $(this).data('icon');
                 if (currentPickerIndex !== null && settings.quickPrompts[currentPickerIndex]) {
