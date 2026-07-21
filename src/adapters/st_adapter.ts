@@ -236,13 +236,13 @@ export class SillyTavernAdapter {
         $('#kaiz-chat-preview-modal').remove();
 
         let html = `
-        <div id="kaiz-chat-preview-modal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; display:flex; padding:5vh 5vw; box-sizing:border-box;">
-            <div style="margin:auto; background:#222; border-radius:10px; width:100%; max-width:800px; max-height:100%; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
-                <div style="padding:15px; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#333; flex-shrink:0;">
+        <div id="kaiz-chat-preview-modal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; display:block;">
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#222; border-radius:10px; width:90%; max-width:800px; height:80vh; max-height:800px; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
+                <div style="height:55px; padding:0 15px; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#333; box-sizing:border-box;">
                     <h3 style="margin:0; color:#fff; font-size:18px;"><i class="fa-solid fa-list-ol"></i> Quick Chat Preview (Total: ${chat.length})</h3>
                     <i id="kaiz-chat-preview-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; color:#ccc; font-size:20px;"></i>
                 </div>
-                <div style="padding:15px; overflow-y:auto; flex:0 1 auto; min-height:0; background:#1e1e1e;">`;
+                <div style="height:calc(100% - 55px); padding:15px; overflow-y:auto; background:#1e1e1e; box-sizing:border-box;">`;
 
         for (let i = 0; i < chat.length; i++) {
             const msg = chat[i];

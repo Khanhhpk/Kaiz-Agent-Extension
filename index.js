@@ -1036,13 +1036,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const chat = ctx.chat || [];
             $('#kaiz-chat-preview-modal').remove();
             let html = `
-        <div id="kaiz-chat-preview-modal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; display:flex; padding:5vh 5vw; box-sizing:border-box;">
-            <div style="margin:auto; background:#222; border-radius:10px; width:100%; max-width:800px; max-height:100%; display:flex; flex-direction:column; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
-                <div style="padding:15px; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#333; flex-shrink:0;">
+        <div id="kaiz-chat-preview-modal" style="position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.8); z-index:99999; display:block;">
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); background:#222; border-radius:10px; width:90%; max-width:800px; height:80vh; max-height:800px; box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden; border:1px solid #444;">
+                <div style="height:55px; padding:0 15px; border-bottom:1px solid #444; display:flex; justify-content:space-between; align-items:center; background:#333; box-sizing:border-box;">
                     <h3 style="margin:0; color:#fff; font-size:18px;"><i class="fa-solid fa-list-ol"></i> Quick Chat Preview (Total: ${chat.length})</h3>
                     <i id="kaiz-chat-preview-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; color:#ccc; font-size:20px;"></i>
                 </div>
-                <div style="padding:15px; overflow-y:auto; flex:0 1 auto; min-height:0; background:#1e1e1e;">`;
+                <div style="height:calc(100% - 55px); padding:15px; overflow-y:auto; background:#1e1e1e; box-sizing:border-box;">`;
             for (let i = 0; i < chat.length; i++) {
                 const msg = chat[i];
                 let text = typeof msg.mes === 'string' ? msg.mes : '';
@@ -2852,15 +2852,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const btn = $('#kaiz-checker-btn');
             if ($('#kaiz-checker-modal').length === 0) {
                 const modalHtml = `
-            <div id="kaiz-checker-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999; padding:5vh 5vw; box-sizing:border-box;">
-                <div style="margin:auto; width:400px; max-width:100%; max-height:100%; display:flex; flex-direction:column; background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor); border-radius:10px; padding:20px; color:var(--SmartThemeBodyColor); backdrop-filter:blur(10px); box-shadow:0 10px 30px rgba(0,0,0,0.5);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:10px; flex-shrink:0;">
+            <div id="kaiz-checker-modal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.6); z-index:99999;">
+                <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:90%; max-width:400px; height:70vh; max-height:500px; background:var(--SmartThemeBlurTintColor); border:1px solid var(--SmartThemeBorderColor); border-radius:10px; color:var(--SmartThemeBodyColor); backdrop-filter:blur(10px); box-shadow:0 10px 30px rgba(0,0,0,0.5); overflow:hidden;">
+                    <div style="height:50px; padding:0 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,0.1); box-sizing:border-box;">
                         <h3 style="margin:0; font-size:16px;"><i class="fa-solid fa-wrench"></i> Tool Checker</h3>
                         <i id="kaiz-checker-close" class="fa-solid fa-xmark interactable" style="cursor:pointer; font-size:18px;"></i>
                     </div>
-                    <div id="kaiz-checker-list" style="overflow-y:auto; flex:0 1 auto; min-height:0; display:flex; flex-direction:column; gap:8px;">
+                    <div id="kaiz-checker-list" style="height:calc(100% - 110px); padding:15px 20px; overflow-y:auto; box-sizing:border-box; display:flex; flex-direction:column; gap:8px;">
                     </div>
-                    <div style="margin-top:15px; text-align:right; flex-shrink:0;">
+                    <div style="height:60px; padding:0 20px; display:flex; justify-content:flex-end; align-items:center; box-sizing:border-box;">
                         <button id="kaiz-checker-run" class="menu_button interactable"><i class="fa-solid fa-play"></i> Run Tests</button>
                     </div>
                 </div>
@@ -2874,12 +2874,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const checkerInstance = new KaizToolChecker(registry, adapter);
             // Mở modal
             btn.on('click', () => {
-                modal.css('display', 'flex');
+                modal.show();
                 renderToolList();
             });
             // Đóng modal
             closeBtn.on('click', () => {
-                modal.css('display', 'none');
+                modal.hide();
             });
             function renderToolList() {
                 const tools = registry.getAllTools();
