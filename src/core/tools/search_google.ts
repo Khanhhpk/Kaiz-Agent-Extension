@@ -23,15 +23,20 @@ export const searchGoogleTool: ITool = {
             }
 
             const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-            
-            // Lấy HTML giả lập người dùng
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                return { content: JSON.stringify({ error: `HTTP error! status: ${response.status}` }), isError: true };
+            let html = "";
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                html = await response.text();
+            } catch (err) {
+                // Tự động Fallback sang proxy nếu fetch gốc bị chặn
+                console.log("[search_google] Direct fetch failed, trying proxy...", err);
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const proxyRes = await fetch(proxyUrl);
+                if (proxyRes.ok) {
+                    html = await proxyRes.text();
+                }
             }
-
-            const html = await response.text();
             
             const parser = new DOMParser();
             const doc = parser.parseFromString(html, "text/html");
@@ -74,20 +79,30 @@ export const searchGoogleTool: ITool = {
             if (results.length === 0) {
                  console.log("[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo...");
                  const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-                 const ddgRes = await fetch(ddgUrl);
-                 if (ddgRes.ok) {
-                     const ddgHtml = await ddgRes.text();
+                 let ddgHtml = "";
+                 try {
+                     const ddgRes = await fetch(ddgUrl);
+                     if (ddgRes.ok) ddgHtml = await ddgRes.text();
+                     else throw new Error("DDG Fetch Not OK");
+                 } catch (e) {
+                     // Proxy fallback for DuckDuckGo
+                     const ddgProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ddgUrl)}`;
+                     const proxyRes = await fetch(ddgProxyUrl);
+                     if (proxyRes.ok) ddgHtml = await proxyRes.text();
+                 }
+
+                 if (ddgHtml) {
                      const ddgDoc = parser.parseFromString(ddgHtml, "text/html");
-                     const ddgResults = ddgDoc.querySelectorAll('div.result');
+                     // Dùng CSS selector rộng hơn để bao phủ nhiều class của DDG
+                     const ddgResults = ddgDoc.querySelectorAll('.result');
                      
                      ddgResults.forEach(res => {
-                         const titleEl = res.querySelector('h2.result__title a');
-                         const snippetEl = res.querySelector('a.result__snippet');
-                         const urlEl = res.querySelector('a.result__url');
+                         const titleEl = res.querySelector('.result__title a');
+                         const snippetEl = res.querySelector('.result__snippet');
+                         const urlEl = res.querySelector('.result__url') || titleEl; // Fallback lấy href từ title nếu ko có url
                          
                          if (titleEl && snippetEl && urlEl) {
                              let link = urlEl.getAttribute('href') || '';
-                             // DuckDuckGo redirects via /l/?uddg=
                              if (link.includes('uddg=')) {
                                  const match = link.match(/uddg=([^&]+)/);
                                  if (match) link = decodeURIComponent(match[1]);

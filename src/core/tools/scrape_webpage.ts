@@ -21,15 +21,22 @@ export const scrapeWebpageTool: ITool = {
             if (!url) {
                 return { content: JSON.stringify({ error: "Missing 'url' parameter" }), isError: true };
             }
-
-            // Fetch directly (assuming user has CORS extension enabled)
-            const response = await fetch(url);
-            
-            if (!response.ok) {
-                return { content: JSON.stringify({ error: `HTTP error! status: ${response.status}` }), isError: true };
+            // Fetch directly first
+            let html = "";
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                html = await response.text();
+            } catch (err) {
+                // Tự động Fallback sang Proxy nếu fetch gốc bị lỗi (do CORS của extension không cover được hết các trang)
+                console.log("[scrape_webpage] Direct fetch failed, trying proxy...", err);
+                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const proxyRes = await fetch(proxyUrl);
+                if (!proxyRes.ok) {
+                    return { content: JSON.stringify({ error: `Scraping failed both directly and via proxy: ${proxyRes.status}` }), isError: true };
+                }
+                html = await proxyRes.text();
             }
-
-            const html = await response.text();
             
             // Parse HTML
             const parser = new DOMParser();
