@@ -73,7 +73,13 @@ export const manageChatTextTool: ITool = {
                 if (dryRun) {
                     let preview = `DRY-RUN (XEM TRƯỚC): Tìm thấy ${result.count} tin nhắn sẽ bị thay đổi.\n\n`;
                     result.messages.forEach(m => {
-                        preview += `--- ID: ${m.id} ---\n- Cũ: ${m.oldText}\n+ Mới: ${m.newText}\n\n`;
+                        preview += `--- ID: ${m.id} ---\n`;
+                        m.snippets.forEach((s, idx) => {
+                            preview += `  [Đoạn ${idx + 1}]\n`;
+                            preview += `  - Cũ: ${s.oldSnippet}\n`;
+                            preview += `  + Mới: ${s.newSnippet}\n`;
+                        });
+                        preview += `\n`;
                     });
                     return { content: preview };
                 } else {

@@ -844,7 +844,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (dryRun) {
                         let preview = `DRY-RUN (XEM TRƯỚC): Tìm thấy ${result.count} tin nhắn sẽ bị thay đổi.\n\n`;
                         result.messages.forEach(m => {
-                            preview += `--- ID: ${m.id} ---\n- Cũ: ${m.oldText}\n+ Mới: ${m.newText}\n\n`;
+                            preview += `--- ID: ${m.id} ---\n`;
+                            m.snippets.forEach((s, idx) => {
+                                preview += `  [Đoạn ${idx + 1}]\n`;
+                                preview += `  - Cũ: ${s.oldSnippet}\n`;
+                                preview += `  + Mới: ${s.newSnippet}\n`;
+                            });
+                            preview += `\n`;
                         });
                         return { content: preview };
                     }
@@ -2004,20 +2010,63 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 console.error("[KaizAgent] Invalid regex:", e);
                 throw new Error(`Regex không hợp lệ: ${e}`);
             }
+            // Cần đảm bảo regex có cờ 'g' để dùng vòng lặp exec
+            if (!regex.global) {
+                regex = new RegExp(regex.source, regex.flags + 'g');
+            }
             const $ = window.$;
             let needReload = false;
             const modifiedMessages = [];
             for (let i = 0; i < ctx.chat.length; i++) {
                 const m = ctx.chat[i];
-                if (m.mes && regex.test(m.mes)) {
-                    regex.lastIndex = 0;
-                    const oldText = m.mes;
-                    const newText = m.mes.replace(regex, replacement);
-                    modifiedMessages.push({ id: i, oldText, newText });
+                if (!m.mes)
+                    continue;
+                regex.lastIndex = 0;
+                let match;
+                let resultText = "";
+                let lastIndex = 0;
+                let messageChanged = false;
+                const snippets = [];
+                while ((match = regex.exec(m.mes)) !== null) {
+                    const matchStart = match.index;
+                    const matchText = match[0];
+                    // 1. SAFEGUARD: Bỏ qua nếu nằm trong thẻ HTML <...> hoặc macro {{...}}
+                    const lastHtmlOpen = m.mes.lastIndexOf('<', matchStart);
+                    const lastHtmlClose = m.mes.lastIndexOf('>', matchStart);
+                    const isInsideHtml = lastHtmlOpen > lastHtmlClose;
+                    const lastMacroOpen = m.mes.lastIndexOf('{{', matchStart);
+                    const lastMacroClose = m.mes.lastIndexOf('}}', matchStart);
+                    const isInsideMacro = lastMacroOpen > lastMacroClose;
+                    if (isInsideHtml || isInsideMacro) {
+                        // Bỏ qua, giữ nguyên text
+                        resultText += m.mes.substring(lastIndex, regex.lastIndex);
+                        lastIndex = regex.lastIndex;
+                        continue;
+                    }
+                    // Thay thế
+                    const prefix = m.mes.substring(lastIndex, matchStart);
+                    resultText += prefix + replacement;
+                    // 2. SNIPPET EXTRACTION: Lấy 30 ký tự trước và sau để preview
+                    if (snippets.length < 3) { // Giới hạn max 3 snippet mỗi tin nhắn để tránh rác
+                        const snipStart = Math.max(0, matchStart - 35);
+                        const snipEnd = Math.min(m.mes.length, matchStart + matchText.length + 35);
+                        const contextOld = m.mes.substring(snipStart, snipEnd);
+                        const contextNew = contextOld.replace(matchText, replacement); // Replace only the first occurrence in the snippet
+                        snippets.push({
+                            oldSnippet: (snipStart > 0 ? "..." : "") + contextOld + (snipEnd < m.mes.length ? "..." : ""),
+                            newSnippet: (snipStart > 0 ? "..." : "") + contextNew + (snipEnd < m.mes.length ? "..." : "")
+                        });
+                    }
+                    messageChanged = true;
+                    lastIndex = regex.lastIndex;
+                }
+                if (messageChanged) {
+                    resultText += m.mes.substring(lastIndex);
+                    modifiedMessages.push({ id: i, snippets });
                     count++;
                     if (!dryRun) {
-                        m.mes = newText;
-                        // Update DOM immediately to avoid full reload
+                        m.mes = resultText;
+                        // Update DOM immediately
                         if ($) {
                             const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
                             if (mesBlock.length) {
@@ -2045,7 +2094,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (typeof ctx.saveChat === 'function') {
                     await ctx.saveChat();
                 }
-                // Nếu không tự update DOM được (vì khác ID hoặc thiếu API), ép ST tải lại
                 if (needReload) {
                     const w = window;
                     if (typeof w.reloadCurrentChat === 'function') {
