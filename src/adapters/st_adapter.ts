@@ -1008,6 +1008,7 @@ export class SillyTavernAdapter {
         }
         
         const $ = (window as any).$;
+        let needReload = false;
 
         for (let i = 0; i < ctx.chat.length; i++) {
             const m = ctx.chat[i];
@@ -1019,25 +1020,39 @@ export class SillyTavernAdapter {
                 
                 // Update DOM immediately to avoid full reload
                 if ($) {
-                    const mesBlock = $(`#chat_mes_${i} .mes_text`);
+                    const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
                     if (mesBlock.length) {
                         const w = window as any;
                         if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
                             const formatted = w.MessageFormatting.formatMessage(m);
                             mesBlock.html(formatted);
-                        } else if (typeof ctx.reloadCurrentChat === 'function') {
-                            // Fallback to full reload if formatter not found
-                            ctx.reloadCurrentChat();
-                            break; 
+                        } else {
+                            needReload = true;
                         }
+                    } else {
+                        needReload = true;
                     }
+                } else {
+                    needReload = true;
                 }
             }
         }
         
         // Cố gắng save chat nếu có thay đổi
-        if (count > 0 && typeof ctx.saveChat === 'function') {
-            await ctx.saveChat();
+        if (count > 0) {
+            if (typeof ctx.saveChat === 'function') {
+                await ctx.saveChat();
+            }
+            
+            // Nếu không tự update DOM được (vì khác ID hoặc thiếu API), ép ST tải lại
+            if (needReload) {
+                const w = window as any;
+                if (typeof w.reloadCurrentChat === 'function') {
+                    w.reloadCurrentChat();
+                } else if (typeof ctx.reloadCurrentChat === 'function') {
+                    ctx.reloadCurrentChat();
+                }
+            }
         }
         
         return count;
@@ -1069,7 +1084,7 @@ export class SillyTavernAdapter {
             regex.lastIndex = 0; // reset
             if (m.mes && regex.test(m.mes)) {
                 count++;
-                const mesBlock = $(`#chat_mes_${i}`);
+                const mesBlock = $(`.mes[mesid="${i}"]`);
                 if (mesBlock.length) {
                     mesBlock.addClass('kaiz-highlight-block');
                     mesBlock.css({
