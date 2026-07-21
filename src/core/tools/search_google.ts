@@ -26,7 +26,7 @@ export const searchGoogleTool: ITool = {
             
             // Lấy HTML giả lập người dùng
             const response = await fetch(url, {
-                credentials: 'omit', // Tránh lỗi CORS credentials flag
+                credentials: 'include', // Kích hoạt gửi Cookie của trình duyệt
                 headers: {
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',

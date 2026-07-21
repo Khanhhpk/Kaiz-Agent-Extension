@@ -1109,7 +1109,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 // Fetch directly (assuming user has CORS extension enabled)
                 const response = await fetch(url, {
-                    credentials: 'omit',
+                    credentials: 'include',
                     headers: {
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                         'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
@@ -1201,7 +1201,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
                 // Lấy HTML giả lập người dùng
                 const response = await fetch(url, {
-                    credentials: 'omit', // Tránh lỗi CORS credentials flag
+                    credentials: 'include', // Kích hoạt gửi Cookie của trình duyệt
                     headers: {
                         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
                         'Accept-Language': 'en-US,en;q=0.9,vi;q=0.8',
