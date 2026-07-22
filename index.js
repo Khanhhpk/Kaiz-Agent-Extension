@@ -3858,11 +3858,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 ctx.saveSettingsDebounced();
             });
             const $memoryList = $('#kaiz-agent-memory-list');
+            let editingMemoryIndex = -1;
             $('#kaiz-add-manual-memory-btn').on('click', () => {
                 const key = String($('#kaiz-manual-memory-key-input').val() || '').trim();
                 const content = String($('#kaiz-manual-memory-input').val() || '').trim();
                 if (key && content) {
-                    {
+                    if (editingMemoryIndex !== -1) {
+                        settings.memories[editingMemoryIndex] = { key, content };
+                        editingMemoryIndex = -1;
+                        $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                    }
+                    else {
                         // Check if key already exists to prevent duplicate keys in manual add
                         const existingIndex = settings.memories.findIndex((m) => typeof m !== 'string' && m.key.toLowerCase() === key.toLowerCase());
                         if (existingIndex !== -1) {
@@ -3944,6 +3950,42 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
             }
             renderMemories();
+            // --- Event Delegation cho Memory List (Chỉ bind 1 lần) ---
+            $memoryList.on('click', '.kaiz-memory-expand-btn', function () {
+                const $text = $(this).siblings('.kaiz-memory-text');
+                if ($text.css('-webkit-line-clamp') === '2') {
+                    $text.css('-webkit-line-clamp', 'unset');
+                    $(this).html('<i class="fa-solid fa-chevron-up"></i> Thu gọn');
+                }
+                else {
+                    $text.css('-webkit-line-clamp', '2');
+                    $(this).html('<i class="fa-solid fa-chevron-down"></i> Hiển thị thêm');
+                }
+            });
+            $memoryList.on('click', '.kaiz-memory-edit-btn', function () {
+                const idx = $(this).data('index');
+                const mem = settings.memories[idx];
+                $('#kaiz-manual-memory-key-input').val(mem.key);
+                $('#kaiz-manual-memory-input').val(mem.content);
+                editingMemoryIndex = idx;
+                $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Cập nhật');
+                $('#kaiz-manual-memory-key-input').trigger('focus');
+            });
+            $memoryList.on('click', '.kaiz-memory-del-btn', function () {
+                const idx = $(this).data('index');
+                settings.memories.splice(idx, 1);
+                if (editingMemoryIndex === idx) {
+                    editingMemoryIndex = -1;
+                    $('#kaiz-manual-memory-key-input').val('');
+                    $('#kaiz-manual-memory-input').val('');
+                    $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                }
+                else if (editingMemoryIndex > idx) {
+                    editingMemoryIndex--;
+                }
+                ctx.saveSettingsDebounced();
+                renderMemories();
+            });
             $('#kaiz-memory-clear-all').on('click', async () => {
                 if (confirm('Bạn có chắc muốn xóa toàn bộ memory của Agent không?')) {
                     settings.memories = [];

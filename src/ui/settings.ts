@@ -517,6 +517,42 @@ export class SettingsUI {
 
         renderMemories();
 
+        // --- Event Delegation cho Memory List (Chỉ bind 1 lần) ---
+        $memoryList.on('click', '.kaiz-memory-expand-btn', function (this: HTMLElement) {
+            const $text = $(this).siblings('.kaiz-memory-text');
+            if ($text.css('-webkit-line-clamp') === '2') {
+                $text.css('-webkit-line-clamp', 'unset');
+                $(this).html('<i class="fa-solid fa-chevron-up"></i> Thu gọn');
+            } else {
+                $text.css('-webkit-line-clamp', '2');
+                $(this).html('<i class="fa-solid fa-chevron-down"></i> Hiển thị thêm');
+            }
+        });
+
+        $memoryList.on('click', '.kaiz-memory-edit-btn', function (this: HTMLElement) {
+            const idx = $(this).data('index');
+            const mem = settings.memories[idx];
+            $('#kaiz-manual-memory-key-input').val(mem.key);
+            $('#kaiz-manual-memory-input').val(mem.content);
+            editingMemoryIndex = idx;
+            $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Cập nhật');
+            $('#kaiz-manual-memory-key-input').trigger('focus');
+        });
+
+        $memoryList.on('click', '.kaiz-memory-del-btn', function (this: HTMLElement) {
+            const idx = $(this).data('index');
+            settings.memories.splice(idx, 1);
+            if (editingMemoryIndex === idx) {
+                editingMemoryIndex = -1;
+                $('#kaiz-manual-memory-key-input').val('');
+                $('#kaiz-manual-memory-input').val('');
+                $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+            } else if (editingMemoryIndex > idx) {
+                editingMemoryIndex--;
+            }
+            ctx.saveSettingsDebounced();
+            renderMemories();
+        });
         $('#kaiz-memory-clear-all').on('click', async () => {
             if (confirm('Bạn có chắc muốn xóa toàn bộ memory của Agent không?')) {
                 settings.memories = [];
