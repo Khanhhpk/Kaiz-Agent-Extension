@@ -131,6 +131,20 @@ export class SettingsUI {
         $('#kaiz-safe-tools-search').on('input', function(this: HTMLInputElement) {
             renderSafeTools(this.value);
         });
+
+        $('#kaiz-safe-tools-blacklist-all').on('click', () => {
+            tools.forEach(tool => {
+                settings.safeModeBlacklist[tool.schema.name] = true;
+            });
+            ctx.saveSettingsDebounced();
+            renderSafeTools(String($('#kaiz-safe-tools-search').val() || ''));
+        });
+
+        $('#kaiz-safe-tools-unblacklist-all').on('click', () => {
+            settings.safeModeBlacklist = {};
+            ctx.saveSettingsDebounced();
+            renderSafeTools(String($('#kaiz-safe-tools-search').val() || ''));
+        });
         // --- END SAFE MODE LOGIC ---
 
         // --- QUICK PROMPTS LOGIC ---

@@ -3,7 +3,7 @@ import { ITool } from "../tool_registry";
 export const scrapeWebpageTool: ITool = {
     schema: {
         name: "scrape_webpage",
-        description: "Cào nội dung văn bản và trích xuất tất cả các đường link từ một URL. Sử dụng khi cần đọc thông tin từ một trang web (như wiki, fandom, bài báo) hoặc tìm kiếm các link liên quan để cào tiếp.",
+        description: "CÔNG CỤ CÀO DỮ LIỆU TỪ INTERNET. Sử dụng công cụ này để bóc tách toàn bộ nội dung văn bản (text) thô và các đường link từ một địa chỉ URL bất kỳ (ví dụ: Wikipedia, Fandom, trang báo). Công cụ này được trang bị hệ thống vượt tường lửa (Cloudflare bypass) nên có thể đọc được các trang khó tính. Dùng nó khi bạn cần 'đọc' nội dung chi tiết của một trang web.",
         parameters: {
             type: "object",
             properties: {

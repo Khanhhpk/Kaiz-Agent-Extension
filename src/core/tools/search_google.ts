@@ -3,7 +3,7 @@ import { ITool } from "../tool_registry";
 export const searchGoogleTool: ITool = {
     schema: {
         name: "search_google",
-        description: "Thực hiện tìm kiếm trên Google và trả về danh sách các kết quả (tiêu đề, link, tóm tắt). Sử dụng công cụ này để tìm hiểu thông tin mới hoặc tìm kiếm URL để sử dụng cho công cụ scrape_webpage.",
+        description: "CÔNG CỤ TÌM KIẾM WEB. Hoạt động giống như việc bạn tìm kiếm Internet. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link.",
         parameters: {
             type: "object",
             properties: {

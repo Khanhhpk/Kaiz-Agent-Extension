@@ -55,6 +55,10 @@
                     <div id="kaiz-safe-mode-group" style="display:none; margin-top:8px; padding-left:10px; border-left: 2px solid rgba(255,255,255,0.1);">
                         <label style="font-size:11px; color:#888; display:block; margin-bottom:4px">Blacklisted Tools (Require confirmation)</label>
                         <input id="kaiz-safe-tools-search" type="text" class="text_pole" placeholder="Search tool name or description..." style="margin-bottom:8px" />
+                        <div style="display:flex; gap:10px; margin-bottom:8px">
+                            <button id="kaiz-safe-tools-blacklist-all" class="menu_button interactable" style="flex:1"><i class="fa-solid fa-lock"></i> Blacklist All</button>
+                            <button id="kaiz-safe-tools-unblacklist-all" class="menu_button interactable" style="flex:1"><i class="fa-solid fa-unlock"></i> Unblacklist All</button>
+                        </div>
                         <div id="kaiz-safe-tools-list" style="max-height: 250px; overflow-y: auto; padding: 5px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; display: flex; flex-direction: column; gap: 8px;">
                             <!-- Danh sách Tool render ở đây -->
                         </div>

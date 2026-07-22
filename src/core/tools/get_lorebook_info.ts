@@ -4,7 +4,7 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getLorebookInfoTool: ITool = {
     schema: {
         name: 'get_lorebook_info',
-        description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info) đang được kích hoạt trong phòng chat. Có 7 chế độ (mode): summary (tóm tắt danh sách), all_full (chi tiết toàn bộ), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn), search (tìm kiếm theo từ khóa), by_uid (lấy 1 entry qua UID), simulate (kiểm tra xem câu thoại nào kích hoạt entry nào).',
+        description: 'Công cụ ĐỌC dữ liệu Sổ tay thế giới (Lorebook / World Info). Gồm 7 chế độ (mode): \n1. "summary": Lấy MỤC LỤC TÓM TẮT (UID, Tên, Keys) của các sách đang bật. ĐẶC BIỆT: Nếu truyền thêm "book_name", sẽ lấy mục lục của riêng cuốn sách đó (cho dù nó đang tắt). LUÔN ƯU TIÊN dùng chế độ này đầu tiên để khảo sát.\n2. "by_uid": Đọc CHI TIẾT nội dung của 1 entry khi đã biết UID.\n3. "by_name": Đọc CHI TIẾT toàn bộ 1 cuốn sách (cho dù nó đang tắt).\n4. "search": Tìm kiếm entry theo từ khóa.\n5. "simulate": Kiểm tra xem câu thoại nào kích hoạt entry nào.\n6. "char_full": Đọc sách gắn cứng theo thẻ nhân vật.\n7. "all_full": Đọc toàn bộ sách đang bật (Rất tốn token, chỉ dùng khi cần thiết).',
         parameters: {
             type: 'object',
             properties: {
