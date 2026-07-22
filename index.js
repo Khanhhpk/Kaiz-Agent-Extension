@@ -1457,8 +1457,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const text = el.innerText?.toLowerCase() || '';
                     const title = el.getAttribute('title')?.toLowerCase() || '';
                     if (text.includes(cleanTarget) || title.includes(cleanTarget)) {
-                        // Check xem element có đang hiển thị không (có offset)
-                        if (el.offsetParent !== null) {
+                        // Check xem element có đang hiển thị không bằng getBoundingClientRect
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
                             foundElement = el;
                             break;
                         }
