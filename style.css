@@ -407,6 +407,20 @@
     flex-direction: column;
 }
 
+@media (max-width: 768px) {
+    .kaiz-log-modal {
+        width: 95%;
+        height: 90%;
+    }
+    .kaiz-log-body {
+        flex-direction: column;
+    }
+    .kaiz-log-pane-left {
+        border-right: none;
+        border-bottom: 1px solid #333;
+    }
+}
+
 .kaiz-log-pane-title {
     margin-top: 0;
 }
