@@ -580,11 +580,12 @@ export class SillyTavernAdapter {
             const chatWorldName = ctx.chatMetadata?.[wiKey];
             if (chatWorldName && typeof chatWorldName === 'string') names.add(chatWorldName);
 
-            if (options.mode === 'by_name') {
-                if (!options.bookName) return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
+            if (options.bookName && (options.mode === 'by_name' || options.mode === 'summary')) {
                 // Bỏ qua kiểm tra names.has() để cho phép đọc book đang bị tắt
                 names.clear();
                 names.add(options.bookName);
+            } else if (options.mode === 'by_name') {
+                return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
             }
 
             if (options.mode === 'char_full') {

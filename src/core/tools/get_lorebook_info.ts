@@ -4,7 +4,7 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getLorebookInfoTool: ITool = {
     schema: {
         name: 'get_lorebook_info',
-        description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info). Có 7 chế độ (mode): summary (tóm tắt danh sách các book đang bật), all_full (chi tiết toàn bộ book đang bật), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn BẤT KỲ, kể cả sách đang bị TẮT), search (tìm kiếm), by_uid (tìm qua UID), simulate (kiểm tra kích hoạt).',
+        description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info). Có 7 chế độ (mode): summary (tóm tắt danh sách các book đang bật, hoặc tóm tắt 1 cuốn cụ thể nếu truyền book_name), all_full (chi tiết toàn bộ book đang bật), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn BẤT KỲ, kể cả sách đang bị TẮT), search (tìm kiếm), by_uid (tìm qua UID), simulate (kiểm tra kích hoạt).',
         parameters: {
             type: 'object',
             properties: {
