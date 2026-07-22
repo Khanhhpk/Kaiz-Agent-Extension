@@ -72,6 +72,17 @@
     transform: translateY(20px) scale(0.95);
 }
 
+.kaiz-chat-window.kaiz-phone-mode {
+    width: 100% !important;
+    height: 100% !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    border-radius: 0 !important;
+    transform: none !important;
+}
+
 /* Header */
 .kaiz-chat-header {
     padding: 16px 20px;

@@ -2822,6 +2822,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 settings.maxAgentLoops = parseInt(this.value, 10) || 5;
                 ctx.saveSettingsDebounced();
             });
+            // --- UI SETTINGS LOGIC ---
+            $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
+            $('#kaiz-phone-mode').on('change', function () {
+                settings.phoneMode = !!this.checked;
+                ctx.saveSettingsDebounced();
+                const win = $('#kaiz-chat-window');
+                if (settings.phoneMode) {
+                    win.addClass('kaiz-phone-mode');
+                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
+                        win.draggable('disable');
+                    }
+                }
+                else {
+                    win.removeClass('kaiz-phone-mode');
+                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
+                        win.draggable('enable');
+                    }
+                }
+            });
             // --- SAFE MODE LOGIC ---
             $('#kaiz-safe-mode').prop('checked', settings.safeMode);
             if (settings.safeMode) {
@@ -3453,6 +3472,27 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 if (isSidebarOpen)
                     toggleSidebar(); // Đóng luôn sidebar
             });
+            // --- Phone Mode Logic ---
+            const applyPhoneMode = () => {
+                const ctx = window.SillyTavern.getContext();
+                const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                const isPhoneMode = !!extSettings.phoneMode;
+                if (isPhoneMode) {
+                    win.addClass('kaiz-phone-mode');
+                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
+                        win.draggable('disable');
+                    }
+                }
+                else {
+                    win.removeClass('kaiz-phone-mode');
+                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
+                        win.draggable('enable');
+                    }
+                }
+            };
+            // Khởi tạo phone mode ban đầu
+            setTimeout(applyPhoneMode, 200);
+            // ------------------------------------
             // Toggle Sidebar
             function toggleSidebar() {
                 isSidebarOpen = !isSidebarOpen;

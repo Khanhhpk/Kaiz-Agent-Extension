@@ -228,6 +228,29 @@ export class ChatWindowUI {
             if (isSidebarOpen) toggleSidebar(); // Đóng luôn sidebar
         });
 
+        // --- Phone Mode Logic ---
+        const applyPhoneMode = () => {
+            const ctx = (window as any).SillyTavern.getContext();
+            const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+            const isPhoneMode = !!extSettings.phoneMode;
+            
+            if (isPhoneMode) {
+                win.addClass('kaiz-phone-mode');
+                if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
+                    win.draggable('disable');
+                }
+            } else {
+                win.removeClass('kaiz-phone-mode');
+                if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
+                    win.draggable('enable');
+                }
+            }
+        };
+
+        // Khởi tạo phone mode ban đầu
+        setTimeout(applyPhoneMode, 200);
+        // ------------------------------------
+
         // Toggle Sidebar
         function toggleSidebar() {
             isSidebarOpen = !isSidebarOpen;
