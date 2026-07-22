@@ -94,14 +94,14 @@ jQuery(async () => {
     const registry = new ToolRegistry();
     registerDefaultTools(registry);
 
-    // 1. Nạp giao diện Settings
-    await SettingsUI.init(extPath, EXT_NAME, registry);
-
-    // 2. Nạp giao diện Khung Chat Độc Lập
+    // 1. Nạp giao diện Khung Chat Độc Lập
     try {
         const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
         if (kaizWindowHtml) {
             $('body').append(kaizWindowHtml);
+
+            // 2. Nạp giao diện Settings (Cần DOM của kaiz_window có sẵn cho các Modal)
+            await SettingsUI.init(extPath, EXT_NAME, registry);
 
             const stateManager = new StateManager();
             await stateManager.init(); // Tải DB và danh sách chat
