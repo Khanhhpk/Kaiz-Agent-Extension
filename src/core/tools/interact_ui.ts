@@ -19,13 +19,18 @@ export const interactUITool: ITool = {
         const target = args.targetDescription?.toLowerCase();
         if (!target) return { content: 'Lỗi: Không có targetDescription.' };
 
-        // Loại bỏ ngoặc vuông nếu agent truyền vào dạng "[k38]" hoặc "[Send]"
-        const cleanTarget = target.replace(/\[|\]/g, '').trim();
-
         // 1. Tìm kiếm element
         let foundElement: HTMLElement | null = null;
-
-        // Kiểm tra xem target có phải là định dạng ID từ scan_ui không (ví dụ "k1", "k12")
+        
+        // Xử lý target để trích xuất kX (nếu có)
+        let cleanTarget = target.trim();
+        const kIdMatch = target.match(/\[(k\d+)\]/i) || target.match(/^(k\d+)$/i);
+        if (kIdMatch) {
+            cleanTarget = kIdMatch[1].toLowerCase(); // "k95"
+        } else {
+            // Loại bỏ ngoặc vuông nếu agent truyền vào dạng "[Extensions]"
+            cleanTarget = target.replace(/\[|\]/g, '').trim();
+        }
         const kaizIdMatch = cleanTarget.match(/^k\d+$/);
         if (kaizIdMatch) {
             foundElement = document.querySelector(`[data-kaiz-id="${cleanTarget}"]`);
