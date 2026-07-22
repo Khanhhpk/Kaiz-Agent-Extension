@@ -1672,10 +1672,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
                 if (html2canvasObj) {
+                    const floatBtn = document.getElementById('kaiz-floating-btn');
+                    const chatWin = document.getElementById('kaiz-chat-window');
+                    const vCursor = document.getElementById('kaiz-virtual-cursor');
                     try {
-                        const floatBtn = document.getElementById('kaiz-floating-btn');
-                        const chatWin = document.getElementById('kaiz-chat-window');
-                        const vCursor = document.getElementById('kaiz-virtual-cursor');
                         if (floatBtn)
                             floatBtn.style.visibility = 'hidden';
                         if (chatWin)
@@ -1684,24 +1684,27 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             vCursor.style.visibility = 'hidden';
                         const canvas = await html2canvasObj(document.body, {
                             useCORS: true,
+                            allowTaint: true, // Allow tainted images to not crash
                             ignoreElements: (e) => {
-                                if (e.id && e.id.startsWith('kaiz-'))
+                                if (e && typeof e.id === 'string' && e.id.startsWith('kaiz-'))
                                     return true;
                                 return false;
                             }
                         });
+                        const base64 = canvas.toDataURL('image/jpeg', 0.6);
+                        outputContent += `\n\n![Screenshot](${base64})`;
+                    }
+                    catch (e) {
+                        console.error('[KaizAgent] html2canvas error:', e);
+                        outputContent += `\n\n(Lỗi: Không thể chụp ảnh màn hình, có thể do cấu trúc trang quá phức tạp. Mã lỗi: ${e})`;
+                    }
+                    finally {
                         if (floatBtn)
                             floatBtn.style.visibility = 'visible';
                         if (chatWin)
                             chatWin.style.visibility = 'visible';
                         if (vCursor)
                             vCursor.style.visibility = 'visible';
-                        const base64 = canvas.toDataURL('image/jpeg', 0.6);
-                        outputContent += `\n\n![Screenshot](${base64})`;
-                    }
-                    catch (e) {
-                        console.error('[KaizAgent] html2canvas error:', e);
-                        outputContent += `\n\n(Lỗi: Không thể chụp ảnh màn hình: ${e})`;
                     }
                 }
                 else {
