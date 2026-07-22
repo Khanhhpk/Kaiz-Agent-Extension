@@ -93,20 +93,6 @@ Ví dụ:
 
 Nếu bạn dùng công cụ, KHÔNG được đưa ra câu trả lời cuối cùng ngay lập tức. Hãy đợi hệ thống trả về kết quả qua thẻ <tool_result> rồi mới được trả lời.
 Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường như một trợ lý (sau khi đã đóng thẻ </agent_cot>).`;
-            if (ctx.extensionSettings?.kaiz_agent) {
-                const persona = ctx.extensionSettings.kaiz_agent.persona;
-                if (persona) {
-                    prompt += `\n[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n`;
-                }
-                const memories = ctx.extensionSettings.kaiz_agent.memories;
-                if (memories && memories.length > 0) {
-                    prompt += `\n[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
-                    memories.forEach((mem, idx) => {
-                        prompt += `${idx + 1}. ${mem}\n`;
-                    });
-                    prompt += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
-                }
-            }
             return prompt;
         }
         parseToolCalls(text) {
@@ -149,6 +135,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 { role: 'system', content: layer2_workspace_permissions },
                 { role: 'system', content: cachedSystemPrompt },
             ];
+            const ctx = window.SillyTavern.getContext();
+            if (ctx.extensionSettings?.kaiz_agent) {
+                const persona = ctx.extensionSettings.kaiz_agent.persona;
+                const memories = ctx.extensionSettings.kaiz_agent.memories;
+                let customContent = '';
+                if (persona) {
+                    customContent += `[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
+                }
+                if (memories && memories.length > 0) {
+                    customContent += `[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
+                    memories.forEach((mem, idx) => {
+                        customContent += `${idx + 1}. ${mem}\n`;
+                    });
+                    customContent += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
+                }
+                if (customContent) {
+                    msgs.push({ role: 'system', content: customContent.trim() });
+                }
+            }
             for (const msg of internalHistory) {
                 let content = msg.content;
                 if (msg.role === 'assistant' || msg.role === 'agent') {
@@ -1908,6 +1913,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (action === 'clear_all') {
                 settings.memories = [];
                 ctx.saveSettingsDebounced();
+                document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                 return {
                     status: 'success',
                     content: 'Đã xóa toàn bộ memory.',
@@ -1919,6 +1925,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (action === 'add') {
                 settings.memories.push(content);
                 ctx.saveSettingsDebounced();
+                document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                 return {
                     status: 'success',
                     content: `Đã thêm ghi nhớ mới: "${content}"`,
@@ -1936,6 +1943,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (indexToRemove !== -1) {
                     const removed = settings.memories.splice(indexToRemove, 1);
                     ctx.saveSettingsDebounced();
+                    document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                     return {
                         status: 'success',
                         content: `Đã xóa ghi nhớ: "${removed[0]}"`,
@@ -3822,6 +3830,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     renderMemories();
                 }
             });
+            document.addEventListener('kaiz_memory_updated', renderMemories);
             // --- END PERSONA & MEMORY LOGIC ---
             // --- TOOLS MANAGER LOGIC ---
             const $toolsList = $('#kaiz-tools-list');

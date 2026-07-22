@@ -119,22 +119,6 @@ Ví dụ:
 Nếu bạn dùng công cụ, KHÔNG được đưa ra câu trả lời cuối cùng ngay lập tức. Hãy đợi hệ thống trả về kết quả qua thẻ <tool_result> rồi mới được trả lời.
 Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường như một trợ lý (sau khi đã đóng thẻ </agent_cot>).`;
 
-        if (ctx.extensionSettings?.kaiz_agent) {
-            const persona = ctx.extensionSettings.kaiz_agent.persona;
-            if (persona) {
-                prompt += `\n[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n`;
-            }
-
-            const memories = ctx.extensionSettings.kaiz_agent.memories;
-            if (memories && memories.length > 0) {
-                prompt += `\n[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
-                memories.forEach((mem: string, idx: number) => {
-                    prompt += `${idx + 1}. ${mem}\n`;
-                });
-                prompt += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
-            }
-        }
-
         return prompt;
     }
 
@@ -186,6 +170,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             { role: 'system', content: layer2_workspace_permissions },
             { role: 'system', content: cachedSystemPrompt },
         ];
+
+        const ctx = (window as any).SillyTavern.getContext();
+        if (ctx.extensionSettings?.kaiz_agent) {
+            const persona = ctx.extensionSettings.kaiz_agent.persona;
+            const memories = ctx.extensionSettings.kaiz_agent.memories;
+            
+            let customContent = '';
+            if (persona) {
+                customContent += `[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
+            }
+
+            if (memories && memories.length > 0) {
+                customContent += `[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
+                memories.forEach((mem: string, idx: number) => {
+                    customContent += `${idx + 1}. ${mem}\n`;
+                });
+                customContent += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
+            }
+
+            if (customContent) {
+                msgs.push({ role: 'system', content: customContent.trim() });
+            }
+        }
 
         for (const msg of internalHistory) {
             let content = msg.content;

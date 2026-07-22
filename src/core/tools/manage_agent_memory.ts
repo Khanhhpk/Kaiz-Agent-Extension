@@ -34,6 +34,7 @@ export const manageAgentMemory: ITool = {
         if (action === 'clear_all') {
             settings.memories = [];
             ctx.saveSettingsDebounced();
+            document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
             return {
                 status: 'success',
                 content: 'Đã xóa toàn bộ memory.',
@@ -47,6 +48,7 @@ export const manageAgentMemory: ITool = {
         if (action === 'add') {
             settings.memories.push(content);
             ctx.saveSettingsDebounced();
+            document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
             return {
                 status: 'success',
                 content: `Đã thêm ghi nhớ mới: "${content}"`,
@@ -67,6 +69,7 @@ export const manageAgentMemory: ITool = {
             if (indexToRemove !== -1) {
                 const removed = settings.memories.splice(indexToRemove, 1);
                 ctx.saveSettingsDebounced();
+                document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                 return {
                     status: 'success',
                     content: `Đã xóa ghi nhớ: "${removed[0]}"`,

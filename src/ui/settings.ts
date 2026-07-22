@@ -453,6 +453,8 @@ export class SettingsUI {
                 renderMemories();
             }
         });
+
+        document.addEventListener('kaiz_memory_updated', renderMemories);
         // --- END PERSONA & MEMORY LOGIC ---
 
         // --- TOOLS MANAGER LOGIC ---
