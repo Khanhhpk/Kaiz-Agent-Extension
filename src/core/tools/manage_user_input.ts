@@ -9,18 +9,18 @@ export const manageUserInputTool: ITool = {
             properties: {
                 text: {
                     type: 'string',
-                    description: 'Văn bản muốn nhập vào khung chat.',
+                    description: 'Văn bản muốn nhập vào khung chat. (Bỏ trống nếu đang dùng mode "read")',
                 },
                 mode: {
                     type: 'string',
-                    description: "Chế độ nhập: 'overwrite' (Xoá hết cũ, ghi đè mới) hoặc 'append' (Nối tiếp vào sau nội dung đang có).",
+                    description: "Chế độ: 'overwrite' (Xoá và ghi đè mới), 'append' (Nối tiếp vào sau nội dung đang có), hoặc 'read' (Chỉ đọc nội dung đang có trong khung nhập liệu).",
                 },
                 send: {
                     type: 'boolean',
-                    description: 'True nếu muốn gửi tin nhắn đó đi luôn. False nếu chỉ điền vào để người dùng tự xem và gửi sau.',
+                    description: 'True nếu muốn gửi tin. False nếu chỉ điền vào. (Bỏ trống nếu đang dùng mode "read")',
                 },
             },
-            required: ['text', 'mode', 'send'],
+            required: ['mode'],
         },
     },
     execute: async (args: Record<string, any>) => {
@@ -28,16 +28,20 @@ export const manageUserInputTool: ITool = {
         const mode = args.mode as string;
         const send = args.send as boolean;
 
-        if (!text) {
-            return { content: 'Lỗi: Tham số text không được để trống.' };
+        if (!mode || !['overwrite', 'append', 'read'].includes(mode)) {
+            return { content: "Lỗi: Tham số mode phải là 'overwrite', 'append' hoặc 'read'." };
         }
-        if (mode !== 'overwrite' && mode !== 'append') {
-            return { content: "Lỗi: Tham số mode phải là 'overwrite' hoặc 'append'." };
+        if (mode !== 'read' && !text) {
+            return { content: 'Lỗi: Tham số text không được để trống khi ghi hoặc nối thêm văn bản.' };
         }
 
         const textarea = document.getElementById('send_textarea') as HTMLTextAreaElement;
         if (!textarea) {
             return { content: 'Lỗi: Không tìm thấy khung nhập văn bản (send_textarea) trên giao diện.' };
+        }
+
+        if (mode === 'read') {
+            return { content: `Nội dung hiện tại trong khung chat là: "${textarea.value}"` };
         }
 
         if (mode === 'overwrite') {
