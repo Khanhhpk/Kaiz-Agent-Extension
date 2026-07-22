@@ -1266,8 +1266,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         if (proxyRes.ok)
                             ddgHtml = await proxyRes.text();
                     }
+                    let ddgDoc = null;
                     if (ddgHtml) {
-                        const ddgDoc = parser.parseFromString(ddgHtml, "text/html");
+                        ddgDoc = parser.parseFromString(ddgHtml, "text/html");
                         // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
                         const linkElements = ddgDoc.querySelectorAll('a.result-link');
                         const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');

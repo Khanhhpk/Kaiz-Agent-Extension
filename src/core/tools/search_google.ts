@@ -91,8 +91,9 @@ export const searchGoogleTool: ITool = {
                      if (proxyRes.ok) ddgHtml = await proxyRes.text();
                  }
 
+                 let ddgDoc: Document | null = null;
                  if (ddgHtml) {
-                     const ddgDoc = parser.parseFromString(ddgHtml, "text/html");
+                     ddgDoc = parser.parseFromString(ddgHtml, "text/html");
                      
                      // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
                      const linkElements = ddgDoc.querySelectorAll('a.result-link');
