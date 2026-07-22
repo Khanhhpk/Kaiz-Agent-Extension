@@ -1654,37 +1654,58 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 outputContent = `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
             }
             // Chụp ảnh nếu được yêu cầu
-            if (args.captureScreenshot && window.html2canvas) {
-                try {
-                    const floatBtn = document.getElementById('kaiz-floating-btn');
-                    const chatWin = document.getElementById('kaiz-chat-window');
-                    const vCursor = document.getElementById('kaiz-virtual-cursor');
-                    if (floatBtn)
-                        floatBtn.style.visibility = 'hidden';
-                    if (chatWin)
-                        chatWin.style.visibility = 'hidden';
-                    if (vCursor)
-                        vCursor.style.visibility = 'hidden';
-                    const canvas = await window.html2canvas(document.body, {
-                        useCORS: true,
-                        ignoreElements: (e) => {
-                            if (e.id && e.id.startsWith('kaiz-'))
-                                return true;
-                            return false;
-                        }
-                    });
-                    if (floatBtn)
-                        floatBtn.style.visibility = 'visible';
-                    if (chatWin)
-                        chatWin.style.visibility = 'visible';
-                    if (vCursor)
-                        vCursor.style.visibility = 'visible';
-                    const base64 = canvas.toDataURL('image/jpeg', 0.6);
-                    outputContent += `\n\n![Screenshot](${base64})`;
+            if (args.captureScreenshot) {
+                let html2canvasObj = window.html2canvas;
+                if (!html2canvasObj) {
+                    try {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                            script.onload = resolve;
+                            script.onerror = reject;
+                            document.head.appendChild(script);
+                        });
+                        html2canvasObj = window.html2canvas;
+                    }
+                    catch (e) {
+                        console.warn('[KaizAgent] Failed to load html2canvas from CDN');
+                    }
                 }
-                catch (e) {
-                    console.error('[KaizAgent] html2canvas error:', e);
-                    outputContent += `\n\n(Lỗi: Không thể chụp ảnh màn hình: ${e})`;
+                if (html2canvasObj) {
+                    try {
+                        const floatBtn = document.getElementById('kaiz-floating-btn');
+                        const chatWin = document.getElementById('kaiz-chat-window');
+                        const vCursor = document.getElementById('kaiz-virtual-cursor');
+                        if (floatBtn)
+                            floatBtn.style.visibility = 'hidden';
+                        if (chatWin)
+                            chatWin.style.visibility = 'hidden';
+                        if (vCursor)
+                            vCursor.style.visibility = 'hidden';
+                        const canvas = await html2canvasObj(document.body, {
+                            useCORS: true,
+                            ignoreElements: (e) => {
+                                if (e.id && e.id.startsWith('kaiz-'))
+                                    return true;
+                                return false;
+                            }
+                        });
+                        if (floatBtn)
+                            floatBtn.style.visibility = 'visible';
+                        if (chatWin)
+                            chatWin.style.visibility = 'visible';
+                        if (vCursor)
+                            vCursor.style.visibility = 'visible';
+                        const base64 = canvas.toDataURL('image/jpeg', 0.6);
+                        outputContent += `\n\n![Screenshot](${base64})`;
+                    }
+                    catch (e) {
+                        console.error('[KaizAgent] html2canvas error:', e);
+                        outputContent += `\n\n(Lỗi: Không thể chụp ảnh màn hình: ${e})`;
+                    }
+                }
+                else {
+                    outputContent += `\n\n(Lỗi: Không tìm thấy và không thể tải thư viện html2canvas để chụp ảnh).`;
                 }
             }
             return {
