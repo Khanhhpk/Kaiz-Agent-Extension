@@ -448,7 +448,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const manageWorldbookTool = {
         schema: {
             name: "manage_worldbook",
-            description: "Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create). LƯU Ý: Tool này tác động lên CẢ CUỐN SÁCH, nếu muốn chỉnh sửa từng mục nhỏ (entry) bên trong sách, hãy dùng tool manage_lorebook_entry.",
+            description: "Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create).",
             parameters: {
                 type: "object",
                 properties: {
@@ -787,7 +787,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const manageLorebookEntryTool = {
         schema: {
             name: "manage_lorebook_entry",
-            description: "Quản lý cấp độ CHI TIẾT (Tạo mới, Sửa, hoặc Xóa) các mục lục nhỏ (Entry) nằm bên trong một cuốn Sổ tay thế giới (Lorebook) đã có. Bạn có thể cập nhật nội dung (content), từ khóa kích hoạt (keys), hoặc dùng tham số 'disable' để Bật/Tắt riêng lẻ một entry mà không cần tắt cả cuốn sách. Mọi thay đổi sẽ được lưu lập tức vào ổ cứng.",
+            description: "Quản lý cấp độ CHI TIẾT (Tạo mới, Sửa, hoặc Xóa) các mục lục nhỏ (Entry) nằm bên trong một cuốn Sổ tay thế giới (Lorebook) đã có. Bạn có thể cập nhật nội dung (content), từ khóa kích hoạt (keys), hoặc dùng tham số 'disable' để Bật/Tắt riêng lẻ một entry mà không cần tắt cả cuốn sách.",
             parameters: {
                 type: "object",
                 properties: {
@@ -1183,7 +1183,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const searchGoogleTool = {
         schema: {
             name: "search_google",
-            description: "CÔNG CỤ TÌM KIẾM WEB (Mặc định dùng Google, tự động fallback sang DuckDuckGo/Bing). Hoạt động giống như việc bạn tìm kiếm Google. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link. Sau khi có được link URL từ kết quả, bạn có thể dùng tiếp tool scrape_webpage để đọc sâu vào bên trong.",
+            description: "CÔNG CỤ TÌM KIẾM WEB. Hoạt động giống như việc bạn tìm kiếm Internet. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link.",
             parameters: {
                 type: "object",
                 properties: {
