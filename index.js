@@ -720,7 +720,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getLorebookInfoTool = {
         schema: {
             name: 'get_lorebook_info',
-            description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info) đang được kích hoạt trong phòng chat. Có 7 chế độ (mode): summary (tóm tắt danh sách), all_full (chi tiết toàn bộ), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn), search (tìm kiếm theo từ khóa), by_uid (lấy 1 entry qua UID), simulate (kiểm tra xem câu thoại nào kích hoạt entry nào).',
+            description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info). Có 7 chế độ (mode): summary (tóm tắt danh sách các book đang bật), all_full (chi tiết toàn bộ book đang bật), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn BẤT KỲ, kể cả sách đang bị TẮT), search (tìm kiếm), by_uid (tìm qua UID), simulate (kiểm tra kích hoạt).',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1901,9 +1901,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (options.mode === 'by_name') {
                     if (!options.bookName)
                         return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
-                    if (!names.has(options.bookName))
-                        return `Không tìm thấy Lorebook nào đang kích hoạt có tên "${options.bookName}".`;
-                    // Nếu tìm thấy, xoá hết các tên khác để chỉ query đúng sách này
+                    // Bỏ qua kiểm tra names.has() để cho phép đọc book đang bị tắt
                     names.clear();
                     names.add(options.bookName);
                 }

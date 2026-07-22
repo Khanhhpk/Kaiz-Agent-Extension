@@ -582,8 +582,7 @@ export class SillyTavernAdapter {
 
             if (options.mode === 'by_name') {
                 if (!options.bookName) return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
-                if (!names.has(options.bookName)) return `Không tìm thấy Lorebook nào đang kích hoạt có tên "${options.bookName}".`;
-                // Nếu tìm thấy, xoá hết các tên khác để chỉ query đúng sách này
+                // Bỏ qua kiểm tra names.has() để cho phép đọc book đang bị tắt
                 names.clear();
                 names.add(options.bookName);
             }
