@@ -118,6 +118,7 @@ export class ChatWindowUI {
         
         // --- Drag Logic ---
         const ensureInBounds = (el: any) => {
+            if (el[0].tagName === 'DIALOG' && !el[0].open) return null;
             if (el.hasClass('kaiz-hidden')) return null;
             const rect = el[0].getBoundingClientRect();
             const w = window.innerWidth;
@@ -185,7 +186,7 @@ export class ChatWindowUI {
                 const btnPos = ensureInBounds(btn);
                 if (btnPos) localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
                 
-                if (!win.hasClass('kaiz-hidden')) {
+                if ((win[0] as HTMLDialogElement).open) {
                     const winPos = ensureInBounds(win);
                     if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
                 }
@@ -209,24 +210,58 @@ export class ChatWindowUI {
                 e.stopPropagation();
                 return;
             }
-            if (win.hasClass('kaiz-hidden')) {
-                win.removeClass('kaiz-hidden');
-                setTimeout(() => {
-                    const winPos = ensureInBounds(win);
-                    if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
-                }, 350); // Chờ hiệu ứng CSS chạy xong
+            
+            const dialogEl = win[0] as HTMLDialogElement;
+            const ctx = (window as any).SillyTavern.getContext();
+            const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+            const isPhoneMode = !!extSettings.phoneMode;
+
+            if (!dialogEl.open) {
+                if (isPhoneMode) {
+                    dialogEl.showModal();
+                } else {
+                    dialogEl.show();
+                    setTimeout(() => {
+                        const winPos = ensureInBounds(win);
+                        if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
+                    }, 50);
+                }
                 // Refresh list khi mở
                 stateManager.loadChatList().then(renderChatList);
             } else {
-                win.addClass('kaiz-hidden');
+                dialogEl.close();
                 if (isSidebarOpen) toggleSidebar();
             }
         });
 
         closeBtn.on('click', () => {
-            win.addClass('kaiz-hidden');
+            const dialogEl = win[0] as HTMLDialogElement;
+            dialogEl.close();
             if (isSidebarOpen) toggleSidebar(); // Đóng luôn sidebar
         });
+
+        // --- Phone Mode Logic ---
+        const applyPhoneMode = () => {
+            const ctx = (window as any).SillyTavern.getContext();
+            const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+            const isPhoneMode = !!extSettings.phoneMode;
+            
+            if (isPhoneMode) {
+                win.addClass('kaiz-phone-mode');
+                if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
+                    win.draggable('disable');
+                }
+            } else {
+                win.removeClass('kaiz-phone-mode');
+                if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
+                    win.draggable('enable');
+                }
+            }
+        };
+
+        // Khởi tạo phone mode ban đầu
+        setTimeout(applyPhoneMode, 200);
+        // ------------------------------------
 
         // Toggle Sidebar
         function toggleSidebar() {

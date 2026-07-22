@@ -63,13 +63,35 @@
     overflow: hidden;
     transition: opacity 0.3s ease, transform 0.3s ease, visibility 0.3s;
     font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    color: #fff;
 }
 
-.kaiz-chat-window.kaiz-hidden {
+.kaiz-chat-window:not([open]) {
+    display: none !important;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    transform: translateY(20px) scale(0.95);
+}
+
+.kaiz-chat-window::backdrop {
+    background: rgba(0,0,0,0.5);
+    backdrop-filter: blur(5px);
+}
+
+.kaiz-chat-window.kaiz-phone-mode {
+    width: 100vw !important;
+    height: 100dvh !important;
+    max-width: none !important;
+    max-height: none !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    margin: 0 !important;
 }
 
 /* Header */
