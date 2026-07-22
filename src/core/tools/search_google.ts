@@ -117,7 +117,7 @@ export const searchGoogleTool: ITool = {
                      return {
                          content: JSON.stringify({ 
                              warning: "Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang",
-                             raw_text: doc.body.innerText.substring(0, 3000)
+                             raw_text: ddgHtml ? (ddgDoc ? ddgDoc.body.innerText.substring(0, 3000) : ddgHtml.substring(0, 3000)) : (doc.body ? doc.body.innerText.substring(0, 3000) : "No text")
                          })
                      };
                  }
