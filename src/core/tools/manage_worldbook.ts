@@ -4,7 +4,7 @@ import { SillyTavernAdapter } from "../../adapters/st_adapter";
 export const manageWorldbookTool: ITool = {
     schema: {
         name: "manage_worldbook",
-        description: "Quản lý các cuốn Sổ tay thế giới (Worldbook/Lorebook) ở mức toàn cục. Cho phép lấy danh sách toàn bộ worldbook đang có trong hệ thống, bật/tắt (kích hoạt) worldbook, và tạo mới một worldbook trống.",
+        description: "Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create). LƯU Ý: Tool này tác động lên CẢ CUỐN SÁCH, nếu muốn chỉnh sửa từng mục nhỏ (entry) bên trong sách, hãy dùng tool manage_lorebook_entry.",
         parameters: {
             type: "object",
             properties: {

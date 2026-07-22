@@ -448,7 +448,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const manageWorldbookTool = {
         schema: {
             name: "manage_worldbook",
-            description: "Quản lý các cuốn Sổ tay thế giới (Worldbook/Lorebook) ở mức toàn cục. Cho phép lấy danh sách toàn bộ worldbook đang có trong hệ thống, bật/tắt (kích hoạt) worldbook, và tạo mới một worldbook trống.",
+            description: "Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create). LƯU Ý: Tool này tác động lên CẢ CUỐN SÁCH, nếu muốn chỉnh sửa từng mục nhỏ (entry) bên trong sách, hãy dùng tool manage_lorebook_entry.",
             parameters: {
                 type: "object",
                 properties: {
@@ -720,7 +720,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const getLorebookInfoTool = {
         schema: {
             name: 'get_lorebook_info',
-            description: 'Lấy thông tin từ Sổ tay thế giới (Lorebook / World Info). Có 7 chế độ (mode): summary (tóm tắt danh sách các book đang bật, hoặc tóm tắt 1 cuốn cụ thể nếu truyền book_name), all_full (chi tiết toàn bộ book đang bật), char_full (chi tiết thẻ nhân vật), by_name (chi tiết 1 cuốn BẤT KỲ, kể cả sách đang bị TẮT), search (tìm kiếm), by_uid (tìm qua UID), simulate (kiểm tra kích hoạt).',
+            description: 'Công cụ ĐỌC dữ liệu Sổ tay thế giới (Lorebook / World Info). Gồm 7 chế độ (mode): \n1. "summary": Lấy MỤC LỤC TÓM TẮT (UID, Tên, Keys) của các sách đang bật. ĐẶC BIỆT: Nếu truyền thêm "book_name", sẽ lấy mục lục của riêng cuốn sách đó (cho dù nó đang tắt). LUÔN ƯU TIÊN dùng chế độ này đầu tiên để khảo sát.\n2. "by_uid": Đọc CHI TIẾT nội dung của 1 entry khi đã biết UID.\n3. "by_name": Đọc CHI TIẾT toàn bộ 1 cuốn sách (cho dù nó đang tắt).\n4. "search": Tìm kiếm entry theo từ khóa.\n5. "simulate": Kiểm tra xem câu thoại nào kích hoạt entry nào.\n6. "char_full": Đọc sách gắn cứng theo thẻ nhân vật.\n7. "all_full": Đọc toàn bộ sách đang bật (Rất tốn token, chỉ dùng khi cần thiết).',
             parameters: {
                 type: 'object',
                 properties: {
@@ -787,7 +787,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const manageLorebookEntryTool = {
         schema: {
             name: "manage_lorebook_entry",
-            description: "Quản lý (Thêm mới, Chỉnh sửa, hoặc Xóa) một mục (entry) trong Sổ tay thế giới (Lorebook / World Info). Lưu ý: Việc thay đổi sẽ được lưu ngay lập tức vào ổ cứng của hệ thống.",
+            description: "Quản lý cấp độ CHI TIẾT (Tạo mới, Sửa, hoặc Xóa) các mục lục nhỏ (Entry) nằm bên trong một cuốn Sổ tay thế giới (Lorebook) đã có. Bạn có thể cập nhật nội dung (content), từ khóa kích hoạt (keys), hoặc dùng tham số 'disable' để Bật/Tắt riêng lẻ một entry mà không cần tắt cả cuốn sách. Mọi thay đổi sẽ được lưu lập tức vào ổ cứng.",
             parameters: {
                 type: "object",
                 properties: {
@@ -1089,7 +1089,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const scrapeWebpageTool = {
         schema: {
             name: "scrape_webpage",
-            description: "Cào nội dung văn bản và trích xuất tất cả các đường link từ một URL. Sử dụng khi cần đọc thông tin từ một trang web (như wiki, fandom, bài báo) hoặc tìm kiếm các link liên quan để cào tiếp.",
+            description: "CÔNG CỤ CÀO DỮ LIỆU TỪ INTERNET. Sử dụng công cụ này để bóc tách toàn bộ nội dung văn bản (text) thô và các đường link từ một địa chỉ URL bất kỳ (ví dụ: Wikipedia, Fandom, trang báo). Công cụ này được trang bị hệ thống vượt tường lửa (Cloudflare bypass) nên có thể đọc được các trang khó tính. Dùng nó khi bạn cần 'đọc' nội dung chi tiết của một trang web.",
             parameters: {
                 type: "object",
                 properties: {
@@ -1183,7 +1183,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const searchGoogleTool = {
         schema: {
             name: "search_google",
-            description: "Thực hiện tìm kiếm trên Google và trả về danh sách các kết quả (tiêu đề, link, tóm tắt). Sử dụng công cụ này để tìm hiểu thông tin mới hoặc tìm kiếm URL để sử dụng cho công cụ scrape_webpage.",
+            description: "CÔNG CỤ TÌM KIẾM WEB (Mặc định dùng Google, tự động fallback sang DuckDuckGo/Bing). Hoạt động giống như việc bạn tìm kiếm Google. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link. Sau khi có được link URL từ kết quả, bạn có thể dùng tiếp tool scrape_webpage để đọc sâu vào bên trong.",
             parameters: {
                 type: "object",
                 properties: {

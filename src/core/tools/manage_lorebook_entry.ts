@@ -4,7 +4,7 @@ import { SillyTavernAdapter } from "../../adapters/st_adapter";
 export const manageLorebookEntryTool: ITool = {
     schema: {
         name: "manage_lorebook_entry",
-        description: "Quản lý (Thêm mới, Chỉnh sửa, hoặc Xóa) một mục (entry) trong Sổ tay thế giới (Lorebook / World Info). Lưu ý: Việc thay đổi sẽ được lưu ngay lập tức vào ổ cứng của hệ thống.",
+        description: "Quản lý cấp độ CHI TIẾT (Tạo mới, Sửa, hoặc Xóa) các mục lục nhỏ (Entry) nằm bên trong một cuốn Sổ tay thế giới (Lorebook) đã có. Bạn có thể cập nhật nội dung (content), từ khóa kích hoạt (keys), hoặc dùng tham số 'disable' để Bật/Tắt riêng lẻ một entry mà không cần tắt cả cuốn sách. Mọi thay đổi sẽ được lưu lập tức vào ổ cứng.",
         parameters: {
             type: "object",
             properties: {
