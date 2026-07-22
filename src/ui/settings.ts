@@ -2,7 +2,7 @@ declare const jQuery: any;
 declare const SillyTavern: any;
 declare const toastr: any;
 
-import { ToolRegistry } from "../core/tool_registry";
+import { ToolRegistry } from '../core/tool_registry';
 
 export class SettingsUI {
     public static async init(extPath: string, EXT_NAME: string, registry: ToolRegistry) {
@@ -10,22 +10,23 @@ export class SettingsUI {
         const ctx = SillyTavern.getContext();
 
         // 2. Nạp giao diện settings.html
-        const container = document.getElementById('extensions_settings') || document.getElementById('extensions_settings2');
+        const container =
+            document.getElementById('extensions_settings') || document.getElementById('extensions_settings2');
         if (container) {
             try {
                 const html = await ctx.renderExtensionTemplateAsync(extPath, 'settings');
                 if (html) {
                     container.insertAdjacentHTML('beforeend', html);
                 } else {
-                    throw new Error("renderExtensionTemplateAsync returned empty html.");
+                    throw new Error('renderExtensionTemplateAsync returned empty html.');
                 }
             } catch (e) {
-                console.error("[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:", e);
-                toastr.error("Kaiz Agent: Failed to load UI settings.");
+                console.error('[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:', e);
+                toastr.error('Kaiz Agent: Failed to load UI settings.');
                 return;
             }
         } else {
-            console.error("[KaizAgent] Could not find #extensions_settings container.");
+            console.error('[KaizAgent] Could not find #extensions_settings container.');
             return;
         }
 
@@ -36,13 +37,13 @@ export class SettingsUI {
         $('#kaiz-custom-url').val(settings.customUrl);
         $('#kaiz-custom-key').val(settings.customKey);
         $('#kaiz-custom-model-text').val(settings.customModel);
-        
+
         if (settings.useCustomEndpoint) {
             $('#kaiz-custom-endpoint-group').show();
         }
 
         // Lắng nghe sự kiện đổi Checkbox
-        $('#kaiz-use-custom-endpoint').on('change', function(this: HTMLInputElement) {
+        $('#kaiz-use-custom-endpoint').on('change', function (this: HTMLInputElement) {
             settings.useCustomEndpoint = !!this.checked;
             ctx.saveSettingsDebounced();
             if (settings.useCustomEndpoint) {
@@ -53,7 +54,7 @@ export class SettingsUI {
         });
 
         // Lắng nghe thay đổi input và lưu tự động
-        $('#kaiz-custom-url, #kaiz-custom-key, #kaiz-custom-model-text').on('input', function(this: HTMLInputElement) {
+        $('#kaiz-custom-url, #kaiz-custom-key, #kaiz-custom-model-text').on('input', function (this: HTMLInputElement) {
             const id = this.id;
             if (id === 'kaiz-custom-url') settings.customUrl = this.value;
             if (id === 'kaiz-custom-key') settings.customKey = this.value;
@@ -62,17 +63,17 @@ export class SettingsUI {
         });
 
         $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);
-        $('#kaiz-max-loops').on('input', function(this: HTMLInputElement) {
+        $('#kaiz-max-loops').on('input', function (this: HTMLInputElement) {
             settings.maxAgentLoops = parseInt(this.value, 10) || 5;
             ctx.saveSettingsDebounced();
         });
 
         // --- UI SETTINGS LOGIC ---
         $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
-        $('#kaiz-phone-mode').on('change', function(this: HTMLInputElement) {
+        $('#kaiz-phone-mode').on('change', function (this: HTMLInputElement) {
             settings.phoneMode = !!this.checked;
             ctx.saveSettingsDebounced();
-            
+
             const win = $('#kaiz-chat-window');
             const dialogEl = win[0] as HTMLDialogElement;
             const isOpen = dialogEl && dialogEl.open;
@@ -103,7 +104,7 @@ export class SettingsUI {
         if (settings.safeMode) {
             $('#kaiz-safe-mode-group').show();
         }
-        $('#kaiz-safe-mode').on('change', function(this: HTMLInputElement) {
+        $('#kaiz-safe-mode').on('change', function (this: HTMLInputElement) {
             settings.safeMode = !!this.checked;
             ctx.saveSettingsDebounced();
             if (settings.safeMode) {
@@ -119,17 +120,21 @@ export class SettingsUI {
         function renderSafeTools(filterText = '') {
             $safeToolsList.empty();
             const lowerFilter = filterText.toLowerCase();
-            
-            tools.forEach(tool => {
+
+            tools.forEach((tool) => {
                 const name = tool.schema.name;
                 const desc = tool.schema.description;
-                
-                if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+
+                if (
+                    lowerFilter &&
+                    !name.toLowerCase().includes(lowerFilter) &&
+                    !desc.toLowerCase().includes(lowerFilter)
+                ) {
                     return;
                 }
-                
+
                 const isBlacklisted = !!settings.safeModeBlacklist[name];
-                
+
                 const $toolItem = $(`
                     <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
                         <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} style="margin-top: 3px;" />
@@ -139,32 +144,32 @@ export class SettingsUI {
                         </div>
                     </div>
                 `);
-                
+
                 $safeToolsList.append($toolItem);
             });
-            
-            $('.kaiz-safe-tool-toggle').on('change', function(this: HTMLInputElement) {
+
+            $('.kaiz-safe-tool-toggle').on('change', function (this: HTMLInputElement) {
                 const toolName = $(this).data('tool');
                 const isChecked = this.checked;
-                
+
                 if (isChecked) {
                     settings.safeModeBlacklist[toolName] = true;
                 } else {
                     delete settings.safeModeBlacklist[toolName];
                 }
                 ctx.saveSettingsDebounced();
-                
+
                 const $label = $(`label[for="kaiz-safe-tool-${toolName}"]`);
                 $label.css('color', isChecked ? '#e74c3c' : '#888');
             });
         }
         renderSafeTools();
-        $('#kaiz-safe-tools-search').on('input', function(this: HTMLInputElement) {
+        $('#kaiz-safe-tools-search').on('input', function (this: HTMLInputElement) {
             renderSafeTools(this.value);
         });
 
         $('#kaiz-safe-tools-blacklist-all').on('click', () => {
-            tools.forEach(tool => {
+            tools.forEach((tool) => {
                 settings.safeModeBlacklist[tool.schema.name] = true;
             });
             ctx.saveSettingsDebounced();
@@ -183,19 +188,56 @@ export class SettingsUI {
         const $addQuickPromptBtn = $('#kaiz-add-quick-prompt-btn');
 
         const lucideIconsList = [
-            'zap', 'sparkles', 'wand-2', 'message-square', 'message-circle', 'book-open', 'scroll-text', 
-            'flame', 'moon', 'sun', 'star', 'sword', 'shield', 'feather', 'wind', 'droplets', 
-            'leaf', 'gem', 'crown', 'ghost', 'skull', 'heart', 'coffee', 'compass', 'map', 
-            'eye', 'camera', 'music', 'play', 'terminal', 'code', 'cpu', 'fingerprint',
-            'palette', 'cloud', 'dice-5', 'puzzle', 'library', 'mountain', 'award', 'bell', 'cherry'
+            'zap',
+            'sparkles',
+            'wand-2',
+            'message-square',
+            'message-circle',
+            'book-open',
+            'scroll-text',
+            'flame',
+            'moon',
+            'sun',
+            'star',
+            'sword',
+            'shield',
+            'feather',
+            'wind',
+            'droplets',
+            'leaf',
+            'gem',
+            'crown',
+            'ghost',
+            'skull',
+            'heart',
+            'coffee',
+            'compass',
+            'map',
+            'eye',
+            'camera',
+            'music',
+            'play',
+            'terminal',
+            'code',
+            'cpu',
+            'fingerprint',
+            'palette',
+            'cloud',
+            'dice-5',
+            'puzzle',
+            'library',
+            'mountain',
+            'award',
+            'bell',
+            'cherry',
         ];
 
         let currentPickerIndex: number | null = null;
-        
+
         // Tạo bảng chọn Icon
         if ($('#kaiz-icon-picker').length === 0) {
             let iconsHtml = '';
-            lucideIconsList.forEach(iconName => {
+            lucideIconsList.forEach((iconName) => {
                 iconsHtml += `<div class="kaiz-icon-picker-item interactable" data-icon="${iconName}" title="${iconName}"><i data-lucide="${iconName}"></i></div>`;
             });
             $('#kaiz-quick-prompts-list').parent().append(`
@@ -228,7 +270,7 @@ export class SettingsUI {
             });
 
             // Sự kiện chọn icon trong picker
-            $('.kaiz-icon-picker-item').on('click', function(this: HTMLElement, e: any) {
+            $('.kaiz-icon-picker-item').on('click', function (this: HTMLElement, e: any) {
                 e.stopPropagation();
                 const iconName = $(this).data('icon');
                 if (currentPickerIndex !== null && settings.quickPrompts[currentPickerIndex]) {
@@ -244,18 +286,20 @@ export class SettingsUI {
         function renderQuickPrompts() {
             $quickPromptsList.empty();
             const quickPrompts = settings.quickPrompts || [];
-            
+
             if (quickPrompts.length === 0) {
-                $quickPromptsList.append('<div style="text-align:center; color:#888; font-size:12px; padding:10px;">No quick prompts added yet.</div>');
+                $quickPromptsList.append(
+                    '<div style="text-align:center; color:#888; font-size:12px; padding:10px;">No quick prompts added yet.</div>',
+                );
                 return;
             }
 
             quickPrompts.forEach((qp: any, index: number) => {
                 const currentIcon = qp.icon || 'zap';
-                
+
                 // Tránh lỗi khi render lần đầu nếu chưa có icon cũ trong list
                 if (currentIcon === '⚡') {
-                     qp.icon = 'zap';
+                    qp.icon = 'zap';
                 }
 
                 const $item = $(`
@@ -290,7 +334,7 @@ export class SettingsUI {
             }
 
             // Gắn sự kiện thay đổi
-            $('.kaiz-qp-name, .kaiz-qp-text').on('input', function(this: HTMLInputElement | HTMLTextAreaElement) {
+            $('.kaiz-qp-name, .kaiz-qp-text').on('input', function (this: HTMLInputElement | HTMLTextAreaElement) {
                 const index = parseInt($(this).data('index'), 10);
                 if (settings.quickPrompts[index]) {
                     if ($(this).hasClass('kaiz-qp-name')) settings.quickPrompts[index].name = $(this).val();
@@ -300,7 +344,7 @@ export class SettingsUI {
             });
 
             // Mở Picker
-            $('.kaiz-qp-icon-btn').on('click', function(this: HTMLButtonElement, e: any) {
+            $('.kaiz-qp-icon-btn').on('click', function (this: HTMLButtonElement, e: any) {
                 e.stopPropagation();
                 const index = parseInt($(this).data('index'), 10);
                 currentPickerIndex = index;
@@ -309,13 +353,13 @@ export class SettingsUI {
                 if (offset && pickerDialog) {
                     $('#kaiz-icon-picker').css({
                         top: offset.top + 40 + 'px',
-                        left: offset.left + 'px'
+                        left: offset.left + 'px',
                     });
                     pickerDialog.showModal();
                 }
             });
 
-            $('.kaiz-qp-up').on('click', function(this: HTMLButtonElement) {
+            $('.kaiz-qp-up').on('click', function (this: HTMLButtonElement) {
                 const index = parseInt($(this).data('index'), 10);
                 if (index > 0) {
                     const temp = settings.quickPrompts[index - 1];
@@ -326,7 +370,7 @@ export class SettingsUI {
                 }
             });
 
-            $('.kaiz-qp-down').on('click', function(this: HTMLButtonElement) {
+            $('.kaiz-qp-down').on('click', function (this: HTMLButtonElement) {
                 const index = parseInt($(this).data('index'), 10);
                 if (index < settings.quickPrompts.length - 1) {
                     const temp = settings.quickPrompts[index + 1];
@@ -337,7 +381,7 @@ export class SettingsUI {
                 }
             });
 
-            $('.kaiz-qp-del').on('click', function(this: HTMLButtonElement) {
+            $('.kaiz-qp-del').on('click', function (this: HTMLButtonElement) {
                 const index = parseInt($(this).data('index'), 10);
                 if (confirm('Delete this quick prompt?')) {
                     settings.quickPrompts.splice(index, 1);
@@ -362,21 +406,25 @@ export class SettingsUI {
 
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
-        
+
         function renderTools(filterText = '') {
             $toolsList.empty();
             const lowerFilter = filterText.toLowerCase();
-            
-            tools.forEach(tool => {
+
+            tools.forEach((tool) => {
                 const name = tool.schema.name;
                 const desc = tool.schema.description;
-                
-                if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+
+                if (
+                    lowerFilter &&
+                    !name.toLowerCase().includes(lowerFilter) &&
+                    !desc.toLowerCase().includes(lowerFilter)
+                ) {
                     return; // Bỏ qua nếu không khớp filter
                 }
-                
+
                 const isEnabled = !settings.disabledTools[name];
-                
+
                 const $toolItem = $(`
                     <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
                         <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} style="margin-top: 3px;" />
@@ -386,39 +434,39 @@ export class SettingsUI {
                         </div>
                     </div>
                 `);
-                
+
                 $toolsList.append($toolItem);
             });
-            
+
             // Gắn sự kiện toggle
-            $('.kaiz-tool-toggle').on('change', function(this: HTMLInputElement) {
+            $('.kaiz-tool-toggle').on('change', function (this: HTMLInputElement) {
                 const toolName = $(this).data('tool');
                 const isChecked = this.checked;
-                
+
                 if (isChecked) {
                     delete settings.disabledTools[toolName];
                 } else {
                     settings.disabledTools[toolName] = true;
                 }
                 ctx.saveSettingsDebounced();
-                
+
                 // Đổi màu nhãn
                 const $label = $(`label[for="kaiz-tool-toggle-${toolName}"]`);
                 $label.css('color', isChecked ? '#fff' : '#888');
             });
         }
-        
+
         // Render lần đầu
         renderTools();
-        
+
         // Bắt sự kiện Search
-        $('#kaiz-tools-search').on('input', function(this: HTMLInputElement) {
+        $('#kaiz-tools-search').on('input', function (this: HTMLInputElement) {
             renderTools(this.value);
         });
         // --- END TOOLS MANAGER LOGIC ---
 
         // Lắng nghe chọn từ Dropdown -> Cập nhật Input
-        $('#kaiz-custom-model').on('change', function(this: HTMLSelectElement) {
+        $('#kaiz-custom-model').on('change', function (this: HTMLSelectElement) {
             if (this.value) {
                 $('#kaiz-custom-model-text').val(this.value).trigger('input');
             }
@@ -428,7 +476,7 @@ export class SettingsUI {
         $('#kaiz-fetch-models').on('click', async () => {
             let url = String($('#kaiz-custom-url').val()).trim();
             const key = String($('#kaiz-custom-key').val()).trim();
-            
+
             if (!url) {
                 toastr.error('Please enter an API URL first.', 'Kaiz Agent');
                 return;
@@ -442,17 +490,17 @@ export class SettingsUI {
             try {
                 $('#kaiz-fetch-models').find('i').addClass('fa-spin');
                 const res = await fetch(url, {
-                    headers: key ? { 'Authorization': `Bearer ${key}` } : {}
+                    headers: key ? { Authorization: `Bearer ${key}` } : {},
                 });
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                
+
                 const data = await res.json();
                 const models = data.data || data; // Hỗ trợ OpenAI format ({ data: [...] }) hoặc mảng trực tiếp
-                
+
                 if (Array.isArray(models)) {
                     const select = $('#kaiz-custom-model');
                     select.empty().append('<option value="">-- Select Model --</option>');
-                    models.forEach(m => {
+                    models.forEach((m) => {
                         const id = m.id || m.name || m;
                         select.append(`<option value="${id}">${id}</option>`);
                     });

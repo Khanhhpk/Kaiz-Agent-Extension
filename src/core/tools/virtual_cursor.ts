@@ -7,15 +7,15 @@ export const toggleVirtualCursorTool: ITool = {
         parameters: {
             type: 'object',
             properties: {},
-            required: []
-        }
+            required: [],
+        },
     },
     execute: async (args: any) => {
         let cursor = document.getElementById('kaiz-virtual-cursor');
         if (cursor) {
             cursor.remove();
             return {
-                content: 'Đã tắt con trỏ chuột ảo.'
+                content: 'Đã tắt con trỏ chuột ảo.',
             };
         } else {
             let extPath = 'third-party/Kaiz-Agent-Extension';
@@ -23,7 +23,12 @@ export const toggleVirtualCursorTool: ITool = {
                 const scripts = document.getElementsByTagName('script');
                 for (let i = 0; i < scripts.length; i++) {
                     const src = scripts[i].src;
-                    if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                    if (
+                        src &&
+                        src.includes('index.js') &&
+                        src.toLowerCase().includes('kaiz') &&
+                        src.toLowerCase().includes('agent')
+                    ) {
                         const parts = new URL(src).pathname.split('/');
                         const extIndex = parts.indexOf('extensions');
                         if (extIndex !== -1 && parts.length > extIndex + 1) {
@@ -35,8 +40,8 @@ export const toggleVirtualCursorTool: ITool = {
                         }
                     }
                 }
-            } catch(e) {}
-            
+            } catch (e) {}
+
             // Spawn mới
             cursor = document.createElement('div');
             cursor.id = 'kaiz-virtual-cursor';
@@ -51,8 +56,8 @@ export const toggleVirtualCursorTool: ITool = {
             document.body.appendChild(cursor);
 
             return {
-                content: 'Đã bật con trỏ chuột ảo Gawr Gura ở giữa màn hình.'
+                content: 'Đã bật con trỏ chuột ảo Gawr Gura ở giữa màn hình.',
             };
         }
-    }
+    },
 };

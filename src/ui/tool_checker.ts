@@ -1,6 +1,6 @@
-import { KaizToolChecker } from "../core/tool_checker";
-import { ToolRegistry } from "../core/tool_registry";
-import { SillyTavernAdapter } from "../adapters/st_adapter";
+import { KaizToolChecker } from '../core/tool_checker';
+import { ToolRegistry } from '../core/tool_registry';
+import { SillyTavernAdapter } from '../adapters/st_adapter';
 
 declare const jQuery: any;
 
@@ -8,7 +8,7 @@ export class ToolCheckerUI {
     public static init(registry: ToolRegistry, adapter: SillyTavernAdapter) {
         const $ = jQuery;
         const btn = $('#kaiz-checker-btn');
-        
+
         if ($('#kaiz-checker-modal').length === 0) {
             const modalHtml = `
             <style>#kaiz-checker-modal::backdrop { background: rgba(0,0,0,0.6); }</style>
@@ -67,28 +67,34 @@ export class ToolCheckerUI {
         runBtn.on('click', async () => {
             runBtn.prop('disabled', true).html('<i class="fa-solid fa-spinner fa-spin"></i> Running...');
             renderToolList(); // Reset list
-            
+
             await checkerInstance.runTests((toolName, status, message) => {
                 const item = $(`#checker-tool-${toolName}`);
                 const msgItem = $(`#checker-tool-msg-${toolName}`);
                 const statusSpan = item.find('.status-icon');
-                
+
                 if (status === 'testing') {
-                    statusSpan.html('<i class="fa-solid fa-spinner fa-spin" style="color:#f39c12"></i> Testing').css('color', '#f39c12');
+                    statusSpan
+                        .html('<i class="fa-solid fa-spinner fa-spin" style="color:#f39c12"></i> Testing')
+                        .css('color', '#f39c12');
                     msgItem.hide();
                 } else if (status === 'ok') {
-                    statusSpan.html('<i class="fa-solid fa-check" style="color:#2ecc71"></i> OK').css('color', '#2ecc71');
+                    statusSpan
+                        .html('<i class="fa-solid fa-check" style="color:#2ecc71"></i> OK')
+                        .css('color', '#2ecc71');
                     if (message) {
                         msgItem.text(message).css('color', '#2ecc71').show();
                     }
                 } else if (status === 'error') {
-                    statusSpan.html('<i class="fa-solid fa-times" style="color:#e74c3c"></i> Error').css('color', '#e74c3c');
+                    statusSpan
+                        .html('<i class="fa-solid fa-times" style="color:#e74c3c"></i> Error')
+                        .css('color', '#e74c3c');
                     if (message) {
                         msgItem.text(message).css('color', '#e74c3c').show();
                     }
                 }
             });
-            
+
             runBtn.prop('disabled', false).html('<i class="fa-solid fa-play"></i> Run Tests');
         });
     }

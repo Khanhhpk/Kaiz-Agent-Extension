@@ -24,12 +24,12 @@ export class KaizDB {
 
             request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
                 const db = (event.target as IDBOpenDBRequest).result;
-                
+
                 if (!db.objectStoreNames.contains('chats')) {
                     const chatStore = db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
                     chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
                 }
-                
+
                 if (!db.objectStoreNames.contains('messages')) {
                     const msgStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
                     msgStore.createIndex('chatId', 'chatId', { unique: false });
@@ -50,7 +50,7 @@ export class KaizDB {
     }
 
     // --- CHATS ---
-    
+
     public async createChat(name: string): Promise<number> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
@@ -58,7 +58,7 @@ export class KaizDB {
             const store = transaction.objectStore('chats');
             const now = Date.now();
             const chat: ChatSession = { name, createdAt: now, updatedAt: now };
-            
+
             const request = store.add(chat);
             request.onsuccess = () => resolve(request.result as number);
             request.onerror = () => reject(request.error);
@@ -70,7 +70,7 @@ export class KaizDB {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['chats'], 'readwrite');
             const store = transaction.objectStore('chats');
-            
+
             const getReq = store.get(id);
             getReq.onsuccess = () => {
                 const chat = getReq.result as ChatSession;
@@ -90,7 +90,7 @@ export class KaizDB {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['chats'], 'readwrite');
             const store = transaction.objectStore('chats');
-            
+
             const getReq = store.get(id);
             getReq.onsuccess = () => {
                 const chat = getReq.result as ChatSession;
@@ -109,7 +109,7 @@ export class KaizDB {
             const transaction = this.db.transaction(['chats'], 'readonly');
             const store = transaction.objectStore('chats');
             const index = store.index('updatedAt');
-            
+
             const request = index.getAll();
             request.onsuccess = () => {
                 // Đảo ngược để chat mới nhất lên đầu
@@ -125,9 +125,9 @@ export class KaizDB {
             const transaction = this.db.transaction(['chats', 'messages'], 'readwrite');
             const chatStore = transaction.objectStore('chats');
             const msgStore = transaction.objectStore('messages');
-            
+
             chatStore.delete(id);
-            
+
             // Xóa message thuộc chat này
             const msgIndex = msgStore.index('chatId');
             const req = msgIndex.openCursor(IDBKeyRange.only(id));
@@ -138,7 +138,7 @@ export class KaizDB {
                     cursor.continue();
                 }
             };
-            
+
             transaction.oncomplete = () => resolve();
             transaction.onerror = () => reject(transaction.error);
         });
@@ -152,7 +152,7 @@ export class KaizDB {
             const transaction = this.db.transaction(['messages'], 'readwrite');
             const store = transaction.objectStore('messages');
             const msg: ChatMessage = { chatId, role, content, timestamp: Date.now() };
-            
+
             const request = store.add(msg);
             request.onsuccess = async () => {
                 await this.updateChatTimestamp(chatId).catch(console.error);
@@ -168,7 +168,7 @@ export class KaizDB {
             const transaction = this.db.transaction(['messages'], 'readonly');
             const store = transaction.objectStore('messages');
             const index = store.index('chatId');
-            
+
             const request = index.getAll(IDBKeyRange.only(chatId));
             request.onsuccess = () => {
                 const msgs = request.result as ChatMessage[];

@@ -52,7 +52,7 @@ export class ToolRegistry {
      * Lấy schema của tất cả tools để gửi lên LLM
      */
     public getAllSchemas(): ToolSchema[] {
-        return Array.from(this.tools.values()).map(t => t.schema);
+        return Array.from(this.tools.values()).map((t) => t.schema);
     }
 
     /**
@@ -71,7 +71,7 @@ export class ToolRegistry {
         if (!tool) {
             return {
                 content: `Error: Tool '${name}' not found.`,
-                isError: true
+                isError: true,
             };
         }
 
@@ -82,7 +82,7 @@ export class ToolRegistry {
                     if (args[req] === undefined) {
                         return {
                             content: `Error: Missing required parameter '${req}' for tool '${name}'.`,
-                            isError: true
+                            isError: true,
                         };
                     }
                 }
@@ -94,7 +94,7 @@ export class ToolRegistry {
             console.error(`[ToolRegistry] Error executing tool '${name}':`, e);
             return {
                 content: `Error executing tool '${name}': ${e.message || String(e)}`,
-                isError: true
+                isError: true,
             };
         }
     }

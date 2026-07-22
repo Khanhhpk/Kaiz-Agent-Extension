@@ -4,18 +4,19 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const deleteMessageByIndexTool: ITool = {
     schema: {
         name: 'delete_message_by_index',
-        description: 'Xóa một hoặc nhiều tin nhắn cụ thể dựa trên chatIndex. LƯU Ý QUAN TRỌNG: TRƯỚC KHI GỌI CÔNG CỤ NÀY, BẠN PHẢI sử dụng công cụ get_chat_history để tìm xem nội dung tin nhắn nằm ở chatIndex số mấy. Tuyệt đối KHÔNG tự phỏng đoán chatIndex.',
+        description:
+            'Xóa một hoặc nhiều tin nhắn cụ thể dựa trên chatIndex. LƯU Ý QUAN TRỌNG: TRƯỚC KHI GỌI CÔNG CỤ NÀY, BẠN PHẢI sử dụng công cụ get_chat_history để tìm xem nội dung tin nhắn nằm ở chatIndex số mấy. Tuyệt đối KHÔNG tự phỏng đoán chatIndex.',
         parameters: {
             type: 'object',
             properties: {
                 indices: {
                     type: 'array',
                     items: { type: 'number' },
-                    description: 'Mảng các chỉ số (chatIndex) của những tin nhắn cần xóa. Ví dụ: [12, 14].'
-                }
+                    description: 'Mảng các chỉ số (chatIndex) của những tin nhắn cần xóa. Ví dụ: [12, 14].',
+                },
             },
-            required: ['indices']
-        }
+            required: ['indices'],
+        },
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
         if (!context.adapter.hasFeature('deleteMessage')) {
@@ -28,10 +29,10 @@ export const deleteMessageByIndexTool: ITool = {
         }
 
         const indices = args.indices;
-        if (!Array.isArray(indices) || !indices.every(i => typeof i === 'number' && Number.isInteger(i))) {
+        if (!Array.isArray(indices) || !indices.every((i) => typeof i === 'number' && Number.isInteger(i))) {
             return {
                 content: 'Error: indices must be an array of integers.',
-                isError: true
+                isError: true,
             };
         }
 
@@ -39,13 +40,13 @@ export const deleteMessageByIndexTool: ITool = {
             // Sửa tên phương thức được gọi sang phương thức mới hỗ trợ mảng
             context.adapter.deleteMessagesByIndices(indices);
             return {
-                content: `Messages at indices [${indices.join(', ')}] deleted successfully.`
+                content: `Messages at indices [${indices.join(', ')}] deleted successfully.`,
             };
         } catch (e: any) {
-             return {
-                 content: `Error deleting messages: ${e.message}`,
-                 isError: true
-             }
+            return {
+                content: `Error deleting messages: ${e.message}`,
+                isError: true,
+            };
         }
-    }
+    },
 };

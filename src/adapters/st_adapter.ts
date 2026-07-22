@@ -27,8 +27,14 @@ export class SillyTavernAdapter {
     /**
      * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
      */
-    public async generateCompletion(messages: Message[], maxTokens: number, stream: boolean = false, onUpdate?: (text: string, reasoning: string | null) => void, signal?: AbortSignal): Promise<{ text: string; reasoning: string | null; isMaxTokens: boolean }> {
-        console.log("[KaizAgent] Calling ST generateCompletion...");
+    public async generateCompletion(
+        messages: Message[],
+        maxTokens: number,
+        stream: boolean = false,
+        onUpdate?: (text: string, reasoning: string | null) => void,
+        signal?: AbortSignal,
+    ): Promise<{ text: string; reasoning: string | null; isMaxTokens: boolean }> {
+        console.log('[KaizAgent] Calling ST generateCompletion...');
         const ctx = SillyTavern.getContext();
         const settings = ctx.extensionSettings['kaiz_agent'] || {};
         const abort = new AbortController();
@@ -36,7 +42,7 @@ export class SillyTavernAdapter {
 
         // 1. Nếu bật tính năng Custom Endpoint, ta gọi trực tiếp (bypass ST)
         if (settings.useCustomEndpoint && settings.customUrl) {
-            console.log("[KaizAgent] Using Custom Endpoint:", settings.customUrl);
+            console.log('[KaizAgent] Using Custom Endpoint:', settings.customUrl);
             let text = '';
             let reasoning: string | null = null;
             let isMaxTokens = false;
@@ -54,14 +60,14 @@ export class SillyTavernAdapter {
                     model: settings.customModel || 'gpt-3.5-turbo',
                     messages: messages,
                     max_tokens: maxTokens,
-                    stream: stream
+                    stream: stream,
                 };
 
                 const res = await fetch(url, {
                     method: 'POST',
                     headers,
                     body: JSON.stringify(payload),
-                    signal: effectiveSignal
+                    signal: effectiveSignal,
                 });
 
                 if (!res.ok) {
@@ -71,17 +77,17 @@ export class SillyTavernAdapter {
 
                 if (stream) {
                     const reader = res.body?.getReader();
-                    const decoder = new TextDecoder("utf-8");
-                    let buffer = "";
+                    const decoder = new TextDecoder('utf-8');
+                    let buffer = '';
 
                     if (reader) {
                         while (true) {
                             const { done, value } = await reader.read();
                             if (done) break;
-                            
+
                             buffer += decoder.decode(value, { stream: true });
                             const lines = buffer.split('\n');
-                            buffer = lines.pop() || "";
+                            buffer = lines.pop() || '';
 
                             for (const line of lines) {
                                 const l = line.trim();
@@ -89,17 +95,18 @@ export class SillyTavernAdapter {
                                 if (l.startsWith('data: ')) {
                                     try {
                                         const data = JSON.parse(l.slice(6));
-                                        
+
                                         const finish = data.choices?.[0]?.finish_reason;
                                         if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
 
                                         const delta = data.choices?.[0]?.delta || {};
                                         if (delta.content) text += delta.content;
                                         if (delta.reasoning || delta.reasoning_content) {
-                                            reasoning = (reasoning || '') + (delta.reasoning || delta.reasoning_content);
+                                            reasoning =
+                                                (reasoning || '') + (delta.reasoning || delta.reasoning_content);
                                         }
                                         if (data.thinking) reasoning = (reasoning || '') + data.thinking;
-                                        
+
                                         if (onUpdate) onUpdate(text, reasoning);
                                     } catch (e) {}
                                 }
@@ -110,7 +117,7 @@ export class SillyTavernAdapter {
                     const data = await res.json();
                     const finish = data.choices?.[0]?.finish_reason;
                     if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
-                    
+
                     const msg = data.choices?.[0]?.message || {};
                     text = msg.content || '';
                     if (msg.reasoning || msg.reasoning_content) {
@@ -121,9 +128,8 @@ export class SillyTavernAdapter {
                 }
 
                 return { text: text.trim(), reasoning, isMaxTokens };
-
             } catch (e) {
-                console.error("[KaizAgent] Custom Endpoint error:", e);
+                console.error('[KaizAgent] Custom Endpoint error:', e);
                 throw e;
             }
         }
@@ -133,31 +139,44 @@ export class SillyTavernAdapter {
         let asyncGeneratorFn: any;
 
         try {
-            let profileId = ctx.extensionSettings?.connectionManager?.selectedProfile || document.getElementById('connection_profiles')?.value;
-            
+            let profileId =
+                ctx.extensionSettings?.connectionManager?.selectedProfile ||
+                document.getElementById('connection_profiles')?.value;
+
             if (profileId && service && typeof service.sendRequest === 'function') {
                 asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
                     stream: stream,
                     signal: effectiveSignal,
                     extractData: false,
-                    includePreset: true
+                    includePreset: true,
                 });
             } else {
                 const mainApi = window.main_api || ctx.main_api;
                 if (mainApi === 'openai' && ctx.ChatCompletionService) {
                     const oaiSettings = window.oai_settings || ctx.oai_settings || {};
-                    asyncGeneratorFn = await ctx.ChatCompletionService.processRequest({
-                        messages: messages,
-                        max_tokens: maxTokens,
-                        stream: stream
-                    }, { presetName: oaiSettings.preset_settings_openai }, false, abort.signal);
+                    asyncGeneratorFn = await ctx.ChatCompletionService.processRequest(
+                        {
+                            messages: messages,
+                            max_tokens: maxTokens,
+                            stream: stream,
+                        },
+                        { presetName: oaiSettings.preset_settings_openai },
+                        false,
+                        abort.signal,
+                    );
                 } else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-                    const textGenSettings = window.textgenerationwebui_settings || ctx.textgenerationwebui_settings || {};
-                    asyncGeneratorFn = await ctx.TextCompletionService.processRequest({
-                        prompt: messages,
-                        max_tokens: maxTokens,
-                        stream: stream
-                    }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, abort.signal);
+                    const textGenSettings =
+                        window.textgenerationwebui_settings || ctx.textgenerationwebui_settings || {};
+                    asyncGeneratorFn = await ctx.TextCompletionService.processRequest(
+                        {
+                            prompt: messages,
+                            max_tokens: maxTokens,
+                            stream: stream,
+                        },
+                        { presetName: textGenSettings.preset_settings_textgenerationwebui },
+                        false,
+                        abort.signal,
+                    );
                 } else {
                     throw new Error('No active API connection found in SillyTavern. Please configure LLM settings.');
                 }
@@ -166,7 +185,8 @@ export class SillyTavernAdapter {
             let text = '';
             let reasoning = null;
 
-            const isGen = typeof asyncGeneratorFn === 'function' ||
+            const isGen =
+                typeof asyncGeneratorFn === 'function' ||
                 (asyncGeneratorFn != null && typeof asyncGeneratorFn[Symbol.asyncIterator] === 'function') ||
                 (asyncGeneratorFn != null && typeof asyncGeneratorFn.next === 'function');
 
@@ -177,10 +197,17 @@ export class SillyTavernAdapter {
                 if (typeof value === 'string') {
                     text = value.trim();
                 } else {
-                    text = value?.text || value?.content || value?.message?.content || value?.choices?.[0]?.message?.content || '';
+                    text =
+                        value?.text ||
+                        value?.content ||
+                        value?.message?.content ||
+                        value?.choices?.[0]?.message?.content ||
+                        '';
                 }
-                const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
-                const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
+                const finishReason =
+                    lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
+                const isMaxTokens =
+                    finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
                 if (onUpdate) onUpdate(text, reasoning);
                 return { text: text.trim(), reasoning, isMaxTokens };
             }
@@ -193,21 +220,22 @@ export class SillyTavernAdapter {
                     break;
                 }
                 lastValue = value;
-                
+
                 let chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
                 if (value?.thinking) reasoning = (reasoning || '') + value.thinking;
-                
+
                 if (chunkText) text += chunkText;
-                
+
                 if (onUpdate) onUpdate(text, reasoning);
             }
 
             const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
-            const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
-            
+            const isMaxTokens =
+                finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
+
             return { text: text.trim(), reasoning, isMaxTokens };
         } catch (e) {
-            console.error("[KaizAgent] generateCompletion error:", e);
+            console.error('[KaizAgent] generateCompletion error:', e);
             throw e;
         }
     }
@@ -249,7 +277,7 @@ export class SillyTavernAdapter {
         for (let i = 0; i < chat.length; i++) {
             const msg = chat[i];
             const name = msg.name || 'System';
-            
+
             // Lấy safe_preview
             let preview = msg.mes || '';
             if (preview.length > 50) preview = preview.substring(0, 50) + '...';
@@ -316,9 +344,9 @@ export class SillyTavernAdapter {
             if (m.is_system || m.is_hidden || (m.extra && m.extra.is_hidden)) continue;
             result.push({
                 role: m.is_user ? 'user' : 'assistant',
-                name: m.is_user ? (ctx.name1 || 'User') : (m.name || ctx.name2 || 'Character'),
+                name: m.is_user ? ctx.name1 || 'User' : m.name || ctx.name2 || 'Character',
                 content: typeof m.mes === 'string' ? m.mes : '',
-                chatIndex: startIndex + i  // index thật trong ctx.chat, không bị lệch bởi filter
+                chatIndex: startIndex + i, // index thật trong ctx.chat, không bị lệch bởi filter
             });
         }
         return result;
@@ -331,7 +359,7 @@ export class SillyTavernAdapter {
         const ctx = SillyTavern.getContext();
         const char = ctx.characters?.[ctx.characterId];
         if (!char) return null;
-        
+
         const d = char.data || {};
         return {
             name: char.name || 'Unknown',
@@ -382,7 +410,7 @@ export class SillyTavernAdapter {
         }
 
         // Lọc và validate (loại bỏ index lỗi, giới hạn trong mảng chat)
-        const validIndices = indices.filter(i => Number.isInteger(i) && i >= 0 && i < ctx.chat.length);
+        const validIndices = indices.filter((i) => Number.isInteger(i) && i >= 0 && i < ctx.chat.length);
         if (validIndices.length === 0) {
             throw new Error('Không có index nào hợp lệ nằm trong giới hạn chat.');
         }
@@ -422,13 +450,13 @@ export class SillyTavernAdapter {
     public async editUserPersona(newDescription: string, newName?: string): Promise<boolean> {
         try {
             const ctx = SillyTavern.getContext();
-            
+
             // Import module personas.js để lấy user_avatar (là ES module variable, không expose ra window)
             let personasModule: any = null;
             try {
                 personasModule = await new Function("return import('/scripts/personas.js')")();
             } catch (e) {
-                console.warn("[KaizAgent] Could not import personas.js:", e);
+                console.warn('[KaizAgent] Could not import personas.js:', e);
             }
 
             // Lấy avatarId từ module hoặc fallback sang power_user settings
@@ -444,13 +472,13 @@ export class SillyTavernAdapter {
             }
 
             if (!avatarId) {
-                console.error("[KaizAgent] No active user_avatar found.");
+                console.error('[KaizAgent] No active user_avatar found.');
                 return false;
             }
 
             const powerUser = (ctx as any).powerUserSettings;
             if (!powerUser || !powerUser.personas) {
-                console.error("[KaizAgent] power_user.personas not accessible via context.");
+                console.error('[KaizAgent] power_user.personas not accessible via context.');
                 return false;
             }
 
@@ -472,7 +500,11 @@ export class SillyTavernAdapter {
                         w.setUserName(newName.trim());
                     }
                     if (ctx.eventSource && ctx.eventTypes) {
-                        ctx.eventSource.emit(ctx.eventTypes.PERSONA_RENAMED, { avatarId, oldName, newName: newName.trim() });
+                        ctx.eventSource.emit(ctx.eventTypes.PERSONA_RENAMED, {
+                            avatarId,
+                            oldName,
+                            newName: newName.trim(),
+                        });
                     }
                     hasUpdates = true;
                 }
@@ -484,7 +516,12 @@ export class SillyTavernAdapter {
                     powerUser.persona_descriptions[avatarId].description = newDescription;
                 } else if (powerUser.persona_descriptions) {
                     // Tạo entry mới nếu chưa có
-                    powerUser.persona_descriptions[avatarId] = { description: newDescription, position: 0, depth: 0, role: 0 };
+                    powerUser.persona_descriptions[avatarId] = {
+                        description: newDescription,
+                        position: 0,
+                        depth: 0,
+                        role: 0,
+                    };
                 }
                 // Cập nhật shorthand được dùng ở nhiều nơi
                 powerUser.persona_description = newDescription;
@@ -511,7 +548,7 @@ export class SillyTavernAdapter {
 
                 // 2. Gọi hàm module để re-render UI panel
                 if (personasModule) {
-                    // reloadUserAvatar() — cập nhật avatar trong chat bubbles  
+                    // reloadUserAvatar() — cập nhật avatar trong chat bubbles
                     if (typeof personasModule.reloadUserAvatar === 'function') {
                         personasModule.reloadUserAvatar();
                     }
@@ -534,7 +571,7 @@ export class SillyTavernAdapter {
 
             return true;
         } catch (err) {
-            console.error("[KaizAgent] Error in editUserPersona:", err);
+            console.error('[KaizAgent] Error in editUserPersona:', err);
             return false;
         }
     }
@@ -543,13 +580,25 @@ export class SillyTavernAdapter {
      * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
      * @param options Các tùy chọn lọc dữ liệu
      */
-    public async getLorebookInfo(options: { mode: 'summary' | 'all_full' | 'char_full' | 'by_name' | 'search' | 'by_uid' | 'simulate', bookName?: string, includeDisabled?: boolean, query?: string, uid?: string | number } = { mode: 'summary' }): Promise<string> {
-        let result = "";
+    public async getLorebookInfo(
+        options: {
+            mode: 'summary' | 'all_full' | 'char_full' | 'by_name' | 'search' | 'by_uid' | 'simulate';
+            bookName?: string;
+            includeDisabled?: boolean;
+            query?: string;
+            uid?: string | number;
+        } = { mode: 'summary' },
+    ): Promise<string> {
+        let result = '';
         try {
             const ctx = SillyTavern.getContext();
             let ST_WorldInfo: any = null;
-            try { ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")(); } catch (e) { console.warn("[KaizAgent] Could not dynamically import world-info.js"); }
-            
+            try {
+                ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+            } catch (e) {
+                console.warn('[KaizAgent] Could not dynamically import world-info.js');
+            }
+
             const names = new Set<string>();
             const globalBooks = ST_WorldInfo?.selected_world_info || (window as any).selected_world_info || [];
             if (Array.isArray(globalBooks)) {
@@ -594,9 +643,9 @@ export class SillyTavernAdapter {
             }
 
             if (options.mode !== 'char_full') {
-                result += "=== LOREBOOKS ĐANG KÍCH HOẠT ===\n";
+                result += '=== LOREBOOKS ĐANG KÍCH HOẠT ===\n';
                 if (names.size === 0) {
-                    result += "Không có Global hay Chat Lorebook nào đang được kích hoạt.\n";
+                    result += 'Không có Global hay Chat Lorebook nào đang được kích hoạt.\n';
                 }
 
                 for (const name of names) {
@@ -607,7 +656,10 @@ export class SillyTavernAdapter {
                         } else {
                             const res = await fetch('/api/worldinfo/get', {
                                 method: 'POST',
-                                headers: { ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}), 'Content-Type': 'application/json' },
+                                headers: {
+                                    ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                                    'Content-Type': 'application/json',
+                                },
                                 body: JSON.stringify({ name }),
                             });
                             if (res.ok) data = await res.json();
@@ -628,8 +680,8 @@ export class SillyTavernAdapter {
 
                             const keysList = entry.key || entry.keys || [];
                             const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
-                            const type = entry.constant ? "CONSTANT" : "NORMAL";
-                            const status = isDisabled ? "TẮT" : "BẬT";
+                            const type = entry.constant ? 'CONSTANT' : 'NORMAL';
+                            const status = isDisabled ? 'TẮT' : 'BẬT';
                             const entryUid = entry.uid ?? entry.id ?? entryKey;
                             const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
 
@@ -650,10 +702,16 @@ export class SillyTavernAdapter {
                                     const kStr = String(key).toLowerCase().trim();
                                     if (!kStr) continue;
                                     if (kStr.includes('&&')) {
-                                        const parts = kStr.split('&&').map(p => p.trim());
-                                        if (parts.every(p => q.includes(p))) { triggered = true; break; }
+                                        const parts = kStr.split('&&').map((p) => p.trim());
+                                        if (parts.every((p) => q.includes(p))) {
+                                            triggered = true;
+                                            break;
+                                        }
                                     } else {
-                                        if (q.includes(kStr)) { triggered = true; break; }
+                                        if (q.includes(kStr)) {
+                                            triggered = true;
+                                            break;
+                                        }
                                     }
                                 }
                                 if (!triggered) continue;
@@ -668,16 +726,25 @@ export class SillyTavernAdapter {
                         }
                         if (hasEntries) {
                             result += bookResult;
-                        } else if (options.mode === 'all_full' || options.mode === 'by_name' || options.mode === 'summary') {
-                            result += bookResult + "(Lorebook này rỗng hoặc không có entry phù hợp)\n";
+                        } else if (
+                            options.mode === 'all_full' ||
+                            options.mode === 'by_name' ||
+                            options.mode === 'summary'
+                        ) {
+                            result += bookResult + '(Lorebook này rỗng hoặc không có entry phù hợp)\n';
                         }
                     }
                 }
             }
 
             if (options.mode !== 'by_name') {
-                result += "\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n";
-                if (character && character.data && character.data.character_book && character.data.character_book.entries) {
+                result += '\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n';
+                if (
+                    character &&
+                    character.data &&
+                    character.data.character_book &&
+                    character.data.character_book.entries
+                ) {
                     let bookResult = `\n[Character Lorebook: ${character.name}]\n`;
                     let entriesObj = character.data.character_book.entries;
                     if (Array.isArray(entriesObj)) {
@@ -693,8 +760,8 @@ export class SillyTavernAdapter {
 
                         const keysList = entry.keys || entry.key || [];
                         const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
-                        const type = entry.constant ? "CONSTANT" : "NORMAL";
-                        const status = isDisabled ? "TẮT" : "BẬT";
+                        const type = entry.constant ? 'CONSTANT' : 'NORMAL';
+                        const status = isDisabled ? 'TẮT' : 'BẬT';
                         const entryUid = entry.id ?? entry.uid ?? entryKey;
                         const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
 
@@ -715,10 +782,16 @@ export class SillyTavernAdapter {
                                 const kStr = String(key).toLowerCase().trim();
                                 if (!kStr) continue;
                                 if (kStr.includes('&&')) {
-                                    const parts = kStr.split('&&').map(p => p.trim());
-                                    if (parts.every(p => q.includes(p))) { triggered = true; break; }
+                                    const parts = kStr.split('&&').map((p) => p.trim());
+                                    if (parts.every((p) => q.includes(p))) {
+                                        triggered = true;
+                                        break;
+                                    }
                                 } else {
-                                    if (q.includes(kStr)) { triggered = true; break; }
+                                    if (q.includes(kStr)) {
+                                        triggered = true;
+                                        break;
+                                    }
                                 }
                             }
                             if (!triggered) continue;
@@ -733,11 +806,15 @@ export class SillyTavernAdapter {
                     }
                     if (hasEntries) {
                         result += bookResult;
-                    } else if (options.mode === 'all_full' || options.mode === 'char_full' || options.mode === 'summary') {
-                        result += bookResult + "(Character Lorebook rỗng hoặc không có entry phù hợp)\n";
+                    } else if (
+                        options.mode === 'all_full' ||
+                        options.mode === 'char_full' ||
+                        options.mode === 'summary'
+                    ) {
+                        result += bookResult + '(Character Lorebook rỗng hoặc không có entry phù hợp)\n';
                     }
                 } else if (options.mode === 'summary' || options.mode === 'all_full' || options.mode === 'char_full') {
-                    result += "Nhân vật này không có Lorebook đi kèm thẻ.\n";
+                    result += 'Nhân vật này không có Lorebook đi kèm thẻ.\n';
                 }
             }
 
@@ -752,25 +829,25 @@ export class SillyTavernAdapter {
      * Quản lý (Thêm/Sửa/Xóa) Lorebook Entry
      */
     public async manageLorebookEntry(options: {
-        action: 'create' | 'edit' | 'delete',
-        book_name: string,
-        uid?: string | number,
-        keys?: string[],
-        content?: string,
-        constant?: boolean,
-        disable?: boolean,
-        comment?: string
+        action: 'create' | 'edit' | 'delete';
+        book_name: string;
+        uid?: string | number;
+        keys?: string[];
+        content?: string;
+        constant?: boolean;
+        disable?: boolean;
+        comment?: string;
     }): Promise<string> {
         try {
             let ST_WorldInfo: any = null;
-            try { 
-                ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")(); 
-            } catch (e) { 
-                return "[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported)."; 
+            try {
+                ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+            } catch (e) {
+                return '[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).';
             }
 
             if (typeof ST_WorldInfo.loadWorldInfo !== 'function' || typeof ST_WorldInfo.saveWorldInfo !== 'function') {
-                return "[KaizAgent] Lỗi: API World Info không tồn tại trong phiên bản ST này.";
+                return '[KaizAgent] Lỗi: API World Info không tồn tại trong phiên bản ST này.';
             }
 
             // Ghi nhận WB có sẵn TRƯỚC khi load để phát hiện implicit creation
@@ -782,31 +859,36 @@ export class SillyTavernAdapter {
                 return `[KaizAgent] Lỗi: Không tìm thấy hoặc không thể tải Lorebook "${options.book_name}".`;
             }
 
-            let resultMsg = "";
+            let resultMsg = '';
 
             if (options.action === 'create') {
                 if (typeof ST_WorldInfo.createWorldInfoEntry !== 'function') {
-                    return "[KaizAgent] Lỗi: Hàm createWorldInfoEntry không tồn tại.";
+                    return '[KaizAgent] Lỗi: Hàm createWorldInfoEntry không tồn tại.';
                 }
                 const newEntry = ST_WorldInfo.createWorldInfoEntry(options.book_name, data);
-                if (!newEntry) return "[KaizAgent] Lỗi: Không thể tạo entry mới (có thể do lỗi getFreeWorldEntryUid).";
-                
-                if (options.keys !== undefined) { newEntry.key = options.keys; newEntry.keys = options.keys; }
+                if (!newEntry) return '[KaizAgent] Lỗi: Không thể tạo entry mới (có thể do lỗi getFreeWorldEntryUid).';
+
+                if (options.keys !== undefined) {
+                    newEntry.key = options.keys;
+                    newEntry.keys = options.keys;
+                }
                 if (options.content !== undefined) newEntry.content = options.content;
                 if (options.constant !== undefined) newEntry.constant = options.constant;
                 if (options.disable !== undefined) newEntry.disable = options.disable;
-                if (options.comment !== undefined) { newEntry.comment = options.comment; newEntry.name = options.comment; }
-                
+                if (options.comment !== undefined) {
+                    newEntry.comment = options.comment;
+                    newEntry.name = options.comment;
+                }
+
                 resultMsg = `Đã tạo thành công Entry mới với UID: ${newEntry.uid} trong Lorebook "${options.book_name}".`;
-            } 
-            else if (options.action === 'edit' || options.action === 'delete') {
-                if (options.uid === undefined) return "[KaizAgent] Lỗi: Cần cung cấp uid để edit hoặc delete.";
-                
+            } else if (options.action === 'edit' || options.action === 'delete') {
+                if (options.uid === undefined) return '[KaizAgent] Lỗi: Cần cung cấp uid để edit hoặc delete.';
+
                 // Find entry by uid
                 const entries = Object.entries(data.entries);
                 let foundEntryKey: string | null = null;
                 let foundEntry: any = null;
-                
+
                 for (const [key, val] of entries) {
                     const e = val as any;
                     const eUid = e.uid ?? e.id ?? key;
@@ -816,7 +898,7 @@ export class SillyTavernAdapter {
                         break;
                     }
                 }
-                
+
                 if (!foundEntryKey || !foundEntry) {
                     return `[KaizAgent] Lỗi: Không tìm thấy Entry có UID: ${options.uid} trong Lorebook "${options.book_name}".`;
                 }
@@ -828,12 +910,19 @@ export class SillyTavernAdapter {
                         delete data.entries[foundEntryKey];
                     }
                     resultMsg = `Đã xoá thành công Entry UID: ${options.uid} khỏi Lorebook "${options.book_name}".`;
-                } else { // edit
-                    if (options.keys !== undefined) { foundEntry.key = options.keys; foundEntry.keys = options.keys; }
+                } else {
+                    // edit
+                    if (options.keys !== undefined) {
+                        foundEntry.key = options.keys;
+                        foundEntry.keys = options.keys;
+                    }
                     if (options.content !== undefined) foundEntry.content = options.content;
                     if (options.constant !== undefined) foundEntry.constant = options.constant;
                     if (options.disable !== undefined) foundEntry.disable = options.disable;
-                    if (options.comment !== undefined) { foundEntry.comment = options.comment; foundEntry.name = options.comment; }
+                    if (options.comment !== undefined) {
+                        foundEntry.comment = options.comment;
+                        foundEntry.name = options.comment;
+                    }
                     resultMsg = `Đã cập nhật thành công Entry UID: ${options.uid} trong Lorebook "${options.book_name}".`;
                 }
             } else {
@@ -864,7 +953,6 @@ export class SillyTavernAdapter {
             }
 
             return resultMsg;
-            
         } catch (e: any) {
             console.error('[KaizAgent] Lỗi khi manageLorebookEntry:', e);
             return `Lỗi khi thực thi Lorebook Write Tool: ${e.message}`;
@@ -874,11 +962,15 @@ export class SillyTavernAdapter {
     /**
      * Quản lý (Liệt kê, bật/tắt, tạo mới) cuốn Lorebook (Worldbook) ở mức toàn cục
      */
-    public async manageWorldbook(options: { action: 'list_all' | 'toggle' | 'create', book_name?: string, state?: 'enable' | 'disable' }) {
+    public async manageWorldbook(options: {
+        action: 'list_all' | 'toggle' | 'create';
+        book_name?: string;
+        state?: 'enable' | 'disable';
+    }) {
         try {
             const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')().catch(() => null);
             if (!ST_WorldInfo) {
-                return "[LỖI] Không thể load module world-info.js của SillyTavern.";
+                return '[LỖI] Không thể load module world-info.js của SillyTavern.';
             }
 
             const ST_Settings = await new Function('return import("/scripts/settings.js")')().catch(() => null);
@@ -891,14 +983,15 @@ export class SillyTavernAdapter {
                 // M5: Trả về JSON thay vì plain text để LLM dễ parse tên sách và trạng thái
                 const books = allBooks.map((name: string) => ({
                     name,
-                    active_globally: activeBooks.includes(name)
+                    active_globally: activeBooks.includes(name),
                 }));
                 return JSON.stringify({ total: books.length, worldbooks: books }, null, 2);
             }
 
             if (options.action === 'toggle') {
-                if (!options.book_name) return "[LỖI] Thiếu tham số book_name.";
-                if (!allBooks.includes(options.book_name)) return `[LỖI] Worldbook "${options.book_name}" không tồn tại.`;
+                if (!options.book_name) return '[LỖI] Thiếu tham số book_name.';
+                if (!allBooks.includes(options.book_name))
+                    return `[LỖI] Worldbook "${options.book_name}" không tồn tại.`;
 
                 const state = options.state;
                 const index = activeBooks.indexOf(options.book_name);
@@ -926,9 +1019,10 @@ export class SillyTavernAdapter {
                         const wiSelect = $('#world_info');
                         if (wiSelect.length) {
                             // Tìm option theo text/value khớp tên WB thay vì index
-                            const option = wiSelect.find('option').filter(function(this: HTMLOptionElement) {
-                                return $(this).text().trim() === options.book_name ||
-                                       $(this).val() === String(bookIndex);
+                            const option = wiSelect.find('option').filter(function (this: HTMLOptionElement) {
+                                return (
+                                    $(this).text().trim() === options.book_name || $(this).val() === String(bookIndex)
+                                );
                             });
                             if (option.length) {
                                 option.prop('selected', state === 'enable');
@@ -948,14 +1042,18 @@ export class SillyTavernAdapter {
                 }
 
                 if (state === 'enable') {
-                    return index === -1 ? `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".` : `Worldbook "${options.book_name}" đã được bật từ trước.`;
+                    return index === -1
+                        ? `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".`
+                        : `Worldbook "${options.book_name}" đã được bật từ trước.`;
                 } else {
-                    return index !== -1 ? `Đã TẮT kích hoạt toàn cục cho Worldbook "${options.book_name}".` : `Worldbook "${options.book_name}" đã tắt từ trước.`;
+                    return index !== -1
+                        ? `Đã TẮT kích hoạt toàn cục cho Worldbook "${options.book_name}".`
+                        : `Worldbook "${options.book_name}" đã tắt từ trước.`;
                 }
             }
 
             if (options.action === 'create') {
-                if (!options.book_name) return "[LỖI] Thiếu tham số book_name.";
+                if (!options.book_name) return '[LỖI] Thiếu tham số book_name.';
                 if (allBooks.includes(options.book_name)) return `[LỖI] Worldbook "${options.book_name}" đã tồn tại.`;
 
                 if (typeof ST_WorldInfo.createNewWorldInfo === 'function') {
@@ -977,7 +1075,7 @@ export class SillyTavernAdapter {
 
                     return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
                 } else {
-                    return "[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.";
+                    return '[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.';
                 }
             }
 
@@ -1011,30 +1109,30 @@ export class SillyTavernAdapter {
      * Tìm và thay thế nội dung trực tiếp trong chat
      */
     public async findAndReplace(
-        query: string, 
-        replacement: string, 
+        query: string,
+        replacement: string,
         isRegex: boolean = false,
         caseInsensitive: boolean = false,
         wholeWord: boolean = false,
-        dryRun: boolean = false
+        dryRun: boolean = false,
     ): Promise<{ count: number; messages: { id: number; snippets: { oldSnippet: string; newSnippet: string }[] }[] }> {
         const ctx = SillyTavern.getContext();
         if (!ctx.chat || !Array.isArray(ctx.chat)) return { count: 0, messages: [] };
-        
+
         let count = 0;
         let regex: RegExp;
         try {
             regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
         } catch (e) {
-            console.error("[KaizAgent] Invalid regex:", e);
+            console.error('[KaizAgent] Invalid regex:', e);
             throw new Error(`Regex không hợp lệ: ${e}`);
         }
-        
+
         // Cần đảm bảo regex có cờ 'g' để dùng vòng lặp exec
         if (!regex.global) {
             regex = new RegExp(regex.source, regex.flags + 'g');
         }
-        
+
         const $ = (window as any).$;
         let needReload = false;
         const modifiedMessages: { id: number; snippets: { oldSnippet: string; newSnippet: string }[] }[] = [];
@@ -1042,60 +1140,61 @@ export class SillyTavernAdapter {
         for (let i = 0; i < ctx.chat.length; i++) {
             const m = ctx.chat[i];
             if (!m.mes) continue;
-            
+
             regex.lastIndex = 0;
             let match;
-            let resultText = "";
+            let resultText = '';
             let lastIndex = 0;
             let messageChanged = false;
             const snippets: { oldSnippet: string; newSnippet: string }[] = [];
-            
+
             while ((match = regex.exec(m.mes)) !== null) {
                 const matchStart = match.index;
                 const matchText = match[0];
-                
+
                 // SAFEGUARD DISABLED: Tạm tắt để cho phép người dùng sửa cả nội dung HTML nếu cần.
                 // Nếu cần bật lại, uncomment đoạn dưới đây.
                 // const lastHtmlOpen = m.mes.lastIndexOf('<', matchStart);
                 // const lastHtmlClose = m.mes.lastIndexOf('>', matchStart);
                 // const isInsideHtml = lastHtmlOpen > lastHtmlClose;
-                // 
+                //
                 // const lastMacroOpen = m.mes.lastIndexOf('{{', matchStart);
                 // const lastMacroClose = m.mes.lastIndexOf('}}', matchStart);
                 // const isInsideMacro = lastMacroOpen > lastMacroClose;
-                // 
+                //
                 // if (isInsideHtml || isInsideMacro) {
                 //     resultText += m.mes.substring(lastIndex, regex.lastIndex);
                 //     lastIndex = regex.lastIndex;
                 //     continue;
                 // }
-                
+
                 // Thay thế
                 const prefix = m.mes.substring(lastIndex, matchStart);
                 resultText += prefix + replacement;
-                
+
                 // 2. SNIPPET EXTRACTION: Lấy 30 ký tự trước và sau để preview
-                if (snippets.length < 3) { // Giới hạn max 3 snippet mỗi tin nhắn để tránh rác
+                if (snippets.length < 3) {
+                    // Giới hạn max 3 snippet mỗi tin nhắn để tránh rác
                     const snipStart = Math.max(0, matchStart - 35);
                     const snipEnd = Math.min(m.mes.length, matchStart + matchText.length + 35);
                     const contextOld = m.mes.substring(snipStart, snipEnd);
                     const contextNew = contextOld.replace(matchText, replacement); // Replace only the first occurrence in the snippet
-                    
+
                     snippets.push({
-                        oldSnippet: (snipStart > 0 ? "..." : "") + contextOld + (snipEnd < m.mes.length ? "..." : ""),
-                        newSnippet: (snipStart > 0 ? "..." : "") + contextNew + (snipEnd < m.mes.length ? "..." : "")
+                        oldSnippet: (snipStart > 0 ? '...' : '') + contextOld + (snipEnd < m.mes.length ? '...' : ''),
+                        newSnippet: (snipStart > 0 ? '...' : '') + contextNew + (snipEnd < m.mes.length ? '...' : ''),
                     });
                 }
-                
+
                 messageChanged = true;
                 lastIndex = regex.lastIndex;
             }
-            
+
             if (messageChanged) {
                 resultText += m.mes.substring(lastIndex);
                 modifiedMessages.push({ id: i, snippets });
                 count++;
-                
+
                 if (!dryRun) {
                     m.mes = resultText;
                     // Update DOM immediately
@@ -1103,7 +1202,10 @@ export class SillyTavernAdapter {
                         const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
                         if (mesBlock.length) {
                             const w = window as any;
-                            if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
+                            if (
+                                typeof w.MessageFormatting === 'object' &&
+                                typeof w.MessageFormatting.formatMessage === 'function'
+                            ) {
                                 const formatted = w.MessageFormatting.formatMessage(m);
                                 mesBlock.html(formatted);
                             } else {
@@ -1118,13 +1220,13 @@ export class SillyTavernAdapter {
                 }
             }
         }
-        
+
         // Cố gắng save chat nếu có thay đổi và không phải dry-run
         if (!dryRun && count > 0) {
             if (typeof ctx.saveChat === 'function') {
                 await ctx.saveChat();
             }
-            
+
             if (needReload) {
                 const w = window as any;
                 if (typeof w.reloadCurrentChat === 'function') {
@@ -1134,7 +1236,7 @@ export class SillyTavernAdapter {
                 }
             }
         }
-        
+
         return { count, messages: modifiedMessages };
     }
 
@@ -1144,21 +1246,25 @@ export class SillyTavernAdapter {
     public clearHighlight(): void {
         const $ = (window as any).$;
         if (!$) return;
-        $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '').css('background-color', '');
+        $('.kaiz-highlight-block')
+            .removeClass('kaiz-highlight-block')
+            .css('box-shadow', '')
+            .css('border', '')
+            .css('background-color', '');
     }
 
     /**
      * Tìm và bôi sáng (highlight block) trên UI
      */
     public findAndHighlight(
-        query: string, 
+        query: string,
         isRegex: boolean = false,
         caseInsensitive: boolean = false,
-        wholeWord: boolean = false
+        wholeWord: boolean = false,
     ): { count: number; messageIds: number[] } {
         const ctx = SillyTavern.getContext();
         if (!ctx.chat || !Array.isArray(ctx.chat)) return { count: 0, messageIds: [] };
-        
+
         let count = 0;
         let regex: RegExp;
         try {
@@ -1166,15 +1272,15 @@ export class SillyTavernAdapter {
         } catch (e) {
             throw new Error(`Regex không hợp lệ: ${e}`);
         }
-        
+
         const $ = (window as any).$;
         if (!$) return { count: 0, messageIds: [] };
 
         // Xóa các highlight cũ
         this.clearHighlight();
-        
+
         const messageIds: number[] = [];
-        
+
         for (let i = 0; i < ctx.chat.length; i++) {
             const m = ctx.chat[i];
             regex.lastIndex = 0; // reset
@@ -1186,14 +1292,14 @@ export class SillyTavernAdapter {
                     mesBlock.addClass('kaiz-highlight-block');
                     mesBlock.css({
                         'box-shadow': '0 0 25px 8px rgba(255, 215, 0, 0.8)',
-                        'border': '3px solid rgba(255, 215, 0, 1)',
+                        border: '3px solid rgba(255, 215, 0, 1)',
                         'background-color': 'rgba(255, 215, 0, 0.15)',
-                        'transition': 'all 0.5s ease'
+                        transition: 'all 0.5s ease',
                     });
                 }
             }
         }
-        
+
         // Tự động cuộn đến tin nhắn đầu tiên tìm thấy
         if (count > 0) {
             const firstMatch = $('.kaiz-highlight-block').first();
@@ -1201,7 +1307,7 @@ export class SillyTavernAdapter {
                 firstMatch[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
-        
+
         return { count, messageIds };
     }
 }

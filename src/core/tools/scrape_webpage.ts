@@ -1,19 +1,20 @@
-import { ITool } from "../tool_registry";
+import { ITool } from '../tool_registry';
 
 export const scrapeWebpageTool: ITool = {
     schema: {
-        name: "scrape_webpage",
-        description: "CÔNG CỤ CÀO DỮ LIỆU TỪ INTERNET. Sử dụng công cụ này để bóc tách toàn bộ nội dung văn bản (text) thô và các đường link từ một địa chỉ URL bất kỳ (ví dụ: Wikipedia, Fandom, trang báo). Công cụ này được trang bị hệ thống vượt tường lửa (Cloudflare bypass) nên có thể đọc được các trang khó tính. Dùng nó khi bạn cần 'đọc' nội dung chi tiết của một trang web.",
+        name: 'scrape_webpage',
+        description:
+            "CÔNG CỤ CÀO DỮ LIỆU TỪ INTERNET. Sử dụng công cụ này để bóc tách toàn bộ nội dung văn bản (text) thô và các đường link từ một địa chỉ URL bất kỳ (ví dụ: Wikipedia, Fandom, trang báo). Công cụ này được trang bị hệ thống vượt tường lửa (Cloudflare bypass) nên có thể đọc được các trang khó tính. Dùng nó khi bạn cần 'đọc' nội dung chi tiết của một trang web.",
         parameters: {
-            type: "object",
+            type: 'object',
             properties: {
                 url: {
-                    type: "string",
-                    description: "Đường link URL cần cào dữ liệu (VD: https://fandom.com/wiki/...)"
-                }
+                    type: 'string',
+                    description: 'Đường link URL cần cào dữ liệu (VD: https://fandom.com/wiki/...)',
+                },
             },
-            required: ["url"]
-        }
+            required: ['url'],
+        },
     },
     execute: async (args: any) => {
         try {
@@ -22,53 +23,77 @@ export const scrapeWebpageTool: ITool = {
                 return { content: JSON.stringify({ error: "Missing 'url' parameter" }), isError: true };
             }
             // Fetch directly first
-            let html = "";
+            let html = '';
             try {
                 const response = await fetch(url);
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 html = await response.text();
             } catch (err) {
                 // Tự động Fallback sang Proxy nếu fetch gốc bị lỗi (do CORS của extension không cover được hết các trang)
-                console.log("[scrape_webpage] Direct fetch failed, trying proxy...", err);
+                console.log('[scrape_webpage] Direct fetch failed, trying proxy...', err);
                 const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
                 const proxyRes = await fetch(proxyUrl);
                 if (!proxyRes.ok) {
-                    return { content: JSON.stringify({ error: `Scraping failed both directly and via proxy: ${proxyRes.status}` }), isError: true };
+                    return {
+                        content: JSON.stringify({
+                            error: `Scraping failed both directly and via proxy: ${proxyRes.status}`,
+                        }),
+                        isError: true,
+                    };
                 }
                 html = await proxyRes.text();
             }
-            
+
             // Parse HTML
             const parser = new DOMParser();
-            const doc = parser.parseFromString(html, "text/html");
+            const doc = parser.parseFromString(html, 'text/html');
 
             // Remove noise elements that shouldn't be in text
-            const noiseSelectors = ['script', 'style', 'noscript', 'canvas', 'svg', 'iframe', 'video', 'audio', 'header', 'footer', 'nav'];
-            noiseSelectors.forEach(selector => {
+            const noiseSelectors = [
+                'script',
+                'style',
+                'noscript',
+                'canvas',
+                'svg',
+                'iframe',
+                'video',
+                'audio',
+                'header',
+                'footer',
+                'nav',
+            ];
+            noiseSelectors.forEach((selector) => {
                 const elements = doc.querySelectorAll(selector);
-                elements.forEach(el => el.remove());
+                elements.forEach((el) => el.remove());
             });
 
             // Lấy nội dung chữ
             // Ưu tiên các thẻ chứa nội dung chính để sạch hơn nếu có thể, nhưng nếu không thấy thì lấy toàn bộ body
-            let contentElement = doc.querySelector('main') || 
-                                 doc.querySelector('#mw-content-text') || 
-                                 doc.querySelector('#content') || 
-                                 doc.body;
+            let contentElement =
+                doc.querySelector('main') ||
+                doc.querySelector('#mw-content-text') ||
+                doc.querySelector('#content') ||
+                doc.body;
 
-            const textContent = (contentElement as HTMLElement).innerText || "";
+            const textContent = (contentElement as HTMLElement).innerText || '';
 
             // Lấy tất cả các links
             const baseUrl = new URL(url);
             const linksSet = new Set<string>();
-            const extractedLinks: { text: string, url: string }[] = [];
+            const extractedLinks: { text: string; url: string }[] = [];
 
             const anchorElements = doc.querySelectorAll('a');
-            anchorElements.forEach(a => {
+            anchorElements.forEach((a) => {
                 const text = a.innerText?.trim();
                 let href = a.getAttribute('href');
-                
-                if (text && href && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('#')) {
+
+                if (
+                    text &&
+                    href &&
+                    !href.startsWith('javascript:') &&
+                    !href.startsWith('mailto:') &&
+                    !href.startsWith('#')
+                ) {
                     try {
                         // Resolve relative URLs
                         const absoluteUrl = new URL(href, baseUrl.href).href;
@@ -89,12 +114,11 @@ export const scrapeWebpageTool: ITool = {
                     url: baseUrl.href,
                     title: doc.title,
                     content: textContent.trim(),
-                    links: extractedLinks
-                })
+                    links: extractedLinks,
+                }),
             };
-
         } catch (error: any) {
             return { content: JSON.stringify({ error: `Scraping failed: ${error.message}` }), isError: true };
         }
-    }
+    },
 };

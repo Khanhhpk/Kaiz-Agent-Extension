@@ -1,6 +1,6 @@
 import { marked } from 'marked';
-import { AgentLoop } from "../core/loop";
-import { StateManager } from "../core/state";
+import { AgentLoop } from '../core/loop';
+import { StateManager } from '../core/state';
 
 declare const jQuery: any;
 
@@ -10,9 +10,11 @@ export class ChatWindowUI {
         const btn = $('#kaiz-floating-btn');
         const win = $('#kaiz-chat-window');
         const closeBtn = $('#kaiz-chat-close');
-        
+
         // --- Bổ sung nút và khung Log Request ---
-        closeBtn.before('<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>');
+        closeBtn.before(
+            '<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>',
+        );
         const logBtn = $('#kaiz-chat-log-btn');
 
         if ($('#kaiz-log-modal').length === 0) {
@@ -36,8 +38,8 @@ export class ChatWindowUI {
             `);
         }
 
-        let lastLogSent = "No data yet.";
-        let lastLogRecv = "No data yet.";
+        let lastLogSent = 'No data yet.';
+        let lastLogRecv = 'No data yet.';
 
         $('#kaiz-log-close').on('click', () => {
             ($('#kaiz-log-modal')[0] as HTMLDialogElement).close();
@@ -57,18 +59,20 @@ export class ChatWindowUI {
         const quickPromptBtn = $('#kaiz-quick-prompt-btn');
         const quickPromptMenu = $('#kaiz-quick-prompt-menu');
         const input = $('#kaiz-chat-input');
-        
+
         function populateQuickPrompts() {
             quickPromptMenu.empty();
             const ctx = (window as any).SillyTavern.getContext();
             const settings = ctx.extensionSettings['kaiz_agent'] || {};
             const prompts = settings.quickPrompts || [];
-            
+
             if (prompts.length === 0) {
-                quickPromptMenu.append('<div style="padding: 10px; color: #888; text-align: center; font-size: 12px;">No quick prompts configured. Add them in Settings.</div>');
+                quickPromptMenu.append(
+                    '<div style="padding: 10px; color: #888; text-align: center; font-size: 12px;">No quick prompts configured. Add them in Settings.</div>',
+                );
                 return;
             }
-            
+
             prompts.forEach((qp: any) => {
                 const iconName = qp.icon || 'zap';
                 const $item = $(`
@@ -80,14 +84,16 @@ export class ChatWindowUI {
                 $item.on('click', () => {
                     const currentText = String(input.val() || '');
                     // Nếu đã có text, nối thêm dòng mới, nếu không thì chèn thẳng
-                    const newText = currentText ? currentText + (currentText.endsWith('\n') ? '' : '\n') + qp.prompt : qp.prompt;
+                    const newText = currentText
+                        ? currentText + (currentText.endsWith('\n') ? '' : '\n') + qp.prompt
+                        : qp.prompt;
                     input.val(newText).trigger('input');
                     input.focus();
                     quickPromptMenu.hide();
                 });
                 quickPromptMenu.append($item);
             });
-            
+
             // Yêu cầu Lucide vẽ SVG
             if ((window as any).lucide) {
                 (window as any).lucide.createIcons();
@@ -97,7 +103,7 @@ export class ChatWindowUI {
                 }, 100);
             }
         }
-        
+
         quickPromptBtn.on('click', (e: any) => {
             e.stopPropagation();
             if (quickPromptMenu.is(':visible')) {
@@ -107,10 +113,13 @@ export class ChatWindowUI {
                 quickPromptMenu.css('display', 'flex'); // Flex to support column layout
             }
         });
-        
+
         // Đóng menu khi click ra ngoài
         $(document).on('click', (e: any) => {
-            if (!$(e.target).closest('#kaiz-quick-prompt-btn').length && !$(e.target).closest('#kaiz-quick-prompt-menu').length) {
+            if (
+                !$(e.target).closest('#kaiz-quick-prompt-btn').length &&
+                !$(e.target).closest('#kaiz-quick-prompt-menu').length
+            ) {
                 quickPromptMenu.hide();
             }
         });
@@ -118,7 +127,7 @@ export class ChatWindowUI {
 
         const sendBtn = $('#kaiz-chat-send');
         const history = $('#kaiz-chat-history');
-        
+
         // --- Drag Logic ---
         const ensureInBounds = (el: any) => {
             if (el[0].tagName === 'DIALOG' && !el[0].open) return null;
@@ -126,15 +135,27 @@ export class ChatWindowUI {
             const rect = el[0].getBoundingClientRect();
             const w = window.innerWidth;
             const h = window.innerHeight;
-            
+
             let newLeft = rect.left;
             let newTop = rect.top;
             let updated = false;
 
-            if (newLeft < 0) { newLeft = 0; updated = true; }
-            if (newTop < 0) { newTop = 0; updated = true; }
-            if (newLeft + rect.width > w) { newLeft = w - rect.width; updated = true; }
-            if (newTop + rect.height > h) { newTop = h - rect.height; updated = true; }
+            if (newLeft < 0) {
+                newLeft = 0;
+                updated = true;
+            }
+            if (newTop < 0) {
+                newTop = 0;
+                updated = true;
+            }
+            if (newLeft + rect.width > w) {
+                newLeft = w - rect.width;
+                updated = true;
+            }
+            if (newTop + rect.height > h) {
+                newTop = h - rect.height;
+                updated = true;
+            }
 
             if (updated) {
                 el.css({ right: 'auto', bottom: 'auto', left: newLeft + 'px', top: newTop + 'px' });
@@ -150,35 +171,39 @@ export class ChatWindowUI {
                     try {
                         const parsed = JSON.parse(savedPos);
                         el.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
-                    } catch(e) {}
+                    } catch (e) {}
                 }
-                
+
                 el.draggable({
                     containment: 'window',
                     scroll: false,
                     distance: 5,
-                    start: function() {
+                    start: function () {
                         if (el.attr('id') === 'kaiz-floating-btn') {
                             isDraggingBtn = true;
                         }
                     },
                     ...options,
-                    stop: function() {
+                    stop: function () {
                         if (el.attr('id') === 'kaiz-floating-btn') {
-                            setTimeout(() => { isDraggingBtn = false; }, 100);
+                            setTimeout(() => {
+                                isDraggingBtn = false;
+                            }, 100);
                         }
                         const pos = ensureInBounds($(this));
                         if (pos) localStorage.setItem(storageKey, JSON.stringify(pos));
-                    }
+                    },
                 });
             };
 
             makeDraggable(btn, 'kaiz_btn_pos');
-            setTimeout(() => { ensureInBounds(btn); }, 500);
+            setTimeout(() => {
+                ensureInBounds(btn);
+            }, 500);
 
-            makeDraggable(win, 'kaiz_win_pos', { 
+            makeDraggable(win, 'kaiz_win_pos', {
                 handle: '.kaiz-chat-header',
-                cancel: 'input,textarea,button,select,option,i'
+                cancel: 'input,textarea,button,select,option,i',
             });
         }
 
@@ -188,7 +213,7 @@ export class ChatWindowUI {
             resizeTimeout = setTimeout(() => {
                 const btnPos = ensureInBounds(btn);
                 if (btnPos) localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
-                
+
                 if ((win[0] as HTMLDialogElement).open) {
                     const winPos = ensureInBounds(win);
                     if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
@@ -213,7 +238,7 @@ export class ChatWindowUI {
                 e.stopPropagation();
                 return;
             }
-            
+
             const dialogEl = win[0] as HTMLDialogElement;
             const ctx = (window as any).SillyTavern.getContext();
             const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
@@ -248,7 +273,7 @@ export class ChatWindowUI {
             const ctx = (window as any).SillyTavern.getContext();
             const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
             const isPhoneMode = !!extSettings.phoneMode;
-            
+
             if (isPhoneMode) {
                 win.addClass('kaiz-phone-mode');
                 if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
@@ -285,14 +310,14 @@ export class ChatWindowUI {
             stateManager.currentChatId = null;
             chatTitle.text('New Chat');
             addWelcomeMessage();
-            
+
             // Xóa background selected ở chat list
             $('.kaiz-chat-item').css('background', 'transparent');
             toggleSidebar();
         });
 
         // Cài đặt Event Delegation cho danh sách chat (chỉ gán 1 lần duy nhất)
-        chatList.on('click', '.kaiz-chat-item', function(this: HTMLElement, e: any) {
+        chatList.on('click', '.kaiz-chat-item', function (this: HTMLElement, e: any) {
             if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
@@ -302,7 +327,7 @@ export class ChatWindowUI {
             }
         });
 
-        chatList.on('click', '.kaiz-chat-delete', async function(this: HTMLElement, e: any) {
+        chatList.on('click', '.kaiz-chat-delete', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
@@ -312,7 +337,7 @@ export class ChatWindowUI {
             }
         });
 
-        chatList.on('click', '.kaiz-chat-edit', async function(this: HTMLElement, e: any) {
+        chatList.on('click', '.kaiz-chat-edit', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
             const id = parseInt($(this).attr('data-id') || '0', 10);
             const currentName = $(this).attr('data-name') || '';
@@ -336,7 +361,7 @@ export class ChatWindowUI {
             for (const chat of chats) {
                 const isSelected = chat.id === stateManager.currentChatId;
                 const bg = isSelected ? 'rgba(0, 201, 255, 0.2)' : 'transparent';
-                
+
                 htmlBuffer += `
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
                         <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${chat.name}</span>
@@ -353,13 +378,16 @@ export class ChatWindowUI {
         // Hàm tiện ích phân tích và render Tool Calls thành HTML
         const parseToolCallsToHtml = (contentToParse: string, escapeText: boolean = false): string => {
             const toolCalls: string[] = [];
-            let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
-                const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
-                toolCalls.push(toolHtml);
-                return `__TOOL_CALL_${toolCalls.length - 1}__`;
-            });
-            
+            let result = contentToParse.replace(
+                /<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g,
+                (match, name, content) => {
+                    const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
+                    toolCalls.push(toolHtml);
+                    return `__TOOL_CALL_${toolCalls.length - 1}__`;
+                },
+            );
+
             if (escapeText) {
                 result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
             }
@@ -392,27 +420,32 @@ export class ChatWindowUI {
                 });
             }
 
-            mermaidBlocks.each(function(this: any) {
+            mermaidBlocks.each(function (this: any) {
                 const block = $(this);
                 if (block.hasClass('mermaid-rendered')) return;
-                
+
                 const code = block.text();
                 const id = 'mermaid-' + Date.now() + Math.floor(Math.random() * 1000);
-                
+
                 try {
                     if ((window as any).mermaid) {
-                        (window as any).mermaid.render(id, code).then((result: any) => {
-                            const parentPre = block.parent('pre');
-                            if (parentPre.length) {
-                                parentPre.replaceWith(`<div class="kaiz-mermaid-container" style="text-align:center; margin:10px 0; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; overflow-x:auto;">${result.svg}</div>`);
-                            }
-                        }).catch((e: any) => {
-                            console.error("Mermaid render error", e);
-                            block.addClass('mermaid-rendered');
-                        });
+                        (window as any).mermaid
+                            .render(id, code)
+                            .then((result: any) => {
+                                const parentPre = block.parent('pre');
+                                if (parentPre.length) {
+                                    parentPre.replaceWith(
+                                        `<div class="kaiz-mermaid-container" style="text-align:center; margin:10px 0; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; overflow-x:auto;">${result.svg}</div>`,
+                                    );
+                                }
+                            })
+                            .catch((e: any) => {
+                                console.error('Mermaid render error', e);
+                                block.addClass('mermaid-rendered');
+                            });
                     }
                 } catch (e) {
-                    console.error("Mermaid error", e);
+                    console.error('Mermaid error', e);
                     block.addClass('mermaid-rendered');
                 }
             });
@@ -425,30 +458,28 @@ export class ChatWindowUI {
         const formatMessage = (text: string, isFinal: boolean): string => {
             let html = text || '';
 
-            const detailsTag = isFinal 
-                ? '<details class="kaiz-cot-block">'
-                : '<details open class="kaiz-cot-block">';
-                
+            const detailsTag = isFinal ? '<details class="kaiz-cot-block">' : '<details open class="kaiz-cot-block">';
+
             const closeIndex = html.indexOf('</agent_cot>');
             if (closeIndex !== -1) {
                 const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
                 let restContent = html.substring(closeIndex + '</agent_cot>'.length).trim();
-                
+
                 restContent = parseToolCallsToHtml(restContent, !isFinal);
-                
+
                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 if (restContent) {
                     const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent;
                     html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                 }
             } else if (!isFinal) {
-                 // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
-                 const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
+                const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
-                 // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                 let parsedContent = parseToolCallsToHtml(html.trim(), false);
-                 html = `<div class="kaiz-markdown-body">${marked.parse(parsedContent)}</div>`;
+                // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
+                let parsedContent = parseToolCallsToHtml(html.trim(), false);
+                html = `<div class="kaiz-markdown-body">${marked.parse(parsedContent)}</div>`;
             }
 
             return html;
@@ -461,11 +492,11 @@ export class ChatWindowUI {
             // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
             const escapeHtml = (unsafe: string) => {
                 return unsafe
-                     .replace(/&/g, "&amp;")
-                     .replace(/</g, "&lt;")
-                     .replace(/>/g, "&gt;")
-                     .replace(/"/g, "&quot;")
-                     .replace(/'/g, "&#039;");
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
             };
 
             const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
@@ -510,16 +541,22 @@ export class ChatWindowUI {
             } else if (messages.length === 0) {
                 addWelcomeMessage();
             }
-            
+
             // Dùng HTML buffer để tránh Reflow/Repaint liên tục
             let htmlBuffer = '';
             for (const msg of messages) {
-                const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
+                const formatted =
+                    msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
                 const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-                
-                let avatar = msg.role === 'user' ? '<i class="fa-solid fa-user"></i>' : (msg.role === 'agent' ? '<i class="fa-solid fa-yin-yang"></i>' : '<i class="fa-solid fa-gear"></i>');
+
+                let avatar =
+                    msg.role === 'user'
+                        ? '<i class="fa-solid fa-user"></i>'
+                        : msg.role === 'agent'
+                          ? '<i class="fa-solid fa-yin-yang"></i>'
+                          : '<i class="fa-solid fa-gear"></i>';
                 let extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
-                
+
                 htmlBuffer += `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
                         <div class="kaiz-msg-avatar">${avatar}</div>
@@ -543,7 +580,11 @@ export class ChatWindowUI {
         };
 
         // Hàm tiện ích thêm tin nhắn DOM (không save DB)
-        const addMessageToDOM = (role: 'user' | 'agent' | 'system', htmlContent: string, animate: boolean = true): string => {
+        const addMessageToDOM = (
+            role: 'user' | 'agent' | 'system',
+            htmlContent: string,
+            animate: boolean = true,
+        ): string => {
             let avatar = '';
             let extraClass = '';
             if (role === 'user') {
@@ -554,7 +595,7 @@ export class ChatWindowUI {
                 extraClass = 'kaiz-msg-agent';
             } else {
                 avatar = '<i class="fa-solid fa-gear"></i>';
-                extraClass = 'kaiz-msg-agent'; 
+                extraClass = 'kaiz-msg-agent';
             }
 
             const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
@@ -577,12 +618,12 @@ export class ChatWindowUI {
             if (!text) return;
 
             input.val('');
-            
+
             // Lưu vào DB trước
             await stateManager.addMessage('user', text);
             // In ra UI
             addMessageToDOM('user', text.replace(/\n/g, '<br>'));
-            
+
             // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
             if (chatTitle.text() === 'New Chat') {
                 chatTitle.text(text.substring(0, 30) + (text.length > 30 ? '...' : ''));
@@ -592,17 +633,19 @@ export class ChatWindowUI {
             sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
             sendBtn.prop('disabled', false); // Bật lại ngay để cho phép click Stop
             sendBtn.addClass('kaiz-stop-mode');
-            
+
             const ctx = (window as any).SillyTavern.getContext();
             const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
             const maxLoops = extSettings.maxAgentLoops || 5;
 
             // Lấy toàn bộ lịch sử (hoặc tối đa N tin) từ DB để truyền cho AI
-            const historyMsgs = stateManager.currentChatId ? await stateManager.db.getMessages(stateManager.currentChatId) : [];
+            const historyMsgs = stateManager.currentChatId
+                ? await stateManager.db.getMessages(stateManager.currentChatId)
+                : [];
 
-            let agentMsgId = "";
+            let agentMsgId = '';
             let agentContentBox: any = null;
-            let currentStepResponse = "";
+            let currentStepResponse = '';
 
             let streamUpdatePending = false;
             let lastStreamEvent: any = null;
@@ -622,7 +665,7 @@ export class ChatWindowUI {
                 }
                 agentContentBox.html(htmlToRender);
                 lastStreamEvent = null;
-                
+
                 // Giải phóng khóa sau khi browser render xong frame này
                 requestAnimationFrame(() => {
                     streamUpdatePending = false;
@@ -636,9 +679,12 @@ export class ChatWindowUI {
                 if (event.type === 'step_start') {
                     btnIcon.addClass('kaiz-icon-spin');
                     btnFloat.removeClass('kaiz-btn-blink');
-                    agentMsgId = addMessageToDOM('agent', '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>');
+                    agentMsgId = addMessageToDOM(
+                        'agent',
+                        '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>',
+                    );
                     agentContentBox = $(`#${agentMsgId}`);
-                    currentStepResponse = "";
+                    currentStepResponse = '';
                 } else if (event.type === 'stream_chunk') {
                     if (!agentContentBox) return;
                     lastStreamEvent = event;
@@ -653,7 +699,7 @@ export class ChatWindowUI {
                     agentContentBox.html(formatMessage(event.text || '', true));
                     // Gọi render biểu đồ Mermaid
                     renderMermaid();
-                    
+
                     currentStepResponse = event.text || '';
                     await stateManager.addMessage('agent', currentStepResponse);
                     agentContentBox = null;
@@ -667,7 +713,7 @@ export class ChatWindowUI {
 
                     const call = event.data.call;
                     const resolveFn = event.data.resolve;
-                    
+
                     const confirmId = Date.now() + Math.floor(Math.random() * 1000);
                     const html = `
                         <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
@@ -679,22 +725,26 @@ export class ChatWindowUI {
                             </div>
                         </div>
                     `;
-                    
+
                     const domId = addMessageToDOM('agent', html);
-                    
+
                     $(`#kaiz-allow-${confirmId}`).on('click', () => {
                         if (!loop.isRunning) return;
                         $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                        $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${call.name}</div>`);
+                        $(`#${domId}`).html(
+                            `<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${call.name}</div>`,
+                        );
                         btnIcon.addClass('kaiz-icon-spin');
                         btnFloat.removeClass('kaiz-btn-blink');
                         resolveFn(true);
                     });
-                    
+
                     $(`#kaiz-deny-${confirmId}`).on('click', () => {
                         if (!loop.isRunning) return;
                         $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                        $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${call.name}</div>`);
+                        $(`#${domId}`).html(
+                            `<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${call.name}</div>`,
+                        );
                         btnIcon.removeClass('kaiz-icon-spin');
                         btnFloat.removeClass('kaiz-btn-blink');
                         resolveFn(false);
@@ -703,12 +753,17 @@ export class ChatWindowUI {
                     // Ng\u1eaft stream render ngay l\u1eadp t\u1ee9c \u0111\u1ec3 kh\u00f4ng b\u1ecb \u0111\u00e8 l\u00ean th\u00f4ng b\u00e1o l\u1ed7i
                     lastStreamEvent = null;
                     streamUpdatePending = false;
-                    
+
                     if (agentContentBox) {
-                        agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`);
+                        agentContentBox.append(
+                            `<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`,
+                        );
                         agentContentBox = null; // Ng\u0103n b\u1ea5t k\u1ef3 callback n\u00e0o c\u00f2n s\u00f3t ghi \u0111\u00e8
                     } else {
-                        addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`);
+                        addMessageToDOM(
+                            'agent',
+                            `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`,
+                        );
                     }
                     await stateManager.addMessage('agent', `[Error] ${event.text}`);
                 } else if (event.type === 'debug') {
@@ -716,10 +771,12 @@ export class ChatWindowUI {
                     lastLogRecv = event.data.responseText;
                 }
             });
-            
+
             // Dọn dẹp tất cả các hộp thoại safe mode bị treo (do abort hoặc lỗi)
-            $('.kaiz-safe-mode-pending').each(function(this: any) {
-                $(this).html(`<div style="color: #95a5a6; font-style: italic;"><i class="fa-solid fa-ban"></i> Đã hủy xác nhận công cụ (Tiến trình bị ngắt).</div>`);
+            $('.kaiz-safe-mode-pending').each(function (this: any) {
+                $(this).html(
+                    `<div style="color: #95a5a6; font-style: italic;"><i class="fa-solid fa-ban"></i> Đã hủy xác nhận công cụ (Tiến trình bị ngắt).</div>`,
+                );
                 $(this).removeClass('kaiz-safe-mode-pending');
             });
 

@@ -7,6 +7,6 @@ export class Planner {
     public plan(objective: string): string[] {
         console.log(`[Planner] Creating plan for objective: ${objective}`);
         // TODO: Phân tích mục tiêu và trả về các bước cần làm
-        return ["Step 1: Understand user request", "Step 2: Execute tool"];
+        return ['Step 1: Understand user request', 'Step 2: Execute tool'];
     }
 }
