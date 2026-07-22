@@ -69,7 +69,7 @@ export const scrapeWebpageTool: ITool = {
 
             // Lấy nội dung chữ
             // Ưu tiên các thẻ chứa nội dung chính để sạch hơn nếu có thể, nhưng nếu không thấy thì lấy toàn bộ body
-            let contentElement =
+            const contentElement =
                 doc.querySelector('main') ||
                 doc.querySelector('#mw-content-text') ||
                 doc.querySelector('#content') ||
@@ -85,7 +85,7 @@ export const scrapeWebpageTool: ITool = {
             const anchorElements = doc.querySelectorAll('a');
             anchorElements.forEach((a) => {
                 const text = a.innerText?.trim();
-                let href = a.getAttribute('href');
+                const href = a.getAttribute('href');
 
                 if (
                     text &&

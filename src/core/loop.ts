@@ -181,7 +181,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
 
         if (step > 1) {
-            let pinnedGoalSection = pinnedUserGoal
+            const pinnedGoalSection = pinnedUserGoal
                 ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!`
                 : '';
             const feedbackBase = hasError
@@ -202,7 +202,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
 
-        let internalHistory = [...history];
+        const internalHistory = [...history];
         let pinnedUserGoal = '';
         for (let i = internalHistory.length - 1; i >= 0; i--) {
             if (internalHistory[i].role === 'user') {

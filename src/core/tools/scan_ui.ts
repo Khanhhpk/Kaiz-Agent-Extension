@@ -48,7 +48,7 @@ export const scanUITool: ITool = {
             el.setAttribute('data-kaiz-id', `k${counter++}`);
         }
 
-        let totalItems = counter - 1;
+        const totalItems = counter - 1;
 
         // Bước 2: Hàm đệ quy xây dựng cây DOM thu gọn
         function buildTree(el: HTMLElement, indent: number): string {
@@ -76,7 +76,7 @@ export const scanUITool: ITool = {
 
             // Nếu là phần tử có thể click
             if (kaizId) {
-                let text = el.innerText?.trim() || '';
+                const text = el.innerText?.trim() || '';
                 // SillyTavern hoặc jQuery UI tooltip có thể gỡ bỏ title và đưa vào data-original-title / jq-title...
                 const title =
                     el.getAttribute('title')?.trim() ||

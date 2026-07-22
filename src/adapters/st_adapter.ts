@@ -139,7 +139,7 @@ export class SillyTavernAdapter {
         let asyncGeneratorFn: any;
 
         try {
-            let profileId =
+            const profileId =
                 ctx.extensionSettings?.connectionManager?.selectedProfile ||
                 document.getElementById('connection_profiles')?.value;
 
@@ -221,7 +221,7 @@ export class SillyTavernAdapter {
                 }
                 lastValue = value;
 
-                let chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
+                const chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
                 if (value?.thinking) reasoning = (reasoning || '') + value.thinking;
 
                 if (chunkText) text += chunkText;
@@ -283,7 +283,7 @@ export class SillyTavernAdapter {
             if (preview.length > 50) preview = preview.substring(0, 50) + '...';
             // Thoát HTML
             preview = preview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            let fullText = (msg.mes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+            const fullText = (msg.mes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
 
             let headerColor = msg.is_user ? '#4dabf7' : '#a9e34b';
             if (name === 'System' || msg.is_system) headerColor = '#ffd43b';

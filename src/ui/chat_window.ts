@@ -478,7 +478,7 @@ export class ChatWindowUI {
                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
                 // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                let parsedContent = parseToolCallsToHtml(html.trim(), false);
+                const parsedContent = parseToolCallsToHtml(html.trim(), false);
                 html = `<div class="kaiz-markdown-body">${marked.parse(parsedContent)}</div>`;
             }
 
@@ -487,7 +487,7 @@ export class ChatWindowUI {
 
         // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
         const formatUserMessage = (text: string): string => {
-            let safeText = text;
+            const safeText = text;
 
             // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
             const escapeHtml = (unsafe: string) => {
@@ -549,13 +549,13 @@ export class ChatWindowUI {
                     msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
                 const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
 
-                let avatar =
+                const avatar =
                     msg.role === 'user'
                         ? '<i class="fa-solid fa-user"></i>'
                         : msg.role === 'agent'
                           ? '<i class="fa-solid fa-yin-yang"></i>'
                           : '<i class="fa-solid fa-gear"></i>';
-                let extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
+                const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
 
                 htmlBuffer += `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
