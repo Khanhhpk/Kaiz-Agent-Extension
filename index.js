@@ -2879,6 +2879,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             $('#kaiz-safe-tools-search').on('input', function () {
                 renderSafeTools(this.value);
             });
+            $('#kaiz-safe-tools-blacklist-all').on('click', () => {
+                tools.forEach(tool => {
+                    settings.safeModeBlacklist[tool.schema.name] = true;
+                });
+                ctx.saveSettingsDebounced();
+                renderSafeTools(String($('#kaiz-safe-tools-search').val() || ''));
+            });
+            $('#kaiz-safe-tools-unblacklist-all').on('click', () => {
+                settings.safeModeBlacklist = {};
+                ctx.saveSettingsDebounced();
+                renderSafeTools(String($('#kaiz-safe-tools-search').val() || ''));
+            });
             // --- END SAFE MODE LOGIC ---
             // --- QUICK PROMPTS LOGIC ---
             const $quickPromptsList = $('#kaiz-quick-prompts-list');
