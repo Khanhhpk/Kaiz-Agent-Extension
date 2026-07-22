@@ -404,6 +404,57 @@ export class SettingsUI {
         });
         // --- END QUICK PROMPTS LOGIC ---
 
+        // --- PERSONA & MEMORY LOGIC ---
+        if (!settings.persona) settings.persona = '';
+        if (!settings.memories) settings.memories = [];
+
+        const $personaInput = $('#kaiz-agent-persona');
+        $personaInput.val(settings.persona);
+        $personaInput.on('input', function (this: HTMLTextAreaElement) {
+            settings.persona = this.value;
+            ctx.saveSettingsDebounced();
+        });
+
+        const $memoryList = $('#kaiz-agent-memory-list');
+
+        function renderMemories() {
+            $memoryList.empty();
+            if (!settings.memories || settings.memories.length === 0) {
+                $memoryList.append('<div style="text-align:center; color:#888; font-size:12px; padding:10px;">Chưa có memory nào.</div>');
+                return;
+            }
+
+            settings.memories.forEach((mem: string, index: number) => {
+                const $item = $(`
+                    <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
+                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word;">${mem}</div>
+                        <button class="menu_button interactable kaiz-memory-del-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;">
+                            <i class="fa-solid fa-xmark"></i>
+                        </button>
+                    </div>
+                `);
+                $memoryList.append($item);
+            });
+
+            $('.kaiz-memory-del-btn').on('click', function(this: HTMLElement) {
+                const idx = $(this).data('index');
+                settings.memories.splice(idx, 1);
+                ctx.saveSettingsDebounced();
+                renderMemories();
+            });
+        }
+
+        renderMemories();
+
+        $('#kaiz-memory-clear-all').on('click', async () => {
+            if (confirm('Bạn có chắc muốn xóa toàn bộ memory của Agent không?')) {
+                settings.memories = [];
+                ctx.saveSettingsDebounced();
+                renderMemories();
+            }
+        });
+        // --- END PERSONA & MEMORY LOGIC ---
+
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
 

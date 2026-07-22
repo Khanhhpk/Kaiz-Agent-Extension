@@ -22,6 +22,7 @@ import { toggleVirtualCursorTool } from './virtual_cursor';
 import { interactUITool } from './interact_ui';
 import { scanUITool } from './scan_ui';
 import { manageUserInputTool } from './manage_user_input';
+import { manageAgentMemory } from './manage_agent_memory';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -50,4 +51,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(interactUITool);
     registry.registerTool(scanUITool);
     registry.registerTool(manageUserInputTool);
+    registry.registerTool(manageAgentMemory);
 }
