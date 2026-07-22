@@ -40,11 +40,11 @@ export const toggleVirtualCursorTool: ITool = {
             // Spawn mới
             cursor = document.createElement('div');
             cursor.id = 'kaiz-virtual-cursor';
-            cursor.innerHTML = `<img src="/scripts/extensions/${extPath}/assets/gura_cursor.gif" style="width: 48px; height: 48px; pointer-events: none;" />`;
+            cursor.innerHTML = `<img src="/scripts/extensions/${extPath}/assets/gura_cursor.gif" style="width: 32px; height: 32px; pointer-events: none;" />`;
             cursor.style.position = 'fixed';
             cursor.style.top = '50%';
             cursor.style.left = '50%';
-            cursor.style.transform = 'translate(-50%, -50%)';
+            cursor.style.transform = 'translate(-20%, -20%)';
             cursor.style.zIndex = '999999';
             cursor.style.pointerEvents = 'none';
             cursor.style.transition = 'top 0.3s, left 0.3s';
