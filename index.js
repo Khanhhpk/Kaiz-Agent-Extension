@@ -144,7 +144,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 msgs.push({ role: apiRole, content: content });
             }
             if (step > 1) {
-                let pinnedGoalSection = pinnedUserGoal
+                const pinnedGoalSection = pinnedUserGoal
                     ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!`
                     : '';
                 const feedbackBase = hasError
@@ -159,7 +159,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async run(history, maxSteps, onEvent) {
             console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
             const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
-            let internalHistory = [...history];
+            const internalHistory = [...history];
             let pinnedUserGoal = '';
             for (let i = internalHistory.length - 1; i >= 0; i--) {
                 if (internalHistory[i].role === 'user') {
@@ -1197,7 +1197,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 });
                 // Lấy nội dung chữ
                 // Ưu tiên các thẻ chứa nội dung chính để sạch hơn nếu có thể, nhưng nếu không thấy thì lấy toàn bộ body
-                let contentElement = doc.querySelector('main') ||
+                const contentElement = doc.querySelector('main') ||
                     doc.querySelector('#mw-content-text') ||
                     doc.querySelector('#content') ||
                     doc.body;
@@ -1209,7 +1209,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const anchorElements = doc.querySelectorAll('a');
                 anchorElements.forEach((a) => {
                     const text = a.innerText?.trim();
-                    let href = a.getAttribute('href');
+                    const href = a.getAttribute('href');
                     if (text &&
                         href &&
                         !href.startsWith('javascript:') &&
@@ -1657,7 +1657,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // Gắn ID
                 el.setAttribute('data-kaiz-id', `k${counter++}`);
             }
-            let totalItems = counter - 1;
+            const totalItems = counter - 1;
             // Bước 2: Hàm đệ quy xây dựng cây DOM thu gọn
             function buildTree(el, indent) {
                 if (!el)
@@ -1678,7 +1678,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const indentStr = '  '.repeat(indent);
                 // Nếu là phần tử có thể click
                 if (kaizId) {
-                    let text = el.innerText?.trim() || '';
+                    const text = el.innerText?.trim() || '';
                     // SillyTavern hoặc jQuery UI tooltip có thể gỡ bỏ title và đưa vào data-original-title / jq-title...
                     const title = el.getAttribute('title')?.trim() ||
                         el.getAttribute('data-original-title')?.trim() ||
@@ -1799,6 +1799,67 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
+    const manageUserInputTool = {
+        schema: {
+            name: 'manage_user_input',
+            description: `Thao tác trực tiếp với khung nhập liệu (chat box) của người dùng trong SillyTavern. Bạn có thể tự động điền chữ, nối tiếp chữ, và tuỳ chọn nhấn nút Gửi (Send) thay cho người dùng.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    text: {
+                        type: 'string',
+                        description: 'Văn bản muốn nhập vào khung chat.',
+                    },
+                    mode: {
+                        type: 'string',
+                        description: "Chế độ nhập: 'overwrite' (Xoá hết cũ, ghi đè mới) hoặc 'append' (Nối tiếp vào sau nội dung đang có).",
+                    },
+                    send: {
+                        type: 'boolean',
+                        description: 'True nếu muốn gửi tin nhắn đó đi luôn. False nếu chỉ điền vào để người dùng tự xem và gửi sau.',
+                    },
+                },
+                required: ['text', 'mode', 'send'],
+            },
+        },
+        execute: async (args) => {
+            const text = args.text;
+            const mode = args.mode;
+            const send = args.send;
+            if (!text) {
+                return { content: 'Lỗi: Tham số text không được để trống.' };
+            }
+            if (mode !== 'overwrite' && mode !== 'append') {
+                return { content: "Lỗi: Tham số mode phải là 'overwrite' hoặc 'append'." };
+            }
+            const textarea = document.getElementById('send_textarea');
+            if (!textarea) {
+                return { content: 'Lỗi: Không tìm thấy khung nhập văn bản (send_textarea) trên giao diện.' };
+            }
+            if (mode === 'overwrite') {
+                textarea.value = text;
+            }
+            else if (mode === 'append') {
+                const currentVal = textarea.value;
+                textarea.value = currentVal + (currentVal && !currentVal.endsWith(' ') ? ' ' : '') + text;
+            }
+            // Bắn event để SillyTavern nhận diện có sự thay đổi text (dành cho bộ đếm ký tự hoặc state react)
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            if (send) {
+                const sendBtn = document.getElementById('send_but');
+                if (sendBtn) {
+                    // SillyTavern dùng div#send_but làm nút gửi
+                    sendBtn.click();
+                    return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung và nhấn nút Gửi thành công.` };
+                }
+                else {
+                    return { content: `Đã điền nội dung nhưng không tìm thấy nút Gửi (send_but). Nội dung vẫn đang ở trong khung chat.` };
+                }
+            }
+            return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung vào khung chat (Không gửi).` };
+        },
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -1824,6 +1885,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(toggleVirtualCursorTool);
         registry.registerTool(interactUITool);
         registry.registerTool(scanUITool);
+        registry.registerTool(manageUserInputTool);
     }
 
     /**
@@ -1944,7 +2006,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const service = ctx.ConnectionManagerRequestService;
             let asyncGeneratorFn;
             try {
-                let profileId = ctx.extensionSettings?.connectionManager?.selectedProfile ||
+                const profileId = ctx.extensionSettings?.connectionManager?.selectedProfile ||
                     document.getElementById('connection_profiles')?.value;
                 if (profileId && service && typeof service.sendRequest === 'function') {
                     asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
@@ -2010,7 +2072,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         break;
                     }
                     lastValue = value;
-                    let chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
+                    const chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
                     if (value?.thinking)
                         reasoning = (reasoning || '') + value.thinking;
                     if (chunkText)
@@ -2066,7 +2128,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     preview = preview.substring(0, 50) + '...';
                 // Thoát HTML
                 preview = preview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                let fullText = (msg.mes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                const fullText = (msg.mes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
                 let headerColor = msg.is_user ? '#4dabf7' : '#a9e34b';
                 if (name === 'System' || msg.is_system)
                     headerColor = '#ffd43b';
@@ -4230,14 +4292,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
                 else {
                     // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                    let parsedContent = parseToolCallsToHtml(html.trim(), false);
+                    const parsedContent = parseToolCallsToHtml(html.trim(), false);
                     html = `<div class="kaiz-markdown-body">${g.parse(parsedContent)}</div>`;
                 }
                 return html;
             };
             // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
             const formatUserMessage = (text) => {
-                let safeText = text;
+                const safeText = text;
                 // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
                 const escapeHtml = (unsafe) => {
                     return unsafe
@@ -4290,12 +4352,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 for (const msg of messages) {
                     const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
                     const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-                    let avatar = msg.role === 'user'
+                    const avatar = msg.role === 'user'
                         ? '<i class="fa-solid fa-user"></i>'
                         : msg.role === 'agent'
                             ? '<i class="fa-solid fa-yin-yang"></i>'
                             : '<i class="fa-solid fa-gear"></i>';
-                    let extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
+                    const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                     htmlBuffer += `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
                         <div class="kaiz-msg-avatar">${avatar}</div>

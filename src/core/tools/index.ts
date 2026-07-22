@@ -21,6 +21,7 @@ import { searchGoogleTool } from './search_google';
 import { toggleVirtualCursorTool } from './virtual_cursor';
 import { interactUITool } from './interact_ui';
 import { scanUITool } from './scan_ui';
+import { manageUserInputTool } from './manage_user_input';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -48,4 +49,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(toggleVirtualCursorTool);
     registry.registerTool(interactUITool);
     registry.registerTool(scanUITool);
+    registry.registerTool(manageUserInputTool);
 }
