@@ -80,7 +80,7 @@ export const scanUITool: ITool = {
                     description = Array.from(el.classList).filter(c => c.startsWith('fa-')).join(' ');
                 }
 
-                if (!description && !isIconOnly) return ''; // Rác, bỏ qua
+                if (!description && !isIconOnly && el.tagName !== 'SELECT' && el.tagName !== 'IMG') return ''; // Rác, bỏ qua
 
                 if (description.length > 60) description = description.substring(0, 57) + '...';
                 description = description.replace(/\n/g, ' ').replace(/\s+/g, ' ');
@@ -88,7 +88,31 @@ export const scanUITool: ITool = {
                 let tagName = el.tagName.toLowerCase();
                 if (tagName === 'i' || tagName === 'span') tagName = 'icon';
 
-                return `${indentStr}[${kaizId}] ${tagName.toUpperCase()}: ${description}\n`;
+                // Bóc tách trạng thái (States & Values)
+                let states = '';
+                if ((el as any).disabled) states += '[Disabled] ';
+                
+                if (tagName === 'input') {
+                    const type = el.getAttribute('type') || 'text';
+                    states += `(type:${type}) `;
+                    if ((el as HTMLInputElement).checked) states += '[Checked] ';
+                }
+                
+                if (tagName === 'select') {
+                    const select = el as HTMLSelectElement;
+                    if (select.selectedIndex >= 0) {
+                        const opt = select.options[select.selectedIndex];
+                        if (opt) states += `(Selected: ${opt.text.trim()}) `;
+                    }
+                }
+
+                if (tagName === 'img') {
+                    const alt = el.getAttribute('alt');
+                    if (alt) description += ` (Image: ${alt})`;
+                }
+
+                const stateStr = states.trim() ? ` ${states.trim()}` : '';
+                return `${indentStr}[${kaizId}] ${tagName.toUpperCase()}${stateStr}: ${description}\n`;
             }
 
             // Nếu chứa phần tử con có kX

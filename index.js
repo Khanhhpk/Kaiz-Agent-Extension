@@ -1599,7 +1599,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         isIconOnly = true;
                         description = Array.from(el.classList).filter(c => c.startsWith('fa-')).join(' ');
                     }
-                    if (!description && !isIconOnly)
+                    if (!description && !isIconOnly && el.tagName !== 'SELECT' && el.tagName !== 'IMG')
                         return ''; // Rác, bỏ qua
                     if (description.length > 60)
                         description = description.substring(0, 57) + '...';
@@ -1607,7 +1607,31 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     let tagName = el.tagName.toLowerCase();
                     if (tagName === 'i' || tagName === 'span')
                         tagName = 'icon';
-                    return `${indentStr}[${kaizId}] ${tagName.toUpperCase()}: ${description}\n`;
+                    // Bóc tách trạng thái (States & Values)
+                    let states = '';
+                    if (el.disabled)
+                        states += '[Disabled] ';
+                    if (tagName === 'input') {
+                        const type = el.getAttribute('type') || 'text';
+                        states += `(type:${type}) `;
+                        if (el.checked)
+                            states += '[Checked] ';
+                    }
+                    if (tagName === 'select') {
+                        const select = el;
+                        if (select.selectedIndex >= 0) {
+                            const opt = select.options[select.selectedIndex];
+                            if (opt)
+                                states += `(Selected: ${opt.text.trim()}) `;
+                        }
+                    }
+                    if (tagName === 'img') {
+                        const alt = el.getAttribute('alt');
+                        if (alt)
+                            description += ` (Image: ${alt})`;
+                    }
+                    const stateStr = states.trim() ? ` ${states.trim()}` : '';
+                    return `${indentStr}[${kaizId}] ${tagName.toUpperCase()}${stateStr}: ${description}\n`;
                 }
                 // Nếu chứa phần tử con có kX
                 let childrenContent = '';
