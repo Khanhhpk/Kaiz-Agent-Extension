@@ -352,19 +352,30 @@
 
 /* Agent Log Modal */
 .kaiz-log-modal {
-    display: none;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
     width: 80%;
     height: 80%;
     background: #1e1e1e;
     color: #fff;
     z-index: 10000;
     border-radius: 10px;
-    flex-direction: column;
     box-shadow: 0 0 20px rgba(0,0,0,0.8);
+    border: none;
+    padding: 0;
+    margin: auto;
+}
+
+.kaiz-log-modal[open] {
+    display: flex;
+    flex-direction: column;
+}
+
+.kaiz-log-modal:not([open]) {
+    display: none !important;
+}
+
+.kaiz-log-modal::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(5px);
 }
 
 .kaiz-log-header {

@@ -17,7 +17,7 @@ export class ChatWindowUI {
 
         if ($('#kaiz-log-modal').length === 0) {
             $('body').append(`
-                <div id="kaiz-log-modal" class="kaiz-log-modal">
+                <dialog id="kaiz-log-modal" class="kaiz-log-modal">
                     <div class="kaiz-log-header">
                         <h3 class="kaiz-log-title">Agent Request Logs</h3>
                         <i id="kaiz-log-close" class="fa-solid fa-xmark interactable kaiz-log-close"></i>
@@ -32,7 +32,7 @@ export class ChatWindowUI {
                             <pre id="kaiz-log-recv" class="kaiz-log-pre"></pre>
                         </div>
                     </div>
-                </div>
+                </dialog>
             `);
         }
 
@@ -40,13 +40,16 @@ export class ChatWindowUI {
         let lastLogRecv = "No data yet.";
 
         $('#kaiz-log-close').on('click', () => {
-            $('#kaiz-log-modal').css('display', 'none');
+            ($('#kaiz-log-modal')[0] as HTMLDialogElement).close();
         });
 
         logBtn.on('click', () => {
             $('#kaiz-log-sent').text(lastLogSent);
             $('#kaiz-log-recv').text(lastLogRecv);
-            $('#kaiz-log-modal').css('display', 'flex');
+            const dialog = $('#kaiz-log-modal')[0] as HTMLDialogElement;
+            if (!dialog.open) {
+                dialog.showModal();
+            }
         });
         // ------------------------------------
 
