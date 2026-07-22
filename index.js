@@ -1552,6 +1552,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             oldTagged.forEach(el => el.removeAttribute('data-kaiz-id'));
             for (let i = 0; i < interactables.length; i++) {
                 const el = interactables[i];
+                // Bỏ qua giao diện của chính Kaiz Agent để tránh tự quét mình
+                if (el.closest('#kaiz-floating-btn, #kaiz-chat-window, #kaiz-log-modal, #kaiz-virtual-cursor')) {
+                    continue;
+                }
                 // Bỏ qua các phần tử bị ẩn
                 if (el.offsetParent === null)
                     continue;
