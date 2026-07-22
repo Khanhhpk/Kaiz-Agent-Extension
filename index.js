@@ -1565,9 +1565,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (el.closest('#kaiz-floating-btn, #kaiz-chat-window, #kaiz-log-modal, #kaiz-virtual-cursor, [id^="kaiz-"]')) {
                     continue;
                 }
-                // Bỏ qua các phần tử bị ẩn (offsetParent === null thường đúng trừ các phần tử fixed)
-                if (el.offsetParent === null && window.getComputedStyle(el).position !== 'fixed')
-                    continue;
                 const style = window.getComputedStyle(el);
                 if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
                     continue;
@@ -1575,6 +1572,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const rect = el.getBoundingClientRect();
                 if (rect.width === 0 || rect.height === 0)
                     continue;
+                // Bỏ qua các element nằm ngoài viewport? Không, đôi khi ST cho phép scroll.
                 // Gắn ID
                 el.setAttribute('data-kaiz-id', `k${counter++}`);
             }
@@ -1596,7 +1594,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // Nếu là phần tử có thể click
                 if (kaizId) {
                     let text = el.innerText?.trim() || '';
-                    const title = el.getAttribute('title')?.trim() || '';
+                    // SillyTavern hoặc jQuery UI tooltip có thể gỡ bỏ title và đưa vào data-original-title / jq-title...
+                    const title = el.getAttribute('title')?.trim() || el.getAttribute('data-original-title')?.trim() || el.getAttribute('data-title')?.trim() || '';
                     const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
                     const value = el.value?.trim() || '';
                     let description = text || title || ariaLabel;
@@ -1604,12 +1603,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         description = value || el.getAttribute('placeholder') || 'Input field';
                     }
                     let isIconOnly = false;
-                    if (!description && (el.classList.contains('fa-solid') || el.classList.contains('fa-regular'))) {
-                        isIconOnly = true;
-                        description = Array.from(el.classList).filter(c => c.startsWith('fa-')).join(' ');
+                    if (!description) {
+                        if (el.classList.contains('fa-solid') || el.classList.contains('fa-regular')) {
+                            isIconOnly = true;
+                            description = Array.from(el.classList).filter(c => c.startsWith('fa-')).join(' ');
+                        }
+                        else {
+                            // Kiểm tra nếu nó bọc một icon bên trong (vd: <div class="menu_button"><i class="fa-solid fa-gear"></i></div>)
+                            const childIcon = el.querySelector('.fa-solid, .fa-regular');
+                            if (childIcon) {
+                                isIconOnly = true;
+                                description = Array.from(childIcon.classList).filter(c => c.startsWith('fa-')).join(' ');
+                            }
+                        }
                     }
-                    if (!description && !isIconOnly && el.tagName !== 'SELECT' && el.tagName !== 'IMG')
-                        return ''; // Rác, bỏ qua
+                    if (!description && !isIconOnly && el.tagName !== 'SELECT' && el.tagName !== 'IMG') {
+                        // Nếu là một element đặc biệt nhưng vẫn không có text (ví dụ menu_button), lấy class/id làm tên
+                        if (el.classList.contains('menu_button') || el.classList.contains('drawer-toggle')) {
+                            description = el.id || el.className;
+                        }
+                        else {
+                            return ''; // Rác, bỏ qua
+                        }
+                    }
                     if (description.length > 60)
                         description = description.substring(0, 57) + '...';
                     description = description.replace(/\n/g, ' ').replace(/\s+/g, ' ');
