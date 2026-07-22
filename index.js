@@ -1416,12 +1416,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const target = args.targetDescription?.toLowerCase();
             if (!target)
                 return { content: 'Lỗi: Không có targetDescription.' };
+            // Loại bỏ ngoặc vuông nếu agent truyền vào dạng "[k38]" hoặc "[Send]"
+            const cleanTarget = target.replace(/\[|\]/g, '').trim();
             // 1. Tìm kiếm element
             let foundElement = null;
             // Kiểm tra xem target có phải là định dạng ID từ scan_ui không (ví dụ "k1", "k12")
-            const kaizIdMatch = target.match(/^k\d+$/);
+            const kaizIdMatch = cleanTarget.match(/^k\d+$/);
             if (kaizIdMatch) {
-                foundElement = document.querySelector(`[data-kaiz-id="${target}"]`);
+                foundElement = document.querySelector(`[data-kaiz-id="${cleanTarget}"]`);
             }
             if (!foundElement) {
                 // Từ khoá hard-code cho các nút quan trọng
@@ -1436,8 +1438,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     'nhân vật': '#rm_button_characters',
                     'menu': '#nav-drawer-toggle'
                 };
-                if (keywordMap[target]) {
-                    foundElement = document.querySelector(keywordMap[target]);
+                if (keywordMap[cleanTarget]) {
+                    foundElement = document.querySelector(keywordMap[cleanTarget]);
                 }
             }
             if (!foundElement) {
@@ -1447,7 +1449,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const el = interactables[i];
                     const text = el.innerText?.toLowerCase() || '';
                     const title = el.getAttribute('title')?.toLowerCase() || '';
-                    if (text.includes(target) || title.includes(target)) {
+                    if (text.includes(cleanTarget) || title.includes(cleanTarget)) {
                         // Check xem element có đang hiển thị không (có offset)
                         if (el.offsetParent !== null) {
                             foundElement = el;
