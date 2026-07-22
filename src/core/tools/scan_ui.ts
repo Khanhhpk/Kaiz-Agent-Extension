@@ -3,15 +3,10 @@ import { ITool } from '../tool_registry';
 export const scanUITool: ITool = {
     schema: {
         name: 'scan_ui',
-        description: 'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX]. Agent có thể dùng captureScreenshot để yêu cầu chụp lại ảnh màn hình đính kèm.',
+        description: 'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX].',
         parameters: {
             type: 'object',
-            properties: {
-                captureScreenshot: {
-                    type: 'boolean',
-                    description: 'Nếu đặt là true, chụp ảnh màn hình hiện tại và đính kèm vào cuối kết quả (hữu ích để nhìn giao diện).'
-                }
-            },
+            properties: {},
             required: []
         }
     },
@@ -135,11 +130,6 @@ export const scanUITool: ITool = {
             const treeData = buildTree(document.body, 0);
             outputContent += '```html\n' + treeData + '\n```';
             outputContent = `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
-        }
-
-        // Chụp ảnh nếu được yêu cầu
-        if (args.captureScreenshot) {
-            outputContent += `\n\n(Lỗi: Tính năng chụp ảnh màn hình hiện đã bị vô hiệu hoá. Việc sử dụng các thư viện screenshot bằng Javascript để quét toàn bộ DOM của SillyTavern gây ra hiện tượng tràn bộ nhớ và treo trình duyệt. Agent chỉ nên sử dụng cấu trúc DOM dạng văn bản ở trên để định vị.)`;
         }
 
         return {

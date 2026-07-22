@@ -456,15 +456,9 @@ export class ChatWindowUI {
 
         // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
         const formatUserMessage = (text: string): string => {
-            let imgHtml = '';
             let safeText = text;
-            const imgRegex = /!\[Screenshot\]\((data:image\/[^;]+;base64,[^)]+)\)/;
-            const match = safeText.match(imgRegex);
-            if (match) {
-                imgHtml = `<br><img src="${match[1]}" style="max-width: 100%; border-radius: 5px; margin-top: 10px; border: 1px solid #444;" />`;
-                safeText = safeText.replace(imgRegex, '[Đã đính kèm ảnh chụp màn hình]');
-            }
 
+            // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
             const escapeHtml = (unsafe: string) => {
                 return unsafe
                      .replace(/&/g, "&amp;")
@@ -473,19 +467,28 @@ export class ChatWindowUI {
                      .replace(/"/g, "&quot;")
                      .replace(/'/g, "&#039;");
             };
+
             const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
 
             if (safeText.startsWith('[Tool Result')) {
-                const isError = safeText.includes('CÓ LỖI/ERROR');
-                const color = isError ? '#e74c3c' : '#2ecc71';
-                const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
-                
+                // ... logic Tool Result ...
+                let color = '#a1a1aa'; // default
+                let icon = 'fa-wrench';
+                if (safeText.includes('THẤT BẠI')) {
+                    color = '#ef4444'; // red
+                    icon = 'fa-circle-xmark';
+                } else if (safeText.includes('THÀNH CÔNG')) {
+                    color = '#4ade80'; // green
+                    icon = 'fa-circle-check';
+                }
+
                 return `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
 <summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
-<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}${imgHtml}</div>
+<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
             }
-            return escapedText + imgHtml;
+
+            return escapedText;
         };
 
         // Lắng nghe StateManager

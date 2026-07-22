@@ -1536,15 +1536,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const scanUITool = {
         schema: {
             name: 'scan_ui',
-            description: 'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX]. Agent có thể dùng captureScreenshot để yêu cầu chụp lại ảnh màn hình đính kèm.',
+            description: 'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX].',
             parameters: {
                 type: 'object',
-                properties: {
-                    captureScreenshot: {
-                        type: 'boolean',
-                        description: 'Nếu đặt là true, chụp ảnh màn hình hiện tại và đính kèm vào cuối kết quả (hữu ích để nhìn giao diện).'
-                    }
-                },
+                properties: {},
                 required: []
             }
         },
@@ -1652,10 +1647,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const treeData = buildTree(document.body, 0);
                 outputContent += '```html\n' + treeData + '\n```';
                 outputContent = `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
-            }
-            // Chụp ảnh nếu được yêu cầu
-            if (args.captureScreenshot) {
-                outputContent += `\n\n(Lỗi: Tính năng chụp ảnh màn hình hiện đã bị vô hiệu hoá. Việc sử dụng các thư viện screenshot bằng Javascript để quét toàn bộ DOM của SillyTavern gây ra hiện tượng tràn bộ nhớ và treo trình duyệt. Agent chỉ nên sử dụng cấu trúc DOM dạng văn bản ở trên để định vị.)`;
             }
             return {
                 content: outputContent
@@ -4016,14 +4007,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             };
             // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
             const formatUserMessage = (text) => {
-                let imgHtml = '';
                 let safeText = text;
-                const imgRegex = /!\[Screenshot\]\((data:image\/[^;]+;base64,[^)]+)\)/;
-                const match = safeText.match(imgRegex);
-                if (match) {
-                    imgHtml = `<br><img src="${match[1]}" style="max-width: 100%; border-radius: 5px; margin-top: 10px; border: 1px solid #444;" />`;
-                    safeText = safeText.replace(imgRegex, '[Đã đính kèm ảnh chụp màn hình]');
-                }
+                // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
                 const escapeHtml = (unsafe) => {
                     return unsafe
                         .replace(/&/g, "&amp;")
@@ -4034,15 +4019,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 };
                 const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
                 if (safeText.startsWith('[Tool Result')) {
-                    const isError = safeText.includes('CÓ LỖI/ERROR');
-                    const color = isError ? '#e74c3c' : '#2ecc71';
-                    const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
+                    // ... logic Tool Result ...
+                    let color = '#a1a1aa'; // default
+                    let icon = 'fa-wrench';
+                    if (safeText.includes('THẤT BẠI')) {
+                        color = '#ef4444'; // red
+                        icon = 'fa-circle-xmark';
+                    }
+                    else if (safeText.includes('THÀNH CÔNG')) {
+                        color = '#4ade80'; // green
+                        icon = 'fa-circle-check';
+                    }
                     return `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
 <summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
-<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}${imgHtml}</div>
+<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
                 }
-                return escapedText + imgHtml;
+                return escapedText;
             };
             // Lắng nghe StateManager
             stateManager.onChatsListUpdated = (chats) => {
