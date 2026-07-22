@@ -458,7 +458,6 @@ export class SettingsUI {
                 );
                 return;
             }
-
             // Migration from string[] to {key, content}[]
             let hasLegacy = false;
             for (let i = 0; i < settings.memories.length; i++) {
@@ -469,12 +468,13 @@ export class SettingsUI {
             }
             if (hasLegacy) ctx.saveSettingsDebounced();
 
+            let htmlStr = '';
             settings.memories.forEach((mem: any, index: number) => {
                 const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const isLongContent = mem.content.length > 100 || mem.content.split('\n').length > 2;
 
-                const $item = $(`
+                htmlStr += `
                     <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
                         <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
                             <i class="fa-solid fa-grip-vertical"></i>
@@ -493,53 +493,16 @@ export class SettingsUI {
                             </button>
                         </div>
                     </div>
-                `);
-                $memoryList.append($item);
+                `;
             });
-
-            $('.kaiz-memory-expand-btn').on('click', function (this: HTMLElement) {
-                const $text = $(this).siblings('.kaiz-memory-text');
-                if ($text.css('-webkit-line-clamp') === '2') {
-                    $text.css('-webkit-line-clamp', 'unset');
-                    $(this).html('<i class="fa-solid fa-chevron-up"></i> Thu gọn');
-                } else {
-                    $text.css('-webkit-line-clamp', '2');
-                    $(this).html('<i class="fa-solid fa-chevron-down"></i> Hiển thị thêm');
-                }
-            });
-
-            $('.kaiz-memory-edit-btn').on('click', function (this: HTMLElement) {
-                const idx = $(this).data('index');
-                const mem = settings.memories[idx];
-                $('#kaiz-manual-memory-key-input').val(mem.key);
-                $('#kaiz-manual-memory-input').val(mem.content);
-                editingMemoryIndex = idx;
-                $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Cập nhật');
-                $('#kaiz-manual-memory-key-input').trigger('focus');
-            });
-
-            $('.kaiz-memory-del-btn').on('click', function (this: HTMLElement) {
-                const idx = $(this).data('index');
-                settings.memories.splice(idx, 1);
-                // Nếu đang edit item bị xóa thì reset
-                if (editingMemoryIndex === idx) {
-                    editingMemoryIndex = -1;
-                    $('#kaiz-manual-memory-key-input').val('');
-                    $('#kaiz-manual-memory-input').val('');
-                    $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
-                } else if (editingMemoryIndex > idx) {
-                    editingMemoryIndex--;
-                }
-                ctx.saveSettingsDebounced();
-                renderMemories();
-            });
+            $memoryList.append(htmlStr);
 
             if (typeof ($memoryList as any).sortable === 'function') {
                 ($memoryList as any).sortable({
                     handle: '.kaiz-memory-drag-handle',
                     axis: 'y',
                     update: function () {
-                        const newMemories: string[] = [];
+                        const newMemories: any[] = [];
                         $memoryList.children('.kaiz-memory-item').each(function (this: HTMLElement) {
                             const oldIndex = $(this).data('index');
                             newMemories.push(settings.memories[oldIndex]);

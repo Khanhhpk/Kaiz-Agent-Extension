@@ -1877,10 +1877,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (sendBtn) {
                     // SillyTavern dùng div#send_but làm nút gửi
                     sendBtn.click();
-                    return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung và nhấn nút Gửi thành công.` };
+                    return {
+                        content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung và nhấn nút Gửi thành công.`,
+                    };
                 }
                 else {
-                    return { content: `Đã điền nội dung nhưng không tìm thấy nút Gửi (send_but). Nội dung vẫn đang ở trong khung chat.` };
+                    return {
+                        content: `Đã điền nội dung nhưng không tìm thấy nút Gửi (send_but). Nội dung vẫn đang ở trong khung chat.`,
+                    };
                 }
             }
             return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung vào khung chat (Không gửi).` };
@@ -1990,7 +1994,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             legacyIndex = i;
                             break;
                         }
-                        else if (typeof mem === 'object' && mem.content && mem.content.toLowerCase().includes(key.toLowerCase())) {
+                        else if (typeof mem === 'object' &&
+                            mem.content &&
+                            mem.content.toLowerCase().includes(key.toLowerCase())) {
                             legacyIndex = i;
                             break;
                         }
@@ -3852,17 +3858,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 ctx.saveSettingsDebounced();
             });
             const $memoryList = $('#kaiz-agent-memory-list');
-            let editingMemoryIndex = -1;
             $('#kaiz-add-manual-memory-btn').on('click', () => {
                 const key = String($('#kaiz-manual-memory-key-input').val() || '').trim();
                 const content = String($('#kaiz-manual-memory-input').val() || '').trim();
                 if (key && content) {
-                    if (editingMemoryIndex !== -1) {
-                        settings.memories[editingMemoryIndex] = { key, content };
-                        editingMemoryIndex = -1;
-                        $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
-                    }
-                    else {
+                    {
                         // Check if key already exists to prevent duplicate keys in manual add
                         const existingIndex = settings.memories.findIndex((m) => typeof m !== 'string' && m.key.toLowerCase() === key.toLowerCase());
                         if (existingIndex !== -1) {
@@ -3899,11 +3899,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 if (hasLegacy)
                     ctx.saveSettingsDebounced();
+                let htmlStr = '';
                 settings.memories.forEach((mem, index) => {
                     const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     const isLongContent = mem.content.length > 100 || mem.content.split('\n').length > 2;
-                    const $item = $(`
+                    htmlStr += `
                     <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
                         <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
                             <i class="fa-solid fa-grip-vertical"></i>
@@ -3922,45 +3923,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             </button>
                         </div>
                     </div>
-                `);
-                    $memoryList.append($item);
+                `;
                 });
-                $('.kaiz-memory-expand-btn').on('click', function () {
-                    const $text = $(this).siblings('.kaiz-memory-text');
-                    if ($text.css('-webkit-line-clamp') === '2') {
-                        $text.css('-webkit-line-clamp', 'unset');
-                        $(this).html('<i class="fa-solid fa-chevron-up"></i> Thu gọn');
-                    }
-                    else {
-                        $text.css('-webkit-line-clamp', '2');
-                        $(this).html('<i class="fa-solid fa-chevron-down"></i> Hiển thị thêm');
-                    }
-                });
-                $('.kaiz-memory-edit-btn').on('click', function () {
-                    const idx = $(this).data('index');
-                    const mem = settings.memories[idx];
-                    $('#kaiz-manual-memory-key-input').val(mem.key);
-                    $('#kaiz-manual-memory-input').val(mem.content);
-                    editingMemoryIndex = idx;
-                    $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Cập nhật');
-                    $('#kaiz-manual-memory-key-input').trigger('focus');
-                });
-                $('.kaiz-memory-del-btn').on('click', function () {
-                    const idx = $(this).data('index');
-                    settings.memories.splice(idx, 1);
-                    // Nếu đang edit item bị xóa thì reset
-                    if (editingMemoryIndex === idx) {
-                        editingMemoryIndex = -1;
-                        $('#kaiz-manual-memory-key-input').val('');
-                        $('#kaiz-manual-memory-input').val('');
-                        $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
-                    }
-                    else if (editingMemoryIndex > idx) {
-                        editingMemoryIndex--;
-                    }
-                    ctx.saveSettingsDebounced();
-                    renderMemories();
-                });
+                $memoryList.append(htmlStr);
                 if (typeof $memoryList.sortable === 'function') {
                     $memoryList.sortable({
                         handle: '.kaiz-memory-drag-handle',
@@ -3974,7 +3939,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             settings.memories = newMemories;
                             ctx.saveSettingsDebounced();
                             renderMemories(); // re-render to update data-index
-                        }
+                        },
                     });
                 }
             }
