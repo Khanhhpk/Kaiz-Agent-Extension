@@ -115,6 +115,38 @@ export const searchGoogleTool: ITool = {
                  }
                  
                  if (results.length === 0) {
+                     console.log("[search_google] DuckDuckGo Lite returned 0 results. Falling back to Bing...");
+                     const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+                     let bingHtml = "";
+                     try {
+                         const bingRes = await fetch(bingUrl);
+                         if (bingRes.ok) bingHtml = await bingRes.text();
+                     } catch (e) {
+                         const bingProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(bingUrl)}`;
+                         const proxyRes = await fetch(bingProxyUrl);
+                         if (proxyRes.ok) bingHtml = await proxyRes.text();
+                     }
+
+                     if (bingHtml) {
+                         const bingDoc = parser.parseFromString(bingHtml, "text/html");
+                         const bingResults = bingDoc.querySelectorAll('.b_algo');
+                         
+                         bingResults.forEach(res => {
+                             const titleEl = res.querySelector('h2 a');
+                             const snippetEl = res.querySelector('.b_caption p') || res.querySelector('.b_snippet');
+                             
+                             if (titleEl && titleEl.getAttribute('href')) {
+                                 results.push({
+                                     title: (titleEl as HTMLElement).innerText.trim(),
+                                     url: titleEl.getAttribute('href')!,
+                                     snippet: snippetEl ? (snippetEl as HTMLElement).innerText.trim() : ""
+                                 });
+                             }
+                         });
+                     }
+                 }
+                 
+                 if (results.length === 0) {
                      return {
                          content: JSON.stringify({ 
                              warning: "Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang",
