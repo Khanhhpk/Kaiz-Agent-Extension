@@ -4,11 +4,12 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const deleteLastMessageTool: ITool = {
     schema: {
         name: 'delete_last_message',
-        description: 'Xóa tin nhắn cuối cùng trong đoạn chat hiện tại. Rất hữu ích khi tin nhắn cuối cùng bị lỗi hoặc người dùng yêu cầu xóa.',
+        description:
+            'Xóa tin nhắn cuối cùng trong đoạn chat hiện tại. Rất hữu ích khi tin nhắn cuối cùng bị lỗi hoặc người dùng yêu cầu xóa.',
         parameters: {
             type: 'object',
-            properties: {} // Không yêu cầu tham số
-        }
+            properties: {}, // Không yêu cầu tham số
+        },
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
         if (!context.adapter.hasFeature('deleteLastMessage')) {
@@ -19,14 +20,14 @@ export const deleteLastMessageTool: ITool = {
         if (!context || !context.adapter) {
             return {
                 content: 'Error: Adapter not provided in context.',
-                isError: true
+                isError: true,
             };
         }
 
         context.adapter.deleteLastMessage();
-        
+
         return {
-            content: 'Last message deleted successfully.'
+            content: 'Last message deleted successfully.',
         };
-    }
+    },
 };

@@ -1,7 +1,7 @@
 {
-  "display_name": "Kaiz Agent",
-  "version": "1.0.0",
-  "description": "AI Agent runtime for SillyTavern, capable of planning and executing tools.",
-  "author": "Kaiz Companion",
-  "js": "index.js"
+    "display_name": "Kaiz Agent",
+    "version": "1.0.0",
+    "description": "AI Agent runtime for SillyTavern, capable of planning and executing tools.",
+    "author": "Kaiz Companion",
+    "js": "index.js"
 }

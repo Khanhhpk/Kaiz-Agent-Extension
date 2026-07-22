@@ -47,7 +47,7 @@
         generateSystemPrompt(maxSteps) {
             const ctx = window.SillyTavern.getContext();
             const disabledTools = ctx.extensionSettings?.kaiz_agent?.disabledTools || {};
-            const schemas = this.toolRegistry.getAllSchemas().filter(s => !disabledTools[s.name]);
+            const schemas = this.toolRegistry.getAllSchemas().filter((s) => !disabledTools[s.name]);
             let prompt = `Bạn là Kaiz Agent, một trợ lý AI được xây dựng để hoạt động bên trong môi trường SillyTavern.
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
 (LƯU Ý QUAN TRỌNG: SỐ MAX AGENT FLOW / AGENT LOOP HIỆN TẠI LÀ: ${maxSteps}. Hãy phân bổ kế hoạch thực thi công việc sao cho hợp lý trong giới hạn số vòng lặp này.)
@@ -64,7 +64,7 @@ Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò c
 
 CÁC CÔNG CỤ HIỆN CÓ:
 `;
-            schemas.forEach(s => {
+            schemas.forEach((s) => {
                 prompt += `<tool>
 <name>${s.name}</name>
 <description>${s.description}</description>
@@ -109,7 +109,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 catch (e) {
                     console.error(`[AgentLoop] Failed to parse JSON for tool ${name}:`, argsStr);
                     // Đẩy lỗi parse vào danh sách thay vì bỏ qua âm thầm
-                    tools.push({ name, args: {}, fullMatch: match[0], parseError: `JSON không hợp lệ cho tool "${name}". Nội dung nhận được: ${argsStr.substring(0, 200)}. Hãy kiểm tra lại cú pháp JSON và gọi lại tool.` });
+                    tools.push({
+                        name,
+                        args: {},
+                        fullMatch: match[0],
+                        parseError: `JSON không hợp lệ cho tool "${name}". Nội dung nhận được: ${argsStr.substring(0, 200)}. Hãy kiểm tra lại cú pháp JSON và gọi lại tool.`,
+                    });
                 }
             }
             return tools;
@@ -130,6 +135,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 { role: 'system', content: layer2_workspace_permissions },
                 { role: 'system', content: cachedSystemPrompt },
             ];
+            const ctx = window.SillyTavern.getContext();
+            if (ctx.extensionSettings?.kaiz_agent) {
+                const persona = ctx.extensionSettings.kaiz_agent.persona;
+                const memories = ctx.extensionSettings.kaiz_agent.memories;
+                let customContent = '';
+                if (persona) {
+                    customContent += `[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
+                }
+                if (memories && memories.length > 0) {
+                    customContent += `[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
+                    memories.forEach((mem, idx) => {
+                        if (typeof mem === 'string') {
+                            customContent += `${idx + 1}. [Untracked] ${mem}\n`;
+                        }
+                        else if (mem && mem.key && mem.content) {
+                            customContent += `${idx + 1}. [${mem.key}] ${mem.content}\n`;
+                        }
+                    });
+                    customContent += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
+                }
+                if (customContent) {
+                    msgs.push({ role: 'system', content: customContent.trim() });
+                }
+            }
             for (const msg of internalHistory) {
                 let content = msg.content;
                 if (msg.role === 'assistant' || msg.role === 'agent') {
@@ -139,7 +168,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 msgs.push({ role: apiRole, content: content });
             }
             if (step > 1) {
-                let pinnedGoalSection = pinnedUserGoal ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!` : '';
+                const pinnedGoalSection = pinnedUserGoal
+                    ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy luôn đối chiếu với yêu cầu ghim trên để đảm bảo các thao tác bám sát mục tiêu gốc!`
+                    : '';
                 const feedbackBase = hasError
                     ? `⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI: Có ít nhất 1 tool vừa gọi bị lỗi. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi phía trên, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
                     : `👉 HỆ THỐNG AGENTIC LOOP ĐANG HOẠT ĐỘNG: Lượt tool vừa thành công và vòng lặp tiếp theo đã tự động kích hoạt!\n- Nếu nhiệm vụ ban đầu vẫn chưa hoàn thành: HÃY TIẾP TỤC gọi tool thực thi công việc tiếp theo ngay lập tức!\n- Nếu đã hoàn thành 100% yêu cầu: HÃY DỪNG LẠI (chỉ chat, không gọi tool nữa) để báo kết quả.`;
@@ -152,8 +183,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async run(history, maxSteps, onEvent) {
             console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
             const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
-            let internalHistory = [...history];
-            let pinnedUserGoal = "";
+            const internalHistory = [...history];
+            let pinnedUserGoal = '';
             for (let i = internalHistory.length - 1; i >= 0; i--) {
                 if (internalHistory[i].role === 'user') {
                     pinnedUserGoal = internalHistory[i].content;
@@ -178,7 +209,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 await onEvent({ type: 'step_start' });
                 try {
                     const messages = this.buildMessages(internalHistory, maxSteps, step, pinnedUserGoal, lastToolError, cachedSystemPrompt);
-                    let currentText = "";
+                    let currentText = '';
                     this._currentAbortController = new AbortController();
                     const response = await Promise.race([
                         this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
@@ -190,14 +221,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }, this._currentAbortController.signal),
                         new Promise((_, reject) => {
                             this._forceAbortReject = reject;
-                        })
+                        }),
                     ]);
                     this._forceAbortReject = null;
                     this._currentAbortController = null;
                     await onEvent({ type: 'think_end', data: response.reasoning });
                     const text = response.text;
                     internalHistory.push({ role: 'assistant', content: text });
-                    await onEvent({ type: 'debug', data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text } });
+                    await onEvent({
+                        type: 'debug',
+                        data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text },
+                    });
                     const toolCalls = this.parseToolCalls(text);
                     if (toolCalls.length === 0) {
                         await onEvent({ type: 'step_end', text: text, isFinal: true });
@@ -223,12 +257,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                     new Promise((resolve) => {
                                         onEvent({
                                             type: 'tool_confirm',
-                                            data: { call, resolve }
+                                            data: { call, resolve },
                                         });
                                     }),
                                     new Promise((_, reject) => {
                                         this._safeModeReject = reject;
-                                    })
+                                    }),
                                 ]);
                                 this._safeModeReject = null;
                             }
@@ -236,7 +270,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 this._safeModeReject = null;
                                 if (e.message === 'FORCE_ABORT')
                                     throw e;
-                                console.error("[KaizAgent] Lỗi khi tạo tool_confirm event:", e);
+                                console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
                                 const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
                                 await onEvent({ type: 'error', text: msg });
                                 break;
@@ -257,10 +291,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         else {
                             try {
                                 result = await Promise.race([
-                                    this.toolRegistry.executeTool(call.name, call.args, { adapter: this.adapter, stateManager: this.stateManager }),
+                                    this.toolRegistry.executeTool(call.name, call.args, {
+                                        adapter: this.adapter,
+                                        stateManager: this.stateManager,
+                                    }),
                                     new Promise((_, reject) => {
                                         this._forceAbortReject = reject;
-                                    })
+                                    }),
                                 ]);
                             }
                             finally {
@@ -274,7 +311,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             hasError = true;
                             isToolError = true;
                         }
-                        const statusText = isToolError ? "❌ LỖI (ERROR)" : "✅ THÀNH CÔNG (SUCCESS)";
+                        const statusText = isToolError ? '❌ LỖI (ERROR)' : '✅ THÀNH CÔNG (SUCCESS)';
                         resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
                     }
                     resultsFormatted = resultsFormatted.trim();
@@ -283,7 +320,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     await onEvent({
                         type: 'tool_result',
                         data: { name: 'Multiple Tools', result: resultsFormatted },
-                        text: dbRawResult
+                        text: dbRawResult,
                     });
                     internalHistory.push({ role: 'user', content: dbRawResult });
                 }
@@ -291,8 +328,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     this._forceAbortReject = null;
                     this._currentAbortController = null;
                     const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
-                    const errorMsg = isForceAbort ? FORCE_ABORT_MSG : (e.message || String(e));
-                    console.error("[AgentLoop] Error during completion:", e);
+                    const errorMsg = isForceAbort ? FORCE_ABORT_MSG : e.message || String(e);
+                    console.error('[AgentLoop] Error during completion:', e);
                     await onEvent({ type: 'error', text: errorMsg });
                     break;
                 }
@@ -324,7 +361,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
          * Lấy schema của tất cả tools để gửi lên LLM
          */
         getAllSchemas() {
-            return Array.from(this.tools.values()).map(t => t.schema);
+            return Array.from(this.tools.values()).map((t) => t.schema);
         }
         /**
          * Lấy danh sách tất cả các tools (phục vụ Tool Check)
@@ -341,7 +378,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!tool) {
                 return {
                     content: `Error: Tool '${name}' not found.`,
-                    isError: true
+                    isError: true,
                 };
             }
             try {
@@ -351,7 +388,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         if (args[req] === undefined) {
                             return {
                                 content: `Error: Missing required parameter '${req}' for tool '${name}'.`,
-                                isError: true
+                                isError: true,
                             };
                         }
                     }
@@ -363,7 +400,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 console.error(`[ToolRegistry] Error executing tool '${name}':`, e);
                 return {
                     content: `Error executing tool '${name}': ${e.message || String(e)}`,
-                    isError: true
+                    isError: true,
                 };
             }
         }
@@ -375,8 +412,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             description: 'Lấy thông tin chi tiết về thẻ nhân vật hiện tại đang chat (tên, tính cách, bối cảnh, v.v.). Dùng khi cần hiểu rõ về nhân vật bạn đang đóng vai hoặc nói chuyện cùng.',
             parameters: {
                 type: 'object',
-                properties: {} // Không yêu cầu tham số
-            }
+                properties: {}, // Không yêu cầu tham số
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('characters')) {
@@ -387,21 +424,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             const charInfo = context.adapter.getCharInfo();
             if (!charInfo) {
                 return {
                     content: 'Error: No active character found. Are you in a group chat without a selected character, or not in a chat at all?',
-                    isError: true
+                    isError: true,
                 };
             }
             // Trả về dữ liệu nhân vật dưới dạng JSON string (LLM sẽ parse được)
             return {
-                content: JSON.stringify(charInfo, null, 2)
+                content: JSON.stringify(charInfo, null, 2),
             };
-        }
+        },
     };
 
     const sendSystemMessageTool = {
@@ -413,11 +450,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     message: {
                         type: 'string',
-                        description: 'Nội dung tin nhắn cần hiển thị cho người dùng'
-                    }
+                        description: 'Nội dung tin nhắn cần hiển thị cho người dùng',
+                    },
                 },
-                required: ['message']
-            }
+                required: ['message'],
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('sendSystemMessage')) {
@@ -428,47 +465,47 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             const message = args.message;
             if (!message) {
                 return {
                     content: 'Error: message is required.',
-                    isError: true
+                    isError: true,
                 };
             }
             context.adapter.sendSystemMessage(`[Kaiz Agent]: ${message}`);
             return {
-                content: 'System message sent successfully.'
+                content: 'System message sent successfully.',
             };
-        }
+        },
     };
 
     const manageWorldbookTool = {
         schema: {
-            name: "manage_worldbook",
-            description: "Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create).",
+            name: 'manage_worldbook',
+            description: 'Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create).',
             parameters: {
-                type: "object",
+                type: 'object',
                 properties: {
                     action: {
-                        type: "string",
-                        enum: ["list_all", "toggle", "create"],
-                        description: "Hành động: list_all (Liệt kê tất cả book hiện có và trạng thái), toggle (Bật/tắt book), create (Tạo book mới)."
+                        type: 'string',
+                        enum: ['list_all', 'toggle', 'create'],
+                        description: 'Hành động: list_all (Liệt kê tất cả book hiện có và trạng thái), toggle (Bật/tắt book), create (Tạo book mới).',
                     },
                     book_name: {
-                        type: "string",
-                        description: "Tên của cuốn Worldbook. BẮT BUỘC nếu action là 'toggle' hoặc 'create'."
+                        type: 'string',
+                        description: "Tên của cuốn Worldbook. BẮT BUỘC nếu action là 'toggle' hoặc 'create'.",
                     },
                     state: {
-                        type: "string",
-                        enum: ["enable", "disable"],
-                        description: "Trạng thái muốn thiết lập (Bật hoặc Tắt). BẮT BUỘC nếu action là 'toggle'."
-                    }
+                        type: 'string',
+                        enum: ['enable', 'disable'],
+                        description: "Trạng thái muốn thiết lập (Bật hoặc Tắt). BẮT BUỘC nếu action là 'toggle'.",
+                    },
                 },
-                required: ["action"]
-            }
+                required: ['action'],
+            },
         },
         validate: async () => {
             try {
@@ -484,14 +521,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             if (!args.action || !['list_all', 'toggle', 'create'].includes(args.action)) {
-                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'list_all', 'toggle', 'create'.", isError: true };
+                return {
+                    content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'list_all', 'toggle', 'create'.",
+                    isError: true,
+                };
             }
             if ((args.action === 'toggle' || args.action === 'create') && !args.book_name) {
-                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên Worldbook cho hành động này.", isError: true };
+                return {
+                    content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên Worldbook cho hành động này.",
+                    isError: true,
+                };
             }
             if (args.action === 'toggle' && !args.state) {
                 return { content: "[LỖI] Thiếu tham số 'state'. Phải truyền 'enable' hoặc 'disable'.", isError: true };
@@ -503,10 +546,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 return {
                     content: `[LỖI] Khi thực thi manageWorldbookTool: ${e.message}`,
-                    isError: true
+                    isError: true,
                 };
             }
-        }
+        },
     };
 
     const deleteLastMessageTool = {
@@ -515,8 +558,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             description: 'Xóa tin nhắn cuối cùng trong đoạn chat hiện tại. Rất hữu ích khi tin nhắn cuối cùng bị lỗi hoặc người dùng yêu cầu xóa.',
             parameters: {
                 type: 'object',
-                properties: {} // Không yêu cầu tham số
-            }
+                properties: {}, // Không yêu cầu tham số
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('deleteLastMessage')) {
@@ -527,14 +570,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             context.adapter.deleteLastMessage();
             return {
-                content: 'Last message deleted successfully.'
+                content: 'Last message deleted successfully.',
             };
-        }
+        },
     };
 
     const deleteMessageByIndexTool = {
@@ -547,11 +590,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     indices: {
                         type: 'array',
                         items: { type: 'number' },
-                        description: 'Mảng các chỉ số (chatIndex) của những tin nhắn cần xóa. Ví dụ: [12, 14].'
-                    }
+                        description: 'Mảng các chỉ số (chatIndex) của những tin nhắn cần xóa. Ví dụ: [12, 14].',
+                    },
                 },
-                required: ['indices']
-            }
+                required: ['indices'],
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('deleteMessage')) {
@@ -563,26 +606,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return { content: 'Error: Adapter not provided in context.', isError: true };
             }
             const indices = args.indices;
-            if (!Array.isArray(indices) || !indices.every(i => typeof i === 'number' && Number.isInteger(i))) {
+            if (!Array.isArray(indices) || !indices.every((i) => typeof i === 'number' && Number.isInteger(i))) {
                 return {
                     content: 'Error: indices must be an array of integers.',
-                    isError: true
+                    isError: true,
                 };
             }
             try {
                 // Sửa tên phương thức được gọi sang phương thức mới hỗ trợ mảng
                 context.adapter.deleteMessagesByIndices(indices);
                 return {
-                    content: `Messages at indices [${indices.join(', ')}] deleted successfully.`
+                    content: `Messages at indices [${indices.join(', ')}] deleted successfully.`,
                 };
             }
             catch (e) {
                 return {
                     content: `Error deleting messages: ${e.message}`,
-                    isError: true
+                    isError: true,
                 };
             }
-        }
+        },
     };
 
     const getChatHistoryTool = {
@@ -594,10 +637,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     depth: {
                         type: 'number',
-                        description: 'Số lượng tin nhắn gần nhất cần lấy (Mặc định: 10). Nếu truyền 0, chỉ trả về số lượng tin nhắn tổng cộng.'
-                    }
-                }
-            }
+                        description: 'Số lượng tin nhắn gần nhất cần lấy (Mặc định: 10). Nếu truyền 0, chỉ trả về số lượng tin nhắn tổng cộng.',
+                    },
+                },
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('chat')) {
@@ -608,7 +651,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             const depth = typeof args.depth === 'number' ? args.depth : 10;
@@ -619,10 +662,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             return {
                 content: JSON.stringify({
                     total_messages: totalMessages,
-                    history: history
-                }, null, 2)
+                    history: history,
+                }, null, 2),
             };
-        }
+        },
     };
 
     const getUserPersonaTool = {
@@ -631,8 +674,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             description: 'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
             parameters: {
                 type: 'object',
-                properties: {}
-            }
+                properties: {},
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('substituteParams')) {
@@ -643,7 +686,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             try {
@@ -653,10 +696,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (error) {
                 return {
                     content: `Error getting User Persona: ${error.message || String(error)}`,
-                    isError: true
+                    isError: true,
                 };
             }
-        }
+        },
     };
 
     const editUserPersonaTool = {
@@ -668,15 +711,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     persona_description: {
                         type: 'string',
-                        description: 'Nội dung mô tả tính cách, ngoại hình, bối cảnh mới của người dùng.'
+                        description: 'Nội dung mô tả tính cách, ngoại hình, bối cảnh mới của người dùng.',
                     },
                     persona_name: {
                         type: 'string',
-                        description: 'Tên hiển thị mới của người dùng (Tùy chọn. Nếu không muốn đổi tên thì bỏ qua trường này).'
-                    }
+                        description: 'Tên hiển thị mới của người dùng (Tùy chọn. Nếu không muốn đổi tên thì bỏ qua trường này).',
+                    },
                 },
-                required: ['persona_description']
-            }
+                required: ['persona_description'],
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('substituteParams')) {
@@ -693,28 +736,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!description) {
                 return {
                     content: '[LỖI] Tham số persona_description không được để trống. Hãy cung cấp mô tả persona đầy đủ.',
-                    isError: true
+                    isError: true,
                 };
             }
             try {
                 const success = await context.adapter.editUserPersona(description, args.persona_name);
                 if (success) {
-                    return { content: `Successfully updated user persona.\nName: ${args.persona_name || '(unchanged)'}\nDescription: ${args.persona_description}` };
+                    return {
+                        content: `Successfully updated user persona.\nName: ${args.persona_name || '(unchanged)'}\nDescription: ${args.persona_description}`,
+                    };
                 }
                 else {
                     return {
                         content: `Failed to update User Persona. (Maybe UI/Backend issues)`,
-                        isError: true
+                        isError: true,
                     };
                 }
             }
             catch (error) {
                 return {
                     content: `Error updating User Persona: ${error.message || String(error)}`,
-                    isError: true
+                    isError: true,
                 };
             }
-        }
+        },
     };
 
     const getLorebookInfoTool = {
@@ -727,27 +772,27 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     mode: {
                         type: 'string',
                         enum: ['summary', 'all_full', 'char_full', 'by_name', 'search', 'by_uid', 'simulate'],
-                        description: 'Chế độ lấy dữ liệu. LƯU Ý: Chế độ "all_full" tốn rất nhiều token, CHỈ NÊN DÙNG khi đã thử các cách khác (search, simulate, by_uid) mà vẫn không tìm thấy thông tin người dùng cần.'
+                        description: 'Chế độ lấy dữ liệu. LƯU Ý: Chế độ "all_full" tốn rất nhiều token, CHỈ NÊN DÙNG khi đã thử các cách khác (search, simulate, by_uid) mà vẫn không tìm thấy thông tin người dùng cần.',
                     },
                     book_name: {
                         type: 'string',
-                        description: 'Tên của cuốn Lorebook (bắt buộc nếu mode = by_name)'
+                        description: 'Tên của cuốn Lorebook (bắt buộc nếu mode = by_name)',
                     },
                     query: {
                         type: 'string',
-                        description: 'Từ khóa cần tìm (nếu mode = search) hoặc đoạn hội thoại cần giả lập kiểm tra (nếu mode = simulate)'
+                        description: 'Từ khóa cần tìm (nếu mode = search) hoặc đoạn hội thoại cần giả lập kiểm tra (nếu mode = simulate)',
                     },
                     uid: {
                         type: 'string',
-                        description: 'UID của Entry cần lấy chi tiết (nếu mode = by_uid)'
+                        description: 'UID của Entry cần lấy chi tiết (nếu mode = by_uid)',
                     },
                     include_disabled: {
                         type: 'boolean',
-                        description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false)'
-                    }
+                        description: 'Nếu true, sẽ lấy cả nội dung chi tiết của các entry đang bị tắt. (Mặc định: false)',
+                    },
                 },
-                required: ['mode']
-            }
+                required: ['mode'],
+            },
         },
         validate: async () => {
             try {
@@ -763,7 +808,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             try {
@@ -778,56 +823,56 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (error) {
                 return {
                     content: `Error getting Lorebook info: ${error.message || String(error)}`,
-                    isError: true
+                    isError: true,
                 };
             }
-        }
+        },
     };
 
     const manageLorebookEntryTool = {
         schema: {
-            name: "manage_lorebook_entry",
+            name: 'manage_lorebook_entry',
             description: "Quản lý cấp độ CHI TIẾT (Tạo mới, Sửa, hoặc Xóa) các mục lục nhỏ (Entry) nằm bên trong một cuốn Sổ tay thế giới (Lorebook) đã có. Bạn có thể cập nhật nội dung (content), từ khóa kích hoạt (keys), hoặc dùng tham số 'disable' để Bật/Tắt riêng lẻ một entry mà không cần tắt cả cuốn sách.",
             parameters: {
-                type: "object",
+                type: 'object',
                 properties: {
                     action: {
-                        type: "string",
-                        enum: ["create", "edit", "delete"],
-                        description: "Hành động muốn thực hiện: create (Tạo mới), edit (Chỉnh sửa), delete (Xoá)."
+                        type: 'string',
+                        enum: ['create', 'edit', 'delete'],
+                        description: 'Hành động muốn thực hiện: create (Tạo mới), edit (Chỉnh sửa), delete (Xoá).',
                     },
                     book_name: {
-                        type: "string",
-                        description: "Tên của cuốn Lorebook chứa entry cần thao tác."
+                        type: 'string',
+                        description: 'Tên của cuốn Lorebook chứa entry cần thao tác.',
                     },
                     uid: {
-                        type: "string",
-                        description: "UID của Entry cần chỉnh sửa hoặc xoá. BẮT BUỘC nếu action là 'edit' hoặc 'delete'."
+                        type: 'string',
+                        description: "UID của Entry cần chỉnh sửa hoặc xoá. BẮT BUỘC nếu action là 'edit' hoặc 'delete'.",
                     },
                     keys: {
-                        type: "array",
-                        items: { type: "string" },
-                        description: "(Tuỳ chọn) Danh sách các từ khóa kích hoạt entry này. Ví dụ: [\"apple\", \"banana\"]. (Dùng cho create/edit)"
+                        type: 'array',
+                        items: { type: 'string' },
+                        description: '(Tuỳ chọn) Danh sách các từ khóa kích hoạt entry này. Ví dụ: ["apple", "banana"]. (Dùng cho create/edit)',
                     },
                     content: {
-                        type: "string",
-                        description: "(Tuỳ chọn) Nội dung chính của entry. (Dùng cho create/edit)"
+                        type: 'string',
+                        description: '(Tuỳ chọn) Nội dung chính của entry. (Dùng cho create/edit)',
                     },
                     constant: {
-                        type: "boolean",
-                        description: "(Tuỳ chọn) Đặt thành true nếu muốn entry luôn luôn được kích hoạt bất chấp từ khóa. (Dùng cho create/edit)"
+                        type: 'boolean',
+                        description: '(Tuỳ chọn) Đặt thành true nếu muốn entry luôn luôn được kích hoạt bất chấp từ khóa. (Dùng cho create/edit)',
                     },
                     disable: {
-                        type: "boolean",
-                        description: "(Tuỳ chọn) Đặt thành true nếu muốn vô hiệu hoá entry. (Dùng cho create/edit)"
+                        type: 'boolean',
+                        description: '(Tuỳ chọn) Đặt thành true nếu muốn vô hiệu hoá entry. (Dùng cho create/edit)',
                     },
                     comment: {
-                        type: "string",
-                        description: "(Tuỳ chọn) Tên hoặc ghi chú nhỏ cho entry để dễ nhận biết. (Dùng cho create/edit)"
-                    }
+                        type: 'string',
+                        description: '(Tuỳ chọn) Tên hoặc ghi chú nhỏ cho entry để dễ nhận biết. (Dùng cho create/edit)',
+                    },
                 },
-                required: ["action", "book_name"]
-            }
+                required: ['action', 'book_name'],
+            },
         },
         validate: async () => {
             try {
@@ -843,17 +888,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             if (!args.action || !['create', 'edit', 'delete'].includes(args.action)) {
-                return { content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'create', 'edit', 'delete'.", isError: true };
+                return {
+                    content: "[LỖI] Tham số 'action' không hợp lệ. Chỉ chấp nhận: 'create', 'edit', 'delete'.",
+                    isError: true,
+                };
             }
             if (!args.book_name) {
-                return { content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên cuốn Lorebook.", isError: true };
+                return {
+                    content: "[LỖI] Thiếu tham số 'book_name'. Bạn bắt buộc phải cung cấp tên cuốn Lorebook.",
+                    isError: true,
+                };
             }
             if ((args.action === 'edit' || args.action === 'delete') && (args.uid === undefined || args.uid === null)) {
-                return { content: "[LỖI] Thiếu tham số 'uid'. Bạn bắt buộc phải cung cấp UID của entry nếu muốn edit hoặc delete.", isError: true };
+                return {
+                    content: "[LỖI] Thiếu tham số 'uid'. Bạn bắt buộc phải cung cấp UID của entry nếu muốn edit hoặc delete.",
+                    isError: true,
+                };
             }
             try {
                 const result = await context.adapter.manageLorebookEntry(args);
@@ -862,10 +916,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 return {
                     content: `[LỖI] Khi thực thi manageLorebookEntry: ${e.message}`,
-                    isError: true
+                    isError: true,
                 };
             }
-        }
+        },
     };
 
     const manageChatTextTool = {
@@ -878,35 +932,35 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     action: {
                         type: 'string',
                         enum: ['find_and_highlight', 'find_and_replace', 'clear_highlight'],
-                        description: 'Hành động cần thực hiện. find_and_highlight: làm sáng khung chat. find_and_replace: thay thế chữ. clear_highlight: Xóa toàn bộ highlight hiện tại.'
+                        description: 'Hành động cần thực hiện. find_and_highlight: làm sáng khung chat. find_and_replace: thay thế chữ. clear_highlight: Xóa toàn bộ highlight hiện tại.',
                     },
                     query: {
                         type: 'string',
-                        description: 'Từ khóa hoặc câu văn cần tìm.'
+                        description: 'Từ khóa hoặc câu văn cần tìm.',
                     },
                     replacement: {
                         type: 'string',
-                        description: 'Chuỗi thay thế (chỉ dùng khi action = find_and_replace). Mặc định là chuỗi rỗng nếu không truyền.'
+                        description: 'Chuỗi thay thế (chỉ dùng khi action = find_and_replace). Mặc định là chuỗi rỗng nếu không truyền.',
                     },
                     is_regex: {
                         type: 'boolean',
-                        description: 'Set thành true nếu query là một biểu thức Regex. Mặc định là false (tìm chuỗi chính xác).'
+                        description: 'Set thành true nếu query là một biểu thức Regex. Mặc định là false (tìm chuỗi chính xác).',
                     },
                     whole_word: {
                         type: 'boolean',
-                        description: 'Nếu true, chỉ tìm kiếm các từ độc lập (không nằm trong từ khác). Mặc định false.'
+                        description: 'Nếu true, chỉ tìm kiếm các từ độc lập (không nằm trong từ khác). Mặc định false.',
                     },
                     case_insensitive: {
                         type: 'boolean',
-                        description: 'Nếu true, không phân biệt chữ hoa chữ thường. Mặc định false.'
+                        description: 'Nếu true, không phân biệt chữ hoa chữ thường. Mặc định false.',
                     },
                     dry_run: {
                         type: 'boolean',
-                        description: 'Nếu true (chỉ dùng cho find_and_replace), sẽ CHỈ trả về danh sách các thay đổi dự kiến mà KHÔNG thực sự lưu thay đổi. Rất hữu ích để xem trước kết quả. Mặc định false.'
-                    }
+                        description: 'Nếu true (chỉ dùng cho find_and_replace), sẽ CHỈ trả về danh sách các thay đổi dự kiến mà KHÔNG thực sự lưu thay đổi. Rất hữu ích để xem trước kết quả. Mặc định false.',
+                    },
                 },
-                required: ['action']
-            }
+                required: ['action'],
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('chat')) {
@@ -931,13 +985,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 else if (action === 'find_and_highlight') {
                     const result = context.adapter.findAndHighlight(query, isRegex, caseInsensitive, wholeWord);
-                    return { content: `Thành công: Đã tìm thấy và bôi sáng ${result.count} tin nhắn chứa từ khóa "${query}".\nID các tin nhắn: ${result.messageIds.join(', ')}` };
+                    return {
+                        content: `Thành công: Đã tìm thấy và bôi sáng ${result.count} tin nhắn chứa từ khóa "${query}".\nID các tin nhắn: ${result.messageIds.join(', ')}`,
+                    };
                 }
                 else if (action === 'find_and_replace') {
                     const result = await context.adapter.findAndReplace(query, replacement, isRegex, caseInsensitive, wholeWord, dryRun);
                     if (dryRun) {
                         let preview = `DRY-RUN (XEM TRƯỚC): Tìm thấy ${result.count} tin nhắn sẽ bị thay đổi.\n\n`;
-                        result.messages.forEach(m => {
+                        result.messages.forEach((m) => {
                             preview += `--- ID: ${m.id} ---\n`;
                             m.snippets.forEach((s, idx) => {
                                 preview += `  [Đoạn ${idx + 1}]\n`;
@@ -949,8 +1005,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return { content: preview };
                     }
                     else {
-                        const ids = result.messages.map(m => m.id);
-                        return { content: `Thành công: Đã tìm thấy và thay thế nội dung trong ${result.count} tin nhắn.\nID các tin nhắn đã sửa: ${ids.join(', ')}` };
+                        const ids = result.messages.map((m) => m.id);
+                        return {
+                            content: `Thành công: Đã tìm thấy và thay thế nội dung trong ${result.count} tin nhắn.\nID các tin nhắn đã sửa: ${ids.join(', ')}`,
+                        };
                     }
                 }
                 else {
@@ -960,7 +1018,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 return { content: `Lỗi khi thực thi: ${e.message}`, isError: true };
             }
-        }
+        },
     };
 
     const quickChatPreviewTool = {
@@ -969,70 +1027,73 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             description: 'Mở bảng modal Quick Chat Preview trên giao diện người dùng. Bảng này liệt kê toàn bộ tin nhắn hiện tại ở dạng thu gọn để người dùng có thể xem nhanh tổng thể độ dài chat và vị trí các tin nhắn. LƯU Ý: Tool này KHÔNG trả về dữ liệu chat cho bạn, nó chỉ dùng để trigger giao diện cho người dùng xem.',
             parameters: {
                 type: 'object',
-                properties: {}
-            }
+                properties: {},
+            },
         },
         execute: async (args, context) => {
             if (!context || !context.adapter) {
                 return {
                     content: 'Error: Adapter not provided in context.',
-                    isError: true
+                    isError: true,
                 };
             }
             try {
                 // Gọi hàm mở Modal (đã định nghĩa trong Adapter)
                 context.adapter.showChatPreviewModal();
                 return {
-                    content: 'Quick Chat Preview modal đã được mở thành công trên màn hình người dùng.'
+                    content: 'Quick Chat Preview modal đã được mở thành công trên màn hình người dùng.',
                 };
             }
             catch (e) {
                 return {
                     content: `Error showing quick chat preview: ${e.message}`,
-                    isError: true
+                    isError: true,
                 };
             }
-        }
+        },
     };
 
     const renameAgentChatTool = {
         schema: {
-            name: "rename_agent_chat",
+            name: 'rename_agent_chat',
             description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
-                type: "object",
+                type: 'object',
                 properties: {
-                    newName: { type: "string", description: "The new name for the chat." },
-                    chatId: { type: "number", description: "Optional. The ID of the chat to rename. If not provided, renames the current chat." }
+                    newName: { type: 'string', description: 'The new name for the chat.' },
+                    chatId: {
+                        type: 'number',
+                        description: 'Optional. The ID of the chat to rename. If not provided, renames the current chat.',
+                    },
                 },
-                required: ["newName"]
-            }
+                required: ['newName'],
+            },
         },
         execute: async (args, context) => {
             const stateManager = context?.stateManager;
             if (!stateManager)
-                throw new Error("StateManager not available in context.");
+                throw new Error('StateManager not available in context.');
             const name = args.newName;
             const id = args.chatId || stateManager.currentChatId;
             if (!id)
-                return { content: "Error: No active chat to rename and no ID provided.", isError: true };
+                return { content: 'Error: No active chat to rename and no ID provided.', isError: true };
             await stateManager.updateChatName(id, name);
             return { content: `Successfully renamed chat ${id} to "${name}".` };
-        }
+        },
     };
     const openNewAgentChatTool = {
         schema: {
-            name: "open_new_agent_chat",
+            name: 'open_new_agent_chat',
             description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
-                type: "object",
-                properties: {}
-            }
+                type: 'object',
+                properties: {},
+            },
         },
         execute: async (args, context) => {
             const stateManager = context?.stateManager;
             if (!stateManager)
-                throw new Error("StateManager not available in context.");
+                throw new Error('StateManager not available in context.');
             stateManager.currentChatId = null;
             if (stateManager.onChatSwitched)
                 stateManager.onChatSwitched(-1, []);
@@ -1040,66 +1101,73 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const chats = await stateManager.loadChatList();
             if (stateManager.onChatsListUpdated)
                 stateManager.onChatsListUpdated(chats);
-            return { content: "Successfully opened a new blank chat session." };
-        }
+            return { content: 'Successfully opened a new blank chat session.' };
+        },
     };
     const listAgentChatsTool = {
         schema: {
-            name: "list_agent_chats",
+            name: 'list_agent_chats',
             description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
-                type: "object",
-                properties: {}
-            }
+                type: 'object',
+                properties: {},
+            },
         },
         execute: async (args, context) => {
             const stateManager = context?.stateManager;
             if (!stateManager)
-                throw new Error("StateManager not available in context.");
+                throw new Error('StateManager not available in context.');
             const chats = await stateManager.loadChatList();
             if (chats.length === 0)
-                return { content: "No chats found." };
-            const listStr = chats.map(c => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`).join('\n');
-            return { content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}` };
-        }
+                return { content: 'No chats found.' };
+            const listStr = chats
+                .map((c) => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`)
+                .join('\n');
+            return {
+                content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}`,
+            };
+        },
     };
     const deleteAgentChatTool = {
         schema: {
-            name: "delete_agent_chat",
+            name: 'delete_agent_chat',
             description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
-                type: "object",
+                type: 'object',
                 properties: {
-                    chatId: { type: "number", description: "Optional. The ID of the chat to delete. If not provided, deletes the current chat." }
-                }
-            }
+                    chatId: {
+                        type: 'number',
+                        description: 'Optional. The ID of the chat to delete. If not provided, deletes the current chat.',
+                    },
+                },
+            },
         },
         execute: async (args, context) => {
             const stateManager = context?.stateManager;
             if (!stateManager)
-                throw new Error("StateManager not available in context.");
+                throw new Error('StateManager not available in context.');
             const id = args.chatId || stateManager.currentChatId;
             if (!id)
-                return { content: "Error: No active chat to delete and no ID provided.", isError: true };
+                return { content: 'Error: No active chat to delete and no ID provided.', isError: true };
             await stateManager.deleteChat(id);
             return { content: `Successfully deleted chat ${id}.` };
-        }
+        },
     };
 
     const scrapeWebpageTool = {
         schema: {
-            name: "scrape_webpage",
+            name: 'scrape_webpage',
             description: "CÔNG CỤ CÀO DỮ LIỆU TỪ INTERNET. Sử dụng công cụ này để bóc tách toàn bộ nội dung văn bản (text) thô và các đường link từ một địa chỉ URL bất kỳ (ví dụ: Wikipedia, Fandom, trang báo). Công cụ này được trang bị hệ thống vượt tường lửa (Cloudflare bypass) nên có thể đọc được các trang khó tính. Dùng nó khi bạn cần 'đọc' nội dung chi tiết của một trang web.",
             parameters: {
-                type: "object",
+                type: 'object',
                 properties: {
                     url: {
-                        type: "string",
-                        description: "Đường link URL cần cào dữ liệu (VD: https://fandom.com/wiki/...)"
-                    }
+                        type: 'string',
+                        description: 'Đường link URL cần cào dữ liệu (VD: https://fandom.com/wiki/...)',
+                    },
                 },
-                required: ["url"]
-            }
+                required: ['url'],
+            },
         },
         execute: async (args) => {
             try {
@@ -1108,7 +1176,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return { content: JSON.stringify({ error: "Missing 'url' parameter" }), isError: true };
                 }
                 // Fetch directly first
-                let html = "";
+                let html = '';
                 try {
                     const response = await fetch(url);
                     if (!response.ok)
@@ -1117,39 +1185,60 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 catch (err) {
                     // Tự động Fallback sang Proxy nếu fetch gốc bị lỗi (do CORS của extension không cover được hết các trang)
-                    console.log("[scrape_webpage] Direct fetch failed, trying proxy...", err);
+                    console.log('[scrape_webpage] Direct fetch failed, trying proxy...', err);
                     const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
                     const proxyRes = await fetch(proxyUrl);
                     if (!proxyRes.ok) {
-                        return { content: JSON.stringify({ error: `Scraping failed both directly and via proxy: ${proxyRes.status}` }), isError: true };
+                        return {
+                            content: JSON.stringify({
+                                error: `Scraping failed both directly and via proxy: ${proxyRes.status}`,
+                            }),
+                            isError: true,
+                        };
                     }
                     html = await proxyRes.text();
                 }
                 // Parse HTML
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(html, "text/html");
+                const doc = parser.parseFromString(html, 'text/html');
                 // Remove noise elements that shouldn't be in text
-                const noiseSelectors = ['script', 'style', 'noscript', 'canvas', 'svg', 'iframe', 'video', 'audio', 'header', 'footer', 'nav'];
-                noiseSelectors.forEach(selector => {
+                const noiseSelectors = [
+                    'script',
+                    'style',
+                    'noscript',
+                    'canvas',
+                    'svg',
+                    'iframe',
+                    'video',
+                    'audio',
+                    'header',
+                    'footer',
+                    'nav',
+                ];
+                noiseSelectors.forEach((selector) => {
                     const elements = doc.querySelectorAll(selector);
-                    elements.forEach(el => el.remove());
+                    elements.forEach((el) => el.remove());
                 });
                 // Lấy nội dung chữ
                 // Ưu tiên các thẻ chứa nội dung chính để sạch hơn nếu có thể, nhưng nếu không thấy thì lấy toàn bộ body
-                let contentElement = doc.querySelector('main') ||
+                const contentElement = doc.querySelector('main') ||
                     doc.querySelector('#mw-content-text') ||
                     doc.querySelector('#content') ||
                     doc.body;
-                const textContent = contentElement.innerText || "";
+                const textContent = contentElement.innerText || '';
                 // Lấy tất cả các links
                 const baseUrl = new URL(url);
                 const linksSet = new Set();
                 const extractedLinks = [];
                 const anchorElements = doc.querySelectorAll('a');
-                anchorElements.forEach(a => {
+                anchorElements.forEach((a) => {
                     const text = a.innerText?.trim();
-                    let href = a.getAttribute('href');
-                    if (text && href && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('#')) {
+                    const href = a.getAttribute('href');
+                    if (text &&
+                        href &&
+                        !href.startsWith('javascript:') &&
+                        !href.startsWith('mailto:') &&
+                        !href.startsWith('#')) {
                         try {
                             // Resolve relative URLs
                             const absoluteUrl = new URL(href, baseUrl.href).href;
@@ -1170,30 +1259,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         url: baseUrl.href,
                         title: doc.title,
                         content: textContent.trim(),
-                        links: extractedLinks
-                    })
+                        links: extractedLinks,
+                    }),
                 };
             }
             catch (error) {
                 return { content: JSON.stringify({ error: `Scraping failed: ${error.message}` }), isError: true };
             }
-        }
+        },
     };
 
     const searchGoogleTool = {
         schema: {
-            name: "search_google",
-            description: "CÔNG CỤ TÌM KIẾM WEB. Hoạt động giống như việc bạn tìm kiếm Internet. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link.",
+            name: 'search_google',
+            description: 'CÔNG CỤ TÌM KIẾM WEB. Hoạt động giống như việc bạn tìm kiếm Internet. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link.',
             parameters: {
-                type: "object",
+                type: 'object',
                 properties: {
                     query: {
-                        type: "string",
-                        description: "Từ khóa cần tìm kiếm trên Google"
-                    }
+                        type: 'string',
+                        description: 'Từ khóa cần tìm kiếm trên Google',
+                    },
                 },
-                required: ["query"]
-            }
+                required: ['query'],
+            },
         },
         execute: async (args) => {
             try {
@@ -1202,7 +1291,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return { content: JSON.stringify({ error: "Missing 'query' parameter" }), isError: true };
                 }
                 const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-                let html = "";
+                let html = '';
                 try {
                     const response = await fetch(url);
                     if (!response.ok)
@@ -1211,7 +1300,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 catch (err) {
                     // Tự động Fallback sang proxy nếu fetch gốc bị chặn
-                    console.log("[search_google] Direct fetch failed, trying proxy...", err);
+                    console.log('[search_google] Direct fetch failed, trying proxy...', err);
                     const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
                     const proxyRes = await fetch(proxyUrl);
                     if (proxyRes.ok) {
@@ -1219,11 +1308,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(html, "text/html");
+                const doc = parser.parseFromString(html, 'text/html');
                 const results = [];
                 // Phân tích các khối kết quả tìm kiếm của Google (thường nằm trong div có class "g")
                 const gElements = doc.querySelectorAll('div.g');
-                gElements.forEach(g => {
+                gElements.forEach((g) => {
                     const aElement = g.querySelector('a');
                     const h3Element = g.querySelector('h3');
                     if (aElement && h3Element) {
@@ -1239,25 +1328,28 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 snippet = snippet.substring(title.length).trim();
                             }
                             // Lọc một số rác (VD: "Translate this page", "Cached")
-                            snippet = snippet.replace(/Translate this page/g, '').replace(/Cached/g, '').trim();
+                            snippet = snippet
+                                .replace(/Translate this page/g, '')
+                                .replace(/Cached/g, '')
+                                .trim();
                             results.push({
                                 title,
                                 url: link,
-                                snippet
+                                snippet,
                             });
                         }
                     }
                 });
                 if (results.length === 0) {
-                    console.log("[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo Lite...");
+                    console.log('[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo Lite...');
                     const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
-                    let ddgHtml = "";
+                    let ddgHtml = '';
                     try {
                         const ddgRes = await fetch(ddgUrl);
                         if (ddgRes.ok)
                             ddgHtml = await ddgRes.text();
                         else
-                            throw new Error("DDG Fetch Not OK");
+                            throw new Error('DDG Fetch Not OK');
                     }
                     catch (e) {
                         // Proxy fallback for DuckDuckGo
@@ -1268,7 +1360,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     let ddgDoc = null;
                     if (ddgHtml) {
-                        ddgDoc = parser.parseFromString(ddgHtml, "text/html");
+                        ddgDoc = parser.parseFromString(ddgHtml, 'text/html');
                         // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
                         const linkElements = ddgDoc.querySelectorAll('a.result-link');
                         const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');
@@ -1282,15 +1374,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 results.push({
                                     title: aEl.innerText.trim(),
                                     url: link,
-                                    snippet: snippetEl ? snippetEl.innerText.trim() : ""
+                                    snippet: snippetEl ? snippetEl.innerText.trim() : '',
                                 });
                             }
                         }
                     }
                     if (results.length === 0) {
-                        console.log("[search_google] DuckDuckGo Lite returned 0 results. Falling back to Bing...");
+                        console.log('[search_google] DuckDuckGo Lite returned 0 results. Falling back to Bing...');
                         const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
-                        let bingHtml = "";
+                        let bingHtml = '';
                         try {
                             const bingRes = await fetch(bingUrl);
                             if (bingRes.ok)
@@ -1303,16 +1395,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 bingHtml = await proxyRes.text();
                         }
                         if (bingHtml) {
-                            const bingDoc = parser.parseFromString(bingHtml, "text/html");
+                            const bingDoc = parser.parseFromString(bingHtml, 'text/html');
                             const bingResults = bingDoc.querySelectorAll('.b_algo');
-                            bingResults.forEach(res => {
+                            bingResults.forEach((res) => {
                                 const titleEl = res.querySelector('h2 a');
                                 const snippetEl = res.querySelector('.b_caption p') || res.querySelector('.b_snippet');
                                 if (titleEl && titleEl.getAttribute('href')) {
                                     results.push({
                                         title: titleEl.innerText.trim(),
                                         url: titleEl.getAttribute('href'),
-                                        snippet: snippetEl ? snippetEl.innerText.trim() : ""
+                                        snippet: snippetEl ? snippetEl.innerText.trim() : '',
                                     });
                                 }
                             });
@@ -1321,23 +1413,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (results.length === 0) {
                         return {
                             content: JSON.stringify({
-                                warning: "Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang",
-                                raw_text: ddgHtml ? (ddgDoc ? ddgDoc.body.innerText.substring(0, 3000) : ddgHtml.substring(0, 3000)) : (doc.body ? doc.body.innerText.substring(0, 3000) : "No text")
-                            })
+                                warning: 'Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang',
+                                raw_text: ddgHtml
+                                    ? ddgDoc
+                                        ? ddgDoc.body.innerText.substring(0, 3000)
+                                        : ddgHtml.substring(0, 3000)
+                                    : doc.body
+                                        ? doc.body.innerText.substring(0, 3000)
+                                        : 'No text',
+                            }),
                         };
                     }
                 }
                 return {
                     content: JSON.stringify({
                         query: query,
-                        results: results.slice(0, 15) // Trả về tối đa 15 kết quả
-                    })
+                        results: results.slice(0, 15), // Trả về tối đa 15 kết quả
+                    }),
                 };
             }
             catch (error) {
                 return { content: JSON.stringify({ error: `Search failed: ${error.message}` }), isError: true };
             }
-        }
+        },
     };
 
     const toggleVirtualCursorTool = {
@@ -1347,15 +1445,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             parameters: {
                 type: 'object',
                 properties: {},
-                required: []
-            }
+                required: [],
+            },
         },
         execute: async (args) => {
             let cursor = document.getElementById('kaiz-virtual-cursor');
             if (cursor) {
                 cursor.remove();
                 return {
-                    content: 'Đã tắt con trỏ chuột ảo.'
+                    content: 'Đã tắt con trỏ chuột ảo.',
                 };
             }
             else {
@@ -1364,7 +1462,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const scripts = document.getElementsByTagName('script');
                     for (let i = 0; i < scripts.length; i++) {
                         const src = scripts[i].src;
-                        if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                        if (src &&
+                            src.includes('index.js') &&
+                            src.toLowerCase().includes('kaiz') &&
+                            src.toLowerCase().includes('agent')) {
                             const parts = new URL(src).pathname.split('/');
                             const extIndex = parts.indexOf('extensions');
                             if (extIndex !== -1 && parts.length > extIndex + 1) {
@@ -1391,10 +1492,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 cursor.style.transition = 'top 0.3s, left 0.3s';
                 document.body.appendChild(cursor);
                 return {
-                    content: 'Đã bật con trỏ chuột ảo Gawr Gura ở giữa màn hình.'
+                    content: 'Đã bật con trỏ chuột ảo Gawr Gura ở giữa màn hình.',
                 };
             }
-        }
+        },
     };
 
     const interactUITool = {
@@ -1406,11 +1507,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     targetDescription: {
                         type: 'string',
-                        description: 'Tên hoặc mô tả của nút bấm cần click. Ví dụ: "Send", "Extensions", "Menu"'
-                    }
+                        description: 'Tên hoặc mô tả của nút bấm cần click. Ví dụ: "Send", "Extensions", "Menu"',
+                    },
                 },
-                required: ['targetDescription']
-            }
+                required: ['targetDescription'],
+            },
         },
         execute: async (args) => {
             const target = args.targetDescription?.toLowerCase();
@@ -1435,15 +1536,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!foundElement) {
                 // Từ khoá hard-code cho các nút quan trọng
                 const keywordMap = {
-                    'send': '#send_but',
-                    'gửi': '#send_but',
-                    'extensions': '#extensions_button',
+                    send: '#send_but',
+                    gửi: '#send_but',
+                    extensions: '#extensions_button',
                     'tiện ích': '#extensions_button',
-                    'settings': '#rm_button_panel',
+                    settings: '#rm_button_panel',
                     'cài đặt': '#rm_button_panel',
-                    'characters': '#rm_button_characters',
+                    characters: '#rm_button_characters',
                     'nhân vật': '#rm_button_characters',
-                    'menu': '#nav-drawer-toggle'
+                    menu: '#nav-drawer-toggle',
                 };
                 if (keywordMap[cleanTarget]) {
                     foundElement = document.querySelector(keywordMap[cleanTarget]);
@@ -1481,7 +1582,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const scripts = document.getElementsByTagName('script');
                     for (let i = 0; i < scripts.length; i++) {
                         const src = scripts[i].src;
-                        if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                        if (src &&
+                            src.includes('index.js') &&
+                            src.toLowerCase().includes('kaiz') &&
+                            src.toLowerCase().includes('agent')) {
                             const parts = new URL(src).pathname.split('/');
                             const extIndex = parts.indexOf('extensions');
                             if (extIndex !== -1 && parts.length > extIndex + 1) {
@@ -1506,7 +1610,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 cursor.style.pointerEvents = 'none';
                 document.body.appendChild(cursor);
                 // Đợi browser render xong
-                await new Promise(r => requestAnimationFrame(r));
+                await new Promise((r) => requestAnimationFrame(r));
             }
             // 4. Tính toán khoảng cách để xác định duration cho animation
             let startX = window.innerWidth / 2;
@@ -1529,7 +1633,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             cursor.style.top = `${targetY}px`;
             cursor.style.left = `${targetX}px`;
             // 5. Chờ bay tới nơi
-            await new Promise(r => setTimeout(r, duration * 1000 + 50));
+            await new Promise((r) => setTimeout(r, duration * 1000 + 50));
             // 6. Thực thi Click (Tạo hiệu ứng nhấp nháy chút cho đẹp)
             cursor.style.transform = 'translate(-20%, -20%) scale(0.8)';
             setTimeout(() => {
@@ -1538,9 +1642,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }, 150);
             foundElement.click();
             return {
-                content: `Đã di chuyển con trỏ chuột và bấm vào nút "${target}" thành công.`
+                content: `Đã di chuyển con trỏ chuột và bấm vào nút "${target}" thành công.`,
             };
-        }
+        },
     };
 
     const scanUITool = {
@@ -1550,15 +1654,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             parameters: {
                 type: 'object',
                 properties: {},
-                required: []
-            }
+                required: [],
+            },
         },
         execute: async (args) => {
             const interactables = document.querySelectorAll('button, a, input, select, textarea, .interactable, [title], .menu_button, .drawer-toggle, .fa-solid, .fa-regular');
             let counter = 1;
             // Xoá các tag cũ
             const oldTagged = document.querySelectorAll('[data-kaiz-id]');
-            oldTagged.forEach(el => el.removeAttribute('data-kaiz-id'));
+            oldTagged.forEach((el) => el.removeAttribute('data-kaiz-id'));
             // Bước 1: Gắn nhãn cho các element hợp lệ
             for (let i = 0; i < interactables.length; i++) {
                 const el = interactables[i];
@@ -1577,13 +1681,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // Gắn ID
                 el.setAttribute('data-kaiz-id', `k${counter++}`);
             }
-            let totalItems = counter - 1;
+            const totalItems = counter - 1;
             // Bước 2: Hàm đệ quy xây dựng cây DOM thu gọn
             function buildTree(el, indent) {
                 if (!el)
                     return '';
                 // Tránh quét Agent UI
-                if (el.id === 'kaiz-floating-btn' || el.id === 'kaiz-chat-window' || el.id === 'kaiz-log-modal' || el.id === 'kaiz-virtual-cursor' || el.id.startsWith('kaiz-')) {
+                if (el.id === 'kaiz-floating-btn' ||
+                    el.id === 'kaiz-chat-window' ||
+                    el.id === 'kaiz-log-modal' ||
+                    el.id === 'kaiz-virtual-cursor' ||
+                    el.id.startsWith('kaiz-')) {
                     return '';
                 }
                 const kaizId = el.getAttribute('data-kaiz-id');
@@ -1594,9 +1702,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const indentStr = '  '.repeat(indent);
                 // Nếu là phần tử có thể click
                 if (kaizId) {
-                    let text = el.innerText?.trim() || '';
+                    const text = el.innerText?.trim() || '';
                     // SillyTavern hoặc jQuery UI tooltip có thể gỡ bỏ title và đưa vào data-original-title / jq-title...
-                    const title = el.getAttribute('title')?.trim() || el.getAttribute('data-original-title')?.trim() || el.getAttribute('data-title')?.trim() || '';
+                    const title = el.getAttribute('title')?.trim() ||
+                        el.getAttribute('data-original-title')?.trim() ||
+                        el.getAttribute('data-title')?.trim() ||
+                        '';
                     const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
                     const value = el.value?.trim() || '';
                     let description = text || title || ariaLabel;
@@ -1607,14 +1718,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (!description) {
                         if (el.classList.contains('fa-solid') || el.classList.contains('fa-regular')) {
                             isIconOnly = true;
-                            description = Array.from(el.classList).filter(c => c.startsWith('fa-')).join(' ');
+                            description = Array.from(el.classList)
+                                .filter((c) => c.startsWith('fa-'))
+                                .join(' ');
                         }
                         else {
                             // Kiểm tra nếu nó bọc một icon bên trong (vd: <div class="menu_button"><i class="fa-solid fa-gear"></i></div>)
                             const childIcon = el.querySelector('.fa-solid, .fa-regular');
                             if (childIcon) {
                                 isIconOnly = true;
-                                description = Array.from(childIcon.classList).filter(c => c.startsWith('fa-')).join(' ');
+                                description = Array.from(childIcon.classList)
+                                    .filter((c) => c.startsWith('fa-'))
+                                    .join(' ');
                             }
                         }
                     }
@@ -1671,7 +1786,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         if (el.id)
                             attrs += ` id="${el.id}"`;
                         if (el.className && typeof el.className === 'string') {
-                            const classes = el.className.split(' ').filter(c => !c.startsWith('fa-') && c.length > 0).join(' ');
+                            const classes = el.className
+                                .split(' ')
+                                .filter((c) => !c.startsWith('fa-') && c.length > 0)
+                                .join(' ');
                             if (classes)
                                 attrs += ` class="${classes}"`;
                         }
@@ -1696,12 +1814,210 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             else {
                 const treeData = buildTree(document.body, 0);
                 outputContent += '```html\n' + treeData + '\n```';
-                outputContent = `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
+                outputContent =
+                    `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
             }
             return {
-                content: outputContent
+                content: outputContent,
             };
-        }
+        },
+    };
+
+    const manageUserInputTool = {
+        schema: {
+            name: 'manage_user_input',
+            description: `Thao tác trực tiếp với khung nhập liệu (chat box) của người dùng trong SillyTavern. Bạn có thể tự động điền chữ, nối tiếp chữ, và tuỳ chọn nhấn nút Gửi (Send) thay cho người dùng.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    text: {
+                        type: 'string',
+                        description: 'Văn bản muốn nhập vào khung chat. (Bỏ trống nếu đang dùng mode "read")',
+                    },
+                    mode: {
+                        type: 'string',
+                        description: "Chế độ: 'overwrite' (Xoá và ghi đè mới), 'append' (Nối tiếp vào sau nội dung đang có), hoặc 'read' (Chỉ đọc nội dung đang có trong khung nhập liệu).",
+                    },
+                    send: {
+                        type: 'boolean',
+                        description: 'True nếu muốn gửi tin. False nếu chỉ điền vào. (Bỏ trống nếu đang dùng mode "read")',
+                    },
+                },
+                required: ['mode'],
+            },
+        },
+        execute: async (args) => {
+            const text = args.text;
+            const mode = args.mode;
+            const send = args.send;
+            if (!mode || !['overwrite', 'append', 'read'].includes(mode)) {
+                return { content: "Lỗi: Tham số mode phải là 'overwrite', 'append' hoặc 'read'." };
+            }
+            if (mode !== 'read' && !text) {
+                return { content: 'Lỗi: Tham số text không được để trống khi ghi hoặc nối thêm văn bản.' };
+            }
+            const textarea = document.getElementById('send_textarea');
+            if (!textarea) {
+                return { content: 'Lỗi: Không tìm thấy khung nhập văn bản (send_textarea) trên giao diện.' };
+            }
+            if (mode === 'read') {
+                return { content: `Nội dung hiện tại trong khung chat là: "${textarea.value}"` };
+            }
+            if (mode === 'overwrite') {
+                textarea.value = text;
+            }
+            else if (mode === 'append') {
+                const currentVal = textarea.value;
+                textarea.value = currentVal + (currentVal && !currentVal.endsWith(' ') ? ' ' : '') + text;
+            }
+            // Bắn event để SillyTavern nhận diện có sự thay đổi text (dành cho bộ đếm ký tự hoặc state react)
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            if (send) {
+                const sendBtn = document.getElementById('send_but');
+                if (sendBtn) {
+                    // SillyTavern dùng div#send_but làm nút gửi
+                    sendBtn.click();
+                    return {
+                        content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung và nhấn nút Gửi thành công.`,
+                    };
+                }
+                else {
+                    return {
+                        content: `Đã điền nội dung nhưng không tìm thấy nút Gửi (send_but). Nội dung vẫn đang ở trong khung chat.`,
+                    };
+                }
+            }
+            return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung vào khung chat (Không gửi).` };
+        },
+    };
+
+    const manageAgentMemory = {
+        schema: {
+            name: 'manage_agent_memory',
+            description: 'Công cụ giúp Kaiz Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        enum: ['add', 'edit', 'delete', 'clear_all'],
+                        description: 'Hành động: add (thêm mới), edit (sửa), delete (xóa), clear_all (xóa tất cả).',
+                    },
+                    key: {
+                        type: 'string',
+                        description: 'Tên định danh (Key) của memory. Ví dụ: "Tên người dùng", "Sở thích". Bắt buộc với add, edit, delete.',
+                    },
+                    content: {
+                        type: 'string',
+                        description: 'Nội dung ghi nhớ chi tiết. Bắt buộc đối với action add và edit.',
+                    },
+                },
+                required: ['action'],
+            },
+        },
+        execute: async (args) => {
+            const action = args.action;
+            const key = args.key;
+            const content = args.content;
+            const ctx = window.SillyTavern.getContext();
+            const settings = ctx.extensionSettings.kaiz_agent;
+            if (!settings.memories) {
+                settings.memories = [];
+            }
+            if (action === 'clear_all') {
+                settings.memories = [];
+                ctx.saveSettingsDebounced();
+                document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
+                return {
+                    status: 'success',
+                    content: 'Đã xóa toàn bộ memory.',
+                };
+            }
+            if (!key) {
+                throw new Error('Thiếu tham số key. Bắt buộc phải có key cho add, edit, delete.');
+            }
+            const existingIndex = settings.memories.findIndex((mem) => {
+                if (typeof mem === 'string')
+                    return false;
+                return mem.key && mem.key.toLowerCase() === key.toLowerCase();
+            });
+            if (action === 'add') {
+                if (!content)
+                    throw new Error('Thiếu tham số content cho action add.');
+                if (existingIndex !== -1) {
+                    return {
+                        status: 'error',
+                        content: `Memory với key "${key}" đã tồn tại. Hãy sử dụng action "edit" để sửa đổi.`,
+                    };
+                }
+                settings.memories.push({ key, content });
+                ctx.saveSettingsDebounced();
+                document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
+                return {
+                    status: 'success',
+                    content: `Đã thêm ghi nhớ mới: [${key}] ${content}`,
+                };
+            }
+            if (action === 'edit') {
+                if (!content)
+                    throw new Error('Thiếu tham số content cho action edit.');
+                if (existingIndex === -1) {
+                    return {
+                        status: 'error',
+                        content: `Không tìm thấy memory với key "${key}". Hãy dùng action "add" để thêm mới.`,
+                    };
+                }
+                settings.memories[existingIndex].content = content;
+                ctx.saveSettingsDebounced();
+                document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
+                return {
+                    status: 'success',
+                    content: `Đã cập nhật ghi nhớ: [${key}] ${content}`,
+                };
+            }
+            if (action === 'delete') {
+                if (existingIndex !== -1) {
+                    settings.memories.splice(existingIndex, 1);
+                    ctx.saveSettingsDebounced();
+                    document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
+                    return {
+                        status: 'success',
+                        content: `Đã xóa ghi nhớ có key: "${key}"`,
+                    };
+                }
+                else {
+                    // Hỗ trợ tìm kiếm theo chuỗi (Legacy fallback) nếu user yêu cầu xóa theo content
+                    let legacyIndex = -1;
+                    for (let i = 0; i < settings.memories.length; i++) {
+                        const mem = settings.memories[i];
+                        if (typeof mem === 'string' && mem.toLowerCase().includes(key.toLowerCase())) {
+                            legacyIndex = i;
+                            break;
+                        }
+                        else if (typeof mem === 'object' &&
+                            mem.content &&
+                            mem.content.toLowerCase().includes(key.toLowerCase())) {
+                            legacyIndex = i;
+                            break;
+                        }
+                    }
+                    if (legacyIndex !== -1) {
+                        settings.memories.splice(legacyIndex, 1);
+                        ctx.saveSettingsDebounced();
+                        document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
+                        return {
+                            status: 'success',
+                            content: `Đã xóa ghi nhớ dựa trên khớp nội dung với từ khóa: "${key}"`,
+                        };
+                    }
+                    return {
+                        status: 'not_found',
+                        content: `Không tìm thấy ghi nhớ nào khớp với key hoặc nội dung "${key}".`,
+                    };
+                }
+            }
+            throw new Error(`Action không hợp lệ: ${action}`);
+        },
     };
 
     /**
@@ -1729,6 +2045,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(toggleVirtualCursorTool);
         registry.registerTool(interactUITool);
         registry.registerTool(scanUITool);
+        registry.registerTool(manageUserInputTool);
+        registry.registerTool(manageAgentMemory);
     }
 
     /**
@@ -1748,14 +2066,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
          * Gửi request lên LLM thông qua ConnectionManager hoặc ChatCompletionService của ST
          */
         async generateCompletion(messages, maxTokens, stream = false, onUpdate, signal) {
-            console.log("[KaizAgent] Calling ST generateCompletion...");
+            console.log('[KaizAgent] Calling ST generateCompletion...');
             const ctx = SillyTavern.getContext();
             const settings = ctx.extensionSettings['kaiz_agent'] || {};
             const abort = new AbortController();
             const effectiveSignal = signal || abort.signal;
             // 1. Nếu bật tính năng Custom Endpoint, ta gọi trực tiếp (bypass ST)
             if (settings.useCustomEndpoint && settings.customUrl) {
-                console.log("[KaizAgent] Using Custom Endpoint:", settings.customUrl);
+                console.log('[KaizAgent] Using Custom Endpoint:', settings.customUrl);
                 let text = '';
                 let reasoning = null;
                 let isMaxTokens = false;
@@ -1771,13 +2089,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         model: settings.customModel || 'gpt-3.5-turbo',
                         messages: messages,
                         max_tokens: maxTokens,
-                        stream: stream
+                        stream: stream,
                     };
                     const res = await fetch(url, {
                         method: 'POST',
                         headers,
                         body: JSON.stringify(payload),
-                        signal: effectiveSignal
+                        signal: effectiveSignal,
                     });
                     if (!res.ok) {
                         const errText = await res.text().catch(() => res.statusText);
@@ -1785,8 +2103,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     if (stream) {
                         const reader = res.body?.getReader();
-                        const decoder = new TextDecoder("utf-8");
-                        let buffer = "";
+                        const decoder = new TextDecoder('utf-8');
+                        let buffer = '';
                         if (reader) {
                             while (true) {
                                 const { done, value } = await reader.read();
@@ -1794,7 +2112,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                     break;
                                 buffer += decoder.decode(value, { stream: true });
                                 const lines = buffer.split('\n');
-                                buffer = lines.pop() || "";
+                                buffer = lines.pop() || '';
                                 for (const line of lines) {
                                     const l = line.trim();
                                     if (!l || l.startsWith(':') || l === 'data: [DONE]')
@@ -1809,7 +2127,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                             if (delta.content)
                                                 text += delta.content;
                                             if (delta.reasoning || delta.reasoning_content) {
-                                                reasoning = (reasoning || '') + (delta.reasoning || delta.reasoning_content);
+                                                reasoning =
+                                                    (reasoning || '') + (delta.reasoning || delta.reasoning_content);
                                             }
                                             if (data.thinking)
                                                 reasoning = (reasoning || '') + data.thinking;
@@ -1840,7 +2159,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return { text: text.trim(), reasoning, isMaxTokens };
                 }
                 catch (e) {
-                    console.error("[KaizAgent] Custom Endpoint error:", e);
+                    console.error('[KaizAgent] Custom Endpoint error:', e);
                     throw e;
                 }
             }
@@ -1848,13 +2167,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const service = ctx.ConnectionManagerRequestService;
             let asyncGeneratorFn;
             try {
-                let profileId = ctx.extensionSettings?.connectionManager?.selectedProfile || document.getElementById('connection_profiles')?.value;
+                const profileId = ctx.extensionSettings?.connectionManager?.selectedProfile ||
+                    document.getElementById('connection_profiles')?.value;
                 if (profileId && service && typeof service.sendRequest === 'function') {
                     asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
                         stream: stream,
                         signal: effectiveSignal,
                         extractData: false,
-                        includePreset: true
+                        includePreset: true,
                     });
                 }
                 else {
@@ -1864,7 +2184,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         asyncGeneratorFn = await ctx.ChatCompletionService.processRequest({
                             messages: messages,
                             max_tokens: maxTokens,
-                            stream: stream
+                            stream: stream,
                         }, { presetName: oaiSettings.preset_settings_openai }, false, abort.signal);
                     }
                     else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
@@ -1872,7 +2192,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         asyncGeneratorFn = await ctx.TextCompletionService.processRequest({
                             prompt: messages,
                             max_tokens: maxTokens,
-                            stream: stream
+                            stream: stream,
                         }, { presetName: textGenSettings.preset_settings_textgenerationwebui }, false, abort.signal);
                     }
                     else {
@@ -1891,7 +2211,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         text = value.trim();
                     }
                     else {
-                        text = value?.text || value?.content || value?.message?.content || value?.choices?.[0]?.message?.content || '';
+                        text =
+                            value?.text ||
+                                value?.content ||
+                                value?.message?.content ||
+                                value?.choices?.[0]?.message?.content ||
+                                '';
                     }
                     const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
                     const isMaxTokens = finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
@@ -1908,7 +2233,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         break;
                     }
                     lastValue = value;
-                    let chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
+                    const chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
                     if (value?.thinking)
                         reasoning = (reasoning || '') + value.thinking;
                     if (chunkText)
@@ -1921,7 +2246,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return { text: text.trim(), reasoning, isMaxTokens };
             }
             catch (e) {
-                console.error("[KaizAgent] generateCompletion error:", e);
+                console.error('[KaizAgent] generateCompletion error:', e);
                 throw e;
             }
         }
@@ -1964,7 +2289,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     preview = preview.substring(0, 50) + '...';
                 // Thoát HTML
                 preview = preview.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                let fullText = (msg.mes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                const fullText = (msg.mes || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
                 let headerColor = msg.is_user ? '#4dabf7' : '#a9e34b';
                 if (name === 'System' || msg.is_system)
                     headerColor = '#ffd43b';
@@ -2019,9 +2344,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     continue;
                 result.push({
                     role: m.is_user ? 'user' : 'assistant',
-                    name: m.is_user ? (ctx.name1 || 'User') : (m.name || ctx.name2 || 'Character'),
+                    name: m.is_user ? ctx.name1 || 'User' : m.name || ctx.name2 || 'Character',
                     content: typeof m.mes === 'string' ? m.mes : '',
-                    chatIndex: startIndex + i // index thật trong ctx.chat, không bị lệch bởi filter
+                    chatIndex: startIndex + i, // index thật trong ctx.chat, không bị lệch bởi filter
                 });
             }
             return result;
@@ -2081,7 +2406,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 throw new Error('Không thể đọc mảng chat hiện tại.');
             }
             // Lọc và validate (loại bỏ index lỗi, giới hạn trong mảng chat)
-            const validIndices = indices.filter(i => Number.isInteger(i) && i >= 0 && i < ctx.chat.length);
+            const validIndices = indices.filter((i) => Number.isInteger(i) && i >= 0 && i < ctx.chat.length);
             if (validIndices.length === 0) {
                 throw new Error('Không có index nào hợp lệ nằm trong giới hạn chat.');
             }
@@ -2122,7 +2447,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     personasModule = await new Function("return import('/scripts/personas.js')")();
                 }
                 catch (e) {
-                    console.warn("[KaizAgent] Could not import personas.js:", e);
+                    console.warn('[KaizAgent] Could not import personas.js:', e);
                 }
                 // Lấy avatarId từ module hoặc fallback sang power_user settings
                 let avatarId = '';
@@ -2137,12 +2462,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
                 if (!avatarId) {
-                    console.error("[KaizAgent] No active user_avatar found.");
+                    console.error('[KaizAgent] No active user_avatar found.');
                     return false;
                 }
                 const powerUser = ctx.powerUserSettings;
                 if (!powerUser || !powerUser.personas) {
-                    console.error("[KaizAgent] power_user.personas not accessible via context.");
+                    console.error('[KaizAgent] power_user.personas not accessible via context.');
                     return false;
                 }
                 if (!powerUser.personas[avatarId]) {
@@ -2161,7 +2486,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             w.setUserName(newName.trim());
                         }
                         if (ctx.eventSource && ctx.eventTypes) {
-                            ctx.eventSource.emit(ctx.eventTypes.PERSONA_RENAMED, { avatarId, oldName, newName: newName.trim() });
+                            ctx.eventSource.emit(ctx.eventTypes.PERSONA_RENAMED, {
+                                avatarId,
+                                oldName,
+                                newName: newName.trim(),
+                            });
                         }
                         hasUpdates = true;
                     }
@@ -2173,7 +2502,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     else if (powerUser.persona_descriptions) {
                         // Tạo entry mới nếu chưa có
-                        powerUser.persona_descriptions[avatarId] = { description: newDescription, position: 0, depth: 0, role: 0 };
+                        powerUser.persona_descriptions[avatarId] = {
+                            description: newDescription,
+                            position: 0,
+                            depth: 0,
+                            role: 0,
+                        };
                     }
                     // Cập nhật shorthand được dùng ở nhiều nơi
                     powerUser.persona_description = newDescription;
@@ -2197,7 +2531,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     // 2. Gọi hàm module để re-render UI panel
                     if (personasModule) {
-                        // reloadUserAvatar() — cập nhật avatar trong chat bubbles  
+                        // reloadUserAvatar() — cập nhật avatar trong chat bubbles
                         if (typeof personasModule.reloadUserAvatar === 'function') {
                             personasModule.reloadUserAvatar();
                         }
@@ -2219,7 +2553,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return true;
             }
             catch (err) {
-                console.error("[KaizAgent] Error in editUserPersona:", err);
+                console.error('[KaizAgent] Error in editUserPersona:', err);
                 return false;
             }
         }
@@ -2228,7 +2562,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
          * @param options Các tùy chọn lọc dữ liệu
          */
         async getLorebookInfo(options = { mode: 'summary' }) {
-            let result = "";
+            let result = '';
             try {
                 const ctx = SillyTavern.getContext();
                 let ST_WorldInfo = null;
@@ -2236,7 +2570,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
                 }
                 catch (e) {
-                    console.warn("[KaizAgent] Could not dynamically import world-info.js");
+                    console.warn('[KaizAgent] Could not dynamically import world-info.js');
                 }
                 const names = new Set();
                 const globalBooks = ST_WorldInfo?.selected_world_info || window.selected_world_info || [];
@@ -2278,9 +2612,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     names.clear();
                 }
                 if (options.mode !== 'char_full') {
-                    result += "=== LOREBOOKS ĐANG KÍCH HOẠT ===\n";
+                    result += '=== LOREBOOKS ĐANG KÍCH HOẠT ===\n';
                     if (names.size === 0) {
-                        result += "Không có Global hay Chat Lorebook nào đang được kích hoạt.\n";
+                        result += 'Không có Global hay Chat Lorebook nào đang được kích hoạt.\n';
                     }
                     for (const name of names) {
                         let data = null;
@@ -2291,7 +2625,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             else {
                                 const res = await fetch('/api/worldinfo/get', {
                                     method: 'POST',
-                                    headers: { ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}), 'Content-Type': 'application/json' },
+                                    headers: {
+                                        ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                                        'Content-Type': 'application/json',
+                                    },
                                     body: JSON.stringify({ name }),
                                 });
                                 if (res.ok)
@@ -2314,8 +2651,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                     continue;
                                 const keysList = entry.key || entry.keys || [];
                                 const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
-                                const type = entry.constant ? "CONSTANT" : "NORMAL";
-                                const status = isDisabled ? "TẮT" : "BẬT";
+                                const type = entry.constant ? 'CONSTANT' : 'NORMAL';
+                                const status = isDisabled ? 'TẮT' : 'BẬT';
                                 const entryUid = entry.uid ?? entry.id ?? entryKey;
                                 const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
                                 // Xử lý các mode đặc biệt
@@ -2340,8 +2677,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                         if (!kStr)
                                             continue;
                                         if (kStr.includes('&&')) {
-                                            const parts = kStr.split('&&').map(p => p.trim());
-                                            if (parts.every(p => q.includes(p))) {
+                                            const parts = kStr.split('&&').map((p) => p.trim());
+                                            if (parts.every((p) => q.includes(p))) {
                                                 triggered = true;
                                                 break;
                                             }
@@ -2367,15 +2704,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             if (hasEntries) {
                                 result += bookResult;
                             }
-                            else if (options.mode === 'all_full' || options.mode === 'by_name' || options.mode === 'summary') {
-                                result += bookResult + "(Lorebook này rỗng hoặc không có entry phù hợp)\n";
+                            else if (options.mode === 'all_full' ||
+                                options.mode === 'by_name' ||
+                                options.mode === 'summary') {
+                                result += bookResult + '(Lorebook này rỗng hoặc không có entry phù hợp)\n';
                             }
                         }
                     }
                 }
                 if (options.mode !== 'by_name') {
-                    result += "\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n";
-                    if (character && character.data && character.data.character_book && character.data.character_book.entries) {
+                    result += '\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n';
+                    if (character &&
+                        character.data &&
+                        character.data.character_book &&
+                        character.data.character_book.entries) {
                         let bookResult = `\n[Character Lorebook: ${character.name}]\n`;
                         let entriesObj = character.data.character_book.entries;
                         if (Array.isArray(entriesObj)) {
@@ -2392,8 +2734,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 continue;
                             const keysList = entry.keys || entry.key || [];
                             const keys = Array.isArray(keysList) ? keysList.join(', ') : String(keysList);
-                            const type = entry.constant ? "CONSTANT" : "NORMAL";
-                            const status = isDisabled ? "TẮT" : "BẬT";
+                            const type = entry.constant ? 'CONSTANT' : 'NORMAL';
+                            const status = isDisabled ? 'TẮT' : 'BẬT';
                             const entryUid = entry.id ?? entry.uid ?? entryKey;
                             const entryTitle = entry.comment || entry.name || `Entry #${entryUid}`;
                             // Xử lý các mode đặc biệt
@@ -2418,8 +2760,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                     if (!kStr)
                                         continue;
                                     if (kStr.includes('&&')) {
-                                        const parts = kStr.split('&&').map(p => p.trim());
-                                        if (parts.every(p => q.includes(p))) {
+                                        const parts = kStr.split('&&').map((p) => p.trim());
+                                        if (parts.every((p) => q.includes(p))) {
                                             triggered = true;
                                             break;
                                         }
@@ -2445,12 +2787,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         if (hasEntries) {
                             result += bookResult;
                         }
-                        else if (options.mode === 'all_full' || options.mode === 'char_full' || options.mode === 'summary') {
-                            result += bookResult + "(Character Lorebook rỗng hoặc không có entry phù hợp)\n";
+                        else if (options.mode === 'all_full' ||
+                            options.mode === 'char_full' ||
+                            options.mode === 'summary') {
+                            result += bookResult + '(Character Lorebook rỗng hoặc không có entry phù hợp)\n';
                         }
                     }
                     else if (options.mode === 'summary' || options.mode === 'all_full' || options.mode === 'char_full') {
-                        result += "Nhân vật này không có Lorebook đi kèm thẻ.\n";
+                        result += 'Nhân vật này không có Lorebook đi kèm thẻ.\n';
                     }
                 }
                 return result;
@@ -2470,10 +2814,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
                 }
                 catch (e) {
-                    return "[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).";
+                    return '[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).';
                 }
                 if (typeof ST_WorldInfo.loadWorldInfo !== 'function' || typeof ST_WorldInfo.saveWorldInfo !== 'function') {
-                    return "[KaizAgent] Lỗi: API World Info không tồn tại trong phiên bản ST này.";
+                    return '[KaizAgent] Lỗi: API World Info không tồn tại trong phiên bản ST này.';
                 }
                 // Ghi nhận WB có sẵn TRƯỚC khi load để phát hiện implicit creation
                 const existingBooks = [...(ST_WorldInfo.world_names || [])];
@@ -2482,14 +2826,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (!data || !data.entries) {
                     return `[KaizAgent] Lỗi: Không tìm thấy hoặc không thể tải Lorebook "${options.book_name}".`;
                 }
-                let resultMsg = "";
+                let resultMsg = '';
                 if (options.action === 'create') {
                     if (typeof ST_WorldInfo.createWorldInfoEntry !== 'function') {
-                        return "[KaizAgent] Lỗi: Hàm createWorldInfoEntry không tồn tại.";
+                        return '[KaizAgent] Lỗi: Hàm createWorldInfoEntry không tồn tại.';
                     }
                     const newEntry = ST_WorldInfo.createWorldInfoEntry(options.book_name, data);
                     if (!newEntry)
-                        return "[KaizAgent] Lỗi: Không thể tạo entry mới (có thể do lỗi getFreeWorldEntryUid).";
+                        return '[KaizAgent] Lỗi: Không thể tạo entry mới (có thể do lỗi getFreeWorldEntryUid).';
                     if (options.keys !== undefined) {
                         newEntry.key = options.keys;
                         newEntry.keys = options.keys;
@@ -2508,7 +2852,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 else if (options.action === 'edit' || options.action === 'delete') {
                     if (options.uid === undefined)
-                        return "[KaizAgent] Lỗi: Cần cung cấp uid để edit hoặc delete.";
+                        return '[KaizAgent] Lỗi: Cần cung cấp uid để edit hoặc delete.';
                     // Find entry by uid
                     const entries = Object.entries(data.entries);
                     let foundEntryKey = null;
@@ -2534,7 +2878,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                         resultMsg = `Đã xoá thành công Entry UID: ${options.uid} khỏi Lorebook "${options.book_name}".`;
                     }
-                    else { // edit
+                    else {
+                        // edit
                         if (options.keys !== undefined) {
                             foundEntry.key = options.keys;
                             foundEntry.keys = options.keys;
@@ -2591,7 +2936,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')().catch(() => null);
                 if (!ST_WorldInfo) {
-                    return "[LỖI] Không thể load module world-info.js của SillyTavern.";
+                    return '[LỖI] Không thể load module world-info.js của SillyTavern.';
                 }
                 const ST_Settings = await new Function('return import("/scripts/settings.js")')().catch(() => null);
                 const saveSettingsDebounced = ST_Settings?.saveSettingsDebounced || window.saveSettingsDebounced;
@@ -2601,13 +2946,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     // M5: Trả về JSON thay vì plain text để LLM dễ parse tên sách và trạng thái
                     const books = allBooks.map((name) => ({
                         name,
-                        active_globally: activeBooks.includes(name)
+                        active_globally: activeBooks.includes(name),
                     }));
                     return JSON.stringify({ total: books.length, worldbooks: books }, null, 2);
                 }
                 if (options.action === 'toggle') {
                     if (!options.book_name)
-                        return "[LỖI] Thiếu tham số book_name.";
+                        return '[LỖI] Thiếu tham số book_name.';
                     if (!allBooks.includes(options.book_name))
                         return `[LỖI] Worldbook "${options.book_name}" không tồn tại.`;
                     const state = options.state;
@@ -2637,8 +2982,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             if (wiSelect.length) {
                                 // Tìm option theo text/value khớp tên WB thay vì index
                                 const option = wiSelect.find('option').filter(function () {
-                                    return $(this).text().trim() === options.book_name ||
-                                        $(this).val() === String(bookIndex);
+                                    return ($(this).text().trim() === options.book_name || $(this).val() === String(bookIndex));
                                 });
                                 if (option.length) {
                                     option.prop('selected', state === 'enable');
@@ -2658,15 +3002,19 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         catch (_) { }
                     }
                     if (state === 'enable') {
-                        return index === -1 ? `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".` : `Worldbook "${options.book_name}" đã được bật từ trước.`;
+                        return index === -1
+                            ? `Đã BẬT kích hoạt toàn cục cho Worldbook "${options.book_name}".`
+                            : `Worldbook "${options.book_name}" đã được bật từ trước.`;
                     }
                     else {
-                        return index !== -1 ? `Đã TẮT kích hoạt toàn cục cho Worldbook "${options.book_name}".` : `Worldbook "${options.book_name}" đã tắt từ trước.`;
+                        return index !== -1
+                            ? `Đã TẮT kích hoạt toàn cục cho Worldbook "${options.book_name}".`
+                            : `Worldbook "${options.book_name}" đã tắt từ trước.`;
                     }
                 }
                 if (options.action === 'create') {
                     if (!options.book_name)
-                        return "[LỖI] Thiếu tham số book_name.";
+                        return '[LỖI] Thiếu tham số book_name.';
                     if (allBooks.includes(options.book_name))
                         return `[LỖI] Worldbook "${options.book_name}" đã tồn tại.`;
                     if (typeof ST_WorldInfo.createNewWorldInfo === 'function') {
@@ -2687,7 +3035,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
                     }
                     else {
-                        return "[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.";
+                        return '[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.';
                     }
                 }
                 return `[LỖI] Action "${options.action}" không hợp lệ.`;
@@ -2727,7 +3075,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
             }
             catch (e) {
-                console.error("[KaizAgent] Invalid regex:", e);
+                console.error('[KaizAgent] Invalid regex:', e);
                 throw new Error(`Regex không hợp lệ: ${e}`);
             }
             // Cần đảm bảo regex có cờ 'g' để dùng vòng lặp exec
@@ -2743,7 +3091,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     continue;
                 regex.lastIndex = 0;
                 let match;
-                let resultText = "";
+                let resultText = '';
                 let lastIndex = 0;
                 let messageChanged = false;
                 const snippets = [];
@@ -2755,11 +3103,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     // const lastHtmlOpen = m.mes.lastIndexOf('<', matchStart);
                     // const lastHtmlClose = m.mes.lastIndexOf('>', matchStart);
                     // const isInsideHtml = lastHtmlOpen > lastHtmlClose;
-                    // 
+                    //
                     // const lastMacroOpen = m.mes.lastIndexOf('{{', matchStart);
                     // const lastMacroClose = m.mes.lastIndexOf('}}', matchStart);
                     // const isInsideMacro = lastMacroOpen > lastMacroClose;
-                    // 
+                    //
                     // if (isInsideHtml || isInsideMacro) {
                     //     resultText += m.mes.substring(lastIndex, regex.lastIndex);
                     //     lastIndex = regex.lastIndex;
@@ -2769,14 +3117,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const prefix = m.mes.substring(lastIndex, matchStart);
                     resultText += prefix + replacement;
                     // 2. SNIPPET EXTRACTION: Lấy 30 ký tự trước và sau để preview
-                    if (snippets.length < 3) { // Giới hạn max 3 snippet mỗi tin nhắn để tránh rác
+                    if (snippets.length < 3) {
+                        // Giới hạn max 3 snippet mỗi tin nhắn để tránh rác
                         const snipStart = Math.max(0, matchStart - 35);
                         const snipEnd = Math.min(m.mes.length, matchStart + matchText.length + 35);
                         const contextOld = m.mes.substring(snipStart, snipEnd);
                         const contextNew = contextOld.replace(matchText, replacement); // Replace only the first occurrence in the snippet
                         snippets.push({
-                            oldSnippet: (snipStart > 0 ? "..." : "") + contextOld + (snipEnd < m.mes.length ? "..." : ""),
-                            newSnippet: (snipStart > 0 ? "..." : "") + contextNew + (snipEnd < m.mes.length ? "..." : "")
+                            oldSnippet: (snipStart > 0 ? '...' : '') + contextOld + (snipEnd < m.mes.length ? '...' : ''),
+                            newSnippet: (snipStart > 0 ? '...' : '') + contextNew + (snipEnd < m.mes.length ? '...' : ''),
                         });
                     }
                     messageChanged = true;
@@ -2793,7 +3142,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             const mesBlock = $(`.mes[mesid="${i}"] .mes_text`);
                             if (mesBlock.length) {
                                 const w = window;
-                                if (typeof w.MessageFormatting === 'object' && typeof w.MessageFormatting.formatMessage === 'function') {
+                                if (typeof w.MessageFormatting === 'object' &&
+                                    typeof w.MessageFormatting.formatMessage === 'function') {
                                     const formatted = w.MessageFormatting.formatMessage(m);
                                     mesBlock.html(formatted);
                                 }
@@ -2835,7 +3185,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const $ = window.$;
             if (!$)
                 return;
-            $('.kaiz-highlight-block').removeClass('kaiz-highlight-block').css('box-shadow', '').css('border', '').css('background-color', '');
+            $('.kaiz-highlight-block')
+                .removeClass('kaiz-highlight-block')
+                .css('box-shadow', '')
+                .css('border', '')
+                .css('background-color', '');
         }
         /**
          * Tìm và bôi sáng (highlight block) trên UI
@@ -2869,9 +3223,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         mesBlock.addClass('kaiz-highlight-block');
                         mesBlock.css({
                             'box-shadow': '0 0 25px 8px rgba(255, 215, 0, 0.8)',
-                            'border': '3px solid rgba(255, 215, 0, 1)',
+                            border: '3px solid rgba(255, 215, 0, 1)',
                             'background-color': 'rgba(255, 215, 0, 0.15)',
-                            'transition': 'all 0.5s ease'
+                            transition: 'all 0.5s ease',
                         });
                     }
                 }
@@ -3140,17 +3494,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         container.insertAdjacentHTML('beforeend', html);
                     }
                     else {
-                        throw new Error("renderExtensionTemplateAsync returned empty html.");
+                        throw new Error('renderExtensionTemplateAsync returned empty html.');
                     }
                 }
                 catch (e) {
-                    console.error("[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:", e);
-                    toastr.error("Kaiz Agent: Failed to load UI settings.");
+                    console.error('[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:', e);
+                    toastr.error('Kaiz Agent: Failed to load UI settings.');
                     return;
                 }
             }
             else {
-                console.error("[KaizAgent] Could not find #extensions_settings container.");
+                console.error('[KaizAgent] Could not find #extensions_settings container.');
                 return;
             }
             const settings = ctx.extensionSettings[EXT_NAME];
@@ -3238,10 +3592,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             function renderSafeTools(filterText = '') {
                 $safeToolsList.empty();
                 const lowerFilter = filterText.toLowerCase();
-                tools.forEach(tool => {
+                tools.forEach((tool) => {
                     const name = tool.schema.name;
                     const desc = tool.schema.description;
-                    if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+                    if (lowerFilter &&
+                        !name.toLowerCase().includes(lowerFilter) &&
+                        !desc.toLowerCase().includes(lowerFilter)) {
                         return;
                     }
                     const isBlacklisted = !!settings.safeModeBlacklist[name];
@@ -3275,7 +3631,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 renderSafeTools(this.value);
             });
             $('#kaiz-safe-tools-blacklist-all').on('click', () => {
-                tools.forEach(tool => {
+                tools.forEach((tool) => {
                     settings.safeModeBlacklist[tool.schema.name] = true;
                 });
                 ctx.saveSettingsDebounced();
@@ -3291,17 +3647,54 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const $quickPromptsList = $('#kaiz-quick-prompts-list');
             const $addQuickPromptBtn = $('#kaiz-add-quick-prompt-btn');
             const lucideIconsList = [
-                'zap', 'sparkles', 'wand-2', 'message-square', 'message-circle', 'book-open', 'scroll-text',
-                'flame', 'moon', 'sun', 'star', 'sword', 'shield', 'feather', 'wind', 'droplets',
-                'leaf', 'gem', 'crown', 'ghost', 'skull', 'heart', 'coffee', 'compass', 'map',
-                'eye', 'camera', 'music', 'play', 'terminal', 'code', 'cpu', 'fingerprint',
-                'palette', 'cloud', 'dice-5', 'puzzle', 'library', 'mountain', 'award', 'bell', 'cherry'
+                'zap',
+                'sparkles',
+                'wand-2',
+                'message-square',
+                'message-circle',
+                'book-open',
+                'scroll-text',
+                'flame',
+                'moon',
+                'sun',
+                'star',
+                'sword',
+                'shield',
+                'feather',
+                'wind',
+                'droplets',
+                'leaf',
+                'gem',
+                'crown',
+                'ghost',
+                'skull',
+                'heart',
+                'coffee',
+                'compass',
+                'map',
+                'eye',
+                'camera',
+                'music',
+                'play',
+                'terminal',
+                'code',
+                'cpu',
+                'fingerprint',
+                'palette',
+                'cloud',
+                'dice-5',
+                'puzzle',
+                'library',
+                'mountain',
+                'award',
+                'bell',
+                'cherry',
             ];
             let currentPickerIndex = null;
             // Tạo bảng chọn Icon
             if ($('#kaiz-icon-picker').length === 0) {
                 let iconsHtml = '';
-                lucideIconsList.forEach(iconName => {
+                lucideIconsList.forEach((iconName) => {
                     iconsHtml += `<div class="kaiz-icon-picker-item interactable" data-icon="${iconName}" title="${iconName}"><i data-lucide="${iconName}"></i></div>`;
                 });
                 $('#kaiz-quick-prompts-list').parent().append(`
@@ -3407,7 +3800,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (offset && pickerDialog) {
                         $('#kaiz-icon-picker').css({
                             top: offset.top + 40 + 'px',
-                            left: offset.left + 'px'
+                            left: offset.left + 'px',
                         });
                         pickerDialog.showModal();
                     }
@@ -3453,15 +3846,166 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 container.scrollTop(container[0].scrollHeight);
             });
             // --- END QUICK PROMPTS LOGIC ---
+            // --- PERSONA & MEMORY LOGIC ---
+            if (!settings.persona)
+                settings.persona = '';
+            if (!settings.memories)
+                settings.memories = [];
+            const $personaInput = $('#kaiz-agent-persona');
+            $personaInput.val(settings.persona);
+            $personaInput.on('input', function () {
+                settings.persona = this.value;
+                ctx.saveSettingsDebounced();
+            });
+            const $memoryList = $('#kaiz-agent-memory-list');
+            let editingMemoryIndex = -1;
+            $('#kaiz-add-manual-memory-btn').on('click', () => {
+                const key = String($('#kaiz-manual-memory-key-input').val() || '').trim();
+                const content = String($('#kaiz-manual-memory-input').val() || '').trim();
+                if (key && content) {
+                    if (editingMemoryIndex !== -1) {
+                        settings.memories[editingMemoryIndex] = { key, content };
+                        editingMemoryIndex = -1;
+                        $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                    }
+                    else {
+                        // Check if key already exists to prevent duplicate keys in manual add
+                        const existingIndex = settings.memories.findIndex((m) => typeof m !== 'string' && m.key.toLowerCase() === key.toLowerCase());
+                        if (existingIndex !== -1) {
+                            alert(`Key "${key}" đã tồn tại. Vui lòng chọn tên khác hoặc ấn Edit ở item tương ứng.`);
+                            return;
+                        }
+                        settings.memories.push({ key, content });
+                    }
+                    $('#kaiz-manual-memory-key-input').val('');
+                    $('#kaiz-manual-memory-input').val('');
+                    ctx.saveSettingsDebounced();
+                    renderMemories();
+                }
+                else {
+                    alert('Vui lòng nhập đầy đủ cả Tên/Key và Nội dung!');
+                }
+            });
+            function renderMemories() {
+                if (typeof $memoryList.sortable === 'function' && $memoryList.hasClass('ui-sortable')) {
+                    $memoryList.sortable('destroy');
+                }
+                $memoryList.empty();
+                if (!settings.memories || settings.memories.length === 0) {
+                    $memoryList.append('<div style="text-align:center; color:#888; font-size:12px; padding:10px;">Chưa có memory nào.</div>');
+                    return;
+                }
+                // Migration from string[] to {key, content}[]
+                let hasLegacy = false;
+                for (let i = 0; i < settings.memories.length; i++) {
+                    if (typeof settings.memories[i] === 'string') {
+                        settings.memories[i] = { key: `Untracked_${i + 1}`, content: settings.memories[i] };
+                        hasLegacy = true;
+                    }
+                }
+                if (hasLegacy)
+                    ctx.saveSettingsDebounced();
+                let htmlStr = '';
+                settings.memories.forEach((mem, index) => {
+                    const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const isLongContent = mem.content.length > 100 || mem.content.split('\n').length > 2;
+                    htmlStr += `
+                    <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
+                        <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
+                            <i class="fa-solid fa-grip-vertical"></i>
+                        </div>
+                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word;">
+                            <span style="font-weight: bold; color: #8bc34a;">[${keyEscaped}]</span> 
+                            <span class="kaiz-memory-text" style="white-space: pre-wrap; ${isLongContent ? 'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;' : ''}">${memEscaped}</span>
+                            ${isLongContent ? `<button class="kaiz-memory-expand-btn interactable" style="background: none; border: none; color: #888; cursor: pointer; padding: 2px 0; font-size: 11px;"><i class="fa-solid fa-chevron-down"></i> Hiển thị thêm</button>` : ''}
+                        </div>
+                        <div style="display: flex; gap: 4px;">
+                            <button class="menu_button interactable kaiz-memory-edit-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Edit">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button class="menu_button interactable kaiz-memory-del-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Delete">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
+                    </div>
+                `;
+                });
+                $memoryList.append(htmlStr);
+                if (typeof $memoryList.sortable === 'function') {
+                    $memoryList.sortable({
+                        handle: '.kaiz-memory-drag-handle',
+                        axis: 'y',
+                        update: function () {
+                            const newMemories = [];
+                            $memoryList.children('.kaiz-memory-item').each(function () {
+                                const oldIndex = $(this).data('index');
+                                newMemories.push(settings.memories[oldIndex]);
+                            });
+                            settings.memories = newMemories;
+                            ctx.saveSettingsDebounced();
+                            renderMemories(); // re-render to update data-index
+                        },
+                    });
+                }
+            }
+            renderMemories();
+            // --- Event Delegation cho Memory List (Chỉ bind 1 lần) ---
+            $memoryList.on('click', '.kaiz-memory-expand-btn', function () {
+                const $text = $(this).siblings('.kaiz-memory-text');
+                if ($text.css('-webkit-line-clamp') === '2') {
+                    $text.css('-webkit-line-clamp', 'unset');
+                    $(this).html('<i class="fa-solid fa-chevron-up"></i> Thu gọn');
+                }
+                else {
+                    $text.css('-webkit-line-clamp', '2');
+                    $(this).html('<i class="fa-solid fa-chevron-down"></i> Hiển thị thêm');
+                }
+            });
+            $memoryList.on('click', '.kaiz-memory-edit-btn', function () {
+                const idx = $(this).data('index');
+                const mem = settings.memories[idx];
+                $('#kaiz-manual-memory-key-input').val(mem.key);
+                $('#kaiz-manual-memory-input').val(mem.content);
+                editingMemoryIndex = idx;
+                $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Cập nhật');
+                $('#kaiz-manual-memory-key-input').trigger('focus');
+            });
+            $memoryList.on('click', '.kaiz-memory-del-btn', function () {
+                const idx = $(this).data('index');
+                settings.memories.splice(idx, 1);
+                if (editingMemoryIndex === idx) {
+                    editingMemoryIndex = -1;
+                    $('#kaiz-manual-memory-key-input').val('');
+                    $('#kaiz-manual-memory-input').val('');
+                    $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                }
+                else if (editingMemoryIndex > idx) {
+                    editingMemoryIndex--;
+                }
+                ctx.saveSettingsDebounced();
+                renderMemories();
+            });
+            $('#kaiz-memory-clear-all').on('click', async () => {
+                if (confirm('Bạn có chắc muốn xóa toàn bộ memory của Agent không?')) {
+                    settings.memories = [];
+                    ctx.saveSettingsDebounced();
+                    renderMemories();
+                }
+            });
+            document.addEventListener('kaiz_memory_updated', renderMemories);
+            // --- END PERSONA & MEMORY LOGIC ---
             // --- TOOLS MANAGER LOGIC ---
             const $toolsList = $('#kaiz-tools-list');
             function renderTools(filterText = '') {
                 $toolsList.empty();
                 const lowerFilter = filterText.toLowerCase();
-                tools.forEach(tool => {
+                tools.forEach((tool) => {
                     const name = tool.schema.name;
                     const desc = tool.schema.description;
-                    if (lowerFilter && !name.toLowerCase().includes(lowerFilter) && !desc.toLowerCase().includes(lowerFilter)) {
+                    if (lowerFilter &&
+                        !name.toLowerCase().includes(lowerFilter) &&
+                        !desc.toLowerCase().includes(lowerFilter)) {
                         return; // Bỏ qua nếu không khớp filter
                     }
                     const isEnabled = !settings.disabledTools[name];
@@ -3522,7 +4066,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 try {
                     $('#kaiz-fetch-models').find('i').addClass('fa-spin');
                     const res = await fetch(url, {
-                        headers: key ? { 'Authorization': `Bearer ${key}` } : {}
+                        headers: key ? { Authorization: `Bearer ${key}` } : {},
                     });
                     if (!res.ok)
                         throw new Error(`HTTP ${res.status}`);
@@ -3531,7 +4075,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (Array.isArray(models)) {
                         const select = $('#kaiz-custom-model');
                         select.empty().append('<option value="">-- Select Model --</option>');
-                        models.forEach(m => {
+                        models.forEach((m) => {
                             const id = m.id || m.name || m;
                             select.append(`<option value="${id}">${id}</option>`);
                         });
@@ -3658,10 +4202,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 </dialog>
             `);
             }
-            let lastLogSent = "No data yet.";
-            let lastLogRecv = "No data yet.";
+            let lastLogSent = 'No data yet.';
+            let lastLogRecv = 'No data yet.';
             $('#kaiz-log-close').on('click', () => {
                 $('#kaiz-log-modal')[0].close();
+            });
+            $('#kaiz-chat-settings-btn').on('click', () => {
+                const modal = $('#kaiz-persona-memory-modal')[0];
+                if (modal)
+                    modal.showModal();
+            });
+            $('#kaiz-persona-memory-close').on('click', () => {
+                const modal = $('#kaiz-persona-memory-modal')[0];
+                if (modal)
+                    modal.close();
             });
             logBtn.on('click', () => {
                 $('#kaiz-log-sent').text(lastLogSent);
@@ -3696,7 +4250,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     $item.on('click', () => {
                         const currentText = String(input.val() || '');
                         // Nếu đã có text, nối thêm dòng mới, nếu không thì chèn thẳng
-                        const newText = currentText ? currentText + (currentText.endsWith('\n') ? '' : '\n') + qp.prompt : qp.prompt;
+                        const newText = currentText
+                            ? currentText + (currentText.endsWith('\n') ? '' : '\n') + qp.prompt
+                            : qp.prompt;
                         input.val(newText).trigger('input');
                         input.focus();
                         quickPromptMenu.hide();
@@ -3726,7 +4282,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             });
             // Đóng menu khi click ra ngoài
             $(document).on('click', (e) => {
-                if (!$(e.target).closest('#kaiz-quick-prompt-btn').length && !$(e.target).closest('#kaiz-quick-prompt-menu').length) {
+                if (!$(e.target).closest('#kaiz-quick-prompt-btn').length &&
+                    !$(e.target).closest('#kaiz-quick-prompt-menu').length) {
                     quickPromptMenu.hide();
                 }
             });
@@ -3789,19 +4346,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         ...options,
                         stop: function () {
                             if (el.attr('id') === 'kaiz-floating-btn') {
-                                setTimeout(() => { isDraggingBtn = false; }, 100);
+                                setTimeout(() => {
+                                    isDraggingBtn = false;
+                                }, 100);
                             }
                             const pos = ensureInBounds($(this));
                             if (pos)
                                 localStorage.setItem(storageKey, JSON.stringify(pos));
-                        }
+                        },
                     });
                 };
                 makeDraggable(btn, 'kaiz_btn_pos');
-                setTimeout(() => { ensureInBounds(btn); }, 500);
+                setTimeout(() => {
+                    ensureInBounds(btn);
+                }, 500);
                 makeDraggable(win, 'kaiz_win_pos', {
                     handle: '.kaiz-chat-header',
-                    cancel: 'input,textarea,button,select,option,i'
+                    cancel: 'input,textarea,button,select,option,i',
                 });
             }
             let resizeTimeout;
@@ -4007,19 +4568,22 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     const id = 'mermaid-' + Date.now() + Math.floor(Math.random() * 1000);
                     try {
                         if (window.mermaid) {
-                            window.mermaid.render(id, code).then((result) => {
+                            window.mermaid
+                                .render(id, code)
+                                .then((result) => {
                                 const parentPre = block.parent('pre');
                                 if (parentPre.length) {
                                     parentPre.replaceWith(`<div class="kaiz-mermaid-container" style="text-align:center; margin:10px 0; background:rgba(255,255,255,0.05); padding:10px; border-radius:8px; overflow-x:auto;">${result.svg}</div>`);
                                 }
-                            }).catch((e) => {
-                                console.error("Mermaid render error", e);
+                            })
+                                .catch((e) => {
+                                console.error('Mermaid render error', e);
                                 block.addClass('mermaid-rendered');
                             });
                         }
                     }
                     catch (e) {
-                        console.error("Mermaid error", e);
+                        console.error('Mermaid error', e);
                         block.addClass('mermaid-rendered');
                     }
                 });
@@ -4029,9 +4593,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             // Hàm tiện ích format tin nhắn
             const formatMessage = (text, isFinal) => {
                 let html = text || '';
-                const detailsTag = isFinal
-                    ? '<details class="kaiz-cot-block">'
-                    : '<details open class="kaiz-cot-block">';
+                const detailsTag = isFinal ? '<details class="kaiz-cot-block">' : '<details open class="kaiz-cot-block">';
                 const closeIndex = html.indexOf('</agent_cot>');
                 if (closeIndex !== -1) {
                     const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
@@ -4050,22 +4612,22 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
                 else {
                     // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                    let parsedContent = parseToolCallsToHtml(html.trim(), false);
+                    const parsedContent = parseToolCallsToHtml(html.trim(), false);
                     html = `<div class="kaiz-markdown-body">${g.parse(parsedContent)}</div>`;
                 }
                 return html;
             };
             // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
             const formatUserMessage = (text) => {
-                let safeText = text;
+                const safeText = text;
                 // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
                 const escapeHtml = (unsafe) => {
                     return unsafe
-                        .replace(/&/g, "&amp;")
-                        .replace(/</g, "&lt;")
-                        .replace(/>/g, "&gt;")
-                        .replace(/"/g, "&quot;")
-                        .replace(/'/g, "&#039;");
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;');
                 };
                 const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
                 if (safeText.startsWith('[Tool Result')) {
@@ -4110,8 +4672,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 for (const msg of messages) {
                     const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
                     const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-                    let avatar = msg.role === 'user' ? '<i class="fa-solid fa-user"></i>' : (msg.role === 'agent' ? '<i class="fa-solid fa-yin-yang"></i>' : '<i class="fa-solid fa-gear"></i>');
-                    let extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
+                    const avatar = msg.role === 'user'
+                        ? '<i class="fa-solid fa-user"></i>'
+                        : msg.role === 'agent'
+                            ? '<i class="fa-solid fa-yin-yang"></i>'
+                            : '<i class="fa-solid fa-gear"></i>';
+                    const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                     htmlBuffer += `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
                         <div class="kaiz-msg-avatar">${avatar}</div>
@@ -4184,10 +4750,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
                 const maxLoops = extSettings.maxAgentLoops || 5;
                 // Lấy toàn bộ lịch sử (hoặc tối đa N tin) từ DB để truyền cho AI
-                const historyMsgs = stateManager.currentChatId ? await stateManager.db.getMessages(stateManager.currentChatId) : [];
-                let agentMsgId = "";
+                const historyMsgs = stateManager.currentChatId
+                    ? await stateManager.db.getMessages(stateManager.currentChatId)
+                    : [];
+                let agentMsgId = '';
                 let agentContentBox = null;
-                let currentStepResponse = "";
+                let currentStepResponse = '';
                 let streamUpdatePending = false;
                 let lastStreamEvent = null;
                 const flushStreamUpdate = () => {
@@ -4218,7 +4786,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         btnFloat.removeClass('kaiz-btn-blink');
                         agentMsgId = addMessageToDOM('agent', '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>');
                         agentContentBox = $(`#${agentMsgId}`);
-                        currentStepResponse = "";
+                        currentStepResponse = '';
                     }
                     else if (event.type === 'stream_chunk') {
                         if (!agentContentBox)
@@ -4386,7 +4954,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     updateUI(name, 'error', e.message || String(e));
                 }
                 // Giả lập delay nhỏ cho UI có thời gian cập nhật mượt mà
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise((r) => setTimeout(r, 200));
             }
         }
     }
@@ -4453,17 +5021,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     const msgItem = $(`#checker-tool-msg-${toolName}`);
                     const statusSpan = item.find('.status-icon');
                     if (status === 'testing') {
-                        statusSpan.html('<i class="fa-solid fa-spinner fa-spin" style="color:#f39c12"></i> Testing').css('color', '#f39c12');
+                        statusSpan
+                            .html('<i class="fa-solid fa-spinner fa-spin" style="color:#f39c12"></i> Testing')
+                            .css('color', '#f39c12');
                         msgItem.hide();
                     }
                     else if (status === 'ok') {
-                        statusSpan.html('<i class="fa-solid fa-check" style="color:#2ecc71"></i> OK').css('color', '#2ecc71');
+                        statusSpan
+                            .html('<i class="fa-solid fa-check" style="color:#2ecc71"></i> OK')
+                            .css('color', '#2ecc71');
                         if (message) {
                             msgItem.text(message).css('color', '#2ecc71').show();
                         }
                     }
                     else if (status === 'error') {
-                        statusSpan.html('<i class="fa-solid fa-times" style="color:#e74c3c"></i> Error').css('color', '#e74c3c');
+                        statusSpan
+                            .html('<i class="fa-solid fa-times" style="color:#e74c3c"></i> Error')
+                            .css('color', '#e74c3c');
                         if (message) {
                             msgItem.text(message).css('color', '#e74c3c').show();
                         }
@@ -4488,7 +5062,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const scripts = document.getElementsByTagName('script');
             for (let i = 0; i < scripts.length; i++) {
                 const src = scripts[i].src;
-                if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                if (src &&
+                    src.includes('index.js') &&
+                    src.toLowerCase().includes('kaiz') &&
+                    src.toLowerCase().includes('agent')) {
                     const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
                     if (match) {
                         extPath = match[1];
@@ -4499,10 +5076,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         }
     }
     catch (e) {
-        console.warn("[KaizAgent] Path resolution failed, using fallback:", e);
+        console.warn('[KaizAgent] Path resolution failed, using fallback:', e);
     }
     jQuery(async () => {
-        console.log("[KaizAgent] Initializing extension core...");
+        console.log('[KaizAgent] Initializing extension core...');
         console.log(`[KaizAgent] Resolved extension path: ${extPath}`);
         const $ = jQuery;
         const ctx = SillyTavern.getContext();
@@ -4517,7 +5094,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 disabledTools: {},
                 safeMode: false,
                 safeModeBlacklist: {},
-                quickPrompts: []
+                quickPrompts: [],
             };
         }
         else {
@@ -4537,27 +5114,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         // Nạp style.css thủ công
         const cssPath = `/scripts/extensions/${extPath}/style.css`;
         if (!$(`link[href="${cssPath}"]`).length) {
-            $('<link>')
-                .appendTo('head')
-                .attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
+            $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
         }
         // Nạp thư viện Lucide Icon
         if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !window.hasOwnProperty('lucide')) {
-            $('<script>')
-                .appendTo('head')
-                .attr({ src: 'https://unpkg.com/lucide@latest' });
+            $('<script>').appendTo('head').attr({ src: 'https://unpkg.com/lucide@latest' });
         }
         // Khởi tạo Core
         const adapter = new SillyTavernAdapter();
         const registry = new ToolRegistry();
         registerDefaultTools(registry);
-        // 1. Nạp giao diện Settings
-        await SettingsUI.init(extPath, EXT_NAME, registry);
-        // 2. Nạp giao diện Khung Chat Độc Lập
+        // 1. Nạp giao diện Khung Chat Độc Lập
         try {
             const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
             if (kaizWindowHtml) {
                 $('body').append(kaizWindowHtml);
+                // 2. Nạp giao diện Settings (Cần DOM của kaiz_window có sẵn cho các Modal)
+                await SettingsUI.init(extPath, EXT_NAME, registry);
                 const stateManager = new StateManager();
                 await stateManager.init(); // Tải DB và danh sách chat
                 const loop = new AgentLoop(adapter, registry, stateManager);
@@ -4572,13 +5145,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     stateManager.onChatSwitched(-1, []);
             }
             else {
-                console.error("[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.");
+                console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');
             }
         }
         catch (e) {
-            console.error("[KaizAgent] Failed to load kaiz_window template:", e);
+            console.error('[KaizAgent] Failed to load kaiz_window template:', e);
         }
-        console.log("[KaizAgent] Core initialized successfully.");
+        console.log('[KaizAgent] Core initialized successfully.');
     });
 
 })();

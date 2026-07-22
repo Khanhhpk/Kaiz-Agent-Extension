@@ -3,17 +3,18 @@ import { ITool } from '../tool_registry';
 export const interactUITool: ITool = {
     schema: {
         name: 'interact_with_ui',
-        description: 'Tương tác vật lý với giao diện SillyTavern. Cho phép Agent di chuyển con trỏ chuột ảo và click vào các nút bấm.',
+        description:
+            'Tương tác vật lý với giao diện SillyTavern. Cho phép Agent di chuyển con trỏ chuột ảo và click vào các nút bấm.',
         parameters: {
             type: 'object',
             properties: {
                 targetDescription: {
                     type: 'string',
-                    description: 'Tên hoặc mô tả của nút bấm cần click. Ví dụ: "Send", "Extensions", "Menu"'
-                }
+                    description: 'Tên hoặc mô tả của nút bấm cần click. Ví dụ: "Send", "Extensions", "Menu"',
+                },
             },
-            required: ['targetDescription']
-        }
+            required: ['targetDescription'],
+        },
     },
     execute: async (args: any) => {
         const target = args.targetDescription?.toLowerCase();
@@ -21,7 +22,7 @@ export const interactUITool: ITool = {
 
         // 1. Tìm kiếm element
         let foundElement: HTMLElement | null = null;
-        
+
         // Xử lý target để trích xuất kX (nếu có)
         let cleanTarget = target.trim();
         const kIdMatch = target.match(/\[(k\d+)\]/i) || target.match(/^(k\d+)$/i);
@@ -39,15 +40,15 @@ export const interactUITool: ITool = {
         if (!foundElement) {
             // Từ khoá hard-code cho các nút quan trọng
             const keywordMap: Record<string, string> = {
-                'send': '#send_but',
-                'gửi': '#send_but',
-                'extensions': '#extensions_button',
+                send: '#send_but',
+                gửi: '#send_but',
+                extensions: '#extensions_button',
                 'tiện ích': '#extensions_button',
-                'settings': '#rm_button_panel',
+                settings: '#rm_button_panel',
                 'cài đặt': '#rm_button_panel',
-                'characters': '#rm_button_characters',
+                characters: '#rm_button_characters',
                 'nhân vật': '#rm_button_characters',
-                'menu': '#nav-drawer-toggle'
+                menu: '#nav-drawer-toggle',
             };
 
             if (keywordMap[cleanTarget]) {
@@ -57,7 +58,9 @@ export const interactUITool: ITool = {
 
         if (!foundElement) {
             // Tìm theo nội dung text hoặc title (tooltip)
-            const interactables = document.querySelectorAll('button, a, .interactable, [title], .menu_button, .drawer-toggle');
+            const interactables = document.querySelectorAll(
+                'button, a, .interactable, [title], .menu_button, .drawer-toggle',
+            );
             for (let i = 0; i < interactables.length; i++) {
                 const el = interactables[i] as HTMLElement;
                 const text = el.innerText?.toLowerCase() || '';
@@ -90,7 +93,12 @@ export const interactUITool: ITool = {
                 const scripts = document.getElementsByTagName('script');
                 for (let i = 0; i < scripts.length; i++) {
                     const src = scripts[i].src;
-                    if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                    if (
+                        src &&
+                        src.includes('index.js') &&
+                        src.toLowerCase().includes('kaiz') &&
+                        src.toLowerCase().includes('agent')
+                    ) {
                         const parts = new URL(src).pathname.split('/');
                         const extIndex = parts.indexOf('extensions');
                         if (extIndex !== -1 && parts.length > extIndex + 1) {
@@ -102,8 +110,8 @@ export const interactUITool: ITool = {
                         }
                     }
                 }
-            } catch(e) {}
-            
+            } catch (e) {}
+
             cursor = document.createElement('div');
             cursor.id = 'kaiz-virtual-cursor';
             cursor.innerHTML = `<img src="/scripts/extensions/${extPath}/assets/gura_cursor.gif" style="width: 32px; height: 32px; pointer-events: none;" />`;
@@ -114,9 +122,9 @@ export const interactUITool: ITool = {
             cursor.style.zIndex = '999999';
             cursor.style.pointerEvents = 'none';
             document.body.appendChild(cursor);
-            
+
             // Đợi browser render xong
-            await new Promise(r => requestAnimationFrame(r));
+            await new Promise((r) => requestAnimationFrame(r));
         }
 
         // 4. Tính toán khoảng cách để xác định duration cho animation
@@ -129,7 +137,7 @@ export const interactUITool: ITool = {
         }
 
         const distance = Math.sqrt(Math.pow(targetX - startX, 2) + Math.pow(targetY - startY, 2));
-        
+
         // Vận tốc cơ bản: 800 pixel mỗi giây
         let duration = distance / 800;
         // Giới hạn thời gian tối thiểu và tối đa
@@ -138,13 +146,13 @@ export const interactUITool: ITool = {
 
         // Bật transition trước khi set vị trí mới
         cursor.style.transition = `top ${duration}s ease-in-out, left ${duration}s ease-in-out`;
-        
+
         // Kích hoạt bay
         cursor.style.top = `${targetY}px`;
         cursor.style.left = `${targetX}px`;
 
         // 5. Chờ bay tới nơi
-        await new Promise(r => setTimeout(r, duration * 1000 + 50));
+        await new Promise((r) => setTimeout(r, duration * 1000 + 50));
 
         // 6. Thực thi Click (Tạo hiệu ứng nhấp nháy chút cho đẹp)
         cursor.style.transform = 'translate(-20%, -20%) scale(0.8)';
@@ -155,7 +163,7 @@ export const interactUITool: ITool = {
         foundElement.click();
 
         return {
-            content: `Đã di chuyển con trỏ chuột và bấm vào nút "${target}" thành công.`
+            content: `Đã di chuyển con trỏ chuột và bấm vào nút "${target}" thành công.`,
         };
-    }
+    },
 };

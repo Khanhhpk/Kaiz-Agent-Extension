@@ -4,11 +4,12 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getUserPersonaTool: ITool = {
     schema: {
         name: 'get_user_persona',
-        description: 'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+        description:
+            'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
         parameters: {
             type: 'object',
-            properties: {}
-        }
+            properties: {},
+        },
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
         if (!context.adapter.hasFeature('substituteParams')) {
@@ -19,7 +20,7 @@ export const getUserPersonaTool: ITool = {
         if (!context || !context.adapter) {
             return {
                 content: 'Error: Adapter not provided in context.',
-                isError: true
+                isError: true,
             };
         }
 
@@ -29,8 +30,8 @@ export const getUserPersonaTool: ITool = {
         } catch (error: any) {
             return {
                 content: `Error getting User Persona: ${error.message || String(error)}`,
-                isError: true
+                isError: true,
             };
         }
-    }
+    },
 };

@@ -7,40 +7,152 @@
 <dialog id="kaiz-chat-window" class="kaiz-chat-window">
     <div class="kaiz-chat-header" id="kaiz-chat-header">
         <div class="kaiz-header-title">
-            <i class="fa-solid fa-bars interactable" id="kaiz-chat-menu-btn" style="margin-right: 8px; cursor: pointer;"></i>
+            <i
+                class="fa-solid fa-bars interactable"
+                id="kaiz-chat-menu-btn"
+                style="margin-right: 8px; cursor: pointer"
+            ></i>
             <i class="fa-solid fa-wand-magic-sparkles"></i> <span id="kaiz-chat-title">Kaiz Agent</span>
         </div>
         <div class="kaiz-header-actions">
-            <i id="kaiz-chat-close" class="fa-solid fa-xmark interactable" style="cursor: pointer;"></i>
+            <i id="kaiz-chat-settings-btn" class="fa-solid fa-gear interactable" style="cursor: pointer; margin-right: 8px;" title="Persona & Memory"></i>
+            <i id="kaiz-chat-close" class="fa-solid fa-xmark interactable" style="cursor: pointer"></i>
         </div>
     </div>
-    
+
     <!-- Sidebar Chat List -->
-    <div id="kaiz-chat-sidebar" class="kaiz-chat-sidebar kaiz-hidden-sidebar" style="display:none; position:absolute; top:54px; left:0; width:200px; bottom:0; background:rgba(20,25,35,0.95); border-right:1px solid rgba(255,255,255,0.1); z-index:10002; flex-direction:column;">
-        <div style="padding:10px; border-bottom:1px solid rgba(255,255,255,0.1);">
-            <button id="kaiz-new-chat-btn" class="menu_button interactable" style="width:100%;"><i class="fa-solid fa-plus"></i> New Chat</button>
+    <div
+        id="kaiz-chat-sidebar"
+        class="kaiz-chat-sidebar kaiz-hidden-sidebar"
+        style="
+            display: none;
+            position: absolute;
+            top: 54px;
+            left: 0;
+            width: 200px;
+            bottom: 0;
+            background: rgba(20, 25, 35, 0.95);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 10002;
+            flex-direction: column;
+        "
+    >
+        <div style="padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1)">
+            <button id="kaiz-new-chat-btn" class="menu_button interactable" style="width: 100%">
+                <i class="fa-solid fa-plus"></i> New Chat
+            </button>
         </div>
-        <div id="kaiz-chat-list" style="flex:1; overflow-y:auto; padding:10px; display:flex; flex-direction:column; gap:5px;">
+        <div
+            id="kaiz-chat-list"
+            style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px"
+        >
             <!-- Danh sách chat -->
         </div>
     </div>
-    
+
     <div id="kaiz-chat-history" class="kaiz-chat-history">
         <!-- Tin nhắn sẽ được nhúng vào đây -->
     </div>
-    
-    <div class="kaiz-chat-input-area" style="position: relative;">
+
+    <div class="kaiz-chat-input-area" style="position: relative">
         <!-- Quick Prompts Menu -->
-        <div id="kaiz-quick-prompt-menu" class="kaiz-quick-prompt-menu" style="display: none; position: absolute; bottom: 100%; left: 16px; margin-bottom: 10px; background: rgba(20, 25, 35, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; width: 250px; max-height: 200px; overflow-y: auto; z-index: 10003; box-shadow: 0 4px 12px rgba(0,0,0,0.5); display: flex; flex-direction: column;">
+        <div
+            id="kaiz-quick-prompt-menu"
+            class="kaiz-quick-prompt-menu"
+            style="
+                display: none;
+                position: absolute;
+                bottom: 100%;
+                left: 16px;
+                margin-bottom: 10px;
+                background: rgba(20, 25, 35, 0.95);
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 8px;
+                width: 250px;
+                max-height: 200px;
+                overflow-y: auto;
+                z-index: 10003;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+                display: flex;
+                flex-direction: column;
+            "
+        >
             <!-- Menu items will be injected here -->
         </div>
 
-        <button id="kaiz-quick-prompt-btn" class="kaiz-chat-send" style="background: rgba(255,255,255,0.1); color: #e0e0e0;" title="Quick Prompts">
+        <button
+            id="kaiz-quick-prompt-btn"
+            class="kaiz-chat-send"
+            style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
+            title="Quick Prompts"
+        >
             <i class="fa-solid fa-fan"></i>
         </button>
-        <textarea id="kaiz-chat-input" class="kaiz-chat-input" placeholder="Nhập yêu cầu của bạn (Shift+Enter để xuống dòng)..." rows="1"></textarea>
+        <textarea
+            id="kaiz-chat-input"
+            class="kaiz-chat-input"
+            placeholder="Nhập yêu cầu của bạn (Shift+Enter để xuống dòng)..."
+            rows="1"
+        ></textarea>
         <button id="kaiz-chat-send" class="kaiz-chat-send">
             <i class="fa-solid fa-paper-plane"></i>
         </button>
+    </div>
+</dialog>
+
+<!-- Persona & Memory Modal -->
+<dialog id="kaiz-persona-memory-modal" class="kaiz-modal" style="background: rgba(20, 25, 35, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; color: #ddd; padding: 15px; width: 400px; max-width: 90vw; backdrop-filter: blur(10px); box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px;">
+        <h3 style="margin: 0; font-size: 16px;"><i class="fa-solid fa-brain"></i> Persona & Memory</h3>
+        <i id="kaiz-persona-memory-close" class="fa-solid fa-xmark interactable" style="cursor: pointer; font-size: 16px;"></i>
+    </div>
+    
+    <label style="font-weight: bold; margin-bottom: 4px; display: block;">Custom Persona</label>
+    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px">
+        Bổ sung thêm luật, phong cách nói chuyện (Persona) hoặc System Prompt cho Agent.
+    </label>
+    <textarea
+        id="kaiz-agent-persona"
+        class="text_pole"
+        rows="4"
+        placeholder="Ví dụ: Bạn là một trợ lý khó tính. Hãy luôn trả lời ngắn gọn..."
+        style="width: 100%; resize: vertical; box-sizing: border-box;"
+    ></textarea>
+
+    <div style="margin-top: 15px; display: flex; align-items: center; justify-content: space-between;">
+        <label style="font-weight: bold;">Agent Memories</label>
+        <button id="kaiz-memory-clear-all" class="menu_button interactable" style="padding: 4px 8px; font-size: 11px; height: auto;">
+            <i class="fa-solid fa-trash"></i> Xóa tất cả
+        </button>
+    </div>
+    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px; margin-top: 4px;">
+        Những dữ kiện mà AI tự học được và ghi nhớ về bạn hoặc công việc. Kéo thả để sắp xếp lại.
+    </label>
+
+    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+        <input
+            id="kaiz-manual-memory-key-input"
+            class="text_pole"
+            type="text"
+            placeholder="Tên/Key của memory (VD: Tên người dùng, Tính cách...)"
+            style="width: 100%; box-sizing: border-box;"
+        />
+        <div style="display: flex; gap: 8px; align-items: flex-end;">
+            <textarea
+                id="kaiz-manual-memory-input"
+                class="text_pole"
+                rows="2"
+                placeholder="Nội dung ghi nhớ..."
+                style="flex: 1; resize: vertical; box-sizing: border-box;"
+            ></textarea>
+            <button id="kaiz-add-manual-memory-btn" class="menu_button interactable" style="padding: 6px 12px; height: auto;">
+                <i class="fa-solid fa-save"></i> Lưu Memory
+            </button>
+        </div>
+    </div>
+
+    <div id="kaiz-agent-memory-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px;">
+        <!-- Memory items will be injected here -->
     </div>
 </dialog>
