@@ -417,17 +417,37 @@ export class SettingsUI {
 
         const $memoryList = $('#kaiz-agent-memory-list');
 
+        $('#kaiz-add-manual-memory-btn').on('click', () => {
+            const val = String($('#kaiz-manual-memory-input').val() || '').trim();
+            if (val) {
+                settings.memories.push(val);
+                $('#kaiz-manual-memory-input').val('');
+                ctx.saveSettingsDebounced();
+                renderMemories();
+            }
+        });
+
         function renderMemories() {
+            if (typeof ($memoryList as any).sortable === 'function' && $memoryList.hasClass('ui-sortable')) {
+                ($memoryList as any).sortable('destroy');
+            }
             $memoryList.empty();
+
             if (!settings.memories || settings.memories.length === 0) {
                 $memoryList.append('<div style="text-align:center; color:#888; font-size:12px; padding:10px;">Chưa có memory nào.</div>');
                 return;
             }
 
             settings.memories.forEach((mem: string, index: number) => {
+                // Escape HTML for memory content if needed, but since it's just user input, we use text() equivalent by using white-space: pre-wrap
+                const memEscaped = mem.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                
                 const $item = $(`
-                    <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
-                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word;">${mem}</div>
+                    <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
+                        <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
+                            <i class="fa-solid fa-grip-vertical"></i>
+                        </div>
+                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word; white-space: pre-wrap;">${memEscaped}</div>
                         <button class="menu_button interactable kaiz-memory-del-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;">
                             <i class="fa-solid fa-xmark"></i>
                         </button>
@@ -442,6 +462,23 @@ export class SettingsUI {
                 ctx.saveSettingsDebounced();
                 renderMemories();
             });
+
+            if (typeof ($memoryList as any).sortable === 'function') {
+                ($memoryList as any).sortable({
+                    handle: '.kaiz-memory-drag-handle',
+                    axis: 'y',
+                    update: function() {
+                        const newMemories: string[] = [];
+                        $memoryList.children('.kaiz-memory-item').each(function(this: HTMLElement) {
+                            const oldIndex = $(this).data('index');
+                            newMemories.push(settings.memories[oldIndex]);
+                        });
+                        settings.memories = newMemories;
+                        ctx.saveSettingsDebounced();
+                        renderMemories(); // re-render to update data-index
+                    }
+                });
+            }
         }
 
         renderMemories();

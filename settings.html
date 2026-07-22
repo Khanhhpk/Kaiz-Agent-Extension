@@ -180,9 +180,23 @@
                         </button>
                     </div>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px; margin-top: 4px;">
-                        Những dữ kiện mà AI tự học được và ghi nhớ về bạn hoặc công việc.
+                        Những dữ kiện mà AI tự học được và ghi nhớ về bạn hoặc công việc. Kéo thả để sắp xếp lại.
                     </label>
-                    <div id="kaiz-agent-memory-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto;">
+
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
+                        <textarea
+                            id="kaiz-manual-memory-input"
+                            class="text_pole"
+                            rows="2"
+                            placeholder="Thêm memory mới thủ công..."
+                            style="flex: 1; resize: vertical; box-sizing: border-box;"
+                        ></textarea>
+                        <button id="kaiz-add-manual-memory-btn" class="menu_button interactable" style="padding: 6px 12px; height: auto;">
+                            <i class="fa-solid fa-plus"></i> Thêm
+                        </button>
+                    </div>
+
+                    <div id="kaiz-agent-memory-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px;">
                         <!-- Memory items will be injected here -->
                     </div>
                 </div>
