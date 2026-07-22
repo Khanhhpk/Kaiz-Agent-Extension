@@ -22,21 +22,29 @@ export const interactUITool: ITool = {
         // 1. Tìm kiếm element
         let foundElement: HTMLElement | null = null;
         
-        // Từ khoá hard-code cho các nút quan trọng
-        const keywordMap: Record<string, string> = {
-            'send': '#send_but',
-            'gửi': '#send_but',
-            'extensions': '#extensions_button',
-            'tiện ích': '#extensions_button',
-            'settings': '#rm_button_panel',
-            'cài đặt': '#rm_button_panel',
-            'characters': '#rm_button_characters',
-            'nhân vật': '#rm_button_characters',
-            'menu': '#nav-drawer-toggle'
-        };
+        // Kiểm tra xem target có phải là định dạng ID từ scan_ui không (ví dụ "k1", "k12")
+        const kaizIdMatch = target.match(/^k\d+$/);
+        if (kaizIdMatch) {
+            foundElement = document.querySelector(`[data-kaiz-id="${target}"]`);
+        }
 
-        if (keywordMap[target]) {
-            foundElement = document.querySelector(keywordMap[target]);
+        if (!foundElement) {
+            // Từ khoá hard-code cho các nút quan trọng
+            const keywordMap: Record<string, string> = {
+                'send': '#send_but',
+                'gửi': '#send_but',
+                'extensions': '#extensions_button',
+                'tiện ích': '#extensions_button',
+                'settings': '#rm_button_panel',
+                'cài đặt': '#rm_button_panel',
+                'characters': '#rm_button_characters',
+                'nhân vật': '#rm_button_characters',
+                'menu': '#nav-drawer-toggle'
+            };
+
+            if (keywordMap[target]) {
+                foundElement = document.querySelector(keywordMap[target]);
+            }
         }
 
         if (!foundElement) {

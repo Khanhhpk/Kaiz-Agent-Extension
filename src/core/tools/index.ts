@@ -15,6 +15,7 @@ import { scrapeWebpageTool } from './scrape_webpage';
 import { searchGoogleTool } from './search_google';
 import { toggleVirtualCursorTool } from './virtual_cursor';
 import { interactUITool } from './interact_ui';
+import { scanUITool } from './scan_ui';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -41,4 +42,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(searchGoogleTool);
     registry.registerTool(toggleVirtualCursorTool);
     registry.registerTool(interactUITool);
+    registry.registerTool(scanUITool);
 }
