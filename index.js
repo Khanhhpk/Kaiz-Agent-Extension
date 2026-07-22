@@ -4046,16 +4046,33 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             };
             // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
             const formatUserMessage = (text) => {
-                if (text.startsWith('[Tool Result')) {
-                    const isError = text.includes('CÓ LỖI/ERROR');
+                let imgHtml = '';
+                let safeText = text;
+                const imgRegex = /!\[Screenshot\]\((data:image\/[^;]+;base64,[^)]+)\)/;
+                const match = safeText.match(imgRegex);
+                if (match) {
+                    imgHtml = `<br><img src="${match[1]}" style="max-width: 100%; border-radius: 5px; margin-top: 10px; border: 1px solid #444;" />`;
+                    safeText = safeText.replace(imgRegex, '[Đã đính kèm ảnh chụp màn hình]');
+                }
+                const escapeHtml = (unsafe) => {
+                    return unsafe
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#039;");
+                };
+                const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
+                if (safeText.startsWith('[Tool Result')) {
+                    const isError = safeText.includes('CÓ LỖI/ERROR');
                     const color = isError ? '#e74c3c' : '#2ecc71';
                     const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
                     return `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
 <summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
-<div class="kaiz-system-content">${text.replace(/\n/g, '<br>')}</div>
+<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}${imgHtml}</div>
 </details>`;
                 }
-                return text.replace(/\n/g, '<br>');
+                return escapedText + imgHtml;
             };
             // Lắng nghe StateManager
             stateManager.onChatsListUpdated = (chats) => {
