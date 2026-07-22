@@ -1340,6 +1340,370 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const toggleVirtualCursorTool = {
+        schema: {
+            name: 'toggle_virtual_cursor',
+            description: 'Bật hoặc tắt con trỏ chuột ảo trên màn hình. Dùng khi người dùng yêu cầu bật/tắt con trỏ ảo.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: []
+            }
+        },
+        execute: async (args) => {
+            let cursor = document.getElementById('kaiz-virtual-cursor');
+            if (cursor) {
+                cursor.remove();
+                return {
+                    content: 'Đã tắt con trỏ chuột ảo.'
+                };
+            }
+            else {
+                let extPath = 'third-party/Kaiz-Agent-Extension';
+                try {
+                    const scripts = document.getElementsByTagName('script');
+                    for (let i = 0; i < scripts.length; i++) {
+                        const src = scripts[i].src;
+                        if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                            const parts = new URL(src).pathname.split('/');
+                            const extIndex = parts.indexOf('extensions');
+                            if (extIndex !== -1 && parts.length > extIndex + 1) {
+                                extPath = parts[extIndex + 1];
+                                if (extPath === 'third-party' && parts.length > extIndex + 2) {
+                                    extPath = parts[extIndex + 1] + '/' + parts[extIndex + 2];
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (e) { }
+                // Spawn mới
+                cursor = document.createElement('div');
+                cursor.id = 'kaiz-virtual-cursor';
+                cursor.innerHTML = `<img src="/scripts/extensions/${extPath}/assets/gura_cursor.gif" style="width: 32px; height: 32px; pointer-events: none;" />`;
+                cursor.style.position = 'fixed';
+                cursor.style.top = '50%';
+                cursor.style.left = '50%';
+                cursor.style.transform = 'translate(-20%, -20%)';
+                cursor.style.zIndex = '999999';
+                cursor.style.pointerEvents = 'none';
+                cursor.style.transition = 'top 0.3s, left 0.3s';
+                document.body.appendChild(cursor);
+                return {
+                    content: 'Đã bật con trỏ chuột ảo Gawr Gura ở giữa màn hình.'
+                };
+            }
+        }
+    };
+
+    const interactUITool = {
+        schema: {
+            name: 'interact_with_ui',
+            description: 'Tương tác vật lý với giao diện SillyTavern. Cho phép Agent di chuyển con trỏ chuột ảo và click vào các nút bấm.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    targetDescription: {
+                        type: 'string',
+                        description: 'Tên hoặc mô tả của nút bấm cần click. Ví dụ: "Send", "Extensions", "Menu"'
+                    }
+                },
+                required: ['targetDescription']
+            }
+        },
+        execute: async (args) => {
+            const target = args.targetDescription?.toLowerCase();
+            if (!target)
+                return { content: 'Lỗi: Không có targetDescription.' };
+            // 1. Tìm kiếm element
+            let foundElement = null;
+            // Xử lý target để trích xuất kX (nếu có)
+            let cleanTarget = target.trim();
+            const kIdMatch = target.match(/\[(k\d+)\]/i) || target.match(/^(k\d+)$/i);
+            if (kIdMatch) {
+                cleanTarget = kIdMatch[1].toLowerCase(); // "k95"
+            }
+            else {
+                // Loại bỏ ngoặc vuông nếu agent truyền vào dạng "[Extensions]"
+                cleanTarget = target.replace(/\[|\]/g, '').trim();
+            }
+            const kaizIdMatch = cleanTarget.match(/^k\d+$/);
+            if (kaizIdMatch) {
+                foundElement = document.querySelector(`[data-kaiz-id="${cleanTarget}"]`);
+            }
+            if (!foundElement) {
+                // Từ khoá hard-code cho các nút quan trọng
+                const keywordMap = {
+                    'send': '#send_but',
+                    'gửi': '#send_but',
+                    'extensions': '#extensions_button',
+                    'tiện ích': '#extensions_button',
+                    'settings': '#rm_button_panel',
+                    'cài đặt': '#rm_button_panel',
+                    'characters': '#rm_button_characters',
+                    'nhân vật': '#rm_button_characters',
+                    'menu': '#nav-drawer-toggle'
+                };
+                if (keywordMap[cleanTarget]) {
+                    foundElement = document.querySelector(keywordMap[cleanTarget]);
+                }
+            }
+            if (!foundElement) {
+                // Tìm theo nội dung text hoặc title (tooltip)
+                const interactables = document.querySelectorAll('button, a, .interactable, [title], .menu_button, .drawer-toggle');
+                for (let i = 0; i < interactables.length; i++) {
+                    const el = interactables[i];
+                    const text = el.innerText?.toLowerCase() || '';
+                    const title = el.getAttribute('title')?.toLowerCase() || '';
+                    if (text.includes(cleanTarget) || title.includes(cleanTarget)) {
+                        // Check xem element có đang hiển thị không bằng getBoundingClientRect
+                        const rect = el.getBoundingClientRect();
+                        if (rect.width > 0 && rect.height > 0) {
+                            foundElement = el;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!foundElement) {
+                return { content: `Không tìm thấy nút hoặc phần tử nào trên màn hình khớp với "${target}".` };
+            }
+            // 2. Tính toán vị trí trung tâm của element
+            const rect = foundElement.getBoundingClientRect();
+            const targetX = rect.left + rect.width / 2;
+            const targetY = rect.top + rect.height / 2;
+            // 3. Khởi tạo / Tìm con trỏ
+            let cursor = document.getElementById('kaiz-virtual-cursor');
+            if (!cursor) {
+                let extPath = 'third-party/Kaiz-Agent-Extension';
+                try {
+                    const scripts = document.getElementsByTagName('script');
+                    for (let i = 0; i < scripts.length; i++) {
+                        const src = scripts[i].src;
+                        if (src && src.includes('index.js') && src.toLowerCase().includes('kaiz') && src.toLowerCase().includes('agent')) {
+                            const parts = new URL(src).pathname.split('/');
+                            const extIndex = parts.indexOf('extensions');
+                            if (extIndex !== -1 && parts.length > extIndex + 1) {
+                                extPath = parts[extIndex + 1];
+                                if (extPath === 'third-party' && parts.length > extIndex + 2) {
+                                    extPath = parts[extIndex + 1] + '/' + parts[extIndex + 2];
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (e) { }
+                cursor = document.createElement('div');
+                cursor.id = 'kaiz-virtual-cursor';
+                cursor.innerHTML = `<img src="/scripts/extensions/${extPath}/assets/gura_cursor.gif" style="width: 32px; height: 32px; pointer-events: none;" />`;
+                cursor.style.position = 'fixed';
+                cursor.style.top = '50%';
+                cursor.style.left = '50%';
+                cursor.style.transform = 'translate(-20%, -20%)';
+                cursor.style.zIndex = '999999';
+                cursor.style.pointerEvents = 'none';
+                document.body.appendChild(cursor);
+                // Đợi browser render xong
+                await new Promise(r => requestAnimationFrame(r));
+            }
+            // 4. Tính toán khoảng cách để xác định duration cho animation
+            let startX = window.innerWidth / 2;
+            let startY = window.innerHeight / 2;
+            if (cursor.style.left && cursor.style.left.endsWith('px')) {
+                startX = parseFloat(cursor.style.left);
+                startY = parseFloat(cursor.style.top);
+            }
+            const distance = Math.sqrt(Math.pow(targetX - startX, 2) + Math.pow(targetY - startY, 2));
+            // Vận tốc cơ bản: 800 pixel mỗi giây
+            let duration = distance / 800;
+            // Giới hạn thời gian tối thiểu và tối đa
+            if (duration < 0.3)
+                duration = 0.3;
+            if (duration > 1.5)
+                duration = 1.5;
+            // Bật transition trước khi set vị trí mới
+            cursor.style.transition = `top ${duration}s ease-in-out, left ${duration}s ease-in-out`;
+            // Kích hoạt bay
+            cursor.style.top = `${targetY}px`;
+            cursor.style.left = `${targetX}px`;
+            // 5. Chờ bay tới nơi
+            await new Promise(r => setTimeout(r, duration * 1000 + 50));
+            // 6. Thực thi Click (Tạo hiệu ứng nhấp nháy chút cho đẹp)
+            cursor.style.transform = 'translate(-20%, -20%) scale(0.8)';
+            setTimeout(() => {
+                if (cursor)
+                    cursor.style.transform = 'translate(-20%, -20%) scale(1)';
+            }, 150);
+            foundElement.click();
+            return {
+                content: `Đã di chuyển con trỏ chuột và bấm vào nút "${target}" thành công.`
+            };
+        }
+    };
+
+    const scanUITool = {
+        schema: {
+            name: 'scan_ui',
+            description: 'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX].',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: []
+            }
+        },
+        execute: async (args) => {
+            const interactables = document.querySelectorAll('button, a, input, select, textarea, .interactable, [title], .menu_button, .drawer-toggle, .fa-solid, .fa-regular');
+            let counter = 1;
+            // Xoá các tag cũ
+            const oldTagged = document.querySelectorAll('[data-kaiz-id]');
+            oldTagged.forEach(el => el.removeAttribute('data-kaiz-id'));
+            // Bước 1: Gắn nhãn cho các element hợp lệ
+            for (let i = 0; i < interactables.length; i++) {
+                const el = interactables[i];
+                // Bỏ qua giao diện của chính Kaiz Agent
+                if (el.closest('#kaiz-floating-btn, #kaiz-chat-window, #kaiz-log-modal, #kaiz-virtual-cursor, [id^="kaiz-"]')) {
+                    continue;
+                }
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0')
+                    continue;
+                // Kiểm tra bị che giấu bởi container (chiều cao hoặc chiều rộng = 0)
+                const rect = el.getBoundingClientRect();
+                if (rect.width === 0 || rect.height === 0)
+                    continue;
+                // Bỏ qua các element nằm ngoài viewport? Không, đôi khi ST cho phép scroll.
+                // Gắn ID
+                el.setAttribute('data-kaiz-id', `k${counter++}`);
+            }
+            let totalItems = counter - 1;
+            // Bước 2: Hàm đệ quy xây dựng cây DOM thu gọn
+            function buildTree(el, indent) {
+                if (!el)
+                    return '';
+                // Tránh quét Agent UI
+                if (el.id === 'kaiz-floating-btn' || el.id === 'kaiz-chat-window' || el.id === 'kaiz-log-modal' || el.id === 'kaiz-virtual-cursor' || el.id.startsWith('kaiz-')) {
+                    return '';
+                }
+                const kaizId = el.getAttribute('data-kaiz-id');
+                const hasChildrenWithId = el.querySelectorAll('[data-kaiz-id]').length > 0;
+                if (!kaizId && !hasChildrenWithId) {
+                    return ''; // Bỏ qua nhánh không có gì tương tác
+                }
+                const indentStr = '  '.repeat(indent);
+                // Nếu là phần tử có thể click
+                if (kaizId) {
+                    let text = el.innerText?.trim() || '';
+                    // SillyTavern hoặc jQuery UI tooltip có thể gỡ bỏ title và đưa vào data-original-title / jq-title...
+                    const title = el.getAttribute('title')?.trim() || el.getAttribute('data-original-title')?.trim() || el.getAttribute('data-title')?.trim() || '';
+                    const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
+                    const value = el.value?.trim() || '';
+                    let description = text || title || ariaLabel;
+                    if (!description && el.tagName === 'INPUT') {
+                        description = value || el.getAttribute('placeholder') || 'Input field';
+                    }
+                    let isIconOnly = false;
+                    if (!description) {
+                        if (el.classList.contains('fa-solid') || el.classList.contains('fa-regular')) {
+                            isIconOnly = true;
+                            description = Array.from(el.classList).filter(c => c.startsWith('fa-')).join(' ');
+                        }
+                        else {
+                            // Kiểm tra nếu nó bọc một icon bên trong (vd: <div class="menu_button"><i class="fa-solid fa-gear"></i></div>)
+                            const childIcon = el.querySelector('.fa-solid, .fa-regular');
+                            if (childIcon) {
+                                isIconOnly = true;
+                                description = Array.from(childIcon.classList).filter(c => c.startsWith('fa-')).join(' ');
+                            }
+                        }
+                    }
+                    if (!description && !isIconOnly && el.tagName !== 'SELECT' && el.tagName !== 'IMG') {
+                        // Nếu là một element đặc biệt nhưng vẫn không có text (ví dụ menu_button), lấy class/id làm tên
+                        if (el.classList.contains('menu_button') || el.classList.contains('drawer-toggle')) {
+                            description = el.id || el.className;
+                        }
+                        else {
+                            return ''; // Rác, bỏ qua
+                        }
+                    }
+                    if (description.length > 60)
+                        description = description.substring(0, 57) + '...';
+                    description = description.replace(/\n/g, ' ').replace(/\s+/g, ' ');
+                    let tagName = el.tagName.toLowerCase();
+                    if (tagName === 'i' || tagName === 'span')
+                        tagName = 'icon';
+                    // Bóc tách trạng thái (States & Values)
+                    let states = '';
+                    if (el.disabled)
+                        states += '[Disabled] ';
+                    if (tagName === 'input') {
+                        const type = el.getAttribute('type') || 'text';
+                        states += `(type:${type}) `;
+                        if (el.checked)
+                            states += '[Checked] ';
+                    }
+                    if (tagName === 'select') {
+                        const select = el;
+                        if (select.selectedIndex >= 0) {
+                            const opt = select.options[select.selectedIndex];
+                            if (opt)
+                                states += `(Selected: ${opt.text.trim()}) `;
+                        }
+                    }
+                    if (tagName === 'img') {
+                        const alt = el.getAttribute('alt');
+                        if (alt)
+                            description += ` (Image: ${alt})`;
+                    }
+                    const stateStr = states.trim() ? ` ${states.trim()}` : '';
+                    return `${indentStr}[${kaizId}] ${tagName.toUpperCase()}${stateStr}: ${description}\n`;
+                }
+                // Nếu chứa phần tử con có kX
+                let childrenContent = '';
+                for (let i = 0; i < el.children.length; i++) {
+                    childrenContent += buildTree(el.children[i], indent + 1);
+                }
+                if (childrenContent) {
+                    const isSignificant = el.id || (el.className && typeof el.className === 'string' && el.className.trim() !== '');
+                    if (isSignificant) {
+                        let attrs = '';
+                        if (el.id)
+                            attrs += ` id="${el.id}"`;
+                        if (el.className && typeof el.className === 'string') {
+                            const classes = el.className.split(' ').filter(c => !c.startsWith('fa-') && c.length > 0).join(' ');
+                            if (classes)
+                                attrs += ` class="${classes}"`;
+                        }
+                        const tagName = el.tagName.toLowerCase();
+                        return `${indentStr}<${tagName}${attrs}>\n${childrenContent}${indentStr}</${tagName}>\n`;
+                    }
+                    else {
+                        // Flatten (Xoá khoảng trắng thụt lề thêm 1 bậc do không wrap)
+                        let flatContent = '';
+                        for (let i = 0; i < el.children.length; i++) {
+                            flatContent += buildTree(el.children[i], indent);
+                        }
+                        return flatContent;
+                    }
+                }
+                return '';
+            }
+            let outputContent = '--- CẤU TRÚC DOM (TÓM TẮT) ---\n\n';
+            if (totalItems === 0) {
+                outputContent = 'Không tìm thấy phần tử nào có thể tương tác trên màn hình hiện tại.';
+            }
+            else {
+                const treeData = buildTree(document.body, 0);
+                outputContent += '```html\n' + treeData + '\n```';
+                outputContent = `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
+            }
+            return {
+                content: outputContent
+            };
+        }
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -1362,6 +1726,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(manageChatTextTool);
         registry.registerTool(scrapeWebpageTool);
         registry.registerTool(searchGoogleTool);
+        registry.registerTool(toggleVirtualCursorTool);
+        registry.registerTool(interactUITool);
+        registry.registerTool(scanUITool);
     }
 
     /**
@@ -3273,7 +3640,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const logBtn = $('#kaiz-chat-log-btn');
             if ($('#kaiz-log-modal').length === 0) {
                 $('body').append(`
-                <div id="kaiz-log-modal" class="kaiz-log-modal">
+                <dialog id="kaiz-log-modal" class="kaiz-log-modal">
                     <div class="kaiz-log-header">
                         <h3 class="kaiz-log-title">Agent Request Logs</h3>
                         <i id="kaiz-log-close" class="fa-solid fa-xmark interactable kaiz-log-close"></i>
@@ -3288,18 +3655,21 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             <pre id="kaiz-log-recv" class="kaiz-log-pre"></pre>
                         </div>
                     </div>
-                </div>
+                </dialog>
             `);
             }
             let lastLogSent = "No data yet.";
             let lastLogRecv = "No data yet.";
             $('#kaiz-log-close').on('click', () => {
-                $('#kaiz-log-modal').css('display', 'none');
+                $('#kaiz-log-modal')[0].close();
             });
             logBtn.on('click', () => {
                 $('#kaiz-log-sent').text(lastLogSent);
                 $('#kaiz-log-recv').text(lastLogRecv);
-                $('#kaiz-log-modal').css('display', 'flex');
+                const dialog = $('#kaiz-log-modal')[0];
+                if (!dialog.open) {
+                    dialog.showModal();
+                }
             });
             // ------------------------------------
             // --- Quick Prompts Logic ---
@@ -3687,16 +4057,35 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             };
             // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
             const formatUserMessage = (text) => {
-                if (text.startsWith('[Tool Result')) {
-                    const isError = text.includes('CÓ LỖI/ERROR');
-                    const color = isError ? '#e74c3c' : '#2ecc71';
-                    const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
+                let safeText = text;
+                // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
+                const escapeHtml = (unsafe) => {
+                    return unsafe
+                        .replace(/&/g, "&amp;")
+                        .replace(/</g, "&lt;")
+                        .replace(/>/g, "&gt;")
+                        .replace(/"/g, "&quot;")
+                        .replace(/'/g, "&#039;");
+                };
+                const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
+                if (safeText.startsWith('[Tool Result')) {
+                    // ... logic Tool Result ...
+                    let color = '#a1a1aa'; // default
+                    let icon = 'fa-wrench';
+                    if (safeText.includes('THẤT BẠI')) {
+                        color = '#ef4444'; // red
+                        icon = 'fa-circle-xmark';
+                    }
+                    else if (safeText.includes('THÀNH CÔNG')) {
+                        color = '#4ade80'; // green
+                        icon = 'fa-circle-check';
+                    }
                     return `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
 <summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
-<div class="kaiz-system-content">${text.replace(/\n/g, '<br>')}</div>
+<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
                 }
-                return text.replace(/\n/g, '<br>');
+                return escapedText;
             };
             // Lắng nghe StateManager
             stateManager.onChatsListUpdated = (chats) => {

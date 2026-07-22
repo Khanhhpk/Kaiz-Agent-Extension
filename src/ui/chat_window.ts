@@ -17,7 +17,7 @@ export class ChatWindowUI {
 
         if ($('#kaiz-log-modal').length === 0) {
             $('body').append(`
-                <div id="kaiz-log-modal" class="kaiz-log-modal">
+                <dialog id="kaiz-log-modal" class="kaiz-log-modal">
                     <div class="kaiz-log-header">
                         <h3 class="kaiz-log-title">Agent Request Logs</h3>
                         <i id="kaiz-log-close" class="fa-solid fa-xmark interactable kaiz-log-close"></i>
@@ -32,7 +32,7 @@ export class ChatWindowUI {
                             <pre id="kaiz-log-recv" class="kaiz-log-pre"></pre>
                         </div>
                     </div>
-                </div>
+                </dialog>
             `);
         }
 
@@ -40,13 +40,16 @@ export class ChatWindowUI {
         let lastLogRecv = "No data yet.";
 
         $('#kaiz-log-close').on('click', () => {
-            $('#kaiz-log-modal').css('display', 'none');
+            ($('#kaiz-log-modal')[0] as HTMLDialogElement).close();
         });
 
         logBtn.on('click', () => {
             $('#kaiz-log-sent').text(lastLogSent);
             $('#kaiz-log-recv').text(lastLogRecv);
-            $('#kaiz-log-modal').css('display', 'flex');
+            const dialog = $('#kaiz-log-modal')[0] as HTMLDialogElement;
+            if (!dialog.open) {
+                dialog.showModal();
+            }
         });
         // ------------------------------------
 
@@ -453,17 +456,39 @@ export class ChatWindowUI {
 
         // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
         const formatUserMessage = (text: string): string => {
-            if (text.startsWith('[Tool Result')) {
-                const isError = text.includes('CÓ LỖI/ERROR');
-                const color = isError ? '#e74c3c' : '#2ecc71';
-                const icon = isError ? 'fa-triangle-exclamation' : 'fa-wrench';
-                
+            let safeText = text;
+
+            // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
+            const escapeHtml = (unsafe: string) => {
+                return unsafe
+                     .replace(/&/g, "&amp;")
+                     .replace(/</g, "&lt;")
+                     .replace(/>/g, "&gt;")
+                     .replace(/"/g, "&quot;")
+                     .replace(/'/g, "&#039;");
+            };
+
+            const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
+
+            if (safeText.startsWith('[Tool Result')) {
+                // ... logic Tool Result ...
+                let color = '#a1a1aa'; // default
+                let icon = 'fa-wrench';
+                if (safeText.includes('THẤT BẠI')) {
+                    color = '#ef4444'; // red
+                    icon = 'fa-circle-xmark';
+                } else if (safeText.includes('THÀNH CÔNG')) {
+                    color = '#4ade80'; // green
+                    icon = 'fa-circle-check';
+                }
+
                 return `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
 <summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
-<div class="kaiz-system-content">${text.replace(/\n/g, '<br>')}</div>
+<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
             }
-            return text.replace(/\n/g, '<br>');
+
+            return escapedText;
         };
 
         // Lắng nghe StateManager
