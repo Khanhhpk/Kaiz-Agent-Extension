@@ -13,7 +13,8 @@ export const manageUserInputTool: ITool = {
                 },
                 mode: {
                     type: 'string',
-                    description: "Chế độ: 'overwrite' (Xoá và ghi đè mới), 'append' (Nối tiếp vào sau nội dung đang có), hoặc 'read' (Chỉ đọc nội dung đang có trong khung nhập liệu).",
+                    description:
+                        "Chế độ: 'overwrite' (Xoá và ghi đè mới), 'append' (Nối tiếp vào sau nội dung đang có), hoặc 'read' (Chỉ đọc nội dung đang có trong khung nhập liệu).",
                 },
                 send: {
                     type: 'boolean',
@@ -59,9 +60,13 @@ export const manageUserInputTool: ITool = {
             if (sendBtn) {
                 // SillyTavern dùng div#send_but làm nút gửi
                 sendBtn.click();
-                return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung và nhấn nút Gửi thành công.` };
+                return {
+                    content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung và nhấn nút Gửi thành công.`,
+                };
             } else {
-                return { content: `Đã điền nội dung nhưng không tìm thấy nút Gửi (send_but). Nội dung vẫn đang ở trong khung chat.` };
+                return {
+                    content: `Đã điền nội dung nhưng không tìm thấy nút Gửi (send_but). Nội dung vẫn đang ở trong khung chat.`,
+                };
             }
         }
 

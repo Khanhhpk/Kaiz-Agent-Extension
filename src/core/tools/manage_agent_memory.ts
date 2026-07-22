@@ -15,7 +15,8 @@ export const manageAgentMemory: ITool = {
                 },
                 key: {
                     type: 'string',
-                    description: 'Tên định danh (Key) của memory. Ví dụ: "Tên người dùng", "Sở thích". Bắt buộc với add, edit, delete.',
+                    description:
+                        'Tên định danh (Key) của memory. Ví dụ: "Tên người dùng", "Sở thích". Bắt buộc với add, edit, delete.',
                 },
                 content: {
                     type: 'string',
@@ -106,12 +107,16 @@ export const manageAgentMemory: ITool = {
                     if (typeof mem === 'string' && mem.toLowerCase().includes(key.toLowerCase())) {
                         legacyIndex = i;
                         break;
-                    } else if (typeof mem === 'object' && mem.content && mem.content.toLowerCase().includes(key.toLowerCase())) {
+                    } else if (
+                        typeof mem === 'object' &&
+                        mem.content &&
+                        mem.content.toLowerCase().includes(key.toLowerCase())
+                    ) {
                         legacyIndex = i;
                         break;
                     }
                 }
-                
+
                 if (legacyIndex !== -1) {
                     settings.memories.splice(legacyIndex, 1);
                     ctx.saveSettingsDebounced();

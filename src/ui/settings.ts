@@ -428,7 +428,9 @@ export class SettingsUI {
                     $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
                 } else {
                     // Check if key already exists to prevent duplicate keys in manual add
-                    const existingIndex = settings.memories.findIndex((m: any) => typeof m !== 'string' && m.key.toLowerCase() === key.toLowerCase());
+                    const existingIndex = settings.memories.findIndex(
+                        (m: any) => typeof m !== 'string' && m.key.toLowerCase() === key.toLowerCase(),
+                    );
                     if (existingIndex !== -1) {
                         alert(`Key "${key}" đã tồn tại. Vui lòng chọn tên khác hoặc ấn Edit ở item tương ứng.`);
                         return;
@@ -451,7 +453,9 @@ export class SettingsUI {
             $memoryList.empty();
 
             if (!settings.memories || settings.memories.length === 0) {
-                $memoryList.append('<div style="text-align:center; color:#888; font-size:12px; padding:10px;">Chưa có memory nào.</div>');
+                $memoryList.append(
+                    '<div style="text-align:center; color:#888; font-size:12px; padding:10px;">Chưa có memory nào.</div>',
+                );
                 return;
             }
 
@@ -493,7 +497,7 @@ export class SettingsUI {
                 $memoryList.append($item);
             });
 
-            $('.kaiz-memory-expand-btn').on('click', function(this: HTMLElement) {
+            $('.kaiz-memory-expand-btn').on('click', function (this: HTMLElement) {
                 const $text = $(this).siblings('.kaiz-memory-text');
                 if ($text.css('-webkit-line-clamp') === '2') {
                     $text.css('-webkit-line-clamp', 'unset');
@@ -504,7 +508,7 @@ export class SettingsUI {
                 }
             });
 
-            $('.kaiz-memory-edit-btn').on('click', function(this: HTMLElement) {
+            $('.kaiz-memory-edit-btn').on('click', function (this: HTMLElement) {
                 const idx = $(this).data('index');
                 const mem = settings.memories[idx];
                 $('#kaiz-manual-memory-key-input').val(mem.key);
@@ -514,7 +518,7 @@ export class SettingsUI {
                 $('#kaiz-manual-memory-key-input').trigger('focus');
             });
 
-            $('.kaiz-memory-del-btn').on('click', function(this: HTMLElement) {
+            $('.kaiz-memory-del-btn').on('click', function (this: HTMLElement) {
                 const idx = $(this).data('index');
                 settings.memories.splice(idx, 1);
                 // Nếu đang edit item bị xóa thì reset
@@ -534,16 +538,16 @@ export class SettingsUI {
                 ($memoryList as any).sortable({
                     handle: '.kaiz-memory-drag-handle',
                     axis: 'y',
-                    update: function() {
+                    update: function () {
                         const newMemories: string[] = [];
-                        $memoryList.children('.kaiz-memory-item').each(function(this: HTMLElement) {
+                        $memoryList.children('.kaiz-memory-item').each(function (this: HTMLElement) {
                             const oldIndex = $(this).data('index');
                             newMemories.push(settings.memories[oldIndex]);
                         });
                         settings.memories = newMemories;
                         ctx.saveSettingsDebounced();
                         renderMemories(); // re-render to update data-index
-                    }
+                    },
                 });
             }
         }

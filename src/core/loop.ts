@@ -175,7 +175,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         if (ctx.extensionSettings?.kaiz_agent) {
             const persona = ctx.extensionSettings.kaiz_agent.persona;
             const memories = ctx.extensionSettings.kaiz_agent.memories;
-            
+
             let customContent = '';
             if (persona) {
                 customContent += `[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
