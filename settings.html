@@ -183,17 +183,26 @@
                         Những dữ kiện mà AI tự học được và ghi nhớ về bạn hoặc công việc. Kéo thả để sắp xếp lại.
                     </label>
 
-                    <div style="display: flex; gap: 8px; margin-bottom: 12px; align-items: flex-end;">
-                        <textarea
-                            id="kaiz-manual-memory-input"
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+                        <input
+                            id="kaiz-manual-memory-key-input"
                             class="text_pole"
-                            rows="2"
-                            placeholder="Thêm memory mới thủ công..."
-                            style="flex: 1; resize: vertical; box-sizing: border-box;"
-                        ></textarea>
-                        <button id="kaiz-add-manual-memory-btn" class="menu_button interactable" style="padding: 6px 12px; height: auto;">
-                            <i class="fa-solid fa-plus"></i> Thêm
-                        </button>
+                            type="text"
+                            placeholder="Tên/Key của memory (VD: Tên người dùng, Tính cách...)"
+                            style="width: 100%; box-sizing: border-box;"
+                        />
+                        <div style="display: flex; gap: 8px; align-items: flex-end;">
+                            <textarea
+                                id="kaiz-manual-memory-input"
+                                class="text_pole"
+                                rows="2"
+                                placeholder="Nội dung ghi nhớ..."
+                                style="flex: 1; resize: vertical; box-sizing: border-box;"
+                            ></textarea>
+                            <button id="kaiz-add-manual-memory-btn" class="menu_button interactable" style="padding: 6px 12px; height: auto;">
+                                <i class="fa-solid fa-save"></i> Lưu Memory
+                            </button>
+                        </div>
                     </div>
 
                     <div id="kaiz-agent-memory-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px;">

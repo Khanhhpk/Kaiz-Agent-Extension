@@ -416,14 +416,31 @@ export class SettingsUI {
         });
 
         const $memoryList = $('#kaiz-agent-memory-list');
+        let editingMemoryIndex = -1;
 
         $('#kaiz-add-manual-memory-btn').on('click', () => {
-            const val = String($('#kaiz-manual-memory-input').val() || '').trim();
-            if (val) {
-                settings.memories.push(val);
+            const key = String($('#kaiz-manual-memory-key-input').val() || '').trim();
+            const content = String($('#kaiz-manual-memory-input').val() || '').trim();
+            if (key && content) {
+                if (editingMemoryIndex !== -1) {
+                    settings.memories[editingMemoryIndex] = { key, content };
+                    editingMemoryIndex = -1;
+                    $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                } else {
+                    // Check if key already exists to prevent duplicate keys in manual add
+                    const existingIndex = settings.memories.findIndex((m: any) => typeof m !== 'string' && m.key.toLowerCase() === key.toLowerCase());
+                    if (existingIndex !== -1) {
+                        alert(`Key "${key}" đã tồn tại. Vui lòng chọn tên khác hoặc ấn Edit ở item tương ứng.`);
+                        return;
+                    }
+                    settings.memories.push({ key, content });
+                }
+                $('#kaiz-manual-memory-key-input').val('');
                 $('#kaiz-manual-memory-input').val('');
                 ctx.saveSettingsDebounced();
                 renderMemories();
+            } else {
+                alert('Vui lòng nhập đầy đủ cả Tên/Key và Nội dung!');
             }
         });
 
@@ -438,27 +455,61 @@ export class SettingsUI {
                 return;
             }
 
-            settings.memories.forEach((mem: string, index: number) => {
-                // Escape HTML for memory content if needed, but since it's just user input, we use text() equivalent by using white-space: pre-wrap
-                const memEscaped = mem.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            // Migration from string[] to {key, content}[]
+            let hasLegacy = false;
+            for (let i = 0; i < settings.memories.length; i++) {
+                if (typeof settings.memories[i] === 'string') {
+                    settings.memories[i] = { key: `Untracked_${i + 1}`, content: settings.memories[i] };
+                    hasLegacy = true;
+                }
+            }
+            if (hasLegacy) ctx.saveSettingsDebounced();
+
+            settings.memories.forEach((mem: any, index: number) => {
+                const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 
                 const $item = $(`
                     <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
                         <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
                             <i class="fa-solid fa-grip-vertical"></i>
                         </div>
-                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word; white-space: pre-wrap;">${memEscaped}</div>
-                        <button class="menu_button interactable kaiz-memory-del-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word; white-space: pre-wrap;"><span style="font-weight: bold; color: #8bc34a;">[${keyEscaped}]</span> ${memEscaped}</div>
+                        <div style="display: flex; gap: 4px;">
+                            <button class="menu_button interactable kaiz-memory-edit-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Edit">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button class="menu_button interactable kaiz-memory-del-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Delete">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
                     </div>
                 `);
                 $memoryList.append($item);
             });
 
+            $('.kaiz-memory-edit-btn').on('click', function(this: HTMLElement) {
+                const idx = $(this).data('index');
+                const mem = settings.memories[idx];
+                $('#kaiz-manual-memory-key-input').val(mem.key);
+                $('#kaiz-manual-memory-input').val(mem.content);
+                editingMemoryIndex = idx;
+                $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Cập nhật');
+                $('#kaiz-manual-memory-key-input').trigger('focus');
+            });
+
             $('.kaiz-memory-del-btn').on('click', function(this: HTMLElement) {
                 const idx = $(this).data('index');
                 settings.memories.splice(idx, 1);
+                // Nếu đang edit item bị xóa thì reset
+                if (editingMemoryIndex === idx) {
+                    editingMemoryIndex = -1;
+                    $('#kaiz-manual-memory-key-input').val('');
+                    $('#kaiz-manual-memory-input').val('');
+                    $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                } else if (editingMemoryIndex > idx) {
+                    editingMemoryIndex--;
+                }
                 ctx.saveSettingsDebounced();
                 renderMemories();
             });

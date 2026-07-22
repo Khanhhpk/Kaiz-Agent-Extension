@@ -183,8 +183,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
             if (memories && memories.length > 0) {
                 customContent += `[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
-                memories.forEach((mem: string, idx: number) => {
-                    customContent += `${idx + 1}. ${mem}\n`;
+                memories.forEach((mem: any, idx: number) => {
+                    if (typeof mem === 'string') {
+                        customContent += `${idx + 1}. [Untracked] ${mem}\n`;
+                    } else if (mem && mem.key && mem.content) {
+                        customContent += `${idx + 1}. [${mem.key}] ${mem.content}\n`;
+                    }
                 });
                 customContent += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
             }

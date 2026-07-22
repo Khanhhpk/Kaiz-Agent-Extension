@@ -146,7 +146,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (memories && memories.length > 0) {
                     customContent += `[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
                     memories.forEach((mem, idx) => {
-                        customContent += `${idx + 1}. ${mem}\n`;
+                        if (typeof mem === 'string') {
+                            customContent += `${idx + 1}. [Untracked] ${mem}\n`;
+                        }
+                        else if (mem && mem.key && mem.content) {
+                            customContent += `${idx + 1}. [${mem.key}] ${mem.content}\n`;
+                        }
                     });
                     customContent += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
                 }
@@ -1885,18 +1890,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const manageAgentMemory = {
         schema: {
             name: 'manage_agent_memory',
-            description: 'Công cụ giúp Kaiz Agent tự động thêm hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và sẽ được tự động tiêm vào system prompt trong mọi cuộc trò chuyện.',
+            description: 'Công cụ giúp Kaiz Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
             parameters: {
                 type: 'object',
                 properties: {
                     action: {
                         type: 'string',
-                        enum: ['add', 'delete', 'clear_all'],
-                        description: 'Hành động: add (thêm mới), delete (xóa), clear_all (xóa tất cả).',
+                        enum: ['add', 'edit', 'delete', 'clear_all'],
+                        description: 'Hành động: add (thêm mới), edit (sửa), delete (xóa), clear_all (xóa tất cả).',
+                    },
+                    key: {
+                        type: 'string',
+                        description: 'Tên định danh (Key) của memory. Ví dụ: "Tên người dùng", "Sở thích". Bắt buộc với add, edit, delete.',
                     },
                     content: {
                         type: 'string',
-                        description: 'Nội dung ghi nhớ. Ví dụ: "Người dùng tên là Khang". Bắt buộc đối với action add và delete. Không cần đối với clear_all. Khi delete, nhập nội dung gần giống để AI tìm và xóa.',
+                        description: 'Nội dung ghi nhớ chi tiết. Bắt buộc đối với action add và edit.',
                     },
                 },
                 required: ['action'],
@@ -1904,6 +1913,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
         execute: async (args) => {
             const action = args.action;
+            const key = args.key;
             const content = args.content;
             const ctx = window.SillyTavern.getContext();
             const settings = ctx.extensionSettings.kaiz_agent;
@@ -1919,40 +1929,84 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     content: 'Đã xóa toàn bộ memory.',
                 };
             }
-            if (!content) {
-                throw new Error('Thiếu tham số content.');
+            if (!key) {
+                throw new Error('Thiếu tham số key. Bắt buộc phải có key cho add, edit, delete.');
             }
+            const existingIndex = settings.memories.findIndex((mem) => {
+                if (typeof mem === 'string')
+                    return false;
+                return mem.key && mem.key.toLowerCase() === key.toLowerCase();
+            });
             if (action === 'add') {
-                settings.memories.push(content);
+                if (!content)
+                    throw new Error('Thiếu tham số content cho action add.');
+                if (existingIndex !== -1) {
+                    return {
+                        status: 'error',
+                        content: `Memory với key "${key}" đã tồn tại. Hãy sử dụng action "edit" để sửa đổi.`,
+                    };
+                }
+                settings.memories.push({ key, content });
                 ctx.saveSettingsDebounced();
                 document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                 return {
                     status: 'success',
-                    content: `Đã thêm ghi nhớ mới: "${content}"`,
+                    content: `Đã thêm ghi nhớ mới: [${key}] ${content}`,
+                };
+            }
+            if (action === 'edit') {
+                if (!content)
+                    throw new Error('Thiếu tham số content cho action edit.');
+                if (existingIndex === -1) {
+                    return {
+                        status: 'error',
+                        content: `Không tìm thấy memory với key "${key}". Hãy dùng action "add" để thêm mới.`,
+                    };
+                }
+                settings.memories[existingIndex].content = content;
+                ctx.saveSettingsDebounced();
+                document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
+                return {
+                    status: 'success',
+                    content: `Đã cập nhật ghi nhớ: [${key}] ${content}`,
                 };
             }
             if (action === 'delete') {
-                const lowerContent = content.toLowerCase();
-                let indexToRemove = -1;
-                for (let i = 0; i < settings.memories.length; i++) {
-                    if (settings.memories[i].toLowerCase().includes(lowerContent)) {
-                        indexToRemove = i;
-                        break;
-                    }
-                }
-                if (indexToRemove !== -1) {
-                    const removed = settings.memories.splice(indexToRemove, 1);
+                if (existingIndex !== -1) {
+                    settings.memories.splice(existingIndex, 1);
                     ctx.saveSettingsDebounced();
                     document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                     return {
                         status: 'success',
-                        content: `Đã xóa ghi nhớ: "${removed[0]}"`,
+                        content: `Đã xóa ghi nhớ có key: "${key}"`,
                     };
                 }
                 else {
+                    // Hỗ trợ tìm kiếm theo chuỗi (Legacy fallback) nếu user yêu cầu xóa theo content
+                    let legacyIndex = -1;
+                    for (let i = 0; i < settings.memories.length; i++) {
+                        const mem = settings.memories[i];
+                        if (typeof mem === 'string' && mem.toLowerCase().includes(key.toLowerCase())) {
+                            legacyIndex = i;
+                            break;
+                        }
+                        else if (typeof mem === 'object' && mem.content && mem.content.toLowerCase().includes(key.toLowerCase())) {
+                            legacyIndex = i;
+                            break;
+                        }
+                    }
+                    if (legacyIndex !== -1) {
+                        settings.memories.splice(legacyIndex, 1);
+                        ctx.saveSettingsDebounced();
+                        document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
+                        return {
+                            status: 'success',
+                            content: `Đã xóa ghi nhớ dựa trên khớp nội dung với từ khóa: "${key}"`,
+                        };
+                    }
                     return {
                         status: 'not_found',
-                        content: `Không tìm thấy ghi nhớ nào khớp với "${content}". Danh sách hiện tại: ${JSON.stringify(settings.memories)}`,
+                        content: `Không tìm thấy ghi nhớ nào khớp với key hoặc nội dung "${key}".`,
                     };
                 }
             }
@@ -3798,13 +3852,32 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 ctx.saveSettingsDebounced();
             });
             const $memoryList = $('#kaiz-agent-memory-list');
+            let editingMemoryIndex = -1;
             $('#kaiz-add-manual-memory-btn').on('click', () => {
-                const val = String($('#kaiz-manual-memory-input').val() || '').trim();
-                if (val) {
-                    settings.memories.push(val);
+                const key = String($('#kaiz-manual-memory-key-input').val() || '').trim();
+                const content = String($('#kaiz-manual-memory-input').val() || '').trim();
+                if (key && content) {
+                    if (editingMemoryIndex !== -1) {
+                        settings.memories[editingMemoryIndex] = { key, content };
+                        editingMemoryIndex = -1;
+                        $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                    }
+                    else {
+                        // Check if key already exists to prevent duplicate keys in manual add
+                        const existingIndex = settings.memories.findIndex((m) => typeof m !== 'string' && m.key.toLowerCase() === key.toLowerCase());
+                        if (existingIndex !== -1) {
+                            alert(`Key "${key}" đã tồn tại. Vui lòng chọn tên khác hoặc ấn Edit ở item tương ứng.`);
+                            return;
+                        }
+                        settings.memories.push({ key, content });
+                    }
+                    $('#kaiz-manual-memory-key-input').val('');
                     $('#kaiz-manual-memory-input').val('');
                     ctx.saveSettingsDebounced();
                     renderMemories();
+                }
+                else {
+                    alert('Vui lòng nhập đầy đủ cả Tên/Key và Nội dung!');
                 }
             });
             function renderMemories() {
@@ -3816,25 +3889,59 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     $memoryList.append('<div style="text-align:center; color:#888; font-size:12px; padding:10px;">Chưa có memory nào.</div>');
                     return;
                 }
+                // Migration from string[] to {key, content}[]
+                let hasLegacy = false;
+                for (let i = 0; i < settings.memories.length; i++) {
+                    if (typeof settings.memories[i] === 'string') {
+                        settings.memories[i] = { key: `Untracked_${i + 1}`, content: settings.memories[i] };
+                        hasLegacy = true;
+                    }
+                }
+                if (hasLegacy)
+                    ctx.saveSettingsDebounced();
                 settings.memories.forEach((mem, index) => {
-                    // Escape HTML for memory content if needed, but since it's just user input, we use text() equivalent by using white-space: pre-wrap
-                    const memEscaped = mem.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     const $item = $(`
                     <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
                         <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
                             <i class="fa-solid fa-grip-vertical"></i>
                         </div>
-                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word; white-space: pre-wrap;">${memEscaped}</div>
-                        <button class="menu_button interactable kaiz-memory-del-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;">
-                            <i class="fa-solid fa-xmark"></i>
-                        </button>
+                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word; white-space: pre-wrap;"><span style="font-weight: bold; color: #8bc34a;">[${keyEscaped}]</span> ${memEscaped}</div>
+                        <div style="display: flex; gap: 4px;">
+                            <button class="menu_button interactable kaiz-memory-edit-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Edit">
+                                <i class="fa-solid fa-pen"></i>
+                            </button>
+                            <button class="menu_button interactable kaiz-memory-del-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Delete">
+                                <i class="fa-solid fa-xmark"></i>
+                            </button>
+                        </div>
                     </div>
                 `);
                     $memoryList.append($item);
                 });
+                $('.kaiz-memory-edit-btn').on('click', function () {
+                    const idx = $(this).data('index');
+                    const mem = settings.memories[idx];
+                    $('#kaiz-manual-memory-key-input').val(mem.key);
+                    $('#kaiz-manual-memory-input').val(mem.content);
+                    editingMemoryIndex = idx;
+                    $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Cập nhật');
+                    $('#kaiz-manual-memory-key-input').trigger('focus');
+                });
                 $('.kaiz-memory-del-btn').on('click', function () {
                     const idx = $(this).data('index');
                     settings.memories.splice(idx, 1);
+                    // Nếu đang edit item bị xóa thì reset
+                    if (editingMemoryIndex === idx) {
+                        editingMemoryIndex = -1;
+                        $('#kaiz-manual-memory-key-input').val('');
+                        $('#kaiz-manual-memory-input').val('');
+                        $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
+                    }
+                    else if (editingMemoryIndex > idx) {
+                        editingMemoryIndex--;
+                    }
                     ctx.saveSettingsDebounced();
                     renderMemories();
                 });
