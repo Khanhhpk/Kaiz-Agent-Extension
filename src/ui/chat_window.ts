@@ -45,6 +45,16 @@ export class ChatWindowUI {
             ($('#kaiz-log-modal')[0] as HTMLDialogElement).close();
         });
 
+        $('#kaiz-chat-settings-btn').on('click', () => {
+            const modal = $('#kaiz-persona-memory-modal')[0] as HTMLDialogElement;
+            if (modal) modal.showModal();
+        });
+
+        $('#kaiz-persona-memory-close').on('click', () => {
+            const modal = $('#kaiz-persona-memory-modal')[0] as HTMLDialogElement;
+            if (modal) modal.close();
+        });
+
         logBtn.on('click', () => {
             $('#kaiz-log-sent').text(lastLogSent);
             $('#kaiz-log-recv').text(lastLogRecv);

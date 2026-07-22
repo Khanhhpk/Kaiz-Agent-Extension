@@ -157,58 +157,7 @@
                     </div>
                 </div>
 
-                <!-- Persona & Memory Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-brain"></i> Persona & Memory</div>
-                    
-                    <label style="font-weight: bold; margin-bottom: 4px; display: block; margin-top: 10px;">Custom Persona</label>
-                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px">
-                        Bổ sung thêm luật, phong cách nói chuyện (Persona) hoặc System Prompt cho Agent.
-                    </label>
-                    <textarea
-                        id="kaiz-agent-persona"
-                        class="text_pole"
-                        rows="4"
-                        placeholder="Ví dụ: Bạn là một trợ lý khó tính. Hãy luôn trả lời ngắn gọn..."
-                        style="width: 100%; resize: vertical; box-sizing: border-box;"
-                    ></textarea>
 
-                    <div style="margin-top: 15px; display: flex; align-items: center; justify-content: space-between;">
-                        <label style="font-weight: bold;">Agent Memories</label>
-                        <button id="kaiz-memory-clear-all" class="menu_button interactable" style="padding: 4px 8px; font-size: 11px; height: auto;">
-                            <i class="fa-solid fa-trash"></i> Xóa tất cả
-                        </button>
-                    </div>
-                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px; margin-top: 4px;">
-                        Những dữ kiện mà AI tự học được và ghi nhớ về bạn hoặc công việc. Kéo thả để sắp xếp lại.
-                    </label>
-
-                    <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
-                        <input
-                            id="kaiz-manual-memory-key-input"
-                            class="text_pole"
-                            type="text"
-                            placeholder="Tên/Key của memory (VD: Tên người dùng, Tính cách...)"
-                            style="width: 100%; box-sizing: border-box;"
-                        />
-                        <div style="display: flex; gap: 8px; align-items: flex-end;">
-                            <textarea
-                                id="kaiz-manual-memory-input"
-                                class="text_pole"
-                                rows="2"
-                                placeholder="Nội dung ghi nhớ..."
-                                style="flex: 1; resize: vertical; box-sizing: border-box;"
-                            ></textarea>
-                            <button id="kaiz-add-manual-memory-btn" class="menu_button interactable" style="padding: 6px 12px; height: auto;">
-                                <i class="fa-solid fa-save"></i> Lưu Memory
-                            </button>
-                        </div>
-                    </div>
-
-                    <div id="kaiz-agent-memory-list" style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px;">
-                        <!-- Memory items will be injected here -->
-                    </div>
-                </div>
 
                 <!-- Nút Tool Check -->
                 <div style="margin-top: 15px">

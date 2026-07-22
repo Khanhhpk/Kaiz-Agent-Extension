@@ -468,13 +468,18 @@ export class SettingsUI {
             settings.memories.forEach((mem: any, index: number) => {
                 const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                
+                const isLongContent = mem.content.length > 100 || mem.content.split('\n').length > 2;
+
                 const $item = $(`
                     <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
                         <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
                             <i class="fa-solid fa-grip-vertical"></i>
                         </div>
-                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word; white-space: pre-wrap;"><span style="font-weight: bold; color: #8bc34a;">[${keyEscaped}]</span> ${memEscaped}</div>
+                        <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word;">
+                            <span style="font-weight: bold; color: #8bc34a;">[${keyEscaped}]</span> 
+                            <span class="kaiz-memory-text" style="white-space: pre-wrap; ${isLongContent ? 'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;' : ''}">${memEscaped}</span>
+                            ${isLongContent ? `<button class="kaiz-memory-expand-btn interactable" style="background: none; border: none; color: #888; cursor: pointer; padding: 2px 0; font-size: 11px;"><i class="fa-solid fa-chevron-down"></i> Hiển thị thêm</button>` : ''}
+                        </div>
                         <div style="display: flex; gap: 4px;">
                             <button class="menu_button interactable kaiz-memory-edit-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Edit">
                                 <i class="fa-solid fa-pen"></i>
@@ -486,6 +491,17 @@ export class SettingsUI {
                     </div>
                 `);
                 $memoryList.append($item);
+            });
+
+            $('.kaiz-memory-expand-btn').on('click', function(this: HTMLElement) {
+                const $text = $(this).siblings('.kaiz-memory-text');
+                if ($text.css('-webkit-line-clamp') === '2') {
+                    $text.css('-webkit-line-clamp', 'unset');
+                    $(this).html('<i class="fa-solid fa-chevron-up"></i> Thu gọn');
+                } else {
+                    $text.css('-webkit-line-clamp', '2');
+                    $(this).html('<i class="fa-solid fa-chevron-down"></i> Hiển thị thêm');
+                }
             });
 
             $('.kaiz-memory-edit-btn').on('click', function(this: HTMLElement) {
