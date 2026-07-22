@@ -133,7 +133,7 @@ export const scanUITool: ITool = {
             outputContent = 'Không tìm thấy phần tử nào có thể tương tác trên màn hình hiện tại.';
         } else {
             const treeData = buildTree(document.body, 0);
-            outputContent += treeData;
+            outputContent += '```html\n' + treeData + '\n```';
             outputContent = `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
         }
 

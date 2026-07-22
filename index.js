@@ -1650,7 +1650,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             else {
                 const treeData = buildTree(document.body, 0);
-                outputContent += treeData;
+                outputContent += '```html\n' + treeData + '\n```';
                 outputContent = `Đã tìm thấy ${totalItems} phần tử tương tác. Sử dụng các thẻ ID [kX] để chọn.\n\n` + outputContent;
             }
             // Chụp ảnh nếu được yêu cầu
