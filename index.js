@@ -1655,59 +1655,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             // Chụp ảnh nếu được yêu cầu
             if (args.captureScreenshot) {
-                let htmlToImageObj = window.htmlToImage;
-                if (!htmlToImageObj) {
-                    try {
-                        await new Promise((resolve, reject) => {
-                            const script = document.createElement('script');
-                            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js';
-                            script.onload = resolve;
-                            script.onerror = reject;
-                            document.head.appendChild(script);
-                        });
-                        htmlToImageObj = window.htmlToImage;
-                    }
-                    catch (e) {
-                        console.warn('[KaizAgent] Failed to load html-to-image from CDN');
-                    }
-                }
-                if (htmlToImageObj) {
-                    const floatBtn = document.getElementById('kaiz-floating-btn');
-                    const chatWin = document.getElementById('kaiz-chat-window');
-                    const vCursor = document.getElementById('kaiz-virtual-cursor');
-                    try {
-                        if (floatBtn)
-                            floatBtn.style.visibility = 'hidden';
-                        if (chatWin)
-                            chatWin.style.visibility = 'hidden';
-                        if (vCursor)
-                            vCursor.style.visibility = 'hidden';
-                        const base64 = await htmlToImageObj.toJpeg(document.body, {
-                            quality: 0.6,
-                            filter: (node) => {
-                                if (node.id && typeof node.id === 'string' && node.id.startsWith('kaiz-'))
-                                    return false;
-                                return true;
-                            }
-                        });
-                        outputContent += `\n\n![Screenshot](${base64})`;
-                    }
-                    catch (e) {
-                        console.error('[KaizAgent] html-to-image error:', e);
-                        outputContent += `\n\n(Lỗi: Không thể chụp ảnh màn hình, có thể do cấu trúc trang quá phức tạp hoặc chứa ảnh lỗi. Mã lỗi: ${e})`;
-                    }
-                    finally {
-                        if (floatBtn)
-                            floatBtn.style.visibility = 'visible';
-                        if (chatWin)
-                            chatWin.style.visibility = 'visible';
-                        if (vCursor)
-                            vCursor.style.visibility = 'visible';
-                    }
-                }
-                else {
-                    outputContent += `\n\n(Lỗi: Không tìm thấy và không thể tải thư viện html-to-image để chụp ảnh).`;
-                }
+                outputContent += `\n\n(Lỗi: Tính năng chụp ảnh màn hình hiện đã bị vô hiệu hoá. Việc sử dụng các thư viện screenshot bằng Javascript để quét toàn bộ DOM của SillyTavern gây ra hiện tượng tràn bộ nhớ và treo trình duyệt. Agent chỉ nên sử dụng cấu trúc DOM dạng văn bản ở trên để định vị.)`;
             }
             return {
                 content: outputContent
