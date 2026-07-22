@@ -74,15 +74,26 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
             
             const win = $('#kaiz-chat-window');
+            const dialogEl = win[0] as HTMLDialogElement;
+            const isOpen = dialogEl && dialogEl.open;
+
             if (settings.phoneMode) {
                 win.addClass('kaiz-phone-mode');
                 if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
                     win.draggable('disable');
                 }
+                if (isOpen) {
+                    dialogEl.close();
+                    dialogEl.showModal();
+                }
             } else {
                 win.removeClass('kaiz-phone-mode');
                 if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
                     win.draggable('enable');
+                }
+                if (isOpen) {
+                    dialogEl.close();
+                    dialogEl.show();
                 }
             }
         });

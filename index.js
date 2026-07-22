@@ -2828,16 +2828,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 settings.phoneMode = !!this.checked;
                 ctx.saveSettingsDebounced();
                 const win = $('#kaiz-chat-window');
+                const dialogEl = win[0];
+                const isOpen = dialogEl && dialogEl.open;
                 if (settings.phoneMode) {
                     win.addClass('kaiz-phone-mode');
                     if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
                         win.draggable('disable');
+                    }
+                    if (isOpen) {
+                        dialogEl.close();
+                        dialogEl.showModal();
                     }
                 }
                 else {
                     win.removeClass('kaiz-phone-mode');
                     if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
                         win.draggable('enable');
+                    }
+                    if (isOpen) {
+                        dialogEl.close();
+                        dialogEl.show();
                     }
                 }
             });
@@ -3355,6 +3365,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const history = $('#kaiz-chat-history');
             // --- Drag Logic ---
             const ensureInBounds = (el) => {
+                if (el[0].tagName === 'DIALOG' && !el[0].open)
+                    return null;
                 if (el.hasClass('kaiz-hidden'))
                     return null;
                 const rect = el[0].getBoundingClientRect();
@@ -3429,7 +3441,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     const btnPos = ensureInBounds(btn);
                     if (btnPos)
                         localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
-                    if (!win.hasClass('kaiz-hidden')) {
+                    if (win[0].open) {
                         const winPos = ensureInBounds(win);
                         if (winPos)
                             localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
@@ -3451,24 +3463,34 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     e.stopPropagation();
                     return;
                 }
-                if (win.hasClass('kaiz-hidden')) {
-                    win.removeClass('kaiz-hidden');
-                    setTimeout(() => {
-                        const winPos = ensureInBounds(win);
-                        if (winPos)
-                            localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
-                    }, 350); // Chờ hiệu ứng CSS chạy xong
+                const dialogEl = win[0];
+                const ctx = window.SillyTavern.getContext();
+                const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                const isPhoneMode = !!extSettings.phoneMode;
+                if (!dialogEl.open) {
+                    if (isPhoneMode) {
+                        dialogEl.showModal();
+                    }
+                    else {
+                        dialogEl.show();
+                        setTimeout(() => {
+                            const winPos = ensureInBounds(win);
+                            if (winPos)
+                                localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
+                        }, 50);
+                    }
                     // Refresh list khi mở
                     stateManager.loadChatList().then(renderChatList);
                 }
                 else {
-                    win.addClass('kaiz-hidden');
+                    dialogEl.close();
                     if (isSidebarOpen)
                         toggleSidebar();
                 }
             });
             closeBtn.on('click', () => {
-                win.addClass('kaiz-hidden');
+                const dialogEl = win[0];
+                dialogEl.close();
                 if (isSidebarOpen)
                     toggleSidebar(); // Đóng luôn sidebar
             });
