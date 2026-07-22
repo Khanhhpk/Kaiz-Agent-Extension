@@ -139,24 +139,24 @@ export const scanUITool: ITool = {
 
         // Chụp ảnh nếu được yêu cầu
         if (args.captureScreenshot) {
-            let html2canvasObj = (window as any).html2canvas;
+            let htmlToImageObj = (window as any).htmlToImage;
             
-            if (!html2canvasObj) {
+            if (!htmlToImageObj) {
                 try {
                     await new Promise((resolve, reject) => {
                         const script = document.createElement('script');
-                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                        script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html-to-image/1.11.11/html-to-image.min.js';
                         script.onload = resolve;
                         script.onerror = reject;
                         document.head.appendChild(script);
                     });
-                    html2canvasObj = (window as any).html2canvas;
+                    htmlToImageObj = (window as any).htmlToImage;
                 } catch (e) {
-                    console.warn('[KaizAgent] Failed to load html2canvas from CDN');
+                    console.warn('[KaizAgent] Failed to load html-to-image from CDN');
                 }
             }
 
-            if (html2canvasObj) {
+            if (htmlToImageObj) {
                 const floatBtn = document.getElementById('kaiz-floating-btn');
                 const chatWin = document.getElementById('kaiz-chat-window');
                 const vCursor = document.getElementById('kaiz-virtual-cursor');
@@ -166,27 +166,25 @@ export const scanUITool: ITool = {
                     if (chatWin) chatWin.style.visibility = 'hidden';
                     if (vCursor) vCursor.style.visibility = 'hidden';
 
-                    const canvas = await html2canvasObj(document.body, {
-                        useCORS: true,
-                        allowTaint: true, // Allow tainted images to not crash
-                        ignoreElements: (e: any) => {
-                            if (e && typeof e.id === 'string' && e.id.startsWith('kaiz-')) return true;
-                            return false;
+                    const base64 = await htmlToImageObj.toJpeg(document.body, {
+                        quality: 0.6,
+                        filter: (node: HTMLElement) => {
+                            if (node.id && typeof node.id === 'string' && node.id.startsWith('kaiz-')) return false;
+                            return true;
                         }
                     });
                     
-                    const base64 = canvas.toDataURL('image/jpeg', 0.6);
                     outputContent += `\n\n![Screenshot](${base64})`;
                 } catch (e) {
-                    console.error('[KaizAgent] html2canvas error:', e);
-                    outputContent += `\n\n(Lỗi: Không thể chụp ảnh màn hình, có thể do cấu trúc trang quá phức tạp. Mã lỗi: ${e})`;
+                    console.error('[KaizAgent] html-to-image error:', e);
+                    outputContent += `\n\n(Lỗi: Không thể chụp ảnh màn hình, có thể do cấu trúc trang quá phức tạp hoặc chứa ảnh lỗi. Mã lỗi: ${e})`;
                 } finally {
                     if (floatBtn) floatBtn.style.visibility = 'visible';
                     if (chatWin) chatWin.style.visibility = 'visible';
                     if (vCursor) vCursor.style.visibility = 'visible';
                 }
             } else {
-                outputContent += `\n\n(Lỗi: Không tìm thấy và không thể tải thư viện html2canvas để chụp ảnh).`;
+                outputContent += `\n\n(Lỗi: Không tìm thấy và không thể tải thư viện html-to-image để chụp ảnh).`;
             }
         }
 
