@@ -176,7 +176,10 @@
     font-size: 14px;
     line-height: 1.5;
     word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: anywhere;
     box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    min-width: 0;
 }
 
 .kaiz-msg-user .kaiz-msg-content {
@@ -441,6 +444,9 @@
     margin-top: 5px;
     white-space: pre-wrap;
     font-family: monospace;
+    word-wrap: break-word;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 .kaiz-system-result-block {
@@ -448,6 +454,7 @@
     background: rgba(0,0,0,0.2);
     padding: 8px;
     border-radius: 5px;
+    overflow: hidden;
 }
 
 /* Markdown Styles */
@@ -514,6 +521,9 @@
     color: #aaa;
     margin-top: 5px;
     white-space: pre-wrap;
+    word-wrap: break-word;
+    word-break: break-all;
+    overflow-wrap: anywhere;
 }
 
 /* Icon animations */

@@ -1086,6 +1086,260 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     };
 
+    const scrapeWebpageTool = {
+        schema: {
+            name: "scrape_webpage",
+            description: "Cào nội dung văn bản và trích xuất tất cả các đường link từ một URL. Sử dụng khi cần đọc thông tin từ một trang web (như wiki, fandom, bài báo) hoặc tìm kiếm các link liên quan để cào tiếp.",
+            parameters: {
+                type: "object",
+                properties: {
+                    url: {
+                        type: "string",
+                        description: "Đường link URL cần cào dữ liệu (VD: https://fandom.com/wiki/...)"
+                    }
+                },
+                required: ["url"]
+            }
+        },
+        execute: async (args) => {
+            try {
+                const url = args.url;
+                if (!url) {
+                    return { content: JSON.stringify({ error: "Missing 'url' parameter" }), isError: true };
+                }
+                // Fetch directly first
+                let html = "";
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok)
+                        throw new Error(`HTTP ${response.status}`);
+                    html = await response.text();
+                }
+                catch (err) {
+                    // Tự động Fallback sang Proxy nếu fetch gốc bị lỗi (do CORS của extension không cover được hết các trang)
+                    console.log("[scrape_webpage] Direct fetch failed, trying proxy...", err);
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    const proxyRes = await fetch(proxyUrl);
+                    if (!proxyRes.ok) {
+                        return { content: JSON.stringify({ error: `Scraping failed both directly and via proxy: ${proxyRes.status}` }), isError: true };
+                    }
+                    html = await proxyRes.text();
+                }
+                // Parse HTML
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+                // Remove noise elements that shouldn't be in text
+                const noiseSelectors = ['script', 'style', 'noscript', 'canvas', 'svg', 'iframe', 'video', 'audio', 'header', 'footer', 'nav'];
+                noiseSelectors.forEach(selector => {
+                    const elements = doc.querySelectorAll(selector);
+                    elements.forEach(el => el.remove());
+                });
+                // Lấy nội dung chữ
+                // Ưu tiên các thẻ chứa nội dung chính để sạch hơn nếu có thể, nhưng nếu không thấy thì lấy toàn bộ body
+                let contentElement = doc.querySelector('main') ||
+                    doc.querySelector('#mw-content-text') ||
+                    doc.querySelector('#content') ||
+                    doc.body;
+                const textContent = contentElement.innerText || "";
+                // Lấy tất cả các links
+                const baseUrl = new URL(url);
+                const linksSet = new Set();
+                const extractedLinks = [];
+                const anchorElements = doc.querySelectorAll('a');
+                anchorElements.forEach(a => {
+                    const text = a.innerText?.trim();
+                    let href = a.getAttribute('href');
+                    if (text && href && !href.startsWith('javascript:') && !href.startsWith('mailto:') && !href.startsWith('#')) {
+                        try {
+                            // Resolve relative URLs
+                            const absoluteUrl = new URL(href, baseUrl.href).href;
+                            // Avoid duplicates
+                            if (!linksSet.has(absoluteUrl)) {
+                                linksSet.add(absoluteUrl);
+                                extractedLinks.push({ text, url: absoluteUrl });
+                            }
+                        }
+                        catch (e) {
+                            // Ignore invalid URLs
+                        }
+                    }
+                });
+                // Không giới hạn nội dung theo yêu cầu người dùng
+                return {
+                    content: JSON.stringify({
+                        url: baseUrl.href,
+                        title: doc.title,
+                        content: textContent.trim(),
+                        links: extractedLinks
+                    })
+                };
+            }
+            catch (error) {
+                return { content: JSON.stringify({ error: `Scraping failed: ${error.message}` }), isError: true };
+            }
+        }
+    };
+
+    const searchGoogleTool = {
+        schema: {
+            name: "search_google",
+            description: "Thực hiện tìm kiếm trên Google và trả về danh sách các kết quả (tiêu đề, link, tóm tắt). Sử dụng công cụ này để tìm hiểu thông tin mới hoặc tìm kiếm URL để sử dụng cho công cụ scrape_webpage.",
+            parameters: {
+                type: "object",
+                properties: {
+                    query: {
+                        type: "string",
+                        description: "Từ khóa cần tìm kiếm trên Google"
+                    }
+                },
+                required: ["query"]
+            }
+        },
+        execute: async (args) => {
+            try {
+                const query = args.query;
+                if (!query) {
+                    return { content: JSON.stringify({ error: "Missing 'query' parameter" }), isError: true };
+                }
+                const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+                let html = "";
+                try {
+                    const response = await fetch(url);
+                    if (!response.ok)
+                        throw new Error(`HTTP ${response.status}`);
+                    html = await response.text();
+                }
+                catch (err) {
+                    // Tự động Fallback sang proxy nếu fetch gốc bị chặn
+                    console.log("[search_google] Direct fetch failed, trying proxy...", err);
+                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    const proxyRes = await fetch(proxyUrl);
+                    if (proxyRes.ok) {
+                        html = await proxyRes.text();
+                    }
+                }
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(html, "text/html");
+                const results = [];
+                // Phân tích các khối kết quả tìm kiếm của Google (thường nằm trong div có class "g")
+                const gElements = doc.querySelectorAll('div.g');
+                gElements.forEach(g => {
+                    const aElement = g.querySelector('a');
+                    const h3Element = g.querySelector('h3');
+                    if (aElement && h3Element) {
+                        const title = h3Element.innerText.trim();
+                        const link = aElement.getAttribute('href');
+                        if (title && link && link.startsWith('http')) {
+                            // Loại bỏ các thẻ con bên trong để lấy chữ (VD: span, div, vv)
+                            // Snippet thường nằm trong một khối div bên dưới thẻ a/h3
+                            // Một cách thô bạo nhưng hiệu quả là lấy toàn bộ text của khối g,
+                            // sau đó loại bỏ phần Title ra.
+                            let snippet = g.innerText.trim();
+                            if (snippet.startsWith(title)) {
+                                snippet = snippet.substring(title.length).trim();
+                            }
+                            // Lọc một số rác (VD: "Translate this page", "Cached")
+                            snippet = snippet.replace(/Translate this page/g, '').replace(/Cached/g, '').trim();
+                            results.push({
+                                title,
+                                url: link,
+                                snippet
+                            });
+                        }
+                    }
+                });
+                if (results.length === 0) {
+                    console.log("[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo Lite...");
+                    const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+                    let ddgHtml = "";
+                    try {
+                        const ddgRes = await fetch(ddgUrl);
+                        if (ddgRes.ok)
+                            ddgHtml = await ddgRes.text();
+                        else
+                            throw new Error("DDG Fetch Not OK");
+                    }
+                    catch (e) {
+                        // Proxy fallback for DuckDuckGo
+                        const ddgProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ddgUrl)}`;
+                        const proxyRes = await fetch(ddgProxyUrl);
+                        if (proxyRes.ok)
+                            ddgHtml = await proxyRes.text();
+                    }
+                    let ddgDoc = null;
+                    if (ddgHtml) {
+                        ddgDoc = parser.parseFromString(ddgHtml, "text/html");
+                        // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
+                        const linkElements = ddgDoc.querySelectorAll('a.result-link');
+                        const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');
+                        for (let i = 0; i < linkElements.length; i++) {
+                            const aEl = linkElements[i];
+                            const snippetEl = snippetElements[i];
+                            if (aEl) {
+                                let link = aEl.getAttribute('href') || '';
+                                if (link.startsWith('//'))
+                                    link = 'https:' + link;
+                                results.push({
+                                    title: aEl.innerText.trim(),
+                                    url: link,
+                                    snippet: snippetEl ? snippetEl.innerText.trim() : ""
+                                });
+                            }
+                        }
+                    }
+                    if (results.length === 0) {
+                        console.log("[search_google] DuckDuckGo Lite returned 0 results. Falling back to Bing...");
+                        const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+                        let bingHtml = "";
+                        try {
+                            const bingRes = await fetch(bingUrl);
+                            if (bingRes.ok)
+                                bingHtml = await bingRes.text();
+                        }
+                        catch (e) {
+                            const bingProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(bingUrl)}`;
+                            const proxyRes = await fetch(bingProxyUrl);
+                            if (proxyRes.ok)
+                                bingHtml = await proxyRes.text();
+                        }
+                        if (bingHtml) {
+                            const bingDoc = parser.parseFromString(bingHtml, "text/html");
+                            const bingResults = bingDoc.querySelectorAll('.b_algo');
+                            bingResults.forEach(res => {
+                                const titleEl = res.querySelector('h2 a');
+                                const snippetEl = res.querySelector('.b_caption p') || res.querySelector('.b_snippet');
+                                if (titleEl && titleEl.getAttribute('href')) {
+                                    results.push({
+                                        title: titleEl.innerText.trim(),
+                                        url: titleEl.getAttribute('href'),
+                                        snippet: snippetEl ? snippetEl.innerText.trim() : ""
+                                    });
+                                }
+                            });
+                        }
+                    }
+                    if (results.length === 0) {
+                        return {
+                            content: JSON.stringify({
+                                warning: "Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang",
+                                raw_text: ddgHtml ? (ddgDoc ? ddgDoc.body.innerText.substring(0, 3000) : ddgHtml.substring(0, 3000)) : (doc.body ? doc.body.innerText.substring(0, 3000) : "No text")
+                            })
+                        };
+                    }
+                }
+                return {
+                    content: JSON.stringify({
+                        query: query,
+                        results: results.slice(0, 15) // Trả về tối đa 15 kết quả
+                    })
+                };
+            }
+            catch (error) {
+                return { content: JSON.stringify({ error: `Search failed: ${error.message}` }), isError: true };
+            }
+        }
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -1106,6 +1360,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(listAgentChatsTool);
         registry.registerTool(deleteAgentChatTool);
         registry.registerTool(manageChatTextTool);
+        registry.registerTool(scrapeWebpageTool);
+        registry.registerTool(searchGoogleTool);
     }
 
     /**
@@ -3263,7 +3519,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 chatList.append(htmlBuffer);
             }
             // Hàm tiện ích phân tích và render Tool Calls thành HTML
-            const parseToolCallsToHtml = (contentToParse) => {
+            const parseToolCallsToHtml = (contentToParse, escapeText = false) => {
                 const toolCalls = [];
                 let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
                     const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -3271,6 +3527,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     toolCalls.push(toolHtml);
                     return `__TOOL_CALL_${toolCalls.length - 1}__`;
                 });
+                if (escapeText) {
+                    result = result.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                }
                 // KHÔNG escape < > ở đây, để dành cho marked.parse xử lý
                 for (let i = 0; i < toolCalls.length; i++) {
                     result = result.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
@@ -3334,10 +3593,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 if (closeIndex !== -1) {
                     const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
                     let restContent = html.substring(closeIndex + '</agent_cot>'.length).trim();
-                    restContent = parseToolCallsToHtml(restContent);
+                    restContent = parseToolCallsToHtml(restContent, !isFinal);
                     html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                     if (restContent) {
-                        const parsedMarkdown = isFinal ? g.parse(restContent) : restContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                        const parsedMarkdown = isFinal ? g.parse(restContent) : restContent;
                         html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                     }
                 }
@@ -3348,7 +3607,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
                 else {
                     // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
-                    let parsedContent = parseToolCallsToHtml(html.trim());
+                    let parsedContent = parseToolCallsToHtml(html.trim(), false);
                     html = `<div class="kaiz-markdown-body">${g.parse(parsedContent)}</div>`;
                 }
                 return html;
