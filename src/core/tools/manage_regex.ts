@@ -82,6 +82,18 @@ export const manageRegexTool: ITool = {
                 return null;
             };
 
+            if (data && typeof data === 'object') {
+                if (data.name && !data.scriptName) data.scriptName = data.name;
+                if (data.regex && !data.findRegex) data.findRegex = data.regex;
+                if (data.replacement && !data.replaceString) data.replaceString = data.replacement;
+                if (data.placement !== undefined && !Array.isArray(data.placement)) {
+                    data.placement = [data.placement];
+                }
+                delete data.name;
+                delete data.regex;
+                delete data.replacement;
+            }
+
             if (action === 'create') {
                 const targetType = getScopeValue(scope || 'Global');
                 const scripts = getScriptsByType(targetType) || [];
