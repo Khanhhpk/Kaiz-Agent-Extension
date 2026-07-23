@@ -96,8 +96,9 @@ export class KaizDB {
                 const chat = getReq.result as ChatSession;
                 if (!chat) return resolve(); // Bỏ qua nếu ko tìm thấy
                 chat.updatedAt = Date.now();
-                store.put(chat);
-                resolve();
+                const putReq = store.put(chat);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
             };
             getReq.onerror = () => reject(getReq.error);
         });
@@ -110,10 +111,16 @@ export class KaizDB {
             const store = transaction.objectStore('chats');
             const index = store.index('updatedAt');
 
-            const request = index.getAll();
-            request.onsuccess = () => {
-                // Đảo ngược để chat mới nhất lên đầu
-                resolve((request.result as ChatSession[]).reverse());
+            const chats: ChatSession[] = [];
+            const request = index.openCursor(null, 'prev');
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    chats.push(cursor.value as ChatSession);
+                    cursor.continue();
+                } else {
+                    resolve(chats);
+                }
             };
             request.onerror = () => reject(request.error);
         });

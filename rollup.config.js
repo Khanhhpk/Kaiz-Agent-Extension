@@ -8,6 +8,7 @@ export default {
         file: 'index.js',
         format: 'iife',
         name: 'KaizAgentExtension',
+        sourcemap: true,
     },
-    plugins: [resolve(), commonjs(), typescript()],
+    plugins: [resolve({ browser: true }), commonjs(), typescript()],
 };

@@ -31,6 +31,10 @@ export const manageAgentMemory: ITool = {
         const key = args.key;
         const content = args.content;
         const ctx = (window as any).SillyTavern.getContext();
+        
+        if (!ctx?.extensionSettings?.kaiz_agent) {
+            return { content: 'Error: Kaiz Agent settings not initialized.', isError: true };
+        }
         const settings = ctx.extensionSettings.kaiz_agent;
 
         if (!settings.memories) {

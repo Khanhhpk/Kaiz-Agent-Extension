@@ -128,7 +128,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         let match;
         while ((match = regex.exec(text)) !== null) {
             const name = match[1];
-            const argsStr = match[2].trim();
+            let argsStr = match[2].trim();
+            argsStr = argsStr.replace(/^```(?:json)?\s*/im, '').replace(/\s*```$/im, '').trim();
             try {
                 const args = JSON.parse(argsStr);
                 tools.push({ name, args, fullMatch: match[0] });

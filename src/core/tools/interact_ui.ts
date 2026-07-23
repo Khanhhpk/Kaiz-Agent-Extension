@@ -56,6 +56,13 @@ export const interactUITool: ITool = {
             }
         }
 
+        if (foundElement) {
+            const rect = foundElement.getBoundingClientRect();
+            if (rect.width === 0 && rect.height === 0) {
+                return { content: 'Element found but is not visible/rendered.', isError: true };
+            }
+        }
+
         if (!foundElement) {
             // Tìm theo nội dung text hoặc title (tooltip)
             const interactables = document.querySelectorAll(

@@ -4,6 +4,8 @@ import { SillyTavernAdapter } from '../adapters/st_adapter';
 
 declare const jQuery: any;
 
+const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export class ToolCheckerUI {
     public static init(registry: ToolRegistry, adapter: SillyTavernAdapter) {
         const $ = jQuery;
@@ -52,7 +54,7 @@ export class ToolCheckerUI {
             const tools = registry.getAllTools();
             list.empty();
             for (const t of tools) {
-                const name = t.schema.name;
+                const name = escapeHtml(t.schema.name);
                 list.append(`
                     <div id="checker-tool-${name}" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px 12px; border-radius:5px;">
                         <span><i class="fa-solid fa-wrench" style="margin-right:8px; opacity:0.7"></i>${name}</span>

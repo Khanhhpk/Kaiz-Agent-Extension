@@ -3,6 +3,7 @@ import { KaizDB, ChatSession, ChatMessage } from './db';
 export class StateManager {
     public db: KaizDB;
     public currentChatId: number | null = null;
+    private pendingCreateChatPromise: Promise<number> | null = null;
 
     // Callbacks cho UI
     public onChatSwitched?: (chatId: number, messages: ChatMessage[]) => void;
@@ -52,10 +53,19 @@ export class StateManager {
         let chatId = this.currentChatId;
 
         if (!chatId) {
-            // Nếu chưa có chat nào (người dùng vừa mở app lên lúc trống), tạo chat mới với tin nhắn này làm tên
-            let nameStr = role === 'user' ? content : 'New Chat';
-            if (nameStr.startsWith('[Tool')) nameStr = 'New Chat';
-            chatId = await this.createNewChat(nameStr);
+            if (this.pendingCreateChatPromise) {
+                chatId = await this.pendingCreateChatPromise;
+            } else {
+                // Nếu chưa có chat nào (người dùng vừa mở app lên lúc trống), tạo chat mới với tin nhắn này làm tên
+                let nameStr = role === 'user' ? content : 'New Chat';
+                if (nameStr.startsWith('[Tool')) nameStr = 'New Chat';
+                this.pendingCreateChatPromise = this.createNewChat(nameStr);
+                try {
+                    chatId = await this.pendingCreateChatPromise;
+                } finally {
+                    this.pendingCreateChatPromise = null;
+                }
+            }
         }
 
         await this.db.addMessage(chatId, role, content);

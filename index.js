@@ -101,7 +101,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             let match;
             while ((match = regex.exec(text)) !== null) {
                 const name = match[1];
-                const argsStr = match[2].trim();
+                let argsStr = match[2].trim();
+                argsStr = argsStr.replace(/^```(?:json)?\s*/im, '').replace(/\s*```$/im, '').trim();
                 try {
                     const args = JSON.parse(argsStr);
                     tools.push({ name, args, fullMatch: match[0] });
@@ -382,6 +383,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 };
             }
             try {
+                if (!args || typeof args !== 'object') {
+                    return { content: 'Error: Arguments must be a valid JSON object.', isError: true };
+                }
                 // Validate basic required fields
                 if (tool.schema.parameters.required) {
                     for (const req of tool.schema.parameters.required) {
@@ -963,6 +967,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             },
         },
         validate: (context) => {
+            if (!context?.adapter) {
+                throw new Error('Adapter not available');
+            }
             if (!context.adapter.hasFeature('chat')) {
                 throw new Error('Tính năng chat không tồn tại hoặc phiên bản SillyTavern không hỗ trợ.');
             }
@@ -1225,14 +1232,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     doc.querySelector('#mw-content-text') ||
                     doc.querySelector('#content') ||
                     doc.body;
-                const textContent = contentElement.innerText || '';
+                const textContent = contentElement?.textContent || '';
                 // Lấy tất cả các links
                 const baseUrl = new URL(url);
                 const linksSet = new Set();
                 const extractedLinks = [];
                 const anchorElements = doc.querySelectorAll('a');
                 anchorElements.forEach((a) => {
-                    const text = a.innerText?.trim();
+                    const text = a.textContent?.trim();
                     const href = a.getAttribute('href');
                     if (text &&
                         href &&
@@ -1316,14 +1323,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const aElement = g.querySelector('a');
                     const h3Element = g.querySelector('h3');
                     if (aElement && h3Element) {
-                        const title = h3Element.innerText.trim();
+                        const title = h3Element.textContent?.trim() || '';
                         const link = aElement.getAttribute('href');
                         if (title && link && link.startsWith('http')) {
                             // Loại bỏ các thẻ con bên trong để lấy chữ (VD: span, div, vv)
                             // Snippet thường nằm trong một khối div bên dưới thẻ a/h3
                             // Một cách thô bạo nhưng hiệu quả là lấy toàn bộ text của khối g,
                             // sau đó loại bỏ phần Title ra.
-                            let snippet = g.innerText.trim();
+                            let snippet = g.textContent?.trim() || '';
                             if (snippet.startsWith(title)) {
                                 snippet = snippet.substring(title.length).trim();
                             }
@@ -1372,9 +1379,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 if (link.startsWith('//'))
                                     link = 'https:' + link;
                                 results.push({
-                                    title: aEl.innerText.trim(),
+                                    title: aEl.textContent?.trim() || '',
                                     url: link,
-                                    snippet: snippetEl ? snippetEl.innerText.trim() : '',
+                                    snippet: snippetEl?.textContent?.trim() || '',
                                 });
                             }
                         }
@@ -1402,9 +1409,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 const snippetEl = res.querySelector('.b_caption p') || res.querySelector('.b_snippet');
                                 if (titleEl && titleEl.getAttribute('href')) {
                                     results.push({
-                                        title: titleEl.innerText.trim(),
+                                        title: titleEl.textContent?.trim() || '',
                                         url: titleEl.getAttribute('href'),
-                                        snippet: snippetEl ? snippetEl.innerText.trim() : '',
+                                        snippet: snippetEl?.textContent?.trim() || '',
                                     });
                                 }
                             });
@@ -1416,10 +1423,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 warning: 'Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang',
                                 raw_text: ddgHtml
                                     ? ddgDoc
-                                        ? ddgDoc.body.innerText.substring(0, 3000)
+                                        ? ddgDoc?.body?.textContent?.substring(0, 3000) || ''
                                         : ddgHtml.substring(0, 3000)
                                     : doc.body
-                                        ? doc.body.innerText.substring(0, 3000)
+                                        ? doc?.body?.textContent?.substring(0, 3000) || ''
                                         : 'No text',
                             }),
                         };
@@ -1548,6 +1555,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 };
                 if (keywordMap[cleanTarget]) {
                     foundElement = document.querySelector(keywordMap[cleanTarget]);
+                }
+            }
+            if (foundElement) {
+                const rect = foundElement.getBoundingClientRect();
+                if (rect.width === 0 && rect.height === 0) {
+                    return { content: 'Element found but is not visible/rendered.', isError: true };
                 }
             }
             if (!foundElement) {
@@ -1775,10 +1788,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return `${indentStr}[${kaizId}] ${tagName.toUpperCase()}${stateStr}: ${description}\n`;
                 }
                 // Nếu chứa phần tử con có kX
-                let childrenContent = '';
+                const parts = [];
                 for (let i = 0; i < el.children.length; i++) {
-                    childrenContent += buildTree(el.children[i], indent + 1);
+                    parts.push(buildTree(el.children[i], indent + 1));
                 }
+                const childrenContent = parts.join('');
                 if (childrenContent) {
                     const isSignificant = el.id || (el.className && typeof el.className === 'string' && el.className.trim() !== '');
                     if (isSignificant) {
@@ -1798,11 +1812,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     else {
                         // Flatten (Xoá khoảng trắng thụt lề thêm 1 bậc do không wrap)
-                        let flatContent = '';
+                        const flatParts = [];
                         for (let i = 0; i < el.children.length; i++) {
-                            flatContent += buildTree(el.children[i], indent);
+                            flatParts.push(buildTree(el.children[i], indent));
                         }
-                        return flatContent;
+                        return flatParts.join('');
                     }
                 }
                 return '';
@@ -1920,6 +1934,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const key = args.key;
             const content = args.content;
             const ctx = window.SillyTavern.getContext();
+            if (!ctx?.extensionSettings?.kaiz_agent) {
+                return { content: 'Error: Kaiz Agent settings not initialized.', isError: true };
+            }
             const settings = ctx.extensionSettings.kaiz_agent;
             if (!settings.memories) {
                 settings.memories = [];
@@ -2053,6 +2070,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
      * SillyTavern Adapter
      * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
      */
+    const escapeHtml$3 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     class SillyTavernAdapter {
         constructor() { }
         /**
@@ -2282,7 +2300,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 <div style="height:calc(100% - 55px); padding:15px; overflow-y:auto; background:#1e1e1e; box-sizing:border-box;">`;
             for (let i = 0; i < chat.length; i++) {
                 const msg = chat[i];
-                const name = msg.name || 'System';
+                const name = escapeHtml$3(msg.name || 'System');
                 // Lấy safe_preview
                 let preview = msg.mes || '';
                 if (preview.length > 50)
@@ -2319,6 +2337,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         </dialog>`;
             $('body').append(html);
             const dialog = document.getElementById('kaiz-chat-preview-modal');
+            dialog.addEventListener('close', () => dialog.remove());
             if (!dialog.open)
                 dialog.showModal();
             $('#kaiz-chat-preview-close').on('click', () => {
@@ -3316,8 +3335,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (!chat)
                         return resolve(); // Bỏ qua nếu ko tìm thấy
                     chat.updatedAt = Date.now();
-                    store.put(chat);
-                    resolve();
+                    const putReq = store.put(chat);
+                    putReq.onsuccess = () => resolve();
+                    putReq.onerror = () => reject(putReq.error);
                 };
                 getReq.onerror = () => reject(getReq.error);
             });
@@ -3329,10 +3349,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const transaction = this.db.transaction(['chats'], 'readonly');
                 const store = transaction.objectStore('chats');
                 const index = store.index('updatedAt');
-                const request = index.getAll();
-                request.onsuccess = () => {
-                    // Đảo ngược để chat mới nhất lên đầu
-                    resolve(request.result.reverse());
+                const chats = [];
+                const request = index.openCursor(null, 'prev');
+                request.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        chats.push(cursor.value);
+                        cursor.continue();
+                    }
+                    else {
+                        resolve(chats);
+                    }
                 };
                 request.onerror = () => reject(request.error);
             });
@@ -3396,6 +3423,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     class StateManager {
         db;
         currentChatId = null;
+        pendingCreateChatPromise = null;
         // Callbacks cho UI
         onChatSwitched;
         onChatsListUpdated;
@@ -3440,11 +3468,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async addMessage(role, content) {
             let chatId = this.currentChatId;
             if (!chatId) {
-                // Nếu chưa có chat nào (người dùng vừa mở app lên lúc trống), tạo chat mới với tin nhắn này làm tên
-                let nameStr = role === 'user' ? content : 'New Chat';
-                if (nameStr.startsWith('[Tool'))
-                    nameStr = 'New Chat';
-                chatId = await this.createNewChat(nameStr);
+                if (this.pendingCreateChatPromise) {
+                    chatId = await this.pendingCreateChatPromise;
+                }
+                else {
+                    // Nếu chưa có chat nào (người dùng vừa mở app lên lúc trống), tạo chat mới với tin nhắn này làm tên
+                    let nameStr = role === 'user' ? content : 'New Chat';
+                    if (nameStr.startsWith('[Tool'))
+                        nameStr = 'New Chat';
+                    this.pendingCreateChatPromise = this.createNewChat(nameStr);
+                    try {
+                        chatId = await this.pendingCreateChatPromise;
+                    }
+                    finally {
+                        this.pendingCreateChatPromise = null;
+                    }
+                }
             }
             await this.db.addMessage(chatId, role, content);
             // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
@@ -3481,6 +3520,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     }
 
+    const escapeHtml$2 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     class SettingsUI {
         static async init(extPath, EXT_NAME, registry) {
             const $ = jQuery;
@@ -3593,8 +3633,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 $safeToolsList.empty();
                 const lowerFilter = filterText.toLowerCase();
                 tools.forEach((tool) => {
-                    const name = tool.schema.name;
-                    const desc = tool.schema.description;
+                    const name = escapeHtml$2(tool.schema.name);
+                    const desc = escapeHtml$2(tool.schema.description);
                     if (lowerFilter &&
                         !name.toLowerCase().includes(lowerFilter) &&
                         !desc.toLowerCase().includes(lowerFilter)) {
@@ -3754,7 +3794,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             <button class="menu_button interactable kaiz-qp-icon-btn" data-index="${index}" style="width: 32px; height: 32px; padding: 0; display: flex; justify-content: center; align-items: center;" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${qp.name || ''}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
+                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${escapeHtml$2(qp.name || '')}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
                             <div style="display: flex; gap: 5px;">
                                 <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
                                 <button class="menu_button interactable kaiz-qp-down" data-index="${index}" style="padding: 5px 10px;" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
@@ -3762,7 +3802,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${qp.prompt || ''}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${escapeHtml$2(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -3993,6 +4033,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     renderMemories();
                 }
             });
+            document.removeEventListener('kaiz_memory_updated', renderMemories);
             document.addEventListener('kaiz_memory_updated', renderMemories);
             // --- END PERSONA & MEMORY LOGIC ---
             // --- TOOLS MANAGER LOGIC ---
@@ -4001,8 +4042,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 $toolsList.empty();
                 const lowerFilter = filterText.toLowerCase();
                 tools.forEach((tool) => {
-                    const name = tool.schema.name;
-                    const desc = tool.schema.description;
+                    const name = escapeHtml$2(tool.schema.name);
+                    const desc = escapeHtml$2(tool.schema.description);
                     if (lowerFilter &&
                         !name.toLowerCase().includes(lowerFilter) &&
                         !desc.toLowerCase().includes(lowerFilter)) {
@@ -4173,6 +4214,7 @@ ${e}</tr>
 `}strong({tokens:e}){return `<strong>${this.parser.parseInline(e)}</strong>`}em({tokens:e}){return `<em>${this.parser.parseInline(e)}</em>`}codespan({text:e}){return `<code>${O(e,true)}</code>`}br(e){return "<br>"}del({tokens:e}){return `<del>${this.parser.parseInline(e)}</del>`}link({href:e,title:t,tokens:n}){let s=this.parser.parseInline(n),r=V(e);if(r===null)return s;e=r;let i='<a href="'+e+'"';return t&&(i+=' title="'+O(t)+'"'),i+=">"+s+"</a>",i}image({href:e,title:t,text:n,tokens:s}){s&&(n=this.parser.parseInline(s,this.parser.textRenderer));let r=V(e);if(r===null)return O(n);e=r;let i=`<img src="${e}" alt="${O(n)}"`;return t&&(i+=` title="${O(t)}"`),i+=">",i}text(e){return "tokens"in e&&e.tokens?this.parser.parseInline(e.tokens):"escaped"in e&&e.escaped?e.text:O(e.text)}};var L=class{strong({text:e}){return e}em({text:e}){return e}codespan({text:e}){return e}del({text:e}){return e}html({text:e}){return e}text({text:e}){return e}link({text:e}){return ""+e}image({text:e}){return ""+e}br(){return ""}checkbox({raw:e}){return e}};var b=class l{options;renderer;textRenderer;constructor(e){this.options=e||T,this.options.renderer=this.options.renderer||new y,this.renderer=this.options.renderer,this.renderer.options=this.options,this.renderer.parser=this,this.textRenderer=new L;}static parse(e,t){return new l(t).parse(e)}static parseInline(e,t){return new l(t).parseInline(e)}parse(e){this.renderer.parser=this;let t="";for(let n=0;n<e.length;n++){let s=e[n];if(this.options.extensions?.renderers?.[s.type]){let i=s,o=this.options.extensions.renderers[i.type].call({parser:this},i);if(o!==false||!["space","hr","heading","code","table","blockquote","list","html","def","paragraph","text"].includes(i.type)){t+=o||"";continue}}let r=s;switch(r.type){case "space":{t+=this.renderer.space(r);break}case "hr":{t+=this.renderer.hr(r);break}case "heading":{t+=this.renderer.heading(r);break}case "code":{t+=this.renderer.code(r);break}case "table":{t+=this.renderer.table(r);break}case "blockquote":{t+=this.renderer.blockquote(r);break}case "list":{t+=this.renderer.list(r);break}case "checkbox":{t+=this.renderer.checkbox(r);break}case "html":{t+=this.renderer.html(r);break}case "def":{t+=this.renderer.def(r);break}case "paragraph":{t+=this.renderer.paragraph(r);break}case "text":{t+=this.renderer.text(r);break}default:{let i='Token with "'+r.type+'" type was not found.';if(this.options.silent)return console.error(i),"";throw new Error(i)}}}return t}parseInline(e,t=this.renderer){this.renderer.parser=this;let n="";for(let s=0;s<e.length;s++){let r=e[s];if(this.options.extensions?.renderers?.[r.type]){let o=this.options.extensions.renderers[r.type].call({parser:this},r);if(o!==false||!["escape","html","link","image","strong","em","codespan","br","del","text"].includes(r.type)){n+=o||"";continue}}let i=r;switch(i.type){case "escape":{n+=t.text(i);break}case "html":{n+=t.html(i);break}case "link":{n+=t.link(i);break}case "image":{n+=t.image(i);break}case "checkbox":{n+=t.checkbox(i);break}case "strong":{n+=t.strong(i);break}case "em":{n+=t.em(i);break}case "codespan":{n+=t.codespan(i);break}case "br":{n+=t.br(i);break}case "del":{n+=t.del(i);break}case "text":{n+=t.text(i);break}default:{let o='Token with "'+i.type+'" type was not found.';if(this.options.silent)return console.error(o),"";throw new Error(o)}}}return n}};var P=class{options;block;constructor(e){this.options=e||T;}static passThroughHooks=new Set(["preprocess","postprocess","processAllTokens","emStrongMask"]);static passThroughHooksRespectAsync=new Set(["preprocess","postprocess","processAllTokens"]);preprocess(e){return e}postprocess(e){return e}processAllTokens(e){return e}emStrongMask(e){return e}provideLexer(e=this.block){return e?x.lex:x.lexInline}provideParser(e=this.block){return e?b.parse:b.parseInline}};var D=class{defaults=M();options=this.setOptions;parse=this.parseMarkdown(true);parseInline=this.parseMarkdown(false);Parser=b;Renderer=y;TextRenderer=L;Lexer=x;Tokenizer=w;Hooks=P;constructor(...e){this.use(...e);}walkTokens(e,t){let n=[];for(let s of e)switch(n=n.concat(t.call(this,s)),s.type){case "table":{let r=s;for(let i of r.header)n=n.concat(this.walkTokens(i.tokens,t));for(let i of r.rows)for(let o of i)n=n.concat(this.walkTokens(o.tokens,t));break}case "list":{let r=s;n=n.concat(this.walkTokens(r.items,t));break}default:{let r=s;this.defaults.extensions?.childTokens?.[r.type]?this.defaults.extensions.childTokens[r.type].forEach(i=>{let o=r[i].flat(1/0);n=n.concat(this.walkTokens(o,t));}):r.tokens&&(n=n.concat(this.walkTokens(r.tokens,t)));}}return n}use(...e){let t=this.defaults.extensions||{renderers:{},childTokens:{}};return e.forEach(n=>{let s={...n};if(s.async=this.defaults.async||s.async||false,n.extensions&&(n.extensions.forEach(r=>{if(!r.name)throw new Error("extension name required");if("renderer"in r){let i=t.renderers[r.name];i?t.renderers[r.name]=function(...o){let u=r.renderer.apply(this,o);return u===false&&(u=i.apply(this,o)),u}:t.renderers[r.name]=r.renderer;}if("tokenizer"in r){if(!r.level||r.level!=="block"&&r.level!=="inline")throw new Error("extension level must be 'block' or 'inline'");let i=t[r.level];i?i.unshift(r.tokenizer):t[r.level]=[r.tokenizer],r.start&&(r.level==="block"?t.startBlock?t.startBlock.push(r.start):t.startBlock=[r.start]:r.level==="inline"&&(t.startInline?t.startInline.push(r.start):t.startInline=[r.start]));}"childTokens"in r&&r.childTokens&&(t.childTokens[r.name]=r.childTokens);}),s.extensions=t),n.renderer){let r=this.defaults.renderer||new y(this.defaults);for(let i in n.renderer){if(!(i in r))throw new Error(`renderer '${i}' does not exist`);if(["options","parser"].includes(i))continue;let o=i,u=n.renderer[o],a=r[o];r[o]=(...c)=>{let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p||""};}s.renderer=r;}if(n.tokenizer){let r=this.defaults.tokenizer||new w(this.defaults);for(let i in n.tokenizer){if(!(i in r))throw new Error(`tokenizer '${i}' does not exist`);if(["options","rules","lexer"].includes(i))continue;let o=i,u=n.tokenizer[o],a=r[o];r[o]=(...c)=>{let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p};}s.tokenizer=r;}if(n.hooks){let r=this.defaults.hooks||new P;for(let i in n.hooks){if(!(i in r))throw new Error(`hook '${i}' does not exist`);if(["options","block"].includes(i))continue;let o=i,u=n.hooks[o],a=r[o];P.passThroughHooks.has(i)?r[o]=c=>{if(this.defaults.async&&P.passThroughHooksRespectAsync.has(i))return (async()=>{let k=await u.call(r,c);return a.call(r,k)})();let p=u.call(r,c);return a.call(r,p)}:r[o]=(...c)=>{if(this.defaults.async)return (async()=>{let k=await u.apply(r,c);return k===false&&(k=await a.apply(r,c)),k})();let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p};}s.hooks=r;}if(n.walkTokens){let r=this.defaults.walkTokens,i=n.walkTokens;s.walkTokens=function(o){let u=[];return u.push(i.call(this,o)),r&&(u=u.concat(r.call(this,o))),u};}this.defaults={...this.defaults,...s};}),this}setOptions(e){return this.defaults={...this.defaults,...e},this}lexer(e,t){return x.lex(e,t??this.defaults)}parser(e,t){return b.parse(e,t??this.defaults)}parseMarkdown(e){return (n,s)=>{let r={...s},i={...this.defaults,...r},o=this.onError(!!i.silent,!!i.async);if(this.defaults.async===true&&r.async===false)return o(new Error("marked(): The async option was set to true by an extension. Remove async: false from the parse options object to return a Promise."));if(typeof n>"u"||n===null)return o(new Error("marked(): input parameter is undefined or null"));if(typeof n!="string")return o(new Error("marked(): input parameter is of type "+Object.prototype.toString.call(n)+", string expected"));if(i.hooks&&(i.hooks.options=i,i.hooks.block=e),i.async)return (async()=>{let u=i.hooks?await i.hooks.preprocess(n):n,c=await(i.hooks?await i.hooks.provideLexer(e):e?x.lex:x.lexInline)(u,i),p=i.hooks?await i.hooks.processAllTokens(c):c;i.walkTokens&&await Promise.all(this.walkTokens(p,i.walkTokens));let h=await(i.hooks?await i.hooks.provideParser(e):e?b.parse:b.parseInline)(p,i);return i.hooks?await i.hooks.postprocess(h):h})().catch(o);try{i.hooks&&(n=i.hooks.preprocess(n));let a=(i.hooks?i.hooks.provideLexer(e):e?x.lex:x.lexInline)(n,i);i.hooks&&(a=i.hooks.processAllTokens(a)),i.walkTokens&&this.walkTokens(a,i.walkTokens);let p=(i.hooks?i.hooks.provideParser(e):e?b.parse:b.parseInline)(a,i);return i.hooks&&(p=i.hooks.postprocess(p)),p}catch(u){return o(u)}}}onError(e,t){return n=>{if(n.message+=`
 Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error occurred:</p><pre>"+O(n.message+"",true)+"</pre>";return t?Promise.resolve(s):s}if(t)return Promise.reject(n);throw n}}};var z=new D;function g(l,e){return z.parse(l,e)}g.options=g.setOptions=function(l){return z.setOptions(l),g.defaults=z.defaults,N(g.defaults),g};g.getDefaults=M;g.defaults=T;g.use=function(...l){return z.use(...l),g.defaults=z.defaults,N(g.defaults),g};g.walkTokens=function(l,e){return z.walkTokens(l,e)};g.parseInline=z.parseInline;g.Parser=b;g.parser=b.parse;g.Renderer=y;g.TextRenderer=L;g.Lexer=x;g.lexer=x.lex;g.Tokenizer=w;g.Hooks=P;g.parse=g;g.options;g.setOptions;g.use;g.walkTokens;g.parseInline;b.parse;x.lex;
 
+    const escapeHtml$1 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     class ChatWindowUI {
         static init(loop, stateManager) {
             const $ = jQuery;
@@ -4366,7 +4408,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 });
             }
             let resizeTimeout;
-            $(window).on('resize', () => {
+            $(window).off('resize.kaiz').on('resize.kaiz', () => {
                 clearTimeout(resizeTimeout);
                 resizeTimeout = setTimeout(() => {
                     const btnPos = ensureInBounds(btn);
@@ -4512,7 +4554,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     const bg = isSelected ? 'rgba(0, 201, 255, 0.2)' : 'transparent';
                     htmlBuffer += `
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${chat.name}</span>
+                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml$1(chat.name)}</span>
                         <div>
                             <i class="fa-solid fa-pen kaiz-chat-edit" style="color:#f39c12; font-size:12px; margin-right:8px;" data-id="${chat.id}" data-name="${chat.name.replace(/"/g, '&quot;')}"></i>
                             <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
@@ -4953,12 +4995,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     console.error(`[KaizToolChecker] Tool ${name} failed check:`, e);
                     updateUI(name, 'error', e.message || String(e));
                 }
-                // Giả lập delay nhỏ cho UI có thời gian cập nhật mượt mà
-                await new Promise((r) => setTimeout(r, 200));
             }
         }
     }
 
+    const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     class ToolCheckerUI {
         static init(registry, adapter) {
             const $ = jQuery;
@@ -5002,7 +5043,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const tools = registry.getAllTools();
                 list.empty();
                 for (const t of tools) {
-                    const name = t.schema.name;
+                    const name = escapeHtml(t.schema.name);
                     list.append(`
                     <div id="checker-tool-${name}" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px 12px; border-radius:5px;">
                         <span><i class="fa-solid fa-wrench" style="margin-right:8px; opacity:0.7"></i>${name}</span>
@@ -5155,3 +5196,4 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
     });
 
 })();
+//# sourceMappingURL=index.js.map

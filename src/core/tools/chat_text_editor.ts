@@ -47,6 +47,9 @@ export const manageChatTextTool: ITool = {
         },
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
+        if (!context?.adapter) {
+            throw new Error('Adapter not available');
+        }
         if (!context.adapter.hasFeature('chat')) {
             throw new Error('Tính năng chat không tồn tại hoặc phiên bản SillyTavern không hỗ trợ.');
         }

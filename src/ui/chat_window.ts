@@ -4,6 +4,8 @@ import { StateManager } from '../core/state';
 
 declare const jQuery: any;
 
+const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export class ChatWindowUI {
     public static init(loop: AgentLoop, stateManager: StateManager) {
         const $ = jQuery;
@@ -218,7 +220,7 @@ export class ChatWindowUI {
         }
 
         let resizeTimeout: any;
-        $(window).on('resize', () => {
+        $(window).off('resize.kaiz').on('resize.kaiz', () => {
             clearTimeout(resizeTimeout);
             resizeTimeout = setTimeout(() => {
                 const btnPos = ensureInBounds(btn);
@@ -374,7 +376,7 @@ export class ChatWindowUI {
 
                 htmlBuffer += `
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${chat.name}</span>
+                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml(chat.name)}</span>
                         <div>
                             <i class="fa-solid fa-pen kaiz-chat-edit" style="color:#f39c12; font-size:12px; margin-right:8px;" data-id="${chat.id}" data-name="${chat.name.replace(/"/g, '&quot;')}"></i>
                             <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>

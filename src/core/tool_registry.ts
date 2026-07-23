@@ -76,6 +76,10 @@ export class ToolRegistry {
         }
 
         try {
+            if (!args || typeof args !== 'object') {
+                return { content: 'Error: Arguments must be a valid JSON object.', isError: true };
+            }
+
             // Validate basic required fields
             if (tool.schema.parameters.required) {
                 for (const req of tool.schema.parameters.required) {

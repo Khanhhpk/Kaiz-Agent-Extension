@@ -153,10 +153,11 @@ export const scanUITool: ITool = {
             }
 
             // Nếu chứa phần tử con có kX
-            let childrenContent = '';
+            const parts: string[] = [];
             for (let i = 0; i < el.children.length; i++) {
-                childrenContent += buildTree(el.children[i] as HTMLElement, indent + 1);
+                parts.push(buildTree(el.children[i] as HTMLElement, indent + 1));
             }
+            const childrenContent = parts.join('');
 
             if (childrenContent) {
                 const isSignificant =
@@ -176,11 +177,11 @@ export const scanUITool: ITool = {
                     return `${indentStr}<${tagName}${attrs}>\n${childrenContent}${indentStr}</${tagName}>\n`;
                 } else {
                     // Flatten (Xoá khoảng trắng thụt lề thêm 1 bậc do không wrap)
-                    let flatContent = '';
+                    const flatParts: string[] = [];
                     for (let i = 0; i < el.children.length; i++) {
-                        flatContent += buildTree(el.children[i] as HTMLElement, indent);
+                        flatParts.push(buildTree(el.children[i] as HTMLElement, indent));
                     }
-                    return flatContent;
+                    return flatParts.join('');
                 }
             }
 
