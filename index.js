@@ -2226,14 +2226,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 '- id: UUID của Regex (bắt buộc cho edit/delete/toggle).\n' +
                 '- scope: "Global", "Scoped", "Preset" (chỉ dùng cho create, mặc định Global).\n' +
                 '- data: Object cấu hình regex. Phải dùng ĐÚNG các biến chuẩn của ST (CẤM chế tên biến khác):\n' +
-                '  + scriptName (Tên Regex), findRegex (Mẫu tìm kiếm), replaceString (Chuỗi thay thế).\n' +
+                '  + scriptName (Tên Regex), disabled (false), runOnEdit (true), findRegex (Mẫu tìm kiếm), trimStrings (Mảng ký tự), replaceString (Chuỗi thay thế).\n' +
                 '  + placement: [1]=User Input, [2]=AI Output, [3]=Slash Commands, [4]=World Info, [5]=Reasoning. Bắt buộc dùng mảng (vd: [2]).\n' +
+                "  + substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.\n" +
+                '  + minDepth, maxDepth: Giới hạn độ sâu (null hoặc số).\n' +
                 '  + Ephemerality (RẤT QUAN TRỌNG):\n' +
                 '    * markdownOnly: true = Alter Chat Display (Chỉ bọc "mặt nạ" đổi hiển thị UI cho user xem, không gửi đi, an toàn nhất).\n' +
                 '    * promptOnly: true = Alter Outgoing Prompt (Chỉ sửa data ngầm gửi cho LLM, không lưu vào lịch sử DB).\n' +
-                '    * NGUY HIỂM: Nếu CẢ 2 đều false, Regex sẽ sửa và LƯU CHẾT vĩnh viễn vào Database hội thoại. Tránh dùng trừ khi user yêu cầu!\n' +
-                "  + substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.\n" +
-                '  + runOnEdit: true = Tự động chạy lại Regex này khi tin nhắn (của các role được cấu hình trong placement) bị chỉnh sửa.',
+                '    * NGUY HIỂM: Nếu CẢ 2 đều false, Regex sẽ sửa và LƯU CHẾT vĩnh viễn vào Database hội thoại. Tránh dùng trừ khi user yêu cầu!',
             parameters: {
                 type: 'object',
                 properties: {
