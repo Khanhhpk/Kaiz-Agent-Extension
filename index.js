@@ -2299,7 +2299,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         ? crypto.randomUUID()
                         : `regex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
                     const newScript = {
-                        id: newId,
                         scriptName: 'New Regex Script',
                         findRegex: '',
                         replaceString: '',
@@ -2313,9 +2312,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         minDepth: null,
                         maxDepth: null,
                         ...(data || {}), // Ghi đè bằng dữ liệu người dùng
+                        id: newId, // Đảm bảo ID không bị ghi đè, nếu ID bị đổi thành số sẽ gây lỗi cho ST UI
                     };
+                    // Đảm bảo tên luôn có
+                    if (!newScript.scriptName) {
+                        newScript.scriptName = 'New Regex Script';
+                    }
                     scripts.push(newScript);
                     await saveScriptsByType(scripts, targetType);
+                    // Cập nhật lại UI của Regex Extension
+                    try {
+                        const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+                        eventSource.emit(event_types.PRESET_CHANGED);
+                    }
+                    catch (e) {
+                        console.error('Failed to emit UI update event:', e);
+                    }
                     return { content: `Tạo mới thành công Regex: ${newScript.scriptName} (ID: ${newId})` };
                 }
                 if (!id) {
@@ -2328,11 +2340,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (action === 'delete') {
                     found.scripts.splice(found.index, 1);
                     await saveScriptsByType(found.scripts, found.type);
+                    try {
+                        const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+                        eventSource.emit(event_types.PRESET_CHANGED);
+                    }
+                    catch (e) { }
                     return { content: `Đã xóa thành công Regex: ${found.script.scriptName}` };
                 }
                 if (action === 'toggle') {
                     found.script.disabled = !found.script.disabled;
                     await saveScriptsByType(found.scripts, found.type);
+                    try {
+                        const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+                        eventSource.emit(event_types.PRESET_CHANGED);
+                    }
+                    catch (e) { }
                     return {
                         content: `Đã thay đổi trạng thái disabled thành ${found.script.disabled} cho Regex: ${found.script.scriptName}`,
                     };
@@ -2341,12 +2363,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (!data || typeof data !== 'object') {
                         return { isError: true, content: 'Phải cung cấp field "data" dưới dạng JSON object để cập nhật.' };
                     }
-                    // Hợp nhất dữ liệu mới vào
-                    found.scripts[found.index] = { ...found.script, ...data };
-                    // Giữ nguyên ID gốc để an toàn
-                    found.scripts[found.index].id = found.script.id;
+                    // Không cho phép ghi đè id
+                    const updatedId = found.script.id;
+                    Object.assign(found.script, data);
+                    found.script.id = updatedId; // Khôi phục id nếu bị đổi
+                    if (!found.script.scriptName) {
+                        found.script.scriptName = 'Edited Regex Script';
+                    }
                     await saveScriptsByType(found.scripts, found.type);
-                    return { content: `Đã cập nhật thành công Regex: ${found.script.scriptName}` };
+                    try {
+                        const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+                        eventSource.emit(event_types.PRESET_CHANGED);
+                    }
+                    catch (e) { }
+                    return { content: `Đã chỉnh sửa thành công Regex: ${found.script.scriptName}` };
                 }
                 return { isError: true, content: `Hành động không hợp lệ: ${action}` };
             }
