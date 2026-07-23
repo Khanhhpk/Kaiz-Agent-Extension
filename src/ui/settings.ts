@@ -4,7 +4,8 @@ declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
 
-const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const escapeHtml = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export class SettingsUI {
     public static async init(extPath: string, EXT_NAME: string, registry: ToolRegistry) {

@@ -4,7 +4,13 @@ import { StateManager } from '../core/state';
 
 declare const jQuery: any;
 
-const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+const escapeHtml = (s: string): string =>
+    s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 
 export class ChatWindowUI {
     public static init(loop: AgentLoop, stateManager: StateManager) {
@@ -220,18 +226,20 @@ export class ChatWindowUI {
         }
 
         let resizeTimeout: any;
-        $(window).off('resize.kaiz').on('resize.kaiz', () => {
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(() => {
-                const btnPos = ensureInBounds(btn);
-                if (btnPos) localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
+        $(window)
+            .off('resize.kaiz')
+            .on('resize.kaiz', () => {
+                clearTimeout(resizeTimeout);
+                resizeTimeout = setTimeout(() => {
+                    const btnPos = ensureInBounds(btn);
+                    if (btnPos) localStorage.setItem('kaiz_btn_pos', JSON.stringify(btnPos));
 
-                if ((win[0] as HTMLDialogElement).open) {
-                    const winPos = ensureInBounds(win);
-                    if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
-                }
-            }, 100);
-        });
+                    if ((win[0] as HTMLDialogElement).open) {
+                        const winPos = ensureInBounds(win);
+                        if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
+                    }
+                }, 100);
+            });
         // ------------------
 
         // Sidebar elements
@@ -587,8 +595,8 @@ export class ChatWindowUI {
             htmlContent: string,
             animate: boolean = true,
         ): string => {
-            let avatar = '';
-            let extraClass = '';
+            let avatar: string;
+            let extraClass: string;
             if (role === 'user') {
                 avatar = '<i class="fa-solid fa-user"></i>';
                 extraClass = 'kaiz-msg-user';

@@ -4,7 +4,8 @@ import { SillyTavernAdapter } from '../adapters/st_adapter';
 
 declare const jQuery: any;
 
-const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const escapeHtml = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 export class ToolCheckerUI {
     public static init(registry: ToolRegistry, adapter: SillyTavernAdapter) {

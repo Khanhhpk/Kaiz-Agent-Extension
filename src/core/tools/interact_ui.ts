@@ -24,7 +24,7 @@ export const interactUITool: ITool = {
         let foundElement: HTMLElement | null = null;
 
         // Xử lý target để trích xuất kX (nếu có)
-        let cleanTarget = target.trim();
+        let cleanTarget: string;
         const kIdMatch = target.match(/\[(k\d+)\]/i) || target.match(/^(k\d+)$/i);
         if (kIdMatch) {
             cleanTarget = kIdMatch[1].toLowerCase(); // "k95"
