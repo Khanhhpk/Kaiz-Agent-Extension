@@ -4,7 +4,7 @@ import { StateManager } from '../core/state';
 
 declare const jQuery: any;
 
-const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+const escapeHtml = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 
 export class ChatWindowUI {
     public static init(loop: AgentLoop, stateManager: StateManager) {
@@ -500,16 +500,6 @@ export class ChatWindowUI {
         // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
         const formatUserMessage = (text: string): string => {
             const safeText = text;
-
-            // Xử lý XSS bằng cách chuyển thẻ HTML thành text an toàn
-            const escapeHtml = (unsafe: string) => {
-                return unsafe
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;')
-                    .replace(/'/g, '&#039;');
-            };
 
             const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
 
