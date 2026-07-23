@@ -5,11 +5,16 @@ export const manageRegexTool: ITool = {
     schema: {
         name: 'manage_regex',
         description:
-            'Công cụ tạo, sửa, xoá, hoặc bật/tắt Regex Scripts. \n' +
+            'Công cụ tạo, sửa, xoá, hoặc bật/tắt Regex Scripts.\n' +
             '- action: "create", "edit", "delete", "toggle".\n' +
             '- id: UUID của Regex (bắt buộc cho edit/delete/toggle).\n' +
             '- scope: "Global", "Scoped", "Preset" (chỉ dùng cho create, mặc định Global).\n' +
-            '- data: Object chứa các cấu hình regex. Ví dụ {"scriptName": "Tên", "findRegex": "/abc/g", "replaceString": "xyz", "disabled": false, "placement": [2], "markdownOnly": true}',
+            '- data: Object chứa cấu hình regex. Lưu ý cấu hình ST:\n' +
+            '  + placement: [1]=User Input, [2]=AI Output, [3]=Slash Commands, [4]=World Info, [5]=Reasoning.\n' +
+            '  + markdownOnly: true = Alter Chat Display (Chỉ đổi hiển thị).\n' +
+            '  + promptOnly: true = Alter Outgoing Prompt (Đổi dữ liệu gửi cho LLM).\n' +
+            '  + (Cả 2 false = Áp dụng vĩnh viễn).\n' +
+            "  + substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.",
         parameters: {
             type: 'object',
             properties: {
