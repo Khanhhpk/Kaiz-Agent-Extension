@@ -2231,7 +2231,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 '    * markdownOnly: true = Alter Chat Display (Chỉ bọc "mặt nạ" đổi hiển thị UI cho user xem, không gửi đi, an toàn nhất).\n' +
                 '    * promptOnly: true = Alter Outgoing Prompt (Chỉ sửa data ngầm gửi cho LLM, không lưu vào lịch sử DB).\n' +
                 '    * NGUY HIỂM: Nếu CẢ 2 đều false, Regex sẽ sửa và LƯU CHẾT vĩnh viễn vào Database hội thoại. Tránh dùng trừ khi user yêu cầu!\n' +
-                "  + substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.",
+                "  + substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.\n" +
+                '  + runOnEdit: true = Chạy lại Regex khi người dùng sửa tin nhắn.',
             parameters: {
                 type: 'object',
                 properties: {
