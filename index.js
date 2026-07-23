@@ -2313,22 +2313,23 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const newId = typeof crypto !== 'undefined' && crypto.randomUUID
                         ? crypto.randomUUID()
                         : `regex-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-                    const newScript = {
+                    const baseScript = {
+                        id: newId,
                         scriptName: 'New Regex Script',
-                        findRegex: '',
-                        replaceString: '',
-                        trimStrings: [],
-                        placement: [2], // 2 = OUTGOING
                         disabled: false,
-                        markdownOnly: false,
-                        promptOnly: false,
                         runOnEdit: true,
+                        findRegex: '',
+                        trimStrings: [],
+                        replaceString: '',
+                        placement: [2], // 2 = OUTGOING
                         substituteRegex: 0,
                         minDepth: null,
                         maxDepth: null,
-                        ...(data || {}), // Ghi đè bằng dữ liệu người dùng
-                        id: newId, // Đảm bảo ID không bị ghi đè, nếu ID bị đổi thành số sẽ gây lỗi cho ST UI
+                        markdownOnly: false,
+                        promptOnly: false,
                     };
+                    const newScript = { ...baseScript, ...(data || {}) };
+                    newScript.id = newId; // Đảm bảo ID không bị ghi đè
                     // Đảm bảo tên luôn có
                     if (!newScript.scriptName) {
                         newScript.scriptName = 'New Regex Script';
