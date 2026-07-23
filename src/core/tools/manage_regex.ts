@@ -112,7 +112,7 @@ export const manageRegexTool: ITool = {
                     disabled: false,
                     markdownOnly: false,
                     promptOnly: false,
-                    runOnEdit: false,
+                    runOnEdit: true,
                     substituteRegex: 0,
                     minDepth: null,
                     maxDepth: null,
