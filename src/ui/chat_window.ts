@@ -517,7 +517,7 @@ export class ChatWindowUI {
                 // ... logic Tool Result ...
                 let color = '#a1a1aa'; // default
                 let icon = 'fa-wrench';
-                if (safeText.includes('THẤT BẠI')) {
+                if (safeText.includes('CÓ LỖI') || safeText.includes('LỖI (ERROR)')) {
                     color = '#ef4444'; // red
                     icon = 'fa-circle-xmark';
                 } else if (safeText.includes('THÀNH CÔNG')) {
