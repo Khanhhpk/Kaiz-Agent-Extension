@@ -9,6 +9,7 @@ export const getRegexInfoTool: ITool = {
             '- placement: [1]=User Input, [2]=AI Output, [3]=Slash Commands, [4]=World Info, [5]=Reasoning.\n' +
             '- markdownOnly: true = Alter Chat Display (Chỉ đổi hiển thị).\n' +
             '- promptOnly: true = Alter Outgoing Prompt (Đổi dữ liệu gửi cho LLM).\n' +
+            '- (Cả 2 false = Áp dụng vĩnh viễn, thay đổi gốc Database).\n' +
             "- substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.\n" +
             '- runOnEdit: Chạy khi edit tin nhắn.',
         parameters: {
