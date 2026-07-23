@@ -11,10 +11,7 @@ export const getRegexListTool: ITool = {
             properties: {},
         },
     },
-    execute: async (
-        args: any,
-        context: { adapter: SillyTavernAdapter },
-    ): Promise<ToolResult> => {
+    execute: async (args: any, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             // Sử dụng Function để bypass trình biên dịch TypeScript không nhận dạng được đường dẫn module tương đối của máy chủ
             const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();

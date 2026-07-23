@@ -4,7 +4,12 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getRegexInfoTool: ITool = {
     schema: {
         name: 'get_regex_info',
-        description: 'Lấy thông tin chi tiết đầy đủ của một Regex Script cụ thể bằng ID (uuid).',
+        description:
+            'Lấy thông tin chi tiết đầy đủ của Regex Script (ID). Hướng dẫn đọc dữ liệu ST:\n' +
+            '- placement: [1]=User Input, [2]=AI Output, [3]=Slash Commands, [4]=World Info, [5]=Reasoning.\n' +
+            '- markdownOnly: true = Alter Chat Display (Chỉ đổi hiển thị). false = Alter Outgoing Prompt (Đổi dữ liệu gửi đi).\n' +
+            "- substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.\n" +
+            '- runOnEdit: Chạy khi edit tin nhắn.',
         parameters: {
             type: 'object',
             properties: {
@@ -16,10 +21,7 @@ export const getRegexInfoTool: ITool = {
             required: ['id'],
         },
     },
-    execute: async (
-        args: Record<string, any>,
-        context: { adapter: SillyTavernAdapter },
-    ): Promise<ToolResult> => {
+    execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             if (!args.id) {
                 return { isError: true, content: 'Thiếu tham số bắt buộc: id' };
