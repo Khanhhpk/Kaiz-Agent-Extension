@@ -2094,6 +2094,130 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
+    const getRegexListTool = {
+        schema: {
+            name: 'get_regex_list',
+            description: 'Lấy danh sách các Regex Scripts hiện có trong SillyTavern. Bao gồm tên, ID (uuid), phạm vi áp dụng (Global, Scoped, Preset), thứ tự và trạng thái Bật/Tắt (disabled).',
+            parameters: {
+                type: 'object',
+                properties: {},
+            },
+        },
+        execute: async (args, context) => {
+            try {
+                // Sử dụng Function để bypass trình biên dịch TypeScript không nhận dạng được đường dẫn module tương đối của máy chủ
+                const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
+                if (!regexEngine || !regexEngine.SCRIPT_TYPES || !regexEngine.getScriptsByType) {
+                    return {
+                        isError: true,
+                        content: 'Không thể tải Regex Engine của SillyTavern. Đảm bảo bạn đang sử dụng phiên bản ST có hỗ trợ extension regex.',
+                    };
+                }
+                const { SCRIPT_TYPES, getScriptsByType } = regexEngine;
+                const results = [];
+                // Lấy Global Scripts
+                const globalScripts = getScriptsByType(SCRIPT_TYPES.GLOBAL) || [];
+                globalScripts.forEach((script, index) => {
+                    results.push({
+                        id: script.id,
+                        name: script.scriptName || 'Unnamed Script',
+                        scope: 'Global',
+                        order: index + 1,
+                        disabled: !!script.disabled,
+                    });
+                });
+                // Lấy Scoped Scripts (Character specific)
+                const scopedScripts = getScriptsByType(SCRIPT_TYPES.SCOPED) || [];
+                scopedScripts.forEach((script, index) => {
+                    results.push({
+                        id: script.id,
+                        name: script.scriptName || 'Unnamed Script',
+                        scope: 'Scoped',
+                        order: index + 1,
+                        disabled: !!script.disabled,
+                    });
+                });
+                // Lấy Preset Scripts
+                const presetScripts = getScriptsByType(SCRIPT_TYPES.PRESET) || [];
+                presetScripts.forEach((script, index) => {
+                    results.push({
+                        id: script.id,
+                        name: script.scriptName || 'Unnamed Script',
+                        scope: 'Preset',
+                        order: index + 1,
+                        disabled: !!script.disabled,
+                    });
+                });
+                if (results.length === 0) {
+                    return {
+                        content: 'Không có Regex Script nào được tìm thấy.',
+                    };
+                }
+                // Trả về dữ liệu dạng JSON cho LLM dễ phân tích
+                return {
+                    content: JSON.stringify(results, null, 2),
+                };
+            }
+            catch (error) {
+                return {
+                    isError: true,
+                    content: `Lỗi khi lấy danh sách Regex: ${error.message || String(error)}`,
+                };
+            }
+        },
+    };
+
+    const getRegexInfoTool = {
+        schema: {
+            name: 'get_regex_info',
+            description: 'Lấy thông tin chi tiết đầy đủ của một Regex Script cụ thể bằng ID (uuid).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    id: {
+                        type: 'string',
+                        description: 'ID (uuid) của Regex Script cần lấy thông tin.',
+                    },
+                },
+                required: ['id'],
+            },
+        },
+        execute: async (args, context) => {
+            try {
+                if (!args.id) {
+                    return { isError: true, content: 'Thiếu tham số bắt buộc: id' };
+                }
+                // Sử dụng Function để bypass trình biên dịch TypeScript
+                const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
+                if (!regexEngine || !regexEngine.getRegexScripts) {
+                    return {
+                        isError: true,
+                        content: 'Không thể tải Regex Engine của SillyTavern.',
+                    };
+                }
+                // getRegexScripts trả về mảng kết hợp từ tất cả các Scope
+                const allScripts = regexEngine.getRegexScripts();
+                const targetScript = allScripts.find((script) => script.id === args.id);
+                if (!targetScript) {
+                    return {
+                        isError: true,
+                        content: `Không tìm thấy Regex Script nào với ID: ${args.id}`,
+                    };
+                }
+                // Trả về toàn bộ chi tiết Regex dưới dạng JSON
+                return {
+                    content: JSON.stringify(targetScript, null, 2),
+                };
+            }
+            catch (error) {
+                return {
+                    isError: true,
+                    content: `Lỗi khi lấy thông tin chi tiết Regex: ${error.message || String(error)}`,
+                };
+            }
+        },
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -2121,6 +2245,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(scanUITool);
         registry.registerTool(manageUserInputTool);
         registry.registerTool(manageAgentMemory);
+        registry.registerTool(getRegexListTool);
+        registry.registerTool(getRegexInfoTool);
     }
 
     /**
