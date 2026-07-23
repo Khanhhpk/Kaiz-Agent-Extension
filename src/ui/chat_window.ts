@@ -515,10 +515,12 @@ export class ChatWindowUI {
                 // ... logic Tool Result ...
                 let color = '#a1a1aa'; // default
                 let icon = 'fa-wrench';
-                if (safeText.includes('CÓ LỖI') || safeText.includes('LỖI (ERROR)')) {
+                const firstLine = safeText.split('\n')[0];
+                
+                if (firstLine.includes('CÓ LỖI') || firstLine.includes('LỖI (ERROR)')) {
                     color = '#ef4444'; // red
                     icon = 'fa-circle-xmark';
-                } else if (safeText.includes('THÀNH CÔNG')) {
+                } else if (firstLine.includes('THÀNH CÔNG')) {
                     color = '#4ade80'; // green
                     icon = 'fa-circle-check';
                 }
