@@ -2232,7 +2232,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 '    * promptOnly: true = Alter Outgoing Prompt (Chỉ sửa data ngầm gửi cho LLM, không lưu vào lịch sử DB).\n' +
                 '    * NGUY HIỂM: Nếu CẢ 2 đều false, Regex sẽ sửa và LƯU CHẾT vĩnh viễn vào Database hội thoại. Tránh dùng trừ khi user yêu cầu!\n' +
                 "  + substituteRegex: 0 = Don't substitute, 1 = Sub before regex, 2 = Sub after regex.\n" +
-                '  + runOnEdit: true = Chạy lại Regex khi người dùng sửa tin nhắn.',
+                '  + runOnEdit: true = Tự động chạy lại Regex này khi tin nhắn (của các role được cấu hình trong placement) bị chỉnh sửa.',
             parameters: {
                 type: 'object',
                 properties: {
