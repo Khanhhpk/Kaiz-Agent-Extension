@@ -1,6 +1,9 @@
 import { SillyTavernAdapter, Message } from '../adapters/st_adapter';
 import { ToolRegistry } from './tool_registry';
 import { StateManager } from './state';
+
+declare const SillyTavern: any;
+
 export interface AgentEvent {
     type:
         | 'think_start'
@@ -11,6 +14,7 @@ export interface AgentEvent {
         | 'tool_call'
         | 'tool_result'
         | 'tool_confirm'
+        | 'retry'
         | 'error'
         | 'debug';
     data?: any;
@@ -271,26 +275,67 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 );
 
                 let currentText = '';
-                this._currentAbortController = new AbortController();
-                const response = await Promise.race([
-                    this.adapter.generateCompletion(
-                        messages,
-                        1500,
-                        true,
-                        async (text, reasoning) => {
-                            // Guard: không cập nhật UI nếu đã bị force abort
-                            if (this._forceAborted) return;
-                            currentText = text;
-                            await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                        },
-                        this._currentAbortController.signal,
-                    ),
-                    new Promise<never>((_, reject) => {
-                        this._forceAbortReject = reject;
-                    }),
-                ]);
-                this._forceAbortReject = null;
-                this._currentAbortController = null;
+
+                const extSettings = SillyTavern?.getContext?.()?.extensionSettings?.['kaiz_agent'] || {};
+                const maxRetries = extSettings.maxRetries ?? 3;
+                const retryDelay = extSettings.retryDelay || 3000;
+                const rawKeywords = extSettings.retryKeywords || '';
+                const retryKeywords = rawKeywords
+                    .split(',')
+                    .map((k: string) => k.trim().toLowerCase())
+                    .filter((k: string) => k);
+
+                let retryCount = 0;
+                let response: any = null;
+
+                while (retryCount <= maxRetries) {
+                    try {
+                        this._currentAbortController = new AbortController();
+                        response = await Promise.race([
+                            this.adapter.generateCompletion(
+                                messages,
+                                1500,
+                                true,
+                                async (text, reasoning) => {
+                                    if (this._forceAborted) return;
+                                    currentText = text;
+                                    await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+                                },
+                                this._currentAbortController.signal,
+                            ),
+                            new Promise<never>((_, reject) => {
+                                this._forceAbortReject = reject;
+                            }),
+                        ]);
+                        this._forceAbortReject = null;
+                        this._currentAbortController = null;
+                        break;
+                    } catch (e: any) {
+                        this._forceAbortReject = null;
+                        this._currentAbortController = null;
+
+                        const isForceAbort =
+                            e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
+                        if (isForceAbort) {
+                            throw e;
+                        }
+
+                        const msgStr = (e.message || String(e)).toLowerCase();
+                        const shouldRetry =
+                            retryKeywords.length > 0 && retryKeywords.some((k: string) => msgStr.includes(k));
+
+                        if (shouldRetry && retryCount < maxRetries) {
+                            retryCount++;
+                            const displayMsg = `Lỗi: ${e.message || String(e)}. Thử lại sau ${retryDelay / 1000}s... (${retryCount}/${maxRetries})`;
+                            await onEvent({ type: 'retry', text: displayMsg });
+                            await new Promise((r) => setTimeout(r, retryDelay));
+                            continue;
+                        } else {
+                            throw e;
+                        }
+                    }
+                }
+
                 await onEvent({ type: 'think_end', data: response.reasoning });
 
                 const text = response.text;

@@ -214,21 +214,55 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 try {
                     const messages = this.buildMessages(internalHistory, maxSteps, step, pinnedUserGoal, lastToolError, cachedSystemPrompt);
                     let currentText = '';
-                    this._currentAbortController = new AbortController();
-                    const response = await Promise.race([
-                        this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
-                            // Guard: không cập nhật UI nếu đã bị force abort
-                            if (this._forceAborted)
-                                return;
-                            currentText = text;
-                            await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                        }, this._currentAbortController.signal),
-                        new Promise((_, reject) => {
-                            this._forceAbortReject = reject;
-                        }),
-                    ]);
-                    this._forceAbortReject = null;
-                    this._currentAbortController = null;
+                    const extSettings = SillyTavern?.getContext?.()?.extensionSettings?.['kaiz_agent'] || {};
+                    const maxRetries = extSettings.maxRetries ?? 3;
+                    const retryDelay = extSettings.retryDelay || 3000;
+                    const rawKeywords = extSettings.retryKeywords || '';
+                    const retryKeywords = rawKeywords
+                        .split(',')
+                        .map((k) => k.trim().toLowerCase())
+                        .filter((k) => k);
+                    let retryCount = 0;
+                    let response = null;
+                    while (retryCount <= maxRetries) {
+                        try {
+                            this._currentAbortController = new AbortController();
+                            response = await Promise.race([
+                                this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
+                                    if (this._forceAborted)
+                                        return;
+                                    currentText = text;
+                                    await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+                                }, this._currentAbortController.signal),
+                                new Promise((_, reject) => {
+                                    this._forceAbortReject = reject;
+                                }),
+                            ]);
+                            this._forceAbortReject = null;
+                            this._currentAbortController = null;
+                            break;
+                        }
+                        catch (e) {
+                            this._forceAbortReject = null;
+                            this._currentAbortController = null;
+                            const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
+                            if (isForceAbort) {
+                                throw e;
+                            }
+                            const msgStr = (e.message || String(e)).toLowerCase();
+                            const shouldRetry = retryKeywords.length > 0 && retryKeywords.some((k) => msgStr.includes(k));
+                            if (shouldRetry && retryCount < maxRetries) {
+                                retryCount++;
+                                const displayMsg = `Lỗi: ${e.message || String(e)}. Thử lại sau ${retryDelay / 1000}s... (${retryCount}/${maxRetries})`;
+                                await onEvent({ type: 'retry', text: displayMsg });
+                                await new Promise((r) => setTimeout(r, retryDelay));
+                                continue;
+                            }
+                            else {
+                                throw e;
+                            }
+                        }
+                    }
                     await onEvent({ type: 'think_end', data: response.reasoning });
                     const text = response.text;
                     internalHistory.push({ role: 'assistant', content: text });
@@ -3586,6 +3620,19 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 settings.maxAgentLoops = parseInt(this.value, 10) || 5;
                 ctx.saveSettingsDebounced();
             });
+            $('#kaiz-retry-keywords').val(settings.retryKeywords || '');
+            $('#kaiz-max-retries').val(settings.maxRetries !== undefined ? settings.maxRetries : 3);
+            $('#kaiz-retry-delay').val(settings.retryDelay || 3000);
+            $('#kaiz-retry-keywords, #kaiz-max-retries, #kaiz-retry-delay').on('input', function () {
+                const id = this.id;
+                if (id === 'kaiz-retry-keywords')
+                    settings.retryKeywords = this.value;
+                if (id === 'kaiz-max-retries')
+                    settings.maxRetries = parseInt(this.value, 10) || 0;
+                if (id === 'kaiz-retry-delay')
+                    settings.retryDelay = parseInt(this.value, 10) || 3000;
+                ctx.saveSettingsDebounced();
+            });
             // --- UI SETTINGS LOGIC ---
             $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
             $('#kaiz-phone-mode').on('change', function () {
@@ -4894,6 +4941,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             resolveFn(false);
                         });
                     }
+                    else if (event.type === 'retry') {
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
+                        if (agentContentBox) {
+                            agentContentBox.html(`<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${event.text}</div>`);
+                        }
+                        else {
+                            agentMsgId = addMessageToDOM('agent', `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${event.text}</div>`);
+                            agentContentBox = $(`#${agentMsgId}`);
+                        }
+                    }
                     else if (event.type === 'error') {
                         // Ng\u1eaft stream render ngay l\u1eadp t\u1ee9c \u0111\u1ec3 kh\u00f4ng b\u1ecb \u0111\u00e8 l\u00ean th\u00f4ng b\u00e1o l\u1ed7i
                         lastStreamEvent = null;
@@ -5134,6 +5192,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 customKey: '',
                 customModel: '',
                 maxAgentLoops: 5,
+                retryKeywords: '',
+                maxRetries: 3,
+                retryDelay: 3000,
                 disabledTools: {},
                 safeMode: false,
                 safeModeBlacklist: {},
@@ -5147,11 +5208,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             if (ctx.extensionSettings[EXT_NAME].safeMode === undefined) {
                 ctx.extensionSettings[EXT_NAME].safeMode = false;
             }
-            if (!ctx.extensionSettings[EXT_NAME].safeModeBlacklist) {
+            if (ctx.extensionSettings[EXT_NAME].safeModeBlacklist === undefined) {
                 ctx.extensionSettings[EXT_NAME].safeModeBlacklist = {};
             }
-            if (!ctx.extensionSettings[EXT_NAME].quickPrompts) {
+            if (ctx.extensionSettings[EXT_NAME].quickPrompts === undefined) {
                 ctx.extensionSettings[EXT_NAME].quickPrompts = [];
+            }
+            if (ctx.extensionSettings[EXT_NAME].retryKeywords === undefined) {
+                ctx.extensionSettings[EXT_NAME].retryKeywords = '';
+            }
+            if (ctx.extensionSettings[EXT_NAME].maxRetries === undefined) {
+                ctx.extensionSettings[EXT_NAME].maxRetries = 3;
+            }
+            if (ctx.extensionSettings[EXT_NAME].retryDelay === undefined) {
+                ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
             }
         }
         // Nạp style.css thủ công

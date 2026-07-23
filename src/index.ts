@@ -58,6 +58,9 @@ jQuery(async () => {
             customKey: '',
             customModel: '',
             maxAgentLoops: 5,
+            retryKeywords: '',
+            maxRetries: 3,
+            retryDelay: 3000,
             disabledTools: {},
             safeMode: false,
             safeModeBlacklist: {},
@@ -70,11 +73,20 @@ jQuery(async () => {
         if (ctx.extensionSettings[EXT_NAME].safeMode === undefined) {
             ctx.extensionSettings[EXT_NAME].safeMode = false;
         }
-        if (!ctx.extensionSettings[EXT_NAME].safeModeBlacklist) {
+        if (ctx.extensionSettings[EXT_NAME].safeModeBlacklist === undefined) {
             ctx.extensionSettings[EXT_NAME].safeModeBlacklist = {};
         }
-        if (!ctx.extensionSettings[EXT_NAME].quickPrompts) {
+        if (ctx.extensionSettings[EXT_NAME].quickPrompts === undefined) {
             ctx.extensionSettings[EXT_NAME].quickPrompts = [];
+        }
+        if (ctx.extensionSettings[EXT_NAME].retryKeywords === undefined) {
+            ctx.extensionSettings[EXT_NAME].retryKeywords = '';
+        }
+        if (ctx.extensionSettings[EXT_NAME].maxRetries === undefined) {
+            ctx.extensionSettings[EXT_NAME].maxRetries = 3;
+        }
+        if (ctx.extensionSettings[EXT_NAME].retryDelay === undefined) {
+            ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
         }
     }
 

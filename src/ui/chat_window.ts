@@ -516,7 +516,7 @@ export class ChatWindowUI {
                 let color = '#a1a1aa'; // default
                 let icon = 'fa-wrench';
                 const firstLine = safeText.split('\n')[0];
-                
+
                 if (firstLine.includes('CÓ LỖI') || firstLine.includes('LỖI (ERROR)')) {
                     color = '#ef4444'; // red
                     icon = 'fa-circle-xmark';
@@ -761,6 +761,20 @@ export class ChatWindowUI {
                         btnFloat.removeClass('kaiz-btn-blink');
                         resolveFn(false);
                     });
+                } else if (event.type === 'retry') {
+                    lastStreamEvent = null;
+                    streamUpdatePending = false;
+                    if (agentContentBox) {
+                        agentContentBox.html(
+                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${event.text}</div>`,
+                        );
+                    } else {
+                        agentMsgId = addMessageToDOM(
+                            'agent',
+                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${event.text}</div>`,
+                        );
+                        agentContentBox = $(`#${agentMsgId}`);
+                    }
                 } else if (event.type === 'error') {
                     // Ng\u1eaft stream render ngay l\u1eadp t\u1ee9c \u0111\u1ec3 kh\u00f4ng b\u1ecb \u0111\u00e8 l\u00ean th\u00f4ng b\u00e1o l\u1ed7i
                     lastStreamEvent = null;

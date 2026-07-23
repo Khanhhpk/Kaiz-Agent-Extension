@@ -71,6 +71,18 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
         });
 
+        $('#kaiz-retry-keywords').val(settings.retryKeywords || '');
+        $('#kaiz-max-retries').val(settings.maxRetries !== undefined ? settings.maxRetries : 3);
+        $('#kaiz-retry-delay').val(settings.retryDelay || 3000);
+
+        $('#kaiz-retry-keywords, #kaiz-max-retries, #kaiz-retry-delay').on('input', function (this: HTMLInputElement) {
+            const id = this.id;
+            if (id === 'kaiz-retry-keywords') settings.retryKeywords = this.value;
+            if (id === 'kaiz-max-retries') settings.maxRetries = parseInt(this.value, 10) || 0;
+            if (id === 'kaiz-retry-delay') settings.retryDelay = parseInt(this.value, 10) || 3000;
+            ctx.saveSettingsDebounced();
+        });
+
         // --- UI SETTINGS LOGIC ---
         $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
         $('#kaiz-phone-mode').on('change', function (this: HTMLInputElement) {
