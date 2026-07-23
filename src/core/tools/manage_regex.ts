@@ -6,7 +6,11 @@ export const manageRegexTool: ITool = {
         name: 'manage_regex',
         description:
             'Công cụ tạo, sửa, xoá, hoặc bật/tắt Regex Scripts.\n' +
-            '- action: "create", "edit", "delete", "toggle". (Lưu ý: "edit" hỗ trợ partial update - chỉ cần truyền những trường cần đổi vào data, các trường khác giữ nguyên).\n' +
+            '- action: Hành động cần thực hiện. Gồm 4 chế độ:\n' +
+            '  + "create": Tạo mới. Bắt buộc truyền các thông số vào biến data.\n' +
+            '  + "edit": Chỉnh sửa. Hỗ trợ partial update (chỉ cần truyền những trường cần đổi vào data, các trường khác giữ nguyên). Yêu cầu id.\n' +
+            '  + "delete": Xoá Regex. Yêu cầu truyền id (bỏ qua data).\n' +
+            '  + "toggle": Bật/tắt trạng thái disabled. Yêu cầu truyền id (bỏ qua data).\n' +
             '- id: UUID của Regex (bắt buộc cho edit/delete/toggle).\n' +
             '- scope: "Global", "Scoped", "Preset" (chỉ dùng cho create, mặc định Global).\n' +
             '- data: Object cấu hình regex. Phải dùng ĐÚNG các biến chuẩn của ST (CẤM chế tên biến khác):\n' +
