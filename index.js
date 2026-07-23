@@ -255,7 +255,27 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 retryCount++;
                                 const displayMsg = `Lỗi: ${e.message || String(e)}. Thử lại sau ${retryDelay / 1000}s... (${retryCount}/${maxRetries})`;
                                 await onEvent({ type: 'retry', text: displayMsg });
-                                await new Promise((r) => setTimeout(r, retryDelay));
+                                if (this._aborted)
+                                    throw e; // Don't sleep if already aborted
+                                try {
+                                    await Promise.race([
+                                        new Promise((r) => setTimeout(r, retryDelay)),
+                                        new Promise((_, reject) => {
+                                            this._forceAbortReject = reject;
+                                        }),
+                                    ]);
+                                }
+                                catch (sleepErr) {
+                                    if (sleepErr.message === 'FORCE_ABORT') {
+                                        throw sleepErr;
+                                    }
+                                    throw e;
+                                }
+                                finally {
+                                    this._forceAbortReject = null;
+                                }
+                                if (this._aborted)
+                                    throw e; // Don't continue if aborted during sleep
                                 continue;
                             }
                             else {
