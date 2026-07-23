@@ -2222,7 +2222,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         schema: {
             name: 'manage_regex',
             description: 'Công cụ tạo, sửa, xoá, hoặc bật/tắt Regex Scripts.\n' +
-                '- action: "create", "edit", "delete", "toggle".\n' +
+                '- action: "create", "edit", "delete", "toggle". (Lưu ý: "edit" hỗ trợ partial update - chỉ cần truyền những trường cần đổi vào data, các trường khác giữ nguyên).\n' +
                 '- id: UUID của Regex (bắt buộc cho edit/delete/toggle).\n' +
                 '- scope: "Global", "Scoped", "Preset" (chỉ dùng cho create, mặc định Global).\n' +
                 '- data: Object cấu hình regex. Phải dùng ĐÚNG các biến chuẩn của ST (CẤM chế tên biến khác):\n' +
