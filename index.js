@@ -4676,7 +4676,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     // ... logic Tool Result ...
                     let color = '#a1a1aa'; // default
                     let icon = 'fa-wrench';
-                    if (safeText.includes('THẤT BẠI')) {
+                    if (safeText.includes('CÓ LỖI') || safeText.includes('LỖI (ERROR)')) {
                         color = '#ef4444'; // red
                         icon = 'fa-circle-xmark';
                     }
