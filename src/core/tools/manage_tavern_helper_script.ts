@@ -9,7 +9,8 @@ export const manageTavernHelperScriptTool: ITool = {
             '- action: "create", "edit", "delete", "toggle".\n' +
             '- id: UUID của Script (bắt buộc cho edit/delete/toggle).\n' +
             '- scope: "global", "preset", "character" (chỉ dùng cho create, mặc định global). Nếu là action khác create, tool sẽ tự động tìm đúng scope.\n' +
-            '- data: Đối tượng JSON chứa các trường CẦN THAY ĐỔI. Tool dùng Object.assign, nên bạn CHỈ CẦN truyền những gì muốn sửa (VD: { info: "Sửa info thôi" }). KHÔNG CẦN truyền lại toàn bộ code (content) hay name nếu không muốn đổi chúng.',
+            '- data: Đối tượng JSON chứa các trường CẦN THAY ĐỔI. Tool dùng Object.assign, nên bạn CHỈ CẦN truyền những gì muốn sửa (VD: { info: "Sửa info thôi" }). KHÔNG CẦN truyền lại toàn bộ code (content) hay name nếu không muốn đổi chúng.\n' +
+            '  + ĐẶC BIỆT MẠNH MẼ: Nếu chỉ muốn sửa 1 đoạn code trong `content` cực dài, KHÔNG CẦN chép lại cả content. Hãy dùng cú pháp patch: truyền vào data mảng `content_replacements: [{ target: "code cũ", replacement: "code mới" }]`. Tool sẽ tự động tìm `target` trong mã nguồn và thay bằng `replacement`.',
         parameters: {
             type: 'object',
             properties: {
@@ -176,6 +177,23 @@ export const manageTavernHelperScriptTool: ITool = {
                         if (data.authorNote !== undefined) {
                             if (data.info === undefined) data.info = data.authorNote;
                             delete data.authorNote;
+                        }
+
+                        // Tính năng siêu việt: Patch mã nguồn thay vì ghi đè toàn bộ content
+                        if (data.content_replacements && Array.isArray(data.content_replacements)) {
+                            let patchError = '';
+                            for (const rep of data.content_replacements) {
+                                if (typeof rep.target === 'string' && typeof rep.replacement === 'string') {
+                                    if (node.content && node.content.includes(rep.target)) {
+                                        node.content = node.content.split(rep.target).join(rep.replacement);
+                                    } else {
+                                        patchError = `Không tìm thấy đoạn mã target: ${rep.target.substring(0, 30)}...`;
+                                        break;
+                                    }
+                                }
+                            }
+                            delete data.content_replacements;
+                            if (patchError) throw new Error(patchError);
                         }
                         
                         Object.assign(node, data);
