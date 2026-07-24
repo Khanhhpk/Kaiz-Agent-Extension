@@ -9,7 +9,7 @@ export const manageTavernHelperScriptTool: ITool = {
             '- action: "create", "edit", "delete", "toggle".\n' +
             '- id: UUID của Script (bắt buộc cho edit/delete/toggle).\n' +
             '- scope: "global", "preset", "character" (chỉ dùng cho create, mặc định global). Nếu là action khác create, tool sẽ tự động tìm đúng scope.\n' +
-            '- data: Object cấu hình script (truyền những trường cần sửa). Ví dụ: { name, content, info, enabled, data: {}, button: { enabled: true, buttons: [] } }.',
+            '- data: Đối tượng JSON chứa các trường CẦN THAY ĐỔI. Tool dùng Object.assign, nên bạn CHỈ CẦN truyền những gì muốn sửa (VD: { info: "Sửa info thôi" }). KHÔNG CẦN truyền lại toàn bộ code (content) hay name nếu không muốn đổi chúng.',
         parameters: {
             type: 'object',
             properties: {
