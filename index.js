@@ -2960,10 +2960,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     };
                     const newScript = { ...baseScript, ...(data || {}) };
                     newScript.id = newId;
-                    const trees = await th.getScriptTrees({ type: targetScope });
-                    const newTrees = JSON.parse(JSON.stringify(trees || []));
-                    newTrees.push(newScript);
-                    await th.replaceScriptTrees(newTrees, { type: targetScope });
+                    await th.updateScriptTreesWith((trees) => {
+                        trees.push(newScript);
+                        return trees;
+                    }, { type: targetScope });
                     return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
                 }
                 if (!id)
@@ -2973,23 +2973,23 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return { isError: true, content: `Không tìm thấy Script nào với ID: ${id}` };
                 }
                 if (action === 'delete') {
-                    const trees = await th.getScriptTrees({ type: foundScope });
-                    const newTrees = JSON.parse(JSON.stringify(trees || []));
-                    deleteFromTree(newTrees);
-                    await th.replaceScriptTrees(newTrees, { type: foundScope });
+                    await th.updateScriptTreesWith((trees) => {
+                        deleteFromTree(trees);
+                        return trees;
+                    }, { type: foundScope });
                     return { content: `Đã xóa thành công Script (ID: ${id})` };
                 }
                 if (action === 'toggle') {
                     let currentStatus = false;
                     let currentName = '';
-                    const trees = await th.getScriptTrees({ type: foundScope });
-                    const newTrees = JSON.parse(JSON.stringify(trees || []));
-                    editInTree(newTrees, (node) => {
-                        node.enabled = !node.enabled;
-                        currentStatus = node.enabled;
-                        currentName = node.name || 'Unnamed';
-                    });
-                    await th.replaceScriptTrees(newTrees, { type: foundScope });
+                    await th.updateScriptTreesWith((trees) => {
+                        editInTree(trees, (node) => {
+                            node.enabled = !node.enabled;
+                            currentStatus = node.enabled;
+                            currentName = node.name || 'Unnamed';
+                        });
+                        return trees;
+                    }, { type: foundScope });
                     return { content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}` };
                 }
                 if (action === 'edit') {
@@ -2997,43 +2997,43 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return { isError: true, content: 'Phải cung cấp field "data" dưới dạng JSON object để cập nhật.' };
                     }
                     let currentName = '';
-                    const trees = await th.getScriptTrees({ type: foundScope });
-                    const newTrees = JSON.parse(JSON.stringify(trees || []));
-                    editInTree(newTrees, (node) => {
-                        // Không cho phép ghi đè id
-                        const originalId = node.id;
-                        // Chuẩn hoá: Dùng info, loại bỏ authorNote
-                        if (data.authorNote !== undefined) {
-                            if (data.info === undefined)
-                                data.info = data.authorNote;
-                            delete data.authorNote;
-                        }
-                        // Tính năng siêu việt: Patch mã nguồn thay vì ghi đè toàn bộ content
-                        if (data.content_replacements && Array.isArray(data.content_replacements)) {
-                            let patchError = '';
-                            for (const rep of data.content_replacements) {
-                                if (typeof rep.target === 'string' && typeof rep.replacement === 'string') {
-                                    if (node.content && node.content.includes(rep.target)) {
-                                        node.content = node.content.split(rep.target).join(rep.replacement);
-                                    }
-                                    else {
-                                        patchError = `Không tìm thấy đoạn mã target: ${rep.target.substring(0, 30)}...`;
-                                        break;
+                    await th.updateScriptTreesWith((trees) => {
+                        editInTree(trees, (node) => {
+                            // Không cho phép ghi đè id
+                            const originalId = node.id;
+                            // Chuẩn hoá: Dùng info, loại bỏ authorNote
+                            if (data.authorNote !== undefined) {
+                                if (data.info === undefined)
+                                    data.info = data.authorNote;
+                                delete data.authorNote;
+                            }
+                            // Tính năng siêu việt: Patch mã nguồn thay vì ghi đè toàn bộ content
+                            if (data.content_replacements && Array.isArray(data.content_replacements)) {
+                                let patchError = '';
+                                for (const rep of data.content_replacements) {
+                                    if (typeof rep.target === 'string' && typeof rep.replacement === 'string') {
+                                        if (node.content && node.content.includes(rep.target)) {
+                                            node.content = node.content.split(rep.target).join(rep.replacement);
+                                        }
+                                        else {
+                                            patchError = `Không tìm thấy đoạn mã target: ${rep.target.substring(0, 30)}...`;
+                                            break;
+                                        }
                                     }
                                 }
+                                delete data.content_replacements;
+                                if (patchError)
+                                    throw new Error(patchError);
                             }
-                            delete data.content_replacements;
-                            if (patchError)
-                                throw new Error(patchError);
-                        }
-                        Object.assign(node, data);
-                        node.id = originalId;
-                        currentName = node.name || 'Unnamed';
-                        if (node.authorNote !== undefined) {
-                            delete node.authorNote;
-                        }
-                    });
-                    await th.replaceScriptTrees(newTrees, { type: foundScope });
+                            Object.assign(node, data);
+                            node.id = originalId;
+                            currentName = node.name || 'Unnamed';
+                            if (node.authorNote !== undefined) {
+                                delete node.authorNote;
+                            }
+                        });
+                        return trees;
+                    }, { type: foundScope });
                     return { content: `Đã chỉnh sửa thành công Script: ${currentName}` };
                 }
                 return { isError: true, content: `Hành động không hợp lệ: ${action}` };
