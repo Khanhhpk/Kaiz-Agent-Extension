@@ -2691,6 +2691,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     };
                 }
                 const results = [];
+                const flattenScripts = (nodes, scopeName, parentPath = '') => {
+                    if (!Array.isArray(nodes))
+                        return;
+                    nodes.forEach((node) => {
+                        // Nhận diện folder (có thể qua type, isFolder, hoặc chứa mảng children/scripts)
+                        const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                        const isFolder = node.isFolder === true || node.type === 'folder' || children !== null;
+                        if (isFolder && children) {
+                            const folderName = node.name || 'Unnamed Folder';
+                            const currentPath = parentPath ? `${parentPath}/${folderName}` : folderName;
+                            flattenScripts(children, scopeName, currentPath);
+                        }
+                        else {
+                            // Nếu là script thường
+                            results.push({
+                                id: node.id,
+                                name: parentPath ? `[${parentPath}] ${node.name || 'Unnamed Script'}` : (node.name || 'Unnamed Script'),
+                                scope: scopeName,
+                                enabled: node.enabled !== false,
+                                authorNote: node.authorNote || node.info || '',
+                            });
+                        }
+                    });
+                };
                 // Lấy Global Scripts
                 let globalScripts = [];
                 try {
@@ -2699,17 +2723,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 catch (e) {
                     console.warn('[KaizAgent] Failed to fetch global scripts', e);
                 }
-                if (Array.isArray(globalScripts)) {
-                    globalScripts.forEach((script) => {
-                        results.push({
-                            id: script.id,
-                            name: script.name || 'Unnamed Script',
-                            scope: 'Global',
-                            enabled: script.enabled !== false,
-                            authorNote: script.authorNote || script.info || '',
-                        });
-                    });
-                }
+                flattenScripts(globalScripts, 'Global');
                 // Lấy Preset Scripts
                 let presetScripts = [];
                 try {
@@ -2718,17 +2732,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 catch (e) {
                     console.warn('[KaizAgent] Failed to fetch preset scripts', e);
                 }
-                if (Array.isArray(presetScripts)) {
-                    presetScripts.forEach((script) => {
-                        results.push({
-                            id: script.id,
-                            name: script.name || 'Unnamed Script',
-                            scope: 'Preset',
-                            enabled: script.enabled !== false,
-                            authorNote: script.authorNote || script.info || '',
-                        });
-                    });
-                }
+                flattenScripts(presetScripts, 'Preset');
                 if (results.length === 0) {
                     return {
                         content: 'Không có Script nào được tìm thấy.',
