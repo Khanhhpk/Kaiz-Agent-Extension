@@ -171,15 +171,19 @@ export const manageTavernHelperScriptTool: ITool = {
                     editInTree(trees, (node) => {
                         // Không cho phép ghi đè id
                         const originalId = node.id;
+                        
+                        // Chuẩn hoá: Dùng info, loại bỏ authorNote
+                        if (data.authorNote !== undefined) {
+                            if (data.info === undefined) data.info = data.authorNote;
+                            delete data.authorNote;
+                        }
+                        
                         Object.assign(node, data);
                         node.id = originalId;
                         currentName = node.name || 'Unnamed';
                         
-                        // Đồng bộ info và authorNote vì ST/JS-Slash-Runner dùng chung mục đích
-                        if ('authorNote' in data) {
-                            node.info = data.authorNote;
-                        } else if ('info' in data) {
-                            node.authorNote = data.info;
+                        if (node.authorNote !== undefined) {
+                            delete node.authorNote;
                         }
                     });
                     return trees;

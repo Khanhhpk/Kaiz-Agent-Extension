@@ -41,7 +41,7 @@ export const getTavernHelperScriptsTool: ITool = {
                             name: parentPath ? `[${parentPath}] ${node.name || 'Unnamed Script'}` : (node.name || 'Unnamed Script'),
                             scope: scopeName,
                             enabled: node.enabled !== false,
-                            authorNote: node.authorNote || node.info || '',
+                            info: node.info || node.authorNote || '',
                         });
                     }
                 });
