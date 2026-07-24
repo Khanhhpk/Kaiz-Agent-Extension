@@ -49,7 +49,11 @@ export class StateManager {
         if (this.onChatSwitched) this.onChatSwitched(id, messages);
     }
 
-    public async addMessage(role: 'user' | 'agent' | 'system', content: string): Promise<void> {
+    public async addMessage(
+        role: 'user' | 'agent' | 'system',
+        content: string,
+        attachments?: import('./db').ChatAttachment[],
+    ): Promise<void> {
         let chatId = this.currentChatId;
 
         if (!chatId) {
@@ -68,7 +72,7 @@ export class StateManager {
             }
         }
 
-        await this.db.addMessage(chatId, role, content);
+        await this.db.addMessage(chatId, role, content, attachments);
 
         // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
         const chats = await this.db.getAllChats();

@@ -5,11 +5,18 @@ export interface ChatSession {
     updatedAt: number;
 }
 
+export interface ChatAttachment {
+    name: string;
+    type: 'image' | 'text';
+    data: string; // Base64 for images, raw string for text
+}
+
 export interface ChatMessage {
     id?: number;
     chatId: number;
     role: 'user' | 'agent' | 'system';
     content: string;
+    attachments?: ChatAttachment[];
     timestamp: number;
 }
 
@@ -154,12 +161,20 @@ export class KaizDB {
 
     // --- MESSAGES ---
 
-    public async addMessage(chatId: number, role: 'user' | 'agent' | 'system', content: string): Promise<number> {
+    public async addMessage(
+        chatId: number,
+        role: 'user' | 'agent' | 'system',
+        content: string,
+        attachments?: ChatAttachment[],
+    ): Promise<number> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['messages'], 'readwrite');
             const store = transaction.objectStore('messages');
             const msg: ChatMessage = { chatId, role, content, timestamp: Date.now() };
+            if (attachments && attachments.length > 0) {
+                msg.attachments = attachments;
+            }
 
             const request = store.add(msg);
             request.onsuccess = async () => {

@@ -13,7 +13,7 @@ const escapeHtml = (s: string): string =>
 export interface Message {
     role: 'system' | 'user' | 'assistant';
     name?: string;
-    content: string;
+    content: string | any[];
 }
 
 export class SillyTavernAdapter {

@@ -13,6 +13,8 @@ const escapeHtml = (s: string): string =>
         .replace(/'/g, '&#039;');
 
 export class ChatWindowUI {
+    private static currentAttachments: import('../core/db').ChatAttachment[] = [];
+
     public static init(loop: AgentLoop, stateManager: StateManager) {
         const $ = jQuery;
         const btn = $('#kaiz-floating-btn');
@@ -139,6 +141,118 @@ export class ChatWindowUI {
                 !$(e.target).closest('#kaiz-quick-prompt-menu').length
             ) {
                 quickPromptMenu.hide();
+            }
+        });
+        // ------------------------------------
+
+        // --- File Attachments Logic ---
+        const attachBtn = $('#kaiz-attach-btn');
+        const fileInput = $('#kaiz-file-upload');
+        const attachmentsPreview = $('#kaiz-attachments-preview');
+
+        const renderAttachmentsPreview = () => {
+            attachmentsPreview.empty();
+            if (ChatWindowUI.currentAttachments.length === 0) {
+                attachmentsPreview.hide();
+                return;
+            }
+            attachmentsPreview.show();
+            ChatWindowUI.currentAttachments.forEach((att, index) => {
+                const item = $('<div class="kaiz-attachment-item"></div>');
+                if (att.type === 'image') {
+                    item.append(`<img src="${att.data}" />`);
+                } else {
+                    item.append(`<i class="fa-solid fa-file-lines"></i>`);
+                }
+                item.append(`<span>${escapeHtml(att.name)}</span>`);
+                const removeBtn = $('<i class="fa-solid fa-xmark kaiz-attachment-remove"></i>');
+                removeBtn.on('click', () => {
+                    ChatWindowUI.currentAttachments.splice(index, 1);
+                    renderAttachmentsPreview();
+                });
+                item.append(removeBtn);
+                attachmentsPreview.append(item);
+            });
+        };
+
+        const processFile = (file: File) => {
+            const reader = new FileReader();
+            if (file.type.startsWith('image/')) {
+                reader.onload = (e) => {
+                    ChatWindowUI.currentAttachments.push({
+                        name: file.name,
+                        type: 'image',
+                        data: e.target?.result as string,
+                    });
+                    renderAttachmentsPreview();
+                };
+                reader.readAsDataURL(file);
+            } else if (file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+                reader.onload = (e) => {
+                    ChatWindowUI.currentAttachments.push({
+                        name: file.name,
+                        type: 'text',
+                        data: e.target?.result as string,
+                    });
+                    renderAttachmentsPreview();
+                };
+                reader.readAsText(file);
+            } else {
+                console.warn('Kaiz Agent: Unsupported file type', file.name);
+            }
+        };
+
+        attachBtn.on('click', () => {
+            fileInput.trigger('click');
+        });
+
+        fileInput.on('change', (e: any) => {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    processFile(files[i]);
+                }
+            }
+            fileInput.val(''); // Reset
+        });
+
+        // Paste support
+        input.on('paste', (e: any) => {
+            const clipboardData = e.clipboardData || e.originalEvent.clipboardData;
+            if (clipboardData && clipboardData.items) {
+                for (let i = 0; i < clipboardData.items.length; i++) {
+                    const item = clipboardData.items[i];
+                    if (item.kind === 'file') {
+                        const file = item.getAsFile();
+                        if (file) {
+                            processFile(file);
+                        }
+                    }
+                }
+            }
+        });
+
+        // Drag & Drop support
+        const dropZone = $('.kaiz-chat-input-area');
+        dropZone.on('dragover', (e: any) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.css('background', 'rgba(255, 255, 255, 0.1)');
+        });
+        dropZone.on('dragleave', (e: any) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.css('background', 'rgba(0, 0, 0, 0.2)');
+        });
+        dropZone.on('drop', (e: any) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.css('background', 'rgba(0, 0, 0, 0.2)');
+            const files = e.originalEvent.dataTransfer.files;
+            if (files && files.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    processFile(files[i]);
+                }
             }
         });
         // ------------------------------------
@@ -506,10 +620,11 @@ export class ChatWindowUI {
         };
 
         // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
-        const formatUserMessage = (text: string): string => {
-            const safeText = text;
+        const formatUserMessage = (text: string, attachments?: import('../core/db').ChatAttachment[]): string => {
+            const safeText = text || '';
 
             const escapedText = escapeHtml(safeText).replace(/\n/g, '<br>');
+            let finalHtml = escapedText;
 
             if (safeText.startsWith('[Tool Result')) {
                 // ... logic Tool Result ...
@@ -525,13 +640,26 @@ export class ChatWindowUI {
                     icon = 'fa-circle-check';
                 }
 
-                return `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
+                finalHtml = `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
 <summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
 <div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
             }
 
-            return escapedText;
+            if (attachments && attachments.length > 0) {
+                let attachmentsHtml = '<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">';
+                for (const att of attachments) {
+                    if (att.type === 'image') {
+                        attachmentsHtml += `<img src="${att.data}" class="kaiz-msg-attachment-img" title="${escapeHtml(att.name)}" />`;
+                    } else if (att.type === 'text') {
+                        attachmentsHtml += `<div class="kaiz-msg-attachment-text"><i class="fa-solid fa-file-lines"></i> <b>${escapeHtml(att.name)}</b></div>`;
+                    }
+                }
+                attachmentsHtml += '</div>';
+                finalHtml += attachmentsHtml;
+            }
+
+            return finalHtml;
         };
 
         // Lắng nghe StateManager
@@ -558,7 +686,7 @@ export class ChatWindowUI {
             let htmlBuffer = '';
             for (const msg of messages) {
                 const formatted =
-                    msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content);
+                    msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content, msg.attachments);
                 const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
 
                 const avatar =
@@ -627,19 +755,25 @@ export class ChatWindowUI {
         const sendMessage = async () => {
             if (sendBtn.prop('disabled')) return;
             const text = String(input.val()).trim();
-            if (!text) return;
+            const attachmentsToSend = [...ChatWindowUI.currentAttachments];
+
+            if (!text && attachmentsToSend.length === 0) return;
 
             sendBtn.prop('disabled', true);
             input.val('');
+            ChatWindowUI.currentAttachments = [];
+            renderAttachmentsPreview();
 
             // Lưu vào DB trước
-            await stateManager.addMessage('user', text);
+            await stateManager.addMessage('user', text, attachmentsToSend);
             // In ra UI
-            addMessageToDOM('user', text.replace(/\n/g, '<br>'));
+            const formattedUI = formatUserMessage(text.replace(/\n/g, '<br>'), attachmentsToSend);
+            addMessageToDOM('user', formattedUI);
 
             // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
             if (chatTitle.text() === 'New Chat') {
-                chatTitle.text(text.substring(0, 30) + (text.length > 30 ? '...' : ''));
+                const titleText = text || 'File đính kèm';
+                chatTitle.text(titleText.substring(0, 30) + (titleText.length > 30 ? '...' : ''));
             }
 
             sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');

@@ -60,6 +60,10 @@
     </div>
 
     <div class="kaiz-chat-input-area" style="position: relative">
+        <!-- Attachment Preview Area -->
+        <div id="kaiz-attachments-preview" style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px;"></div>
+        <input type="file" id="kaiz-file-upload" accept="image/*,.txt,.md" multiple style="display: none;" />
+
         <!-- Quick Prompts Menu -->
         <div
             id="kaiz-quick-prompt-menu"
@@ -86,23 +90,33 @@
             <!-- Menu items will be injected here -->
         </div>
 
-        <button
-            id="kaiz-quick-prompt-btn"
-            class="kaiz-chat-send"
-            style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-            title="Quick Prompts"
-        >
-            <i class="fa-solid fa-fan"></i>
-        </button>
-        <textarea
-            id="kaiz-chat-input"
-            class="kaiz-chat-input"
-            placeholder="Nhập yêu cầu của bạn (Shift+Enter để xuống dòng)..."
-            rows="1"
-        ></textarea>
-        <button id="kaiz-chat-send" class="kaiz-chat-send">
-            <i class="fa-solid fa-paper-plane"></i>
-        </button>
+        <div style="display: flex; align-items: flex-end; gap: 8px; width: 100%;">
+            <button
+                id="kaiz-quick-prompt-btn"
+                class="kaiz-chat-send"
+                style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
+                title="Quick Prompts"
+            >
+                <i class="fa-solid fa-fan"></i>
+            </button>
+            <button
+                id="kaiz-attach-btn"
+                class="kaiz-chat-send"
+                style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
+                title="Đính kèm file (Ảnh, TXT, MD)"
+            >
+                <i class="fa-solid fa-paperclip"></i>
+            </button>
+            <textarea
+                id="kaiz-chat-input"
+                class="kaiz-chat-input"
+                placeholder="Nhập yêu cầu (Shift+Enter xuống dòng) hoặc Paste/Kéo thả file..."
+                rows="1"
+            ></textarea>
+            <button id="kaiz-chat-send" class="kaiz-chat-send">
+                <i class="fa-solid fa-paper-plane"></i>
+            </button>
+        </div>
     </div>
 </dialog>
 
