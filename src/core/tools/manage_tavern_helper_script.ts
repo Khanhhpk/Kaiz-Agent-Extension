@@ -83,29 +83,21 @@ export const manageTavernHelperScriptTool: ITool = {
 
             const forceSyncUI = async (targetScope: string, targetId: string) => {
                 try {
-                    const currentTrees = await th.getScriptTrees({ type: targetScope });
+                    const tempId = targetId + '_temp_sync';
                     
-                    // Clone and remove the specific script to unmount its Vue component
-                    const tempTrees = JSON.parse(JSON.stringify(currentTrees));
-                    const removeNode = (nodes: any[]) => {
-                        if (!Array.isArray(nodes)) return false;
-                        for (let i = 0; i < nodes.length; i++) {
-                            if (nodes[i].id === targetId) {
-                                nodes.splice(i, 1);
-                                return true;
-                            }
-                            const children = Array.isArray(nodes[i].children) ? nodes[i].children : (Array.isArray(nodes[i].scripts) ? nodes[i].scripts : null);
-                            if (children && removeNode(children)) return true;
-                        }
-                        return false;
-                    };
-                    removeNode(tempTrees);
+                    // Đổi ID tạm thời để Vue unmount component
+                    await th.updateScriptTreesWith((trees: any[]) => {
+                        editInTree(trees, (node) => { if (node.id === targetId) node.id = tempId; });
+                        return trees;
+                    }, { type: targetScope });
                     
-                    // Replace with tree lacking the script
-                    await th.replaceScriptTrees(tempTrees, { type: targetScope });
                     await new Promise(resolve => setTimeout(resolve, 100));
-                    // Restore full tree, recreating the ScriptItem for the edited script
-                    await th.replaceScriptTrees(currentTrees, { type: targetScope });
+                    
+                    // Trả lại ID gốc để Vue mount lại component với dữ liệu mới
+                    await th.updateScriptTreesWith((trees: any[]) => {
+                        editInTree(trees, (node) => { if (node.id === tempId) node.id = targetId; });
+                        return trees;
+                    }, { type: targetScope });
                 } catch (e) {
                     console.error("Lỗi khi force sync UI JS-Slash-Runner:", e);
                 }
