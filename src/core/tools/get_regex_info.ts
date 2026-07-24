@@ -25,15 +25,21 @@ export const getRegexInfoTool: ITool = {
             // Sử dụng Function để bypass trình biên dịch TypeScript
             const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
 
-            if (!regexEngine || !regexEngine.getRegexScripts) {
+            if (!regexEngine || !regexEngine.SCRIPT_TYPES || !regexEngine.getScriptsByType) {
                 return {
                     isError: true,
                     content: 'Không thể tải Regex Engine của SillyTavern.',
                 };
             }
 
-            // getRegexScripts trả về mảng kết hợp từ tất cả các Scope
-            const allScripts = regexEngine.getRegexScripts();
+            const { SCRIPT_TYPES, getScriptsByType } = regexEngine;
+
+            // Lấy tất cả scripts từ các scope để tìm kiếm
+            const globalScripts = getScriptsByType(SCRIPT_TYPES.GLOBAL) || [];
+            const scopedScripts = getScriptsByType(SCRIPT_TYPES.SCOPED) || [];
+            const presetScripts = getScriptsByType(SCRIPT_TYPES.PRESET) || [];
+
+            const allScripts = [...globalScripts, ...scopedScripts, ...presetScripts];
 
             const targetScript = allScripts.find((script: any) => script.id === args.id);
 
