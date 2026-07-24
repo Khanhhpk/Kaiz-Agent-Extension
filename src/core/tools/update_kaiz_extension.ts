@@ -22,13 +22,36 @@ export const updateKaizExtensionTool: ITool = {
                 'X-CSRF-Token': (window as any).csrf_token || '',
             };
 
-            const namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension'];
+            let namesToTry = [
+                'Kaiz-Agent-Extension',
+                'Kaiz-Agent',
+                'kaiz-agent-extension',
+                'https://github.com/Khanhhpk/Kaiz-Agent-Extension',
+                'https://github.com/Khanhhpk/Kaiz-Agent-Extension.git'
+            ];
+
+            const extTypes = (window as any).extensionTypes || (window as any).SillyTavern?.getContext?.()?.extensionTypes;
+            if (extTypes) {
+                const foundKeys = Object.keys(extTypes).filter((k) => k.toLowerCase().includes('kaiz'));
+                namesToTry = [...foundKeys, ...namesToTry];
+            }
+            // Loại bỏ trùng lặp
+            namesToTry = [...new Set(namesToTry)];
+
             let updatedOk = false;
             let successName = '';
 
             for (const extName of namesToTry) {
-                // Thử update cả local và global
-                for (const isGlobal of [false, true]) {
+                // Determine if it is global or local if possible
+                const isSystem = extTypes && extTypes[extName] === 'system';
+                if (isSystem) continue;
+
+                let isGlobalList = [false, true];
+                if (extTypes && extTypes[extName] === 'global') isGlobalList = [true];
+                if (extTypes && extTypes[extName] === 'local') isGlobalList = [false];
+
+                // Thử update
+                for (const isGlobal of isGlobalList) {
                     try {
                         const payload = { extensionName: extName, global: isGlobal };
                         let res = await fetch('/api/extensions/update', {
