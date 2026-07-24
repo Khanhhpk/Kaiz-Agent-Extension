@@ -174,9 +174,13 @@ export const manageTavernHelperScriptTool: ITool = {
                         Object.assign(node, data);
                         node.id = originalId;
                         currentName = node.name || 'Unnamed';
-                        // Alias handling, kaiz-collection treats authorNote as info and vice versa
-                        if (data.authorNote && !data.info) node.info = data.authorNote;
-                        if (data.info && !data.authorNote) node.authorNote = data.info;
+                        
+                        // Đồng bộ info và authorNote vì ST/JS-Slash-Runner dùng chung mục đích
+                        if ('authorNote' in data) {
+                            node.info = data.authorNote;
+                        } else if ('info' in data) {
+                            node.authorNote = data.info;
+                        }
                     });
                     return trees;
                 }, { type: foundScope });
