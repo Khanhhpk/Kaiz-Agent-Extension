@@ -1678,7 +1678,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
                 if (!foundElement) {
-                    return { content: `Không tìm thấy nút hoặc phần tử nào trên màn hình khớp với "${target}".`, isError: true };
+                    return {
+                        content: `Không tìm thấy nút hoặc phần tử nào trên màn hình khớp với "${target}".`,
+                        isError: true,
+                    };
                 }
                 // 2. Tính toán vị trí trung tâm của element
                 const rect = foundElement.getBoundingClientRect();
@@ -1981,11 +1984,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return { content: "Lỗi: Tham số mode phải là 'overwrite', 'append' hoặc 'read'.", isError: true };
                 }
                 if (mode !== 'read' && !text) {
-                    return { content: 'Lỗi: Tham số text không được để trống khi ghi hoặc nối thêm văn bản.', isError: true };
+                    return {
+                        content: 'Lỗi: Tham số text không được để trống khi ghi hoặc nối thêm văn bản.',
+                        isError: true,
+                    };
                 }
                 const textarea = document.getElementById('send_textarea');
                 if (!textarea) {
-                    return { content: 'Lỗi: Không tìm thấy khung nhập văn bản (send_textarea) trên giao diện.', isError: true };
+                    return {
+                        content: 'Lỗi: Không tìm thấy khung nhập văn bản (send_textarea) trên giao diện.',
+                        isError: true,
+                    };
                 }
                 if (mode === 'read') {
                     return { content: `Nội dung hiện tại trong khung chat là: "${textarea.value}"` };
@@ -2014,7 +2023,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         };
                     }
                 }
-                return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung vào khung chat (Không gửi).` };
+                return {
+                    content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung vào khung chat (Không gửi).`,
+                };
             }
             catch (e) {
                 return {
@@ -2055,7 +2066,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const key = args.key;
                 const content = args.content;
                 // Check for window and SillyTavern safely
-                if (typeof window === 'undefined' || !window.SillyTavern || typeof window.SillyTavern.getContext !== 'function') {
+                if (typeof window === 'undefined' ||
+                    !window.SillyTavern ||
+                    typeof window.SillyTavern.getContext !== 'function') {
                     return { content: 'Error: SillyTavern context not available.', isError: true };
                 }
                 const ctx = window.SillyTavern.getContext();
@@ -2486,6 +2499,79 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
+    const updateKaizExtensionTool = {
+        schema: {
+            name: 'update_kaiz_extension',
+            description: 'Kiểm tra thông báo update của Kaiz-Agent-Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+            parameters: {
+                type: 'object',
+                properties: {},
+                required: [],
+            },
+        },
+        validate: () => {
+            return; // Luôn dùng được trên trình duyệt có jQuery
+        },
+        execute: async (args, context) => {
+            try {
+                const $ = window.$;
+                if (!$) {
+                    return { content: 'Lỗi: Không tìm thấy jQuery ($) trên trang.', isError: true };
+                }
+                // Tìm thẻ chứa Kaiz-Agent-Extension
+                // Trong ST, mỗi extension thường được bọc trong thẻ có data-name hoặc class chứa tên
+                let extBlock = $('[data-name="Kaiz-Agent-Extension"]');
+                // Fallback nếu không tìm thấy bằng data-name
+                if (extBlock.length === 0) {
+                    extBlock = $('.extension_name')
+                        .filter(function () {
+                        return $(this).text().trim().toLowerCase().includes('kaiz-agent-extension');
+                    })
+                        .closest('.extension_list_item, .extension_wrapper, .extension_row, [data-name]');
+                }
+                if (extBlock.length === 0) {
+                    return {
+                        content: 'Không tìm thấy Kaiz-Agent-Extension trong danh sách Extension Manager. Có thể thẻ chưa được load vào DOM.',
+                        isError: true,
+                    };
+                }
+                // Tìm nút update bên trong block này
+                // ST thường dùng class .extension_update hoặc nút có icon download/text "Update"
+                let updateBtn = extBlock.find('.extension_update');
+                if (updateBtn.length === 0) {
+                    updateBtn = extBlock.find('.menu_button').filter(function () {
+                        const text = $(this).text().toLowerCase();
+                        const title = ($(this).attr('title') || '').toLowerCase();
+                        return text.includes('update') || text.includes('cập nhật') || title.includes('update');
+                    });
+                }
+                if (updateBtn.length > 0 && updateBtn.is(':visible')) {
+                    // Nếu nút bị disable thì tức là đang update dở hoặc không cho click
+                    if (updateBtn.prop('disabled') || updateBtn.hasClass('disabled')) {
+                        return {
+                            content: 'Nút Update tồn tại nhưng đang bị vô hiệu hóa (Disabled). Có thể đang cập nhật rồi.',
+                        };
+                    }
+                    updateBtn.trigger('click');
+                    return {
+                        content: '✅ Đã tìm thấy bản cập nhật! Đã tự động nhấn nút Update. Vui lòng đợi SillyTavern tải về và có thể sẽ yêu cầu Restart.',
+                    };
+                }
+                else {
+                    return {
+                        content: 'ℹ️ Không tìm thấy thông báo/nút cập nhật. Kaiz-Agent-Extension hiện đã ở phiên bản mới nhất!',
+                    };
+                }
+            }
+            catch (e) {
+                return {
+                    content: `Lỗi khi chạy công cụ update_kaiz_extension: ${e.message}`,
+                    isError: true,
+                };
+            }
+        },
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -2516,6 +2602,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(getRegexListTool);
         registry.registerTool(getRegexInfoTool);
         registry.registerTool(manageRegexTool);
+        registry.registerTool(updateKaizExtensionTool);
     }
 
     /**
