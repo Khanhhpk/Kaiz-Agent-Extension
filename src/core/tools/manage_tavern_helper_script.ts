@@ -130,14 +130,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     return trees;
                 }, { type: targetScope });
 
-                setTimeout(() => {
-                    if (typeof window !== 'undefined') window.location.reload();
-                }, 1500);
-
-                return { 
-                    content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope}). Đang tự động tải lại trang...`,
-                    isTerminal: true
-                };
+                return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
             }
 
             if (!id) return { isError: true, content: 'Bắt buộc phải cung cấp id cho hành động này.' };
@@ -152,14 +145,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     deleteFromTree(trees);
                     return trees;
                 }, { type: foundScope });
-                
-                setTimeout(() => {
-                    if (typeof window !== 'undefined') window.location.reload();
-                }, 1500);
-                return { 
-                    content: `Đã xóa thành công Script (ID: ${id}). Đang tự động tải lại trang để đồng bộ giao diện...`,
-                    isTerminal: true
-                };
+                return { content: `Đã xóa thành công Script (ID: ${id})` };
             }
 
             if (action === 'toggle') {
@@ -173,15 +159,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     });
                     return trees;
                 }, { type: foundScope });
-                
-                setTimeout(() => {
-                    if (typeof window !== 'undefined') window.location.reload();
-                }, 1500);
-                
-                return { 
-                    content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}. Đang tự động tải lại trang...`,
-                    isTerminal: true
-                };
+                return { content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}` };
             }
 
             if (action === 'edit') {
@@ -229,14 +207,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     return trees;
                 }, { type: foundScope });
 
-                setTimeout(() => {
-                    if (typeof window !== 'undefined') window.location.reload();
-                }, 1500);
-
-                return { 
-                    content: `Đã chỉnh sửa thành công Script: ${currentName}. Đang tự động tải lại trang...`,
-                    isTerminal: true
-                };
+                return { content: `Đã chỉnh sửa thành công Script: ${currentName}` };
             }
 
             return { isError: true, content: `Hành động không hợp lệ: ${action}` };
