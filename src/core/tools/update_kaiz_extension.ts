@@ -17,10 +17,27 @@ export const updateKaizExtensionTool: ITool = {
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
-            const reqHeaders = {
+            let reqHeaders: Record<string, string> = {
                 'Content-Type': 'application/json',
-                'X-CSRF-Token': (window as any).csrf_token || '',
             };
+            try {
+                const win = window as any;
+                if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+                    const ctx = win.SillyTavern.getContext();
+                    if (ctx && typeof ctx.getRequestHeaders === 'function') {
+                        Object.assign(reqHeaders, ctx.getRequestHeaders());
+                    }
+                } else if (typeof win.getRequestHeaders === 'function') {
+                    Object.assign(reqHeaders, win.getRequestHeaders());
+                } else {
+                    let token = win.token || win.SillyTavern?.token;
+                    if (!token) {
+                        const meta = document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement;
+                        if (meta) token = meta.content;
+                    }
+                    if (token) reqHeaders['X-CSRF-Token'] = token;
+                }
+            } catch (e) {};
 
             let namesToTry = [
                 'Kaiz-Agent-Extension',
