@@ -17,60 +17,46 @@ export const updateKaizExtensionTool: ITool = {
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
-            const $ = (window as any).$;
-            if (!$) {
-                return { content: 'Lỗi: Không tìm thấy jQuery ($) trên trang.', isError: true };
-            }
+            const reqHeaders = {
+                'Content-Type': 'application/json',
+                'X-CSRF-Token': (window as any).csrf_token || '',
+            };
 
-            // Tìm thẻ chứa Kaiz-Agent-Extension
-            // Trong ST, mỗi extension thường được bọc trong thẻ có data-name hoặc class chứa tên
-            let extBlock = $('[data-name="Kaiz-Agent-Extension"]');
+            const namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension'];
+            let updatedOk = false;
+            let successName = '';
 
-            // Fallback nếu không tìm thấy bằng data-name
-            if (extBlock.length === 0) {
-                extBlock = $('.extension_name')
-                    .filter(function (this: any) {
-                        const t = $(this).text().trim().toLowerCase();
-                        return t.includes('kaiz agent') || t.includes('kaiz-agent');
-                    })
-                    .closest('.extension_list_item, .extension_wrapper, .extension_row, [data-name]');
-            }
+            for (const extName of namesToTry) {
+                // Thử update cả local và global
+                for (const isGlobal of [false, true]) {
+                    try {
+                        const payload = { extensionName: extName, global: isGlobal };
+                        let res = await fetch('/api/extensions/update', {
+                            method: 'POST',
+                            headers: reqHeaders,
+                            body: JSON.stringify(payload),
+                        });
 
-            if (extBlock.length === 0) {
-                return {
-                    content:
-                        'Không tìm thấy Kaiz-Agent-Extension trong danh sách Extension Manager. Có thể thẻ chưa được load vào DOM.',
-                    isError: true,
-                };
-            }
-
-            // Tìm nút update bên trong block này
-            // ST thường dùng class .extension_update hoặc nút có icon download/text "Update"
-            let updateBtn = extBlock.find('.extension_update');
-            if (updateBtn.length === 0) {
-                updateBtn = extBlock.find('.menu_button').filter(function (this: any) {
-                    const text = $(this).text().toLowerCase();
-                    const title = ($(this).attr('title') || '').toLowerCase();
-                    return text.includes('update') || text.includes('cập nhật') || title.includes('update');
-                });
-            }
-
-            if (updateBtn.length > 0 && updateBtn.is(':visible')) {
-                // Nếu nút bị disable thì tức là đang update dở hoặc không cho click
-                if (updateBtn.prop('disabled') || updateBtn.hasClass('disabled')) {
-                    return {
-                        content: 'Nút Update tồn tại nhưng đang bị vô hiệu hóa (Disabled). Có thể đang cập nhật rồi.',
-                    };
+                        // Nếu fetch thành công và trả về mã OK, ST backend đã xử lý update
+                        if (res.ok) {
+                            updatedOk = true;
+                            successName = extName;
+                            break;
+                        }
+                    } catch (e) {
+                        // Bỏ qua lỗi fetch và thử tên khác
+                    }
                 }
+                if (updatedOk) break;
+            }
 
-                updateBtn.trigger('click');
+            if (updatedOk) {
                 return {
-                    content:
-                        '✅ Đã tìm thấy bản cập nhật! Đã tự động nhấn nút Update. Vui lòng đợi SillyTavern tải về và có thể sẽ yêu cầu Restart.',
+                    content: `✅ Đã gọi API cập nhật thành công (Target: ${successName}). Vui lòng chờ ST tải về và tự động restart nếu cần!`,
                 };
             } else {
                 return {
-                    content: 'ℹ️ Không tìm thấy thông báo/nút cập nhật. Kaiz-Agent-Extension hiện đã ở phiên bản mới nhất!',
+                    content: 'ℹ️ Không thể cập nhật hoặc đã ở phiên bản mới nhất. API không trả về thành công.',
                 };
             }
         } catch (e: any) {
