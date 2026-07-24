@@ -257,23 +257,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
 
-        const internalHistory = [...history];
-        let pinnedUserGoal = '';
-        // Tạm thời vô hiệu hoá Ghim tin nhắn để tránh AI kẹt vòng lặp
-        /* 
+        const internalHistory = history.map(msg => ({ ...msg }));
+        
         for (let i = internalHistory.length - 1; i >= 0; i--) {
             if (internalHistory[i].role === 'user') {
-                // Fix error if content is array
+                const header = '📌 [YÊU CẦU CHÍNH CHỦ CỦA USER]:\n"';
+                const footer = '"\n\n-> NẾU ĐÃ HOÀN THÀNH TRIỆT ĐỂ YÊU CẦU NÀY, hãy DỪNG GỌI TOOL và trả lời kết quả cuối cùng!';
+                
                 if (typeof internalHistory[i].content === 'string') {
-                    pinnedUserGoal = internalHistory[i].content;
+                    internalHistory[i].content = header + internalHistory[i].content + footer;
                 } else if (Array.isArray(internalHistory[i].content)) {
-                    const textContent = internalHistory[i].content.find((c: any) => c.type === 'text');
-                    pinnedUserGoal = textContent ? textContent.text : '';
+                    internalHistory[i].content = [...internalHistory[i].content];
+                    const textIndex = internalHistory[i].content.findIndex((c: any) => c.type === 'text');
+                    if (textIndex !== -1) {
+                        internalHistory[i].content[textIndex] = {
+                            ...internalHistory[i].content[textIndex],
+                            text: header + internalHistory[i].content[textIndex].text + footer
+                        };
+                    } else {
+                        internalHistory[i].content.unshift({ type: 'text', text: header + footer });
+                    }
                 }
                 break;
             }
         }
-        */
 
         let step = 0;
         let lastToolError = false;
