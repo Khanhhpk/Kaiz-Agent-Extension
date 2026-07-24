@@ -2914,11 +2914,30 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     return false;
                 };
-                const forceSyncUI = async (targetScope) => {
+                const forceSyncUI = async (targetScope, targetId) => {
                     try {
                         const currentTrees = await th.getScriptTrees({ type: targetScope });
-                        await th.replaceScriptTrees([], { type: targetScope });
+                        // Clone and remove the specific script to unmount its Vue component
+                        const tempTrees = JSON.parse(JSON.stringify(currentTrees));
+                        const removeNode = (nodes) => {
+                            if (!Array.isArray(nodes))
+                                return false;
+                            for (let i = 0; i < nodes.length; i++) {
+                                if (nodes[i].id === targetId) {
+                                    nodes.splice(i, 1);
+                                    return true;
+                                }
+                                const children = Array.isArray(nodes[i].children) ? nodes[i].children : (Array.isArray(nodes[i].scripts) ? nodes[i].scripts : null);
+                                if (children && removeNode(children))
+                                    return true;
+                            }
+                            return false;
+                        };
+                        removeNode(tempTrees);
+                        // Replace with tree lacking the script
+                        await th.replaceScriptTrees(tempTrees, { type: targetScope });
                         await new Promise(resolve => setTimeout(resolve, 100));
+                        // Restore full tree, recreating the ScriptItem for the edited script
                         await th.replaceScriptTrees(currentTrees, { type: targetScope });
                     }
                     catch (e) {
@@ -2975,7 +2994,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         trees.push(newScript);
                         return trees;
                     }, { type: targetScope });
-                    await forceSyncUI(targetScope);
                     return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
                 }
                 if (!id)
@@ -2989,7 +3007,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         deleteFromTree(trees);
                         return trees;
                     }, { type: foundScope });
-                    await forceSyncUI(foundScope);
                     return { content: `Đã xóa thành công Script (ID: ${id})` };
                 }
                 if (action === 'toggle') {
@@ -3003,7 +3020,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         });
                         return trees;
                     }, { type: foundScope });
-                    await forceSyncUI(foundScope);
                     return { content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}` };
                 }
                 if (action === 'edit') {
@@ -3048,7 +3064,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         });
                         return trees;
                     }, { type: foundScope });
-                    await forceSyncUI(foundScope);
+                    await forceSyncUI(foundScope, id);
                     return { content: `Đã chỉnh sửa thành công Script: ${currentName}` };
                 }
                 return { isError: true, content: `Hành động không hợp lệ: ${action}` };
