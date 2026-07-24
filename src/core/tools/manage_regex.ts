@@ -162,7 +162,9 @@ export const manageRegexTool: ITool = {
                 try {
                     const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
                     eventSource.emit(event_types.PRESET_CHANGED);
-                } catch (e) {}
+                } catch (e) {
+                    console.error('Failed to emit UI update event:', e);
+                }
 
                 return { content: `Đã xóa thành công Regex: ${found.script.scriptName}` };
             }
@@ -174,7 +176,9 @@ export const manageRegexTool: ITool = {
                 try {
                     const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
                     eventSource.emit(event_types.PRESET_CHANGED);
-                } catch (e) {}
+                } catch (e) {
+                    console.error('Failed to emit UI update event:', e);
+                }
 
                 return {
                     content: `Đã thay đổi trạng thái disabled thành ${found.script.disabled} cho Regex: ${found.script.scriptName}`,
@@ -201,7 +205,9 @@ export const manageRegexTool: ITool = {
                 try {
                     const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
                     eventSource.emit(event_types.PRESET_CHANGED);
-                } catch (e) {}
+                } catch (e) {
+                    console.error('Failed to emit UI update event:', e);
+                }
 
                 return { content: `Đã chỉnh sửa thành công Regex: ${found.script.scriptName}` };
             }

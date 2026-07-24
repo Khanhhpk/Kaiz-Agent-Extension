@@ -518,11 +518,20 @@ export class SettingsUI {
                     axis: 'y',
                     update: function () {
                         const newMemories: any[] = [];
+                        let newEditingIndex = -1;
+                        let currentIndex = 0;
                         $memoryList.children('.kaiz-memory-item').each(function (this: HTMLElement) {
                             const oldIndex = $(this).data('index');
+                            if (oldIndex === editingMemoryIndex) {
+                                newEditingIndex = currentIndex;
+                            }
                             newMemories.push(settings.memories[oldIndex]);
+                            currentIndex++;
                         });
                         settings.memories = newMemories;
+                        if (editingMemoryIndex !== -1) {
+                            editingMemoryIndex = newEditingIndex;
+                        }
                         ctx.saveSettingsDebounced();
                         renderMemories(); // re-render to update data-index
                     },

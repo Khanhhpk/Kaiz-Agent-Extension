@@ -19,17 +19,21 @@ export const renameAgentChatTool: ITool = {
         },
     },
     execute: async (args: any, context?: any) => {
-        const stateManager = context?.stateManager as StateManager;
-        if (!stateManager) throw new Error('StateManager not available in context.');
+        try {
+            const stateManager = context?.stateManager as StateManager;
+            if (!stateManager) return { content: 'Error: StateManager not available in context.', isError: true };
 
-        const name = args.newName;
-        const id = args.chatId || stateManager.currentChatId;
+            const name = args.newName;
+            const id = args.chatId || stateManager.currentChatId;
 
-        if (!id) return { content: 'Error: No active chat to rename and no ID provided.', isError: true };
+            if (!id) return { content: 'Error: No active chat to rename and no ID provided.', isError: true };
 
-        await stateManager.updateChatName(id, name);
+            await stateManager.updateChatName(id, name);
 
-        return { content: `Successfully renamed chat ${id} to "${name}".` };
+            return { content: `Successfully renamed chat ${id} to "${name}".` };
+        } catch (e: any) {
+            return { content: `Error renaming chat: ${e.message}`, isError: true };
+        }
     },
 };
 
@@ -44,17 +48,21 @@ export const openNewAgentChatTool: ITool = {
         },
     },
     execute: async (args: any, context?: any) => {
-        const stateManager = context?.stateManager as StateManager;
-        if (!stateManager) throw new Error('StateManager not available in context.');
+        try {
+            const stateManager = context?.stateManager as StateManager;
+            if (!stateManager) return { content: 'Error: StateManager not available in context.', isError: true };
 
-        stateManager.currentChatId = null;
-        if (stateManager.onChatSwitched) stateManager.onChatSwitched(-1, []);
+            stateManager.currentChatId = null;
+            if (stateManager.onChatSwitched) stateManager.onChatSwitched(-1, []);
 
-        // Remove selection in list UI
-        const chats = await stateManager.loadChatList();
-        if (stateManager.onChatsListUpdated) stateManager.onChatsListUpdated(chats);
+            // Remove selection in list UI
+            const chats = await stateManager.loadChatList();
+            if (stateManager.onChatsListUpdated) stateManager.onChatsListUpdated(chats);
 
-        return { content: 'Successfully opened a new blank chat session.' };
+            return { content: 'Successfully opened a new blank chat session.' };
+        } catch (e: any) {
+            return { content: `Error opening new chat: ${e.message}`, isError: true };
+        }
     },
 };
 
@@ -69,18 +77,22 @@ export const listAgentChatsTool: ITool = {
         },
     },
     execute: async (args: any, context?: any) => {
-        const stateManager = context?.stateManager as StateManager;
-        if (!stateManager) throw new Error('StateManager not available in context.');
+        try {
+            const stateManager = context?.stateManager as StateManager;
+            if (!stateManager) return { content: 'Error: StateManager not available in context.', isError: true };
 
-        const chats = await stateManager.loadChatList();
-        if (chats.length === 0) return { content: 'No chats found.' };
+            const chats = await stateManager.loadChatList();
+            if (chats.length === 0) return { content: 'No chats found.' };
 
-        const listStr = chats
-            .map((c) => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`)
-            .join('\n');
-        return {
-            content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}`,
-        };
+            const listStr = chats
+                .map((c) => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`)
+                .join('\n');
+            return {
+                content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}`,
+            };
+        } catch (e: any) {
+            return { content: `Error listing chats: ${e.message}`, isError: true };
+        }
     },
 };
 
@@ -100,14 +112,18 @@ export const deleteAgentChatTool: ITool = {
         },
     },
     execute: async (args: any, context?: any) => {
-        const stateManager = context?.stateManager as StateManager;
-        if (!stateManager) throw new Error('StateManager not available in context.');
+        try {
+            const stateManager = context?.stateManager as StateManager;
+            if (!stateManager) return { content: 'Error: StateManager not available in context.', isError: true };
 
-        const id = args.chatId || stateManager.currentChatId;
-        if (!id) return { content: 'Error: No active chat to delete and no ID provided.', isError: true };
+            const id = args.chatId || stateManager.currentChatId;
+            if (!id) return { content: 'Error: No active chat to delete and no ID provided.', isError: true };
 
-        await stateManager.deleteChat(id);
+            await stateManager.deleteChat(id);
 
-        return { content: `Successfully deleted chat ${id}.` };
+            return { content: `Successfully deleted chat ${id}.` };
+        } catch (e: any) {
+            return { content: `Error deleting chat: ${e.message}`, isError: true };
+        }
     },
 };

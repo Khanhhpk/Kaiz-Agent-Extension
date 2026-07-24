@@ -145,6 +145,7 @@ export class KaizDB {
                     cursor.continue();
                 }
             };
+            req.onerror = () => reject(req.error);
 
             transaction.oncomplete = () => resolve();
             transaction.onerror = () => reject(transaction.error);

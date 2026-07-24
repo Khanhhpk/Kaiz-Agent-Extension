@@ -116,18 +116,14 @@ jQuery(async () => {
             await SettingsUI.init(extPath, EXT_NAME, registry);
 
             const stateManager = new StateManager();
-            await stateManager.init(); // Tải DB và danh sách chat
-
             const loop = new AgentLoop(adapter, registry, stateManager);
 
-            // Gắn kết UI
+            // Gắn kết UI trước để đăng ký callback
             ChatWindowUI.init(loop, stateManager);
             ToolCheckerUI.init(registry, adapter);
 
-            // Mở DB chat đầu tiên hoặc render rỗng
-            const initialChats = await stateManager.loadChatList();
-            if (stateManager.onChatsListUpdated) stateManager.onChatsListUpdated(initialChats);
-            if (stateManager.onChatSwitched) stateManager.onChatSwitched(-1, []);
+            // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
+            await stateManager.init();
         } else {
             console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');
         }

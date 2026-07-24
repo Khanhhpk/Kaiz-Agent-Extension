@@ -19,8 +19,8 @@ export const deleteMessageByIndexTool: ITool = {
         },
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
-        if (!context.adapter.hasFeature('deleteMessage')) {
-            throw new Error('ST API deleteMessage is missing');
+        if (!context.adapter.hasFeature('deleteMessagesByIndices')) {
+            throw new Error('ST API deleteMessagesByIndices is missing');
         }
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {

@@ -268,7 +268,7 @@ export class ChatWindowUI {
                 if (isPhoneMode) {
                     dialogEl.showModal();
                 } else {
-                    dialogEl.show();
+                    dialogEl.showModal();
                     setTimeout(() => {
                         const winPos = ensureInBounds(win);
                         if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
@@ -402,7 +402,7 @@ export class ChatWindowUI {
                 /<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g,
                 (match, name, content) => {
                     const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${name}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
+                    const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${escapeHtml(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
                     toolCalls.push(toolHtml);
                     return `__TOOL_CALL_${toolCalls.length - 1}__`;
                 },
@@ -629,6 +629,7 @@ export class ChatWindowUI {
             const text = String(input.val()).trim();
             if (!text) return;
 
+            sendBtn.prop('disabled', true);
             input.val('');
 
             // Lưu vào DB trước
@@ -641,7 +642,6 @@ export class ChatWindowUI {
                 chatTitle.text(text.substring(0, 30) + (text.length > 30 ? '...' : ''));
             }
 
-            sendBtn.prop('disabled', true);
             sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
             sendBtn.prop('disabled', false); // Bật lại ngay để cho phép click Stop
             sendBtn.addClass('kaiz-stop-mode');
@@ -730,7 +730,7 @@ export class ChatWindowUI {
                     const html = `
                         <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
                             <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
-                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${call.name}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
+                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
                             <div style="display: flex; gap: 10px; margin-top: 10px;">
                                 <button id="kaiz-allow-${confirmId}" style="background: #2ecc71; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-check"></i> Allow</button>
                                 <button id="kaiz-deny-${confirmId}" style="background: #e74c3c; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Deny</button>
@@ -744,7 +744,7 @@ export class ChatWindowUI {
                         if (!loop.isRunning) return;
                         $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
                         $(`#${domId}`).html(
-                            `<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${call.name}</div>`,
+                            `<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml(call.name)}</div>`,
                         );
                         btnIcon.addClass('kaiz-icon-spin');
                         btnFloat.removeClass('kaiz-btn-blink');
@@ -755,7 +755,7 @@ export class ChatWindowUI {
                         if (!loop.isRunning) return;
                         $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
                         $(`#${domId}`).html(
-                            `<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${call.name}</div>`,
+                            `<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml(call.name)}</div>`,
                         );
                         btnIcon.removeClass('kaiz-icon-spin');
                         btnFloat.removeClass('kaiz-btn-blink');
@@ -766,12 +766,12 @@ export class ChatWindowUI {
                     streamUpdatePending = false;
                     if (agentContentBox) {
                         agentContentBox.html(
-                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${event.text}</div>`,
+                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
                         );
                     } else {
                         agentMsgId = addMessageToDOM(
                             'agent',
-                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${event.text}</div>`,
+                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
                         );
                         agentContentBox = $(`#${agentMsgId}`);
                     }
@@ -782,13 +782,13 @@ export class ChatWindowUI {
 
                     if (agentContentBox) {
                         agentContentBox.append(
-                            `<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`,
+                            `<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
                         );
                         agentContentBox = null; // Ng\u0103n b\u1ea5t k\u1ef3 callback n\u00e0o c\u00f2n s\u00f3t ghi \u0111\u00e8
                     } else {
                         addMessageToDOM(
                             'agent',
-                            `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${event.text}</div>`,
+                            `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
                         );
                     }
                     await stateManager.addMessage('agent', `[Error] ${event.text}`);
