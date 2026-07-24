@@ -236,8 +236,8 @@
     background: rgba(0, 0, 0, 0.2);
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
+    flex-direction: column;
     gap: 12px;
-    align-items: flex-end;
 }
 
 .kaiz-chat-input {
@@ -638,38 +638,79 @@
 .kaiz-attachment-item {
     position: relative;
     background: rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 6px 10px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     font-size: 12px;
     color: #e0e0e0;
-    max-width: 150px;
     border: 1px solid rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
 }
 
-.kaiz-attachment-item img {
-    width: 24px;
-    height: 24px;
+.kaiz-attachment-item.is-image {
+    width: 64px;
+    height: 64px;
+    padding: 0;
+}
+
+.kaiz-attachment-item.is-image img {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
-    border-radius: 4px;
+    border-radius: 12px;
+}
+
+.kaiz-attachment-item.is-file {
+    height: 36px;
+    padding: 6px 12px;
+    border-radius: 18px;
 }
 
 .kaiz-attachment-item span {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 1;
+    max-width: 120px;
 }
 
 .kaiz-attachment-remove {
+    position: absolute;
     cursor: pointer;
-    color: #ff5e5e;
-    font-size: 14px;
+    background: #444;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-.kaiz-attachment-remove:hover {
+.kaiz-attachment-item.is-image .kaiz-attachment-remove {
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 10px;
+    border: 2px solid #2b2b2b;
+    background: #ff5e5e;
+    z-index: 10;
+}
+
+.kaiz-attachment-item.is-file .kaiz-attachment-remove {
+    position: static;
+    background: transparent;
+    color: #ff5e5e;
+    font-size: 14px;
+    width: auto;
+    height: auto;
+    margin-left: 4px;
+}
+
+.kaiz-attachment-item.is-image .kaiz-attachment-remove:hover {
+    background: #ff3333;
+}
+.kaiz-attachment-item.is-file .kaiz-attachment-remove:hover {
     color: #ff3333;
 }
 

@@ -4950,13 +4950,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 ChatWindowUI.currentAttachments.forEach((att, index) => {
                     const item = $('<div class="kaiz-attachment-item"></div>');
                     if (att.type === 'image') {
-                        item.append(`<img src="${att.data}" />`);
+                        item.addClass('is-image');
+                        item.append(`<img src="${att.data}" title="${escapeHtml$1(att.name)}" />`);
                     }
                     else {
+                        item.addClass('is-file');
                         item.append(`<i class="fa-solid fa-file-lines"></i>`);
+                        item.append(`<span>${escapeHtml$1(att.name)}</span>`);
                     }
-                    item.append(`<span>${escapeHtml$1(att.name)}</span>`);
-                    const removeBtn = $('<i class="fa-solid fa-xmark kaiz-attachment-remove"></i>');
+                    const removeBtn = $('<div class="kaiz-attachment-remove"><i class="fa-solid fa-xmark"></i></div>');
                     removeBtn.on('click', () => {
                         ChatWindowUI.currentAttachments.splice(index, 1);
                         renderAttachmentsPreview();
