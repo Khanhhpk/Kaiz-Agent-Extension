@@ -2525,7 +2525,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (extBlock.length === 0) {
                     extBlock = $('.extension_name')
                         .filter(function () {
-                        return $(this).text().trim().toLowerCase().includes('kaiz-agent-extension');
+                        const t = $(this).text().trim().toLowerCase();
+                        return t.includes('kaiz agent') || t.includes('kaiz-agent');
                     })
                         .closest('.extension_list_item, .extension_wrapper, .extension_row, [data-name]');
                 }
