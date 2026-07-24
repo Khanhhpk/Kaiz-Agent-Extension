@@ -4927,7 +4927,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         dialogEl.showModal();
                     }
                     else {
-                        dialogEl.showModal();
+                        dialogEl.show();
                         setTimeout(() => {
                             const winPos = ensureInBounds(win);
                             if (winPos)

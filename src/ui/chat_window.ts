@@ -268,7 +268,7 @@ export class ChatWindowUI {
                 if (isPhoneMode) {
                     dialogEl.showModal();
                 } else {
-                    dialogEl.showModal();
+                    dialogEl.show();
                     setTimeout(() => {
                         const winPos = ensureInBounds(win);
                         if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
