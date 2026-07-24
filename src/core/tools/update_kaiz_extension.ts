@@ -30,7 +30,8 @@ export const updateKaizExtensionTool: ITool = {
             if (extBlock.length === 0) {
                 extBlock = $('.extension_name')
                     .filter(function (this: any) {
-                        return $(this).text().trim().toLowerCase().includes('kaiz-agent-extension');
+                        const t = $(this).text().trim().toLowerCase();
+                        return t.includes('kaiz agent') || t.includes('kaiz-agent');
                     })
                     .closest('.extension_list_item, .extension_wrapper, .extension_row, [data-name]');
             }
