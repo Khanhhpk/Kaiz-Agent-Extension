@@ -236,8 +236,8 @@
     background: rgba(0, 0, 0, 0.2);
     border-top: 1px solid rgba(255, 255, 255, 0.05);
     display: flex;
+    flex-direction: column;
     gap: 12px;
-    align-items: flex-end;
 }
 
 .kaiz-chat-input {
@@ -633,4 +633,104 @@
         transform: scale(1);
         box-shadow: 0 8px 24px rgba(243, 156, 18, 0.6);
     }
+}
+
+/* Attachments UI */
+.kaiz-attachment-item {
+    position: relative;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #e0e0e0;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    flex-shrink: 0;
+}
+
+.kaiz-attachment-item.is-image {
+    width: 64px;
+    height: 64px;
+    padding: 0;
+}
+
+.kaiz-attachment-item.is-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+.kaiz-attachment-item.is-file {
+    height: 36px;
+    padding: 6px 12px;
+    border-radius: 18px;
+}
+
+.kaiz-attachment-item span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+.kaiz-attachment-remove {
+    position: absolute;
+    cursor: pointer;
+    background: #444;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kaiz-attachment-item.is-image .kaiz-attachment-remove {
+    top: -6px;
+    right: -6px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    font-size: 10px;
+    border: 2px solid #2b2b2b;
+    background: #ff5e5e;
+    z-index: 10;
+}
+
+.kaiz-attachment-item.is-file .kaiz-attachment-remove {
+    position: static;
+    background: transparent;
+    color: #ff5e5e;
+    font-size: 14px;
+    width: auto;
+    height: auto;
+    margin-left: 4px;
+}
+
+.kaiz-attachment-item.is-image .kaiz-attachment-remove:hover {
+    background: #ff3333;
+}
+.kaiz-attachment-item.is-file .kaiz-attachment-remove:hover {
+    color: #ff3333;
+}
+
+.kaiz-msg-attachment-img {
+    max-width: 250px;
+    max-height: 250px;
+    object-fit: contain;
+    border-radius: 8px;
+    margin-top: 8px;
+    display: block;
+}
+
+.kaiz-msg-attachment-text {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 8px;
+    border-radius: 6px;
+    margin-top: 8px;
+    font-family: monospace;
+    font-size: 12px;
+    border-left: 3px solid #4ade80;
+    color: #ddd;
 }

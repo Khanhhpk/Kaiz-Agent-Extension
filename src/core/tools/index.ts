@@ -26,6 +26,10 @@ import { manageAgentMemory } from './manage_agent_memory';
 import { getRegexListTool } from './get_regex_list';
 import { getRegexInfoTool } from './get_regex_info';
 import { manageRegexTool } from './manage_regex';
+import { updateKaizExtensionTool } from './update_kaiz_extension';
+import { getTavernHelperScriptsTool } from './get_tavern_helper_scripts';
+import { getTavernHelperScriptInfoTool } from './get_tavern_helper_script_info';
+import { manageTavernHelperScriptTool } from './manage_tavern_helper_script';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -58,4 +62,8 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getRegexListTool);
     registry.registerTool(getRegexInfoTool);
     registry.registerTool(manageRegexTool);
+    registry.registerTool(updateKaizExtensionTool);
+    registry.registerTool(getTavernHelperScriptsTool);
+    registry.registerTool(getTavernHelperScriptInfoTool);
+    registry.registerTool(manageTavernHelperScriptTool);
 }

@@ -26,6 +26,7 @@ export interface ToolSchema {
 export interface ToolResult {
     content: string;
     isError?: boolean;
+    isTerminal?: boolean; // Cờ báo hiệu tool này kết thúc chuỗi (ví dụ: reload web)
 }
 
 export interface ITool {
