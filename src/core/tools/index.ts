@@ -27,6 +27,7 @@ import { getRegexListTool } from './get_regex_list';
 import { getRegexInfoTool } from './get_regex_info';
 import { manageRegexTool } from './manage_regex';
 import { updateKaizExtensionTool } from './update_kaiz_extension';
+import { getTavernHelperScriptsTool } from './get_tavern_helper_scripts';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -60,4 +61,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getRegexInfoTool);
     registry.registerTool(manageRegexTool);
     registry.registerTool(updateKaizExtensionTool);
+    registry.registerTool(getTavernHelperScriptsTool);
 }
