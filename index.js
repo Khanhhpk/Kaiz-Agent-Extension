@@ -2964,7 +2964,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         trees.push(newScript);
                         return trees;
                     }, { type: targetScope });
-                    return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
+                    setTimeout(() => {
+                        if (typeof window !== 'undefined')
+                            window.location.reload();
+                    }, 1500);
+                    return {
+                        content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope}). Đang tự động tải lại trang...`,
+                        isTerminal: true
+                    };
                 }
                 if (!id)
                     return { isError: true, content: 'Bắt buộc phải cung cấp id cho hành động này.' };
@@ -2977,7 +2984,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         deleteFromTree(trees);
                         return trees;
                     }, { type: foundScope });
-                    return { content: `Đã xóa thành công Script (ID: ${id})` };
+                    setTimeout(() => {
+                        if (typeof window !== 'undefined')
+                            window.location.reload();
+                    }, 1500);
+                    return {
+                        content: `Đã xóa thành công Script (ID: ${id}). Đang tự động tải lại trang để đồng bộ giao diện...`,
+                        isTerminal: true
+                    };
                 }
                 if (action === 'toggle') {
                     let currentStatus = false;
@@ -2990,7 +3004,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         });
                         return trees;
                     }, { type: foundScope });
-                    return { content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}` };
+                    setTimeout(() => {
+                        if (typeof window !== 'undefined')
+                            window.location.reload();
+                    }, 1500);
+                    return {
+                        content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}. Đang tự động tải lại trang...`,
+                        isTerminal: true
+                    };
                 }
                 if (action === 'edit') {
                     if (!data || typeof data !== 'object') {
@@ -3034,7 +3055,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         });
                         return trees;
                     }, { type: foundScope });
-                    return { content: `Đã chỉnh sửa thành công Script: ${currentName}` };
+                    setTimeout(() => {
+                        if (typeof window !== 'undefined')
+                            window.location.reload();
+                    }, 1500);
+                    return {
+                        content: `Đã chỉnh sửa thành công Script: ${currentName}. Đang tự động tải lại trang...`,
+                        isTerminal: true
+                    };
                 }
                 return { isError: true, content: `Hành động không hợp lệ: ${action}` };
             }
