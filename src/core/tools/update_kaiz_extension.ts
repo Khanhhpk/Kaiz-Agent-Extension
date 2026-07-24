@@ -121,6 +121,7 @@ export const updateKaizExtensionTool: ITool = {
                     }, 2000);
                     return {
                         content: `✅ Đã quét bằng API nội bộ và kích hoạt cập nhật thành công (Target: ${successName}, Hash: ${newCommitHash}). Đang khởi động lại trang...`,
+                        isTerminal: true,
                     };
                 } else {
                     return {

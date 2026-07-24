@@ -345,6 +345,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
                     let resultsFormatted = '';
                     let hasError = false;
+                    let isTerminalFound = false;
                     for (let i = 0; i < toolCalls.length; i++) {
                         if (this._forceAborted)
                             throw new Error('FORCE_ABORT');
@@ -420,6 +421,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                         const statusText = isToolError ? '❌ LỖI (ERROR)' : '✅ THÀNH CÔNG (SUCCESS)';
                         resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
+                        if (result.isTerminal) {
+                            isTerminalFound = true;
+                            break;
+                        }
                     }
                     resultsFormatted = resultsFormatted.trim();
                     const dbRawResult = `[Tool Result - ${hasError ? 'CÓ LỖI/ERROR' : 'THÀNH CÔNG'}]\n${resultsFormatted}`;
@@ -430,6 +435,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         text: dbRawResult,
                     });
                     internalHistory.push({ role: 'user', content: dbRawResult });
+                    if (isTerminalFound) {
+                        reachedFinal = true;
+                        this.abort();
+                        break;
+                    }
                 }
                 catch (e) {
                     this._forceAbortReject = null;
@@ -2651,6 +2661,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }, 2000);
                         return {
                             content: `✅ Đã quét bằng API nội bộ và kích hoạt cập nhật thành công (Target: ${successName}, Hash: ${newCommitHash}). Đang khởi động lại trang...`,
+                            isTerminal: true,
                         };
                     }
                     else {

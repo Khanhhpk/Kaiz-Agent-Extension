@@ -422,6 +422,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
                 let resultsFormatted = '';
                 let hasError = false;
+                let isTerminalFound = false;
 
                 for (let i = 0; i < toolCalls.length; i++) {
                     if (this._forceAborted) throw new Error('FORCE_ABORT');
@@ -498,6 +499,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
                     const statusText = isToolError ? '❌ LỖI (ERROR)' : '✅ THÀNH CÔNG (SUCCESS)';
                     resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
+
+                    if (result.isTerminal) {
+                        isTerminalFound = true;
+                        break;
+                    }
                 }
 
                 resultsFormatted = resultsFormatted.trim();
@@ -513,6 +519,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 });
 
                 internalHistory.push({ role: 'user', content: dbRawResult });
+
+                if (isTerminalFound) {
+                    reachedFinal = true;
+                    this.abort();
+                    break;
+                }
             } catch (e: any) {
                 this._forceAbortReject = null;
                 this._currentAbortController = null;
