@@ -81,6 +81,17 @@ export const manageTavernHelperScriptTool: ITool = {
                 return false;
             };
 
+            const forceSyncUI = async (targetScope: string) => {
+                try {
+                    const currentTrees = await th.getScriptTrees({ type: targetScope });
+                    await th.replaceScriptTrees([], { type: targetScope });
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    await th.replaceScriptTrees(currentTrees, { type: targetScope });
+                } catch (e) {
+                    console.error("Lỗi khi force sync UI JS-Slash-Runner:", e);
+                }
+            };
+
             // Helpers tìm script để biết scope hiện tại
             const findScope = async (): Promise<string | null> => {
                 const scopes = ['global', 'preset', 'character'];
@@ -129,6 +140,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     trees.push(newScript);
                     return trees;
                 }, { type: targetScope });
+                await forceSyncUI(targetScope);
 
                 return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
             }
@@ -145,6 +157,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     deleteFromTree(trees);
                     return trees;
                 }, { type: foundScope });
+                await forceSyncUI(foundScope);
                 return { content: `Đã xóa thành công Script (ID: ${id})` };
             }
 
@@ -159,6 +172,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     });
                     return trees;
                 }, { type: foundScope });
+                await forceSyncUI(foundScope);
                 return { content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}` };
             }
 
@@ -206,6 +220,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     });
                     return trees;
                 }, { type: foundScope });
+                await forceSyncUI(foundScope);
                 return { content: `Đã chỉnh sửa thành công Script: ${currentName}` };
             }
 

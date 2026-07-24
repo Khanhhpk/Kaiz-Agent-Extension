@@ -2914,6 +2914,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     return false;
                 };
+                const forceSyncUI = async (targetScope) => {
+                    try {
+                        const currentTrees = await th.getScriptTrees({ type: targetScope });
+                        await th.replaceScriptTrees([], { type: targetScope });
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        await th.replaceScriptTrees(currentTrees, { type: targetScope });
+                    }
+                    catch (e) {
+                        console.error("Lỗi khi force sync UI JS-Slash-Runner:", e);
+                    }
+                };
                 // Helpers tìm script để biết scope hiện tại
                 const findScope = async () => {
                     const scopes = ['global', 'preset', 'character'];
@@ -2964,6 +2975,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         trees.push(newScript);
                         return trees;
                     }, { type: targetScope });
+                    await forceSyncUI(targetScope);
                     return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
                 }
                 if (!id)
@@ -2977,6 +2989,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         deleteFromTree(trees);
                         return trees;
                     }, { type: foundScope });
+                    await forceSyncUI(foundScope);
                     return { content: `Đã xóa thành công Script (ID: ${id})` };
                 }
                 if (action === 'toggle') {
@@ -2990,6 +3003,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         });
                         return trees;
                     }, { type: foundScope });
+                    await forceSyncUI(foundScope);
                     return { content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}` };
                 }
                 if (action === 'edit') {
@@ -3034,6 +3048,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         });
                         return trees;
                     }, { type: foundScope });
+                    await forceSyncUI(foundScope);
                     return { content: `Đã chỉnh sửa thành công Script: ${currentName}` };
                 }
                 return { isError: true, content: `Hành động không hợp lệ: ${action}` };
