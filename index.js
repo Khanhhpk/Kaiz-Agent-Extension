@@ -165,11 +165,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             if (step > 1) {
                 const pinnedGoalSection = pinnedUserGoal
-                    ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> Bạn đang ở vòng lặp số ${step}/${maxSteps}. Hãy đối chiếu với yêu cầu trên để làm tiếp. NẾU ĐÃ HOÀN THÀNH TRIỆT ĐỂ, hãy DỪNG GỌI TOOL và trả lời kết quả cuối cùng!`
+                    ? `\n\n📌 [GHIM YÊU CẦU CHÍNH CHỦ CỦA USER]: "${pinnedUserGoal}"\n-> NẾU ĐÃ HOÀN THÀNH TRIỆT ĐỂ, hãy DỪNG GỌI TOOL và trả lời kết quả cuối cùng!`
                     : '';
                 const feedbackBase = hasError
-                    ? `⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI: Có ít nhất 1 tool vừa gọi bị lỗi hệ thống. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi phía trên, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
-                    : `👉 HỆ THỐNG AGENTIC LOOP ĐANG HOẠT ĐỘNG: Vòng lặp tiếp theo đã kích hoạt!\n- Hãy kiểm tra kết quả tool trả về ở dưới (có thể là dữ liệu thực, hoặc thông báo không tìm thấy).\n- Nếu nhiệm vụ chưa xong: HÃY TIẾP TỤC gọi tool xử lý bước tiếp theo!\n- Nếu nhiệm vụ đã hoàn thành 100%: HÃY DỪNG LẠI (không gọi tool nữa) để trả lời user.`;
+                    ? `⚠️ LƯU Ý TỰ ĐỘNG GỠ LỖI (Vòng lặp ${step}/${maxSteps}): Có ít nhất 1 tool vừa gọi bị lỗi hệ thống. HÃY TỰ ĐỘNG đọc kỹ thông báo lỗi phía trên, suy luận trong <agent_cot> và GỌI LẠI TOOL sửa lỗi ngay trong lượt này, KHÔNG ĐƯỢC dừng lại hay bỏ cuộc!`
+                    : `👉 HỆ THỐNG AGENTIC LOOP ĐANG HOẠT ĐỘNG (Vòng lặp ${step}/${maxSteps}): Vòng lặp tiếp theo đã kích hoạt!\n- Hãy kiểm tra kết quả tool trả về ở dưới (có thể là dữ liệu thực, hoặc thông báo không tìm thấy).\n- Nếu nhiệm vụ chưa xong: HÃY TIẾP TỤC gọi tool xử lý bước tiếp theo!\n- Nếu nhiệm vụ đã hoàn thành 100%: HÃY DỪNG LẠI (không gọi tool nữa) để trả lời user.`;
                 msgs.push({ role: 'system', content: feedbackBase + pinnedGoalSection });
             }
             for (const msg of internalHistory) {
