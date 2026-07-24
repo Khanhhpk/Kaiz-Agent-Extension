@@ -17,59 +17,6 @@ export const updateKaizExtensionTool: ITool = {
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
-            // Cách 1: Sử dụng API như cũ để backup
-            let apiSuccess = false;
-            let successName = '';
-            
-            // Cách 2 (Ưu tiên): Quét trực tiếp trên DOM của Extension Manager
-            let domSuccess = false;
-            
-            // Tìm nút mở Extension Manager và click tạm để render DOM nếu chưa render
-            const extManageBtn = document.getElementById('extensions_manage_button') || document.querySelector('[title="Extensions"]') as HTMLElement;
-            let didOpenModal = false;
-            
-            if (extManageBtn) {
-                // Kiểm tra xem modal có đang mở không
-                const extModal = document.getElementById('extensions_manage_modal') || document.querySelector('.extensions_manage_modal');
-                const isModalHidden = !extModal || (extModal.style.display === 'none') || !extModal.classList.contains('active');
-                
-                if (isModalHidden) {
-                    extManageBtn.click();
-                    didOpenModal = true;
-                    // Đợi render
-                    await new Promise(r => setTimeout(r, 500));
-                }
-                
-                // Quét tìm row của Kaiz Agent
-                const extRows = document.querySelectorAll('.extension_row, .extension-item');
-                for (const row of Array.from(extRows)) {
-                    if (row.textContent?.toLowerCase().includes('kaiz agent') || row.textContent?.toLowerCase().includes('kaiz-agent-extension')) {
-                        // Tìm nút update (thường có icon fa-download hoặc title Update)
-                        const updateBtn = row.querySelector('.menu_button[title*="Update"], .menu_button[title*="update"], .fa-download') as HTMLElement;
-                        if (updateBtn) {
-                            const btnToClick = updateBtn.closest('button, .menu_button') as HTMLElement || updateBtn;
-                            btnToClick.click();
-                            domSuccess = true;
-                            break;
-                        }
-                    }
-                }
-                
-                // Đóng modal nếu chúng ta đã tự mở nó
-                if (didOpenModal) {
-                    const closeBtn = document.querySelector('#extensions_manage_modal .fa-xmark, .extensions_manage_modal .fa-xmark') as HTMLElement;
-                    if (closeBtn) closeBtn.click();
-                    else extManageBtn.click(); // Toggle again
-                }
-            }
-
-            if (domSuccess) {
-                return {
-                    content: '✅ Đã tìm thấy bản cập nhật trong Extension Manager và tự động click cập nhật thành công! Vui lòng chờ ST tải xuống...',
-                };
-            }
-
-            // Fallback sang API
             const reqHeaders = {
                 'Content-Type': 'application/json',
                 'X-CSRF-Token': (window as any).csrf_token || '',
@@ -78,9 +25,7 @@ export const updateKaizExtensionTool: ITool = {
             let namesToTry = [
                 'Kaiz-Agent-Extension',
                 'Kaiz-Agent',
-                'kaiz-agent-extension',
-                'https://github.com/Khanhhpk/Kaiz-Agent-Extension',
-                'https://github.com/Khanhhpk/Kaiz-Agent-Extension.git'
+                'kaiz-agent-extension'
             ];
 
             const extTypes = (window as any).extensionTypes || (window as any).SillyTavern?.getContext?.()?.extensionTypes;
@@ -89,6 +34,10 @@ export const updateKaizExtensionTool: ITool = {
                 namesToTry = [...foundKeys, ...namesToTry];
             }
             namesToTry = [...new Set(namesToTry)];
+
+            let updateFound = false;
+            let successName = '';
+            let newCommitHash = '';
 
             for (const extName of namesToTry) {
                 const isSystem = extTypes && extTypes[extName] === 'system';
@@ -101,30 +50,48 @@ export const updateKaizExtensionTool: ITool = {
                 for (const isGlobal of isGlobalList) {
                     try {
                         const payload = { extensionName: extName, global: isGlobal };
-                        let res = await fetch('/api/extensions/update', {
+                        
+                        // 1. Dùng API nội bộ của ST để check xem có update thật hay không
+                        let versionRes = await fetch('/api/extensions/version', {
                             method: 'POST',
                             headers: reqHeaders,
                             body: JSON.stringify(payload),
                         });
 
-                        if (res.ok) {
-                            apiSuccess = true;
-                            successName = extName;
-                            break;
+                        if (versionRes.ok) {
+                            const versionData = await versionRes.json();
+                            
+                            // Nếu có bản cập nhật mới (isUpToDate = false)
+                            if (versionData && versionData.isUpToDate === false) {
+                                // 2. Kích hoạt logic update của ST
+                                let updateRes = await fetch('/api/extensions/update', {
+                                    method: 'POST',
+                                    headers: reqHeaders,
+                                    body: JSON.stringify(payload),
+                                });
+                                
+                                if (updateRes.ok) {
+                                    const updateData = await updateRes.json();
+                                    updateFound = true;
+                                    successName = extName;
+                                    newCommitHash = updateData.shortCommitHash || '';
+                                    break;
+                                }
+                            }
                         }
                     } catch (e) {}
                 }
-                if (apiSuccess) break;
+                if (updateFound) break;
             }
 
-            if (apiSuccess) {
+            if (updateFound) {
                 return {
-                    content: `✅ Đã gọi API cập nhật thành công (Target: ${successName}). Vui lòng chờ ST tải về!`,
+                    content: `✅ Đã quét bằng API nội bộ và kích hoạt cập nhật thành công (Target: ${successName}, Hash: ${newCommitHash}). ST sẽ tải ngầm về!`,
                 };
             }
 
             return {
-                content: 'ℹ️ Đã quét Extension Manager và gọi API nhưng không tìm thấy bản cập nhật mới nào (Hoặc đang ở bản mới nhất).',
+                content: 'ℹ️ Đã sử dụng API của ST để quét nhưng không tìm thấy bản cập nhật mới nào (Hoặc đang ở bản mới nhất).',
             };
         } catch (e: any) {
             return {
