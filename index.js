@@ -677,8 +677,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             },
         },
         validate: (context) => {
-            if (!context.adapter.hasFeature('deleteMessagesByIndices')) {
-                throw new Error('ST API deleteMessagesByIndices is missing');
+            if (!context.adapter.hasFeature('deleteMessage')) {
+                throw new Error('ST API deleteMessage is missing');
             }
         },
         execute: async (args, context) => {
@@ -802,8 +802,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             },
         },
         validate: (context) => {
-            if (!context.adapter.hasFeature('editUserPersona')) {
-                throw new Error('ST API editUserPersona is missing');
+            if (!context.adapter.hasFeature('substituteParams')) {
+                throw new Error('ST API substituteParams is missing');
             }
         },
         execute: async (args, context) => {

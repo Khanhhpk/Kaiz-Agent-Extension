@@ -23,8 +23,8 @@ export const editUserPersonaTool: ITool = {
         },
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
-        if (!context.adapter.hasFeature('editUserPersona')) {
-            throw new Error('ST API editUserPersona is missing');
+        if (!context.adapter.hasFeature('substituteParams')) {
+            throw new Error('ST API substituteParams is missing');
         }
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
