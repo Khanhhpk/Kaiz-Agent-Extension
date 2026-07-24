@@ -769,7 +769,7 @@ export class ChatWindowUI {
             // Lưu vào DB trước
             await stateManager.addMessage('user', text, attachmentsToSend);
             // In ra UI
-            const formattedUI = formatUserMessage(text.replace(/\n/g, '<br>'), attachmentsToSend);
+            const formattedUI = formatUserMessage(text, attachmentsToSend);
             addMessageToDOM('user', formattedUI);
 
             // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
