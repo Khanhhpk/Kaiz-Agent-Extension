@@ -58,6 +58,9 @@ jQuery(async () => {
             customKey: '',
             customModel: '',
             maxAgentLoops: 5,
+            retryKeywords: '',
+            maxRetries: 3,
+            retryDelay: 3000,
             disabledTools: {},
             safeMode: false,
             safeModeBlacklist: {},
@@ -70,11 +73,20 @@ jQuery(async () => {
         if (ctx.extensionSettings[EXT_NAME].safeMode === undefined) {
             ctx.extensionSettings[EXT_NAME].safeMode = false;
         }
-        if (!ctx.extensionSettings[EXT_NAME].safeModeBlacklist) {
+        if (ctx.extensionSettings[EXT_NAME].safeModeBlacklist === undefined) {
             ctx.extensionSettings[EXT_NAME].safeModeBlacklist = {};
         }
-        if (!ctx.extensionSettings[EXT_NAME].quickPrompts) {
+        if (ctx.extensionSettings[EXT_NAME].quickPrompts === undefined) {
             ctx.extensionSettings[EXT_NAME].quickPrompts = [];
+        }
+        if (ctx.extensionSettings[EXT_NAME].retryKeywords === undefined) {
+            ctx.extensionSettings[EXT_NAME].retryKeywords = '';
+        }
+        if (ctx.extensionSettings[EXT_NAME].maxRetries === undefined) {
+            ctx.extensionSettings[EXT_NAME].maxRetries = 3;
+        }
+        if (ctx.extensionSettings[EXT_NAME].retryDelay === undefined) {
+            ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
         }
     }
 
@@ -104,18 +116,14 @@ jQuery(async () => {
             await SettingsUI.init(extPath, EXT_NAME, registry);
 
             const stateManager = new StateManager();
-            await stateManager.init(); // Tải DB và danh sách chat
-
             const loop = new AgentLoop(adapter, registry, stateManager);
 
-            // Gắn kết UI
+            // Gắn kết UI trước để đăng ký callback
             ChatWindowUI.init(loop, stateManager);
             ToolCheckerUI.init(registry, adapter);
 
-            // Mở DB chat đầu tiên hoặc render rỗng
-            const initialChats = await stateManager.loadChatList();
-            if (stateManager.onChatsListUpdated) stateManager.onChatsListUpdated(initialChats);
-            if (stateManager.onChatSwitched) stateManager.onChatSwitched(-1, []);
+            // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
+            await stateManager.init();
         } else {
             console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');
         }

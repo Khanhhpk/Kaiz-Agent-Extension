@@ -11,13 +11,11 @@ export default tseslint.config(
     },
     {
         rules: {
-            '@typescript-eslint/no-explicit-any': 'off',
-            '@typescript-eslint/no-unused-vars': 'off',
-            'no-empty': 'off',
-            'no-useless-escape': 'off',
-            'no-prototype-builtins': 'off',
-            'no-useless-assignment': 'off',
-            'preserve-caught-error': 'off',
+            '@typescript-eslint/no-explicit-any': 'warn',
+            '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
+            'no-empty': 'warn',
+            'no-useless-escape': 'warn',
+            'no-prototype-builtins': 'warn',
         },
     },
 );

@@ -54,7 +54,7 @@ export const manageLorebookEntryTool: ITool = {
             const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
             if (!ST_WorldInfo) throw new Error('Module loaded but empty');
         } catch (e: any) {
-            throw new Error('Failed to load /scripts/world-info.js - ' + e.message);
+            throw new Error('Failed to load /scripts/world-info.js - ' + e.message, { cause: e });
         }
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {

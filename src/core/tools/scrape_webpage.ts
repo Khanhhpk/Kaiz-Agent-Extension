@@ -75,7 +75,7 @@ export const scrapeWebpageTool: ITool = {
                 doc.querySelector('#content') ||
                 doc.body;
 
-            const textContent = (contentElement as HTMLElement).innerText || '';
+            const textContent = contentElement?.textContent || '';
 
             // Lấy tất cả các links
             const baseUrl = new URL(url);
@@ -84,7 +84,7 @@ export const scrapeWebpageTool: ITool = {
 
             const anchorElements = doc.querySelectorAll('a');
             anchorElements.forEach((a) => {
-                const text = a.innerText?.trim();
+                const text = a.textContent?.trim();
                 const href = a.getAttribute('href');
 
                 if (

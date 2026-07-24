@@ -84,6 +84,52 @@
                     <input id="kaiz-max-loops" type="number" class="text_pole" min="1" max="20" placeholder="5" />
                 </div>
 
+                <!-- Auto Retry System -->
+                <div class="scp-settings-flat-section" style="margin-top: 15px">
+                    <div class="scp-settings-flat-title">
+                        <i class="fa-solid fa-rotate-right"></i> Auto Retry System
+                    </div>
+                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
+                        >Error Keywords (comma separated)</label
+                    >
+                    <input
+                        id="kaiz-retry-keywords"
+                        type="text"
+                        class="text_pole"
+                        placeholder="429, 502, 522, timeout"
+                        style="margin-bottom: 8px"
+                    />
+
+                    <div style="display: flex; gap: 10px">
+                        <div style="flex: 1">
+                            <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
+                                >Max Retries</label
+                            >
+                            <input
+                                id="kaiz-max-retries"
+                                type="number"
+                                class="text_pole"
+                                min="0"
+                                max="10"
+                                placeholder="3"
+                            />
+                        </div>
+                        <div style="flex: 1">
+                            <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
+                                >Delay (ms)</label
+                            >
+                            <input
+                                id="kaiz-retry-delay"
+                                type="number"
+                                class="text_pole"
+                                min="1000"
+                                max="60000"
+                                placeholder="3000"
+                            />
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Safe Mode Settings -->
                 <div class="scp-settings-flat-section" style="margin-top: 15px">
                     <div class="scp-settings-flat-title"><i class="fa-solid fa-shield-halved"></i> Safe Mode</div>
@@ -156,8 +202,6 @@
                         </button>
                     </div>
                 </div>
-
-
 
                 <!-- Nút Tool Check -->
                 <div style="margin-top: 15px">

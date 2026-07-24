@@ -4,6 +4,9 @@ declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
 
+const escapeHtml = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export class SettingsUI {
     public static async init(extPath: string, EXT_NAME: string, registry: ToolRegistry) {
         const $ = jQuery;
@@ -68,6 +71,18 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
         });
 
+        $('#kaiz-retry-keywords').val(settings.retryKeywords || '');
+        $('#kaiz-max-retries').val(settings.maxRetries !== undefined ? settings.maxRetries : 3);
+        $('#kaiz-retry-delay').val(settings.retryDelay || 3000);
+
+        $('#kaiz-retry-keywords, #kaiz-max-retries, #kaiz-retry-delay').on('input', function (this: HTMLInputElement) {
+            const id = this.id;
+            if (id === 'kaiz-retry-keywords') settings.retryKeywords = this.value;
+            if (id === 'kaiz-max-retries') settings.maxRetries = parseInt(this.value, 10) || 0;
+            if (id === 'kaiz-retry-delay') settings.retryDelay = parseInt(this.value, 10) || 3000;
+            ctx.saveSettingsDebounced();
+        });
+
         // --- UI SETTINGS LOGIC ---
         $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
         $('#kaiz-phone-mode').on('change', function (this: HTMLInputElement) {
@@ -122,8 +137,8 @@ export class SettingsUI {
             const lowerFilter = filterText.toLowerCase();
 
             tools.forEach((tool) => {
-                const name = tool.schema.name;
-                const desc = tool.schema.description;
+                const name = escapeHtml(tool.schema.name);
+                const desc = escapeHtml(tool.schema.description);
 
                 if (
                     lowerFilter &&
@@ -308,7 +323,7 @@ export class SettingsUI {
                             <button class="menu_button interactable kaiz-qp-icon-btn" data-index="${index}" style="width: 32px; height: 32px; padding: 0; display: flex; justify-content: center; align-items: center;" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${qp.name || ''}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
+                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${escapeHtml(qp.name || '')}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
                             <div style="display: flex; gap: 5px;">
                                 <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
                                 <button class="menu_button interactable kaiz-qp-down" data-index="${index}" style="padding: 5px 10px;" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
@@ -316,7 +331,7 @@ export class SettingsUI {
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${qp.prompt || ''}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${escapeHtml(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -503,11 +518,20 @@ export class SettingsUI {
                     axis: 'y',
                     update: function () {
                         const newMemories: any[] = [];
+                        let newEditingIndex = -1;
+                        let currentIndex = 0;
                         $memoryList.children('.kaiz-memory-item').each(function (this: HTMLElement) {
                             const oldIndex = $(this).data('index');
+                            if (oldIndex === editingMemoryIndex) {
+                                newEditingIndex = currentIndex;
+                            }
                             newMemories.push(settings.memories[oldIndex]);
+                            currentIndex++;
                         });
                         settings.memories = newMemories;
+                        if (editingMemoryIndex !== -1) {
+                            editingMemoryIndex = newEditingIndex;
+                        }
                         ctx.saveSettingsDebounced();
                         renderMemories(); // re-render to update data-index
                     },
@@ -561,6 +585,7 @@ export class SettingsUI {
             }
         });
 
+        document.removeEventListener('kaiz_memory_updated', renderMemories);
         document.addEventListener('kaiz_memory_updated', renderMemories);
         // --- END PERSONA & MEMORY LOGIC ---
 
@@ -572,8 +597,8 @@ export class SettingsUI {
             const lowerFilter = filterText.toLowerCase();
 
             tools.forEach((tool) => {
-                const name = tool.schema.name;
-                const desc = tool.schema.description;
+                const name = escapeHtml(tool.schema.name);
+                const desc = escapeHtml(tool.schema.description);
 
                 if (
                     lowerFilter &&

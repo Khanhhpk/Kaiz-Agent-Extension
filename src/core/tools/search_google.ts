@@ -52,7 +52,7 @@ export const searchGoogleTool: ITool = {
                 const h3Element = g.querySelector('h3');
 
                 if (aElement && h3Element) {
-                    const title = h3Element.innerText.trim();
+                    const title = h3Element.textContent?.trim() || '';
                     const link = aElement.getAttribute('href');
 
                     if (title && link && link.startsWith('http')) {
@@ -60,7 +60,7 @@ export const searchGoogleTool: ITool = {
                         // Snippet thường nằm trong một khối div bên dưới thẻ a/h3
                         // Một cách thô bạo nhưng hiệu quả là lấy toàn bộ text của khối g,
                         // sau đó loại bỏ phần Title ra.
-                        let snippet = (g as HTMLElement).innerText.trim();
+                        let snippet = g.textContent?.trim() || '';
                         if (snippet.startsWith(title)) {
                             snippet = snippet.substring(title.length).trim();
                         }
@@ -112,9 +112,9 @@ export const searchGoogleTool: ITool = {
                             let link = aEl.getAttribute('href') || '';
                             if (link.startsWith('//')) link = 'https:' + link;
                             results.push({
-                                title: (aEl as HTMLElement).innerText.trim(),
+                                title: aEl.textContent?.trim() || '',
                                 url: link,
-                                snippet: snippetEl ? (snippetEl as HTMLElement).innerText.trim() : '',
+                                snippet: snippetEl?.textContent?.trim() || '',
                             });
                         }
                     }
@@ -143,9 +143,9 @@ export const searchGoogleTool: ITool = {
 
                             if (titleEl && titleEl.getAttribute('href')) {
                                 results.push({
-                                    title: (titleEl as HTMLElement).innerText.trim(),
+                                    title: titleEl.textContent?.trim() || '',
                                     url: titleEl.getAttribute('href')!,
-                                    snippet: snippetEl ? (snippetEl as HTMLElement).innerText.trim() : '',
+                                    snippet: snippetEl?.textContent?.trim() || '',
                                 });
                             }
                         });
@@ -159,10 +159,10 @@ export const searchGoogleTool: ITool = {
                                 'Không trích xuất được kết quả theo chuẩn từ Google lẫn DuckDuckGo, trả về text thô của trang',
                             raw_text: ddgHtml
                                 ? ddgDoc
-                                    ? ddgDoc.body.innerText.substring(0, 3000)
+                                    ? ddgDoc?.body?.textContent?.substring(0, 3000) || ''
                                     : ddgHtml.substring(0, 3000)
                                 : doc.body
-                                  ? doc.body.innerText.substring(0, 3000)
+                                  ? doc?.body?.textContent?.substring(0, 3000) || ''
                                   : 'No text',
                         }),
                     };

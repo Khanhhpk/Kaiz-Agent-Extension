@@ -28,9 +28,6 @@ export class KaizToolChecker {
                 console.error(`[KaizToolChecker] Tool ${name} failed check:`, e);
                 updateUI(name, 'error', e.message || String(e));
             }
-
-            // Giả lập delay nhỏ cho UI có thời gian cập nhật mượt mà
-            await new Promise((r) => setTimeout(r, 200));
         }
     }
 }

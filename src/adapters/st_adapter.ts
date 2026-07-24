@@ -7,6 +7,9 @@ declare const SillyTavern: any;
 declare const window: any;
 declare const document: any;
 
+const escapeHtml = (s: string): string =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 export interface Message {
     role: 'system' | 'user' | 'assistant';
     name?: string;
@@ -276,7 +279,7 @@ export class SillyTavernAdapter {
 
         for (let i = 0; i < chat.length; i++) {
             const msg = chat[i];
-            const name = msg.name || 'System';
+            const name = escapeHtml(msg.name || 'System');
 
             // Lấy safe_preview
             let preview = msg.mes || '';
@@ -318,6 +321,7 @@ export class SillyTavernAdapter {
         $('body').append(html);
 
         const dialog = document.getElementById('kaiz-chat-preview-modal') as any;
+        dialog.addEventListener('close', () => dialog.remove());
         if (!dialog.open) dialog.showModal();
 
         $('#kaiz-chat-preview-close').on('click', () => {
@@ -1125,7 +1129,7 @@ export class SillyTavernAdapter {
             regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
         } catch (e) {
             console.error('[KaizAgent] Invalid regex:', e);
-            throw new Error(`Regex không hợp lệ: ${e}`);
+            throw new Error(`Regex không hợp lệ: ${e}`, { cause: e });
         }
 
         // Cần đảm bảo regex có cờ 'g' để dùng vòng lặp exec
@@ -1270,7 +1274,7 @@ export class SillyTavernAdapter {
         try {
             regex = this.buildRegex(query, isRegex, caseInsensitive, wholeWord);
         } catch (e) {
-            throw new Error(`Regex không hợp lệ: ${e}`);
+            throw new Error(`Regex không hợp lệ: ${e}`, { cause: e });
         }
 
         const $ = (window as any).$;

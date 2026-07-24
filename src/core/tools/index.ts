@@ -23,6 +23,9 @@ import { interactUITool } from './interact_ui';
 import { scanUITool } from './scan_ui';
 import { manageUserInputTool } from './manage_user_input';
 import { manageAgentMemory } from './manage_agent_memory';
+import { getRegexListTool } from './get_regex_list';
+import { getRegexInfoTool } from './get_regex_info';
+import { manageRegexTool } from './manage_regex';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -52,4 +55,7 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(scanUITool);
     registry.registerTool(manageUserInputTool);
     registry.registerTool(manageAgentMemory);
+    registry.registerTool(getRegexListTool);
+    registry.registerTool(getRegexInfoTool);
+    registry.registerTool(manageRegexTool);
 }
