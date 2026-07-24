@@ -85,7 +85,10 @@ export const interactUITool: ITool = {
             }
 
             if (!foundElement) {
-                return { content: `Không tìm thấy nút hoặc phần tử nào trên màn hình khớp với "${target}".`, isError: true };
+                return {
+                    content: `Không tìm thấy nút hoặc phần tử nào trên màn hình khớp với "${target}".`,
+                    isError: true,
+                };
             }
 
             // 2. Tính toán vị trí trung tâm của element

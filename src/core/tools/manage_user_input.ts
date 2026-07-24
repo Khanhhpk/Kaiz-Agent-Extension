@@ -34,12 +34,18 @@ export const manageUserInputTool: ITool = {
                 return { content: "Lỗi: Tham số mode phải là 'overwrite', 'append' hoặc 'read'.", isError: true };
             }
             if (mode !== 'read' && !text) {
-                return { content: 'Lỗi: Tham số text không được để trống khi ghi hoặc nối thêm văn bản.', isError: true };
+                return {
+                    content: 'Lỗi: Tham số text không được để trống khi ghi hoặc nối thêm văn bản.',
+                    isError: true,
+                };
             }
 
             const textarea = document.getElementById('send_textarea') as HTMLTextAreaElement;
             if (!textarea) {
-                return { content: 'Lỗi: Không tìm thấy khung nhập văn bản (send_textarea) trên giao diện.', isError: true };
+                return {
+                    content: 'Lỗi: Không tìm thấy khung nhập văn bản (send_textarea) trên giao diện.',
+                    isError: true,
+                };
             }
 
             if (mode === 'read') {
@@ -71,7 +77,9 @@ export const manageUserInputTool: ITool = {
                 }
             }
 
-            return { content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung vào khung chat (Không gửi).` };
+            return {
+                content: `Đã ${mode === 'overwrite' ? 'ghi đè' : 'nối thêm'} nội dung vào khung chat (Không gửi).`,
+            };
         } catch (e: any) {
             return {
                 isError: true,

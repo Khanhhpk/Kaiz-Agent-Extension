@@ -31,9 +31,13 @@ export const manageAgentMemory: ITool = {
             const action = args.action;
             const key = args.key;
             const content = args.content;
-            
+
             // Check for window and SillyTavern safely
-            if (typeof window === 'undefined' || !(window as any).SillyTavern || typeof (window as any).SillyTavern.getContext !== 'function') {
+            if (
+                typeof window === 'undefined' ||
+                !(window as any).SillyTavern ||
+                typeof (window as any).SillyTavern.getContext !== 'function'
+            ) {
                 return { content: 'Error: SillyTavern context not available.', isError: true };
             }
             const ctx = (window as any).SillyTavern.getContext();
