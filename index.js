@@ -2898,17 +2898,17 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return false;
                 };
                 // Hàm đệ quy sửa
-                const editInTree = (nodes, mutator) => {
+                const editInTree = (nodes, searchId, mutator) => {
                     if (!Array.isArray(nodes))
                         return false;
                     for (const node of nodes) {
-                        if (node.id === id) {
+                        if (node.id === searchId) {
                             mutator(node);
                             return true;
                         }
                         const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
                         if (children) {
-                            if (editInTree(children, mutator))
+                            if (editInTree(children, searchId, mutator))
                                 return true;
                         }
                     }
@@ -2919,15 +2919,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const tempId = targetId + '_temp_sync';
                         // Đổi ID tạm thời để Vue unmount component
                         await th.updateScriptTreesWith((trees) => {
-                            editInTree(trees, (node) => { if (node.id === targetId)
-                                node.id = tempId; });
+                            editInTree(trees, targetId, (node) => { node.id = tempId; });
                             return trees;
                         }, { type: targetScope });
                         await new Promise(resolve => setTimeout(resolve, 100));
                         // Trả lại ID gốc để Vue mount lại component với dữ liệu mới
                         await th.updateScriptTreesWith((trees) => {
-                            editInTree(trees, (node) => { if (node.id === tempId)
-                                node.id = targetId; });
+                            editInTree(trees, tempId, (node) => { node.id = targetId; });
                             return trees;
                         }, { type: targetScope });
                     }
@@ -3004,7 +3002,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     let currentStatus = false;
                     let currentName = '';
                     await th.updateScriptTreesWith((trees) => {
-                        editInTree(trees, (node) => {
+                        editInTree(trees, id, (node) => {
                             node.enabled = !node.enabled;
                             currentStatus = node.enabled;
                             currentName = node.name || 'Unnamed';
@@ -3019,7 +3017,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     let currentName = '';
                     await th.updateScriptTreesWith((trees) => {
-                        editInTree(trees, (node) => {
+                        editInTree(trees, id, (node) => {
                             // Không cho phép ghi đè id
                             const originalId = node.id;
                             // Chuẩn hoá: Dùng info, loại bỏ authorNote

@@ -66,16 +66,16 @@ export const manageTavernHelperScriptTool: ITool = {
             };
 
             // Hàm đệ quy sửa
-            const editInTree = (nodes: any[], mutator: (node: any) => void): boolean => {
+            const editInTree = (nodes: any[], searchId: string, mutator: (node: any) => void): boolean => {
                 if (!Array.isArray(nodes)) return false;
                 for (const node of nodes) {
-                    if (node.id === id) {
+                    if (node.id === searchId) {
                         mutator(node);
                         return true;
                     }
                     const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
                     if (children) {
-                        if (editInTree(children, mutator)) return true;
+                        if (editInTree(children, searchId, mutator)) return true;
                     }
                 }
                 return false;
@@ -87,7 +87,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     
                     // Đổi ID tạm thời để Vue unmount component
                     await th.updateScriptTreesWith((trees: any[]) => {
-                        editInTree(trees, (node) => { if (node.id === targetId) node.id = tempId; });
+                        editInTree(trees, targetId, (node) => { node.id = tempId; });
                         return trees;
                     }, { type: targetScope });
                     
@@ -95,7 +95,7 @@ export const manageTavernHelperScriptTool: ITool = {
                     
                     // Trả lại ID gốc để Vue mount lại component với dữ liệu mới
                     await th.updateScriptTreesWith((trees: any[]) => {
-                        editInTree(trees, (node) => { if (node.id === tempId) node.id = targetId; });
+                        editInTree(trees, tempId, (node) => { node.id = targetId; });
                         return trees;
                     }, { type: targetScope });
                 } catch (e) {
@@ -174,7 +174,7 @@ export const manageTavernHelperScriptTool: ITool = {
                 let currentStatus = false;
                 let currentName = '';
                 await th.updateScriptTreesWith((trees: any[]) => {
-                    editInTree(trees, (node) => {
+                    editInTree(trees, id, (node) => {
                         node.enabled = !node.enabled;
                         currentStatus = node.enabled;
                         currentName = node.name || 'Unnamed';
@@ -191,7 +191,7 @@ export const manageTavernHelperScriptTool: ITool = {
 
                 let currentName = '';
                 await th.updateScriptTreesWith((trees: any[]) => {
-                    editInTree(trees, (node) => {
+                    editInTree(trees, id, (node) => {
                         // Không cho phép ghi đè id
                         const originalId = node.id;
                         
