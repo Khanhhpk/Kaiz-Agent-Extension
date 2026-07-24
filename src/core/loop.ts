@@ -259,12 +259,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         const internalHistory = [...history];
         let pinnedUserGoal = '';
+        // Tạm thời vô hiệu hoá Ghim tin nhắn để tránh AI kẹt vòng lặp
+        /* 
         for (let i = internalHistory.length - 1; i >= 0; i--) {
             if (internalHistory[i].role === 'user') {
-                pinnedUserGoal = internalHistory[i].content;
+                // Fix error if content is array
+                if (typeof internalHistory[i].content === 'string') {
+                    pinnedUserGoal = internalHistory[i].content;
+                } else if (Array.isArray(internalHistory[i].content)) {
+                    const textContent = internalHistory[i].content.find((c: any) => c.type === 'text');
+                    pinnedUserGoal = textContent ? textContent.text : '';
+                }
                 break;
             }
         }
+        */
 
         let step = 0;
         let lastToolError = false;
