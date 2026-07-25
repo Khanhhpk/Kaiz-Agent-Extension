@@ -564,6 +564,47 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
+    const editCharacterCardTool = {
+        schema: {
+            name: 'edit_character_card',
+            description: 'Chỉnh sửa thông tin của thẻ nhân vật hiện tại (description, personality, scenario, first_mes, mes_example, system_prompt, v.v.). Cập nhật trực tiếp vào thẻ nhân vật.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    field: {
+                        type: 'string',
+                        enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version'],
+                        description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality".',
+                    },
+                    value: {
+                        type: 'string',
+                        description: 'Giá trị mới cần cập nhật cho trường này. Có thể truyền mảng đối với alternate_greetings, chuỗi phân cách bởi dấu phẩy đối với tags.',
+                    },
+                },
+                required: ['field', 'value'],
+            },
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context characters object is missing');
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) {
+                return { content: 'Error: Adapter not provided in context.', isError: true };
+            }
+            if (!args.field || args.value === undefined) {
+                return { content: 'Error: field and value are required.', isError: true };
+            }
+            try {
+                await context.adapter.editCharacterAttribute(args.field, args.value);
+                return { content: `Successfully updated field "${args.field}" for the current character.` };
+            } catch (e) {
+                return { content: `Error updating character field: ${e.message}`, isError: true };
+            }
+        },
+    };
+
     const sendSystemMessageTool = {
         schema: {
             name: 'send_system_message',
@@ -3072,6 +3113,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
      */
     function registerDefaultTools(registry) {
         registry.registerTool(getCharInfoTool);
+        registry.registerTool(editCharacterCardTool);
         registry.registerTool(sendSystemMessageTool);
         registry.registerTool(deleteLastMessageTool);
         registry.registerTool(deleteMessageByIndexTool);
@@ -3423,6 +3465,81 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 scenario: d.scenario || char.scenario || '',
                 system_prompt: d.system_prompt || char.system_prompt || '',
             };
+        }
+        /**
+         * Chỉnh sửa trường thông tin của nhân vật hiện tại
+         */
+        async editCharacterAttribute(fieldId, newValue) {
+            const ctx = SillyTavern.getContext();
+            const char = ctx.characters?.[ctx.characterId];
+            if (!char) throw new Error("No active character found.");
+            
+            if (fieldId === 'name') {
+                const trimmedName = (String(newValue) || '').trim();
+                if (!trimmedName) throw new Error('Character name cannot be empty');
+                const renameRes = await fetch('/api/characters/rename', {
+                    method: 'POST',
+                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ avatar_url: char.avatar, new_name: trimmedName }),
+                });
+                if (!renameRes.ok) throw new Error(`Rename failed: ${renameRes.status}`);
+                char.name = trimmedName;
+                if (char.data) char.data.name = trimmedName;
+                if (typeof window.getCharacters === 'function') await window.getCharacters().catch(() => {});
+            } else if (fieldId === 'tags') {
+                const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
+                if (!char.data) char.data = {};
+                char.data.tags = newTagsNames;
+                char.tags = newTagsNames;
+                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: 'tags', value: newTagsNames };
+                await fetch('/api/characters/edit-attribute', {
+                    method: 'POST',
+                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+            } else {
+                if (!char.data) char.data = {};
+                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
+                if (fieldId === 'alternate_greetings') {
+                    char.data.alternate_greetings = Array.isArray(newValue) ? newValue : [String(newValue)];
+                } else {
+                    char.data[fieldId] = newValue;
+                    char[fieldId] = newValue;
+                }
+                const res = await fetch('/api/characters/edit-attribute', {
+                    method: 'POST',
+                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            }
+
+            const domMap = {
+                description: 'description_textarea',
+                personality: 'personality_textarea',
+                scenario: 'scenario_pole',
+                first_mes: 'firstmessage_textarea',
+                mes_example: 'mes_example_textarea',
+                system_prompt: 'system_prompt_textarea',
+                post_history_instructions: 'post_history_instructions_textarea',
+                creator_notes: 'creator_notes_textarea',
+            };
+            if (domMap[fieldId]) {
+                const el = document.getElementById(domMap[fieldId]);
+                if (el) {
+                    el.value = typeof newValue === 'string' ? newValue : JSON.stringify(newValue);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            } else if (fieldId === 'alternate_greetings') {
+                if (typeof window.printAlternateGreetings === 'function') window.printAlternateGreetings();
+            }
+
+            const es = ctx.eventSource || window.eventSource;
+            const et = ctx.event_types || window.event_types;
+            if (es && et?.CHARACTER_EDITED) {
+                es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
+                es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
+            }
         }
         /**
          * Gửi tin nhắn hệ thống (không lưu vào lịch sử nhân vật)
