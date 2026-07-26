@@ -529,6 +529,65 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     }
 
+    const listCharactersTool = {
+        schema: {
+            name: 'list_characters',
+            description: 'Lấy danh sách các thẻ nhân vật hiện có trong kho của SillyTavern. Trả về tên, avatar, creator, và mô tả ngắn.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    search_query: { type: 'string', description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.' }
+                }
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context characters object is missing');
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) return { content: 'Error: Adapter not provided.', isError: true };
+            try {
+                const list = await context.adapter.listCharacters(args.search_query);
+                if (!list || list.length === 0) {
+                    return { content: 'Không tìm thấy thẻ nhân vật nào khớp.' };
+                }
+                return { content: JSON.stringify(list, null, 2) };
+            } catch (e) {
+                return { content: `Error listing characters: ${e.message}`, isError: true };
+            }
+        }
+    };
+
+    const switchCharacterChatTool = {
+        schema: {
+            name: 'switch_character_chat',
+            description: 'Chuyển sang màn hình chat của một nhân vật khác. Cần cung cấp chính xác tên nhân vật (lấy từ kết quả list_characters).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    character_name: { type: 'string', description: 'Tên nhân vật muốn chuyển chat tới (bắt buộc).' }
+                },
+                required: ['character_name']
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context characters object is missing');
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) return { content: 'Error: Adapter not provided.', isError: true };
+            if (!args.character_name) return { content: 'Error: character_name is required.', isError: true };
+            try {
+                const result = await context.adapter.switchCharacterChat(args.character_name);
+                return { content: result };
+            } catch (e) {
+                return { content: `Error switching character: ${e.message}`, isError: true };
+            }
+        }
+    };
+
     const getCharInfoTool = {
         schema: {
             name: 'get_char_info',
@@ -3151,6 +3210,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
      * Đăng ký tất cả các tools mặc định vào Registry
      */
     function registerDefaultTools(registry) {
+        registry.registerTool(listCharactersTool);
+        registry.registerTool(switchCharacterChatTool);
         registry.registerTool(getCharInfoTool);
         registry.registerTool(editCharacterCardTool);
         registry.registerTool(createCharacterCardTool);
@@ -3526,6 +3587,64 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 talkativeness: char.talkativeness ?? d.extensions?.talkativeness ?? d.talkativeness ?? '0.5',
                 fav: char.fav ?? d.extensions?.fav ?? d.fav ?? false,
             };
+        }
+        /**
+         * Lấy danh sách thẻ nhân vật hiện có (lược bớt thông tin)
+         */
+        async listCharacters(searchQuery) {
+            const ctx = SillyTavern.getContext();
+            const chars = ctx.characters || window.characters || [];
+            let filtered = chars;
+            if (searchQuery) {
+                const q = searchQuery.toLowerCase();
+                filtered = chars.filter(c => c.name && c.name.toLowerCase().includes(q));
+            }
+            return filtered.map(c => {
+                let shortDesc = c.description || c.personality || '';
+                if (shortDesc.length > 150) shortDesc = shortDesc.substring(0, 150) + '...';
+                return {
+                    name: c.name,
+                    avatar: c.avatar,
+                    creator: c.creator || '',
+                    description_snippet: shortDesc
+                };
+            });
+        }
+        /**
+         * Chuyển màn hình chat sang một nhân vật khác
+         */
+        async switchCharacterChat(charName) {
+            const ctx = SillyTavern.getContext();
+            const chars = ctx.characters || window.characters || [];
+            
+            // Search case-insensitive
+            const q = charName.toLowerCase();
+            const index = chars.findIndex(c => c.name && c.name.toLowerCase() === q);
+            
+            if (index === -1) {
+                throw new Error(`Không tìm thấy nhân vật nào tên "${charName}". Vui lòng dùng list_characters để kiểm tra lại.`);
+            }
+            
+            const targetChar = chars[index];
+            
+            // Try standard ST API first if available (avatar filename is typically used as ID in new versions)
+            if (typeof window.selectCharacterById === 'function') {
+                try {
+                    window.selectCharacterById(targetChar.avatar);
+                    return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
+                } catch (e) {
+                    console.warn('[KaizAgent] window.selectCharacterById failed, falling back to DOM click', e);
+                }
+            }
+            
+            // Fallback to DOM click (chid is usually the index in the array)
+            const el = document.querySelector(`.character_select[chid="${index}"]`);
+            if (el) {
+                el.click();
+                return `Thành công click chuyển sang chat với nhân vật: ${targetChar.name}`;
+            }
+            
+            throw new Error(`Đã tìm thấy nhân vật "${targetChar.name}" ở vị trí ${index} nhưng không thể click vào thẻ UI tương ứng.`);
         }
         /**
          * Tạo thẻ nhân vật mới
