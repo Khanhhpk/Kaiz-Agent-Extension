@@ -1,4 +1,8 @@
 import { getCharInfoTool } from './get_char_info';
+import { listCharactersTool } from './list_characters';
+import { switchCharacterChatTool } from './switch_character_chat';
+import { editCharacterCardTool } from './edit_character_card';
+import { createCharacterCardTool } from './create_character_card';
 import { sendSystemMessageTool } from './send_system_message';
 import { manageWorldbookTool } from './manage_worldbook';
 import { deleteLastMessageTool } from './delete_message';
@@ -37,6 +41,10 @@ import { ToolRegistry } from '../tool_registry';
  */
 export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getCharInfoTool);
+    registry.registerTool(listCharactersTool);
+    registry.registerTool(switchCharacterChatTool);
+    registry.registerTool(editCharacterCardTool);
+    registry.registerTool(createCharacterCardTool);
     registry.registerTool(sendSystemMessageTool);
     registry.registerTool(deleteLastMessageTool);
     registry.registerTool(deleteMessageByIndexTool);

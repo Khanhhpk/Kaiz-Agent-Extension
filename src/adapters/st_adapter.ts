@@ -365,14 +365,253 @@ export class SillyTavernAdapter {
         if (!char) return null;
 
         const d = char.data || {};
+        let actualTags = char.tags || d.tags || [];
+        if (ctx.tagMap && ctx.tags && ctx.tagMap[char.avatar]) {
+            const mappedTags = ctx.tagMap[char.avatar].map((id: string) => {
+                const t = ctx.tags.find((tag: any) => tag.id === id);
+                return t ? t.name : null;
+            }).filter(Boolean);
+            if (mappedTags.length > 0 || actualTags.length === 0) {
+                actualTags = mappedTags;
+            }
+        }
         return {
             name: char.name || 'Unknown',
             description: d.description || char.description || '',
             personality: d.personality || char.personality || '',
             scenario: d.scenario || char.scenario || '',
             system_prompt: d.system_prompt || char.system_prompt || '',
+            first_mes: d.first_mes || char.first_mes || '',
+            mes_example: d.mes_example || char.mes_example || '',
+            post_history_instructions: d.post_history_instructions || char.post_history_instructions || '',
+            tags: actualTags,
+            alternate_greetings: d.alternate_greetings || [],
+            creator_notes: d.creator_notes || char.creator_notes || '',
+            character_version: d.character_version || char.character_version || '',
+            character_book: (function() {
+                const b = d.character_book || char.character_book;
+                if (!b) return null;
+                if (typeof b === 'string') return b;
+                return {
+                    name: b.name || 'Embedded Lorebook',
+                    entries_count: b.entries ? b.entries.length : 0
+                };
+            })(),
+            creator: d.creator || char.creator || '',
+            talkativeness: char.talkativeness ?? d.extensions?.talkativeness ?? d.talkativeness ?? '0.5',
+            fav: char.fav ?? d.extensions?.fav ?? d.fav ?? false,
         };
     }
+
+    /**
+     * Lấy danh sách thẻ nhân vật hiện có (lược bớt thông tin)
+     */
+    public async listCharacters(searchQuery?: string) {
+        const ctx = SillyTavern.getContext();
+        const chars = ctx.characters || (window as any).characters || [];
+        let filtered = chars;
+        if (searchQuery) {
+            const q = searchQuery.toLowerCase();
+            filtered = chars.filter((c: any) => c.name && c.name.toLowerCase().includes(q));
+        }
+        return filtered.map((c: any) => {
+            let shortDesc = c.description || c.personality || '';
+            if (shortDesc.length > 150) shortDesc = shortDesc.substring(0, 150) + '...';
+            return {
+                name: c.name,
+                avatar: c.avatar,
+                creator: c.creator || '',
+                description_snippet: shortDesc
+            };
+        });
+    }
+
+    /**
+     * Chuyển màn hình chat sang một nhân vật khác
+     */
+    public async switchCharacterChat(charName: string) {
+        const ctx = SillyTavern.getContext();
+        const chars = ctx.characters || (window as any).characters || [];
+        
+        // Search case-insensitive
+        const q = charName.toLowerCase();
+        const index = chars.findIndex((c: any) => c.name && c.name.toLowerCase() === q);
+        
+        if (index === -1) {
+            throw new Error(`Không tìm thấy nhân vật nào tên "${charName}". Vui lòng dùng list_characters để kiểm tra lại.`);
+        }
+        
+        const targetChar = chars[index];
+        
+        // Try standard ST API first (it expects the numeric ID / index)
+        if (typeof ctx.selectCharacterById === 'function') {
+            await ctx.selectCharacterById(index);
+            return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
+        } 
+        
+        if (typeof (window as any).selectCharacterById === 'function') {
+            await (window as any).selectCharacterById(index);
+            return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
+        }
+        
+        // Minimal Fallback for older versions
+        const el = document.querySelector(`.character_select[data-chid="${index}"]`) || document.querySelector(`.character_select[chid="${index}"]`);
+        if (el) {
+            if (typeof (window as any).$ !== 'undefined') (window as any).$(el).trigger('click');
+            else (el as HTMLElement).click();
+            return `Thành công click chuyển sang chat với nhân vật: ${targetChar.name}`;
+        }
+        
+        throw new Error(`Không thể chọn nhân vật "${targetChar.name}" vì hàm API không tồn tại và thẻ không hiển thị trên giao diện.`);
+    }
+
+    /**
+     * Tạo thẻ nhân vật mới
+     */
+    public async createCharacterCard(data: Record<string, any>) {
+        const ctx = SillyTavern.getContext();
+        const tagsString = Array.isArray(data.tags) ? data.tags.join(', ') : (typeof data.tags === 'string' ? data.tags : '');
+        
+        const formData = new FormData();
+        formData.append('ch_name', data.name || 'New Character');
+        formData.append('description', data.description || '');
+        formData.append('personality', data.personality || '');
+        formData.append('scenario', data.scenario || '');
+        formData.append('first_mes', data.first_mes || '');
+        formData.append('mes_example', data.mes_example || '');
+        formData.append('system_prompt', data.system_prompt || '');
+        formData.append('tags', tagsString);
+        
+        const headers = ctx.getRequestHeaders();
+        delete headers['Content-Type']; // Browser will set boundary automatically
+        
+        const res = await fetch('/api/characters/create', {
+            method: 'POST',
+            headers,
+            body: formData,
+            cache: 'no-cache',
+        });
+        
+        if (!res.ok) {
+            const errText = await res.text().catch(() => res.statusText);
+            throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+        
+        const newAvatar = await res.text();
+        
+        await new Promise(r => setTimeout(r, 400));
+        
+        if (typeof ctx.getCharacters === 'function') {
+            await ctx.getCharacters();
+        } else if (typeof (window as any).getCharacters === 'function') {
+            await (window as any).getCharacters();
+        }
+        
+        if (typeof (window as any).PrintCharacterList === 'function') {
+            (window as any).PrintCharacterList();
+        }
+        const es = ctx.eventSource || (window as any).eventSource;
+        const et = ctx.event_types || (window as any).event_types;
+        if (es && et?.CHARACTERS_UPDATED) {
+            es.emit(et.CHARACTERS_UPDATED);
+        }
+        
+        return newAvatar;
+    }
+
+    /**
+     * Chỉnh sửa trường thông tin của nhân vật hiện tại
+     */
+    public async editCharacterAttribute(fieldId: string, newValue: any) {
+        const ctx = SillyTavern.getContext();
+        const char = ctx.characters?.[ctx.characterId];
+        if (!char) throw new Error("No active character found.");
+        
+        if (fieldId === 'name') {
+            const trimmedName = (String(newValue) || '').trim();
+            if (!trimmedName) throw new Error('Character name cannot be empty');
+            const renameRes = await fetch('/api/characters/rename', {
+                method: 'POST',
+                headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify({ avatar_url: char.avatar, new_name: trimmedName }),
+            });
+            if (!renameRes.ok) throw new Error(`Rename failed: ${renameRes.status}`);
+            char.name = trimmedName;
+            if (char.data) char.data.name = trimmedName;
+            if (typeof (window as any).getCharacters === 'function') await (window as any).getCharacters().catch(() => {});
+        } else if (fieldId === 'tags') {
+            const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map((t: string) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
+            
+            if (ctx.tagMap && ctx.tags) {
+                const currentTagIds = ctx.tagMap[char.avatar] || [];
+                const toUnlink = currentTagIds.filter((id: string) => {
+                    const tagObj = ctx.tags.find((t: any) => t.id === id);
+                    return tagObj ? !newTagsNames.some((n: string) => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
+                });
+                if (toUnlink.length > 0) {
+                    ctx.tagMap[char.avatar] = currentTagIds.filter((id: string) => !toUnlink.includes(id));
+                    if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+                }
+            }
+
+            if (!char.data) char.data = {};
+            char.data.tags = newTagsNames;
+            char.tags = newTagsNames;
+            const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: 'tags', value: newTagsNames };
+            await fetch('/api/characters/edit-attribute', {
+                method: 'POST',
+                headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (typeof ctx.importTags === 'function') {
+                await ctx.importTags(char, { importSetting: 3 }).catch(() => {});
+            }
+        } else {
+            if (!char.data) char.data = {};
+            const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
+            if (fieldId === 'alternate_greetings') {
+                char.data.alternate_greetings = Array.isArray(newValue) ? newValue : [String(newValue)];
+            } else {
+                char.data[fieldId] = newValue;
+                char[fieldId] = newValue;
+            }
+            const res = await fetch('/api/characters/edit-attribute', {
+                method: 'POST',
+                headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        }
+
+        const domMap: Record<string, string> = {
+            description: 'description_textarea',
+            personality: 'personality_textarea',
+            scenario: 'scenario_pole',
+            first_mes: 'firstmessage_textarea',
+            mes_example: 'mes_example_textarea',
+            system_prompt: 'system_prompt_textarea',
+            post_history_instructions: 'post_history_instructions_textarea',
+            creator_notes: 'creator_notes_textarea',
+        };
+        if (domMap[fieldId]) {
+            const el = document.getElementById(domMap[fieldId]) as HTMLTextAreaElement;
+            if (el) {
+                el.value = typeof newValue === 'string' ? newValue : JSON.stringify(newValue);
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        } else if (fieldId === 'alternate_greetings') {
+            if (typeof (window as any).printAlternateGreetings === 'function') (window as any).printAlternateGreetings();
+        }
+
+        const es = ctx.eventSource || (window as any).eventSource;
+        const et = ctx.event_types || (window as any).event_types;
+        if (es && et?.CHARACTER_EDITED) {
+            es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
+            es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
+        }
+    }
+
 
     /**
      * Gửi tin nhắn hệ thống (không lưu vào lịch sử nhân vật)
@@ -633,11 +872,22 @@ export class SillyTavernAdapter {
             const chatWorldName = ctx.chatMetadata?.[wiKey];
             if (chatWorldName && typeof chatWorldName === 'string') names.add(chatWorldName);
 
-            if (options.bookName && (options.mode === 'by_name' || options.mode === 'summary')) {
-                // Bỏ qua kiểm tra names.has() để cho phép đọc book đang bị tắt
+            if (options.bookName && options.mode === 'by_name') {
+                // Chế độ by_name bắt buộc xoá hết và chỉ đọc 1 sách
                 names.clear();
                 names.add(options.bookName);
-            } else if (options.mode === 'by_name') {
+            } else if (options.bookName) {
+                // Với các chế độ khác, nếu có bookName thì ưu tiên lọc
+                if (names.has(options.bookName) || options.mode === 'summary') {
+                    names.clear();
+                    names.add(options.bookName);
+                } else {
+                    names.clear();
+                    names.add(options.bookName);
+                }
+            }
+            
+            if (options.mode === 'by_name' && !options.bookName) {
                 return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
             }
 
@@ -743,11 +993,13 @@ export class SillyTavernAdapter {
 
             if (options.mode !== 'by_name') {
                 result += '\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n';
+                const charBookName = character?.data?.character_book?.name || character?.name || 'Embedded Lorebook';
                 if (
                     character &&
                     character.data &&
                     character.data.character_book &&
-                    character.data.character_book.entries
+                    character.data.character_book.entries &&
+                    (!options.bookName || charBookName === options.bookName)
                 ) {
                     let bookResult = `\n[Character Lorebook: ${character.name}]\n`;
                     let entriesObj = character.data.character_book.entries;
