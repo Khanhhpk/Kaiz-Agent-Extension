@@ -2012,7 +2012,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             el.getAttribute('data-title')?.trim() ||
                             '';
                         const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                        const value = el.value?.trim() || '';
+                        const value = (el.value !== undefined && el.value !== null) ? String(el.value).trim() : '';
                         let description = text || title || ariaLabel;
                         if (!description && el.tagName === 'INPUT') {
                             description = value || el.getAttribute('placeholder') || 'Input field';
@@ -3637,8 +3637,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
             }
             
-            // Fallback to DOM click (chid is usually the index in the array)
-            const el = document.querySelector(`.character_select[chid="${index}"]`);
+            // Fallback to DOM click (chid is usually the index in the array, OR the avatar filename in modern ST)
+            let el = document.querySelector(`.character_select[chid="${index}"]`);
+            if (!el) {
+                // Thử tìm bằng avatar
+                try {
+                    el = document.querySelector(`.character_select[chid="${targetChar.avatar}"]`) || document.querySelector(`.character_select[avatar="${targetChar.avatar}"]`);
+                } catch(e) {}
+            }
+            if (!el) {
+                // Tìm bằng text
+                const allSelects = document.querySelectorAll('.character_select');
+                for (let i = 0; i < allSelects.length; i++) {
+                     const nameEl = allSelects[i].querySelector('.ch_name');
+                     if (nameEl && nameEl.innerText.trim() === targetChar.name) {
+                         el = allSelects[i];
+                         break;
+                     }
+                }
+            }
+
             if (el) {
                 el.click();
                 return `Thành công click chuyển sang chat với nhân vật: ${targetChar.name}`;
