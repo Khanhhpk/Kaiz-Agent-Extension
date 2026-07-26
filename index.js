@@ -3629,59 +3629,24 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             
             // Try standard ST API first (it expects the numeric ID / index)
             if (typeof ctx.selectCharacterById === 'function') {
-                try {
-                    await ctx.selectCharacterById(index);
-                    return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
-                } catch (e) {
-                    console.warn('[KaizAgent] ctx.selectCharacterById failed, falling back to DOM click', e);
-                }
-            } else if (typeof window.selectCharacterById === 'function') {
-                try {
-                    await window.selectCharacterById(index);
-                    return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
-                } catch (e) {
-                    console.warn('[KaizAgent] window.selectCharacterById failed, falling back to DOM click', e);
-                }
+                await ctx.selectCharacterById(index);
+                return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
+            } 
+            
+            if (typeof window.selectCharacterById === 'function') {
+                await window.selectCharacterById(index);
+                return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
             }
             
-            // Fallback to DOM click (data-chid is often the index in modern ST)
-            let el = document.querySelector(`.character_select[data-chid="${index}"]`);
-            if (!el) {
-                el = document.querySelector(`.character_select[chid="${index}"]`);
-            }
-            if (!el) {
-                // Thử tìm bằng avatar
-                try {
-                    el = document.querySelector(`.character_select[chid="${targetChar.avatar}"]`) || document.querySelector(`.character_select[avatar="${targetChar.avatar}"]`);
-                } catch(e) {}
-            }
-            if (!el) {
-                // Tìm bằng text
-                const allSelects = document.querySelectorAll('.character_select');
-                for (let i = 0; i < allSelects.length; i++) {
-                     const nameEl = allSelects[i].querySelector('.ch_name');
-                     if (nameEl && nameEl.innerText.trim() === targetChar.name) {
-                         el = allSelects[i];
-                         break;
-                     }
-                }
-            }
-
+            // Minimal Fallback for older versions
+            const el = document.querySelector(`.character_select[data-chid="${index}"]`) || document.querySelector(`.character_select[chid="${index}"]`);
             if (el) {
-                if (typeof el.scrollIntoView === 'function') {
-                    try { el.scrollIntoView({ behavior: 'instant', block: 'nearest' }); } catch(e) {}
-                }
-
-                if (typeof $ !== 'undefined') {
-                    $(el).trigger('click');
-                } else {
-                    el.click();
-                }
-                
+                if (typeof $ !== 'undefined') $(el).trigger('click');
+                else el.click();
                 return `Thành công click chuyển sang chat với nhân vật: ${targetChar.name}`;
             }
             
-            throw new Error(`Đã tìm thấy nhân vật "${targetChar.name}" ở vị trí ${index} nhưng không thể click vào thẻ UI tương ứng.`);
+            throw new Error(`Không thể chọn nhân vật "${targetChar.name}" vì hàm API không tồn tại và thẻ không hiển thị trên giao diện.`);
         }
         /**
          * Tạo thẻ nhân vật mới
