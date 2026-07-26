@@ -3464,6 +3464,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 personality: d.personality || char.personality || '',
                 scenario: d.scenario || char.scenario || '',
                 system_prompt: d.system_prompt || char.system_prompt || '',
+                first_mes: d.first_mes || char.first_mes || '',
+                mes_example: d.mes_example || char.mes_example || '',
+                post_history_instructions: d.post_history_instructions || char.post_history_instructions || '',
+                tags: char.tags || d.tags || [],
+                alternate_greetings: d.alternate_greetings || [],
+                creator_notes: d.creator_notes || char.creator_notes || '',
+                character_version: d.character_version || char.character_version || '',
+                character_book: d.character_book || char.character_book || null,
             };
         }
         /**
