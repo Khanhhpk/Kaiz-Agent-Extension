@@ -3458,6 +3458,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (!char)
                 return null;
             const d = char.data || {};
+            let actualTags = char.tags || d.tags || [];
+            if (ctx.tagMap && ctx.tags && ctx.tagMap[char.avatar]) {
+                const mappedTags = ctx.tagMap[char.avatar].map(id => {
+                    const t = ctx.tags.find(tag => tag.id === id);
+                    return t ? t.name : null;
+                }).filter(Boolean);
+                if (mappedTags.length > 0 || actualTags.length === 0) {
+                    actualTags = mappedTags;
+                }
+            }
             return {
                 name: char.name || 'Unknown',
                 description: d.description || char.description || '',
@@ -3467,7 +3477,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 first_mes: d.first_mes || char.first_mes || '',
                 mes_example: d.mes_example || char.mes_example || '',
                 post_history_instructions: d.post_history_instructions || char.post_history_instructions || '',
-                tags: char.tags || d.tags || [],
+                tags: actualTags,
                 alternate_greetings: d.alternate_greetings || [],
                 creator_notes: d.creator_notes || char.creator_notes || '',
                 character_version: d.character_version || char.character_version || '',
@@ -3496,6 +3506,19 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (typeof window.getCharacters === 'function') await window.getCharacters().catch(() => {});
             } else if (fieldId === 'tags') {
                 const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
+                
+                if (ctx.tagMap && ctx.tags) {
+                    const currentTagIds = ctx.tagMap[char.avatar] || [];
+                    const toUnlink = currentTagIds.filter(id => {
+                        const tagObj = ctx.tags.find(t => t.id === id);
+                        return tagObj ? !newTagsNames.some(n => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
+                    });
+                    if (toUnlink.length > 0) {
+                        ctx.tagMap[char.avatar] = currentTagIds.filter(id => !toUnlink.includes(id));
+                        if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+                    }
+                }
+
                 if (!char.data) char.data = {};
                 char.data.tags = newTagsNames;
                 char.tags = newTagsNames;
@@ -3505,6 +3528,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
+
+                if (typeof ctx.importTags === 'function') {
+                    await ctx.importTags(char, { importSetting: 3 }).catch(() => {});
+                }
             } else {
                 if (!char.data) char.data = {};
                 const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
