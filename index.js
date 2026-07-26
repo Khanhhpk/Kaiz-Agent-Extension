@@ -529,65 +529,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     }
 
-    const listCharactersTool = {
-        schema: {
-            name: 'list_characters',
-            description: 'Lấy danh sách các thẻ nhân vật hiện có trong kho của SillyTavern. Trả về tên, avatar, creator, và mô tả ngắn.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    search_query: { type: 'string', description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.' }
-                }
-            }
-        },
-        validate: (context) => {
-            if (!context.adapter.hasFeature('characters')) {
-                throw new Error('ST Context characters object is missing');
-            }
-        },
-        execute: async (args, context) => {
-            if (!context || !context.adapter) return { content: 'Error: Adapter not provided.', isError: true };
-            try {
-                const list = await context.adapter.listCharacters(args.search_query);
-                if (!list || list.length === 0) {
-                    return { content: 'Không tìm thấy thẻ nhân vật nào khớp.' };
-                }
-                return { content: JSON.stringify(list, null, 2) };
-            } catch (e) {
-                return { content: `Error listing characters: ${e.message}`, isError: true };
-            }
-        }
-    };
-
-    const switchCharacterChatTool = {
-        schema: {
-            name: 'switch_character_chat',
-            description: 'Chuyển sang màn hình chat của một nhân vật khác. Cần cung cấp chính xác tên nhân vật (lấy từ kết quả list_characters).',
-            parameters: {
-                type: 'object',
-                properties: {
-                    character_name: { type: 'string', description: 'Tên nhân vật muốn chuyển chat tới (bắt buộc).' }
-                },
-                required: ['character_name']
-            }
-        },
-        validate: (context) => {
-            if (!context.adapter.hasFeature('characters')) {
-                throw new Error('ST Context characters object is missing');
-            }
-        },
-        execute: async (args, context) => {
-            if (!context || !context.adapter) return { content: 'Error: Adapter not provided.', isError: true };
-            if (!args.character_name) return { content: 'Error: character_name is required.', isError: true };
-            try {
-                const result = await context.adapter.switchCharacterChat(args.character_name);
-                return { content: result };
-            } catch (e) {
-                return { content: `Error switching character: ${e.message}`, isError: true };
-            }
-        }
-    };
-
     const getCharInfoTool = {
         schema: {
             name: 'get_char_info',
@@ -623,6 +564,70 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
+    const listCharactersTool = {
+        schema: {
+            name: 'list_characters',
+            description: 'Lấy danh sách các thẻ nhân vật hiện có trong kho của SillyTavern. Trả về tên, avatar, creator, và mô tả ngắn.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    search_query: { type: 'string', description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.' }
+                }
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context characters object is missing');
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter)
+                return { content: 'Error: Adapter not provided.', isError: true };
+            try {
+                const list = await context.adapter.listCharacters(args.search_query);
+                if (!list || list.length === 0) {
+                    return { content: 'Không tìm thấy thẻ nhân vật nào khớp.' };
+                }
+                return { content: JSON.stringify(list, null, 2) };
+            }
+            catch (e) {
+                return { content: `Error listing characters: ${e.message}`, isError: true };
+            }
+        }
+    };
+
+    const switchCharacterChatTool = {
+        schema: {
+            name: 'switch_character_chat',
+            description: 'Chuyển sang màn hình chat của một nhân vật khác. Cần cung cấp chính xác tên nhân vật (lấy từ kết quả list_characters).',
+            parameters: {
+                type: 'object',
+                properties: {
+                    character_name: { type: 'string', description: 'Tên nhân vật muốn chuyển chat tới (bắt buộc).' }
+                },
+                required: ['character_name']
+            }
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context characters object is missing');
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter)
+                return { content: 'Error: Adapter not provided.', isError: true };
+            if (!args.character_name)
+                return { content: 'Error: character_name is required.', isError: true };
+            try {
+                const result = await context.adapter.switchCharacterChat(args.character_name);
+                return { content: result };
+            }
+            catch (e) {
+                return { content: `Error switching character: ${e.message}`, isError: true };
+            }
+        }
+    };
+
     const editCharacterCardTool = {
         schema: {
             name: 'edit_character_card',
@@ -636,6 +641,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "character_book" (để gắn Lorebook), "talkativeness", "fav".',
                     },
                     value: {
+                        type: 'string',
                         description: 'Giá trị mới cần cập nhật cho trường này. Có thể truyền chuỗi, mảng, số (như talkativeness), hoặc boolean (như fav).',
                     },
                 },
@@ -657,7 +663,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 await context.adapter.editCharacterAttribute(args.field, args.value);
                 return { content: `Successfully updated field "${args.field}" for the current character.` };
-            } catch (e) {
+            }
+            catch (e) {
                 return { content: `Error updating character field: ${e.message}`, isError: true };
             }
         },
@@ -697,7 +704,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 const avatar = await context.adapter.createCharacterCard(args);
                 return { content: `Successfully created new character "${args.name}". Avatar filename: ${avatar}` };
-            } catch (e) {
+            }
+            catch (e) {
                 return { content: `Error creating character: ${e.message}`, isError: true };
             }
         },
@@ -2012,7 +2020,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             el.getAttribute('data-title')?.trim() ||
                             '';
                         const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                        const value = (el.value !== undefined && el.value !== null) ? String(el.value).trim() : '';
+                        const value = el.value?.trim() || '';
                         let description = text || title || ariaLabel;
                         if (!description && el.tagName === 'INPUT') {
                             description = value || el.getAttribute('placeholder') || 'Input field';
@@ -3210,9 +3218,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
      * Đăng ký tất cả các tools mặc định vào Registry
      */
     function registerDefaultTools(registry) {
+        registry.registerTool(getCharInfoTool);
         registry.registerTool(listCharactersTool);
         registry.registerTool(switchCharacterChatTool);
-        registry.registerTool(getCharInfoTool);
         registry.registerTool(editCharacterCardTool);
         registry.registerTool(createCharacterCardTool);
         registry.registerTool(sendSystemMessageTool);
@@ -3561,8 +3569,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const d = char.data || {};
             let actualTags = char.tags || d.tags || [];
             if (ctx.tagMap && ctx.tags && ctx.tagMap[char.avatar]) {
-                const mappedTags = ctx.tagMap[char.avatar].map(id => {
-                    const t = ctx.tags.find(tag => tag.id === id);
+                const mappedTags = ctx.tagMap[char.avatar].map((id) => {
+                    const t = ctx.tags.find((tag) => tag.id === id);
                     return t ? t.name : null;
                 }).filter(Boolean);
                 if (mappedTags.length > 0 || actualTags.length === 0) {
@@ -3582,10 +3590,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 alternate_greetings: d.alternate_greetings || [],
                 creator_notes: d.creator_notes || char.creator_notes || '',
                 character_version: d.character_version || char.character_version || '',
-                character_book: (function() {
+                character_book: (function () {
                     const b = d.character_book || char.character_book;
-                    if (!b) return null;
-                    if (typeof b === 'string') return b;
+                    if (!b)
+                        return null;
+                    if (typeof b === 'string')
+                        return b;
                     return {
                         name: b.name || 'Embedded Lorebook',
                         entries_count: b.entries ? b.entries.length : 0
@@ -3605,11 +3615,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             let filtered = chars;
             if (searchQuery) {
                 const q = searchQuery.toLowerCase();
-                filtered = chars.filter(c => c.name && c.name.toLowerCase().includes(q));
+                filtered = chars.filter((c) => c.name && c.name.toLowerCase().includes(q));
             }
-            return filtered.map(c => {
+            return filtered.map((c) => {
                 let shortDesc = c.description || c.personality || '';
-                if (shortDesc.length > 150) shortDesc = shortDesc.substring(0, 150) + '...';
+                if (shortDesc.length > 150)
+                    shortDesc = shortDesc.substring(0, 150) + '...';
                 return {
                     name: c.name,
                     avatar: c.avatar,
@@ -3624,36 +3635,31 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async switchCharacterChat(charName) {
             const ctx = SillyTavern.getContext();
             const chars = ctx.characters || window.characters || [];
-            
             // Search case-insensitive
             const q = charName.toLowerCase();
-            const index = chars.findIndex(c => c.name && c.name.toLowerCase() === q);
-            
+            const index = chars.findIndex((c) => c.name && c.name.toLowerCase() === q);
             if (index === -1) {
                 throw new Error(`Không tìm thấy nhân vật nào tên "${charName}". Vui lòng dùng list_characters để kiểm tra lại.`);
             }
-            
             const targetChar = chars[index];
-            
             // Try standard ST API first (it expects the numeric ID / index)
             if (typeof ctx.selectCharacterById === 'function') {
                 await ctx.selectCharacterById(index);
                 return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
-            } 
-            
+            }
             if (typeof window.selectCharacterById === 'function') {
                 await window.selectCharacterById(index);
                 return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
             }
-            
             // Minimal Fallback for older versions
             const el = document.querySelector(`.character_select[data-chid="${index}"]`) || document.querySelector(`.character_select[chid="${index}"]`);
             if (el) {
-                if (typeof $ !== 'undefined') $(el).trigger('click');
-                else el.click();
+                if (typeof window.$ !== 'undefined')
+                    window.$(el).trigger('click');
+                else
+                    el.click();
                 return `Thành công click chuyển sang chat với nhân vật: ${targetChar.name}`;
             }
-            
             throw new Error(`Không thể chọn nhân vật "${targetChar.name}" vì hàm API không tồn tại và thẻ không hiển thị trên giao diện.`);
         }
         /**
@@ -3662,7 +3668,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async createCharacterCard(data) {
             const ctx = SillyTavern.getContext();
             const tagsString = Array.isArray(data.tags) ? data.tags.join(', ') : (typeof data.tags === 'string' ? data.tags : '');
-            
             const formData = new FormData();
             formData.append('ch_name', data.name || 'New Character');
             formData.append('description', data.description || '');
@@ -3672,32 +3677,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             formData.append('mes_example', data.mes_example || '');
             formData.append('system_prompt', data.system_prompt || '');
             formData.append('tags', tagsString);
-            
             const headers = ctx.getRequestHeaders();
             delete headers['Content-Type']; // Browser will set boundary automatically
-            
             const res = await fetch('/api/characters/create', {
                 method: 'POST',
                 headers,
                 body: formData,
                 cache: 'no-cache',
             });
-            
             if (!res.ok) {
                 const errText = await res.text().catch(() => res.statusText);
                 throw new Error(`HTTP ${res.status}: ${errText}`);
             }
-            
             const newAvatar = await res.text();
-            
             await new Promise(r => setTimeout(r, 400));
-            
             if (typeof ctx.getCharacters === 'function') {
                 await ctx.getCharacters();
-            } else if (typeof window.getCharacters === 'function') {
+            }
+            else if (typeof window.getCharacters === 'function') {
                 await window.getCharacters();
             }
-            
             if (typeof window.PrintCharacterList === 'function') {
                 window.PrintCharacterList();
             }
@@ -3706,7 +3705,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             if (es && et?.CHARACTERS_UPDATED) {
                 es.emit(et.CHARACTERS_UPDATED);
             }
-            
             return newAvatar;
         }
         /**
@@ -3715,36 +3713,41 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async editCharacterAttribute(fieldId, newValue) {
             const ctx = SillyTavern.getContext();
             const char = ctx.characters?.[ctx.characterId];
-            if (!char) throw new Error("No active character found.");
-            
+            if (!char)
+                throw new Error("No active character found.");
             if (fieldId === 'name') {
                 const trimmedName = (String(newValue) || '').trim();
-                if (!trimmedName) throw new Error('Character name cannot be empty');
+                if (!trimmedName)
+                    throw new Error('Character name cannot be empty');
                 const renameRes = await fetch('/api/characters/rename', {
                     method: 'POST',
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
                     body: JSON.stringify({ avatar_url: char.avatar, new_name: trimmedName }),
                 });
-                if (!renameRes.ok) throw new Error(`Rename failed: ${renameRes.status}`);
+                if (!renameRes.ok)
+                    throw new Error(`Rename failed: ${renameRes.status}`);
                 char.name = trimmedName;
-                if (char.data) char.data.name = trimmedName;
-                if (typeof window.getCharacters === 'function') await window.getCharacters().catch(() => {});
-            } else if (fieldId === 'tags') {
-                const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map(t => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
-                
+                if (char.data)
+                    char.data.name = trimmedName;
+                if (typeof window.getCharacters === 'function')
+                    await window.getCharacters().catch(() => { });
+            }
+            else if (fieldId === 'tags') {
+                const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
                 if (ctx.tagMap && ctx.tags) {
                     const currentTagIds = ctx.tagMap[char.avatar] || [];
-                    const toUnlink = currentTagIds.filter(id => {
-                        const tagObj = ctx.tags.find(t => t.id === id);
-                        return tagObj ? !newTagsNames.some(n => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
+                    const toUnlink = currentTagIds.filter((id) => {
+                        const tagObj = ctx.tags.find((t) => t.id === id);
+                        return tagObj ? !newTagsNames.some((n) => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
                     });
                     if (toUnlink.length > 0) {
-                        ctx.tagMap[char.avatar] = currentTagIds.filter(id => !toUnlink.includes(id));
-                        if (typeof ctx.saveSettingsDebounced === 'function') ctx.saveSettingsDebounced();
+                        ctx.tagMap[char.avatar] = currentTagIds.filter((id) => !toUnlink.includes(id));
+                        if (typeof ctx.saveSettingsDebounced === 'function')
+                            ctx.saveSettingsDebounced();
                     }
                 }
-
-                if (!char.data) char.data = {};
+                if (!char.data)
+                    char.data = {};
                 char.data.tags = newTagsNames;
                 char.tags = newTagsNames;
                 const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: 'tags', value: newTagsNames };
@@ -3753,16 +3756,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
                 });
-
                 if (typeof ctx.importTags === 'function') {
-                    await ctx.importTags(char, { importSetting: 3 }).catch(() => {});
+                    await ctx.importTags(char, { importSetting: 3 }).catch(() => { });
                 }
-            } else {
-                if (!char.data) char.data = {};
+            }
+            else {
+                if (!char.data)
+                    char.data = {};
                 const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
                 if (fieldId === 'alternate_greetings') {
                     char.data.alternate_greetings = Array.isArray(newValue) ? newValue : [String(newValue)];
-                } else {
+                }
+                else {
                     char.data[fieldId] = newValue;
                     char[fieldId] = newValue;
                 }
@@ -3771,9 +3776,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                if (!res.ok)
+                    throw new Error(`HTTP ${res.status}`);
             }
-
             const domMap = {
                 description: 'description_textarea',
                 personality: 'personality_textarea',
@@ -3790,10 +3795,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     el.value = typeof newValue === 'string' ? newValue : JSON.stringify(newValue);
                     el.dispatchEvent(new Event('input', { bubbles: true }));
                 }
-            } else if (fieldId === 'alternate_greetings') {
-                if (typeof window.printAlternateGreetings === 'function') window.printAlternateGreetings();
             }
-
+            else if (fieldId === 'alternate_greetings') {
+                if (typeof window.printAlternateGreetings === 'function')
+                    window.printAlternateGreetings();
+            }
             const es = ctx.eventSource || window.eventSource;
             const et = ctx.event_types || window.event_types;
             if (es && et?.CHARACTER_EDITED) {
@@ -4036,17 +4042,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     // Chế độ by_name bắt buộc xoá hết và chỉ đọc 1 sách
                     names.clear();
                     names.add(options.bookName);
-                } else if (options.bookName) {
+                }
+                else if (options.bookName) {
                     // Với các chế độ khác, nếu có bookName thì ưu tiên lọc
                     if (names.has(options.bookName) || options.mode === 'summary') {
                         names.clear();
                         names.add(options.bookName);
-                    } else {
+                    }
+                    else {
                         names.clear();
                         names.add(options.bookName);
                     }
                 }
-                
                 if (options.mode === 'by_name' && !options.bookName) {
                     return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
                 }
@@ -4157,7 +4164,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 if (options.mode !== 'by_name') {
                     result += '\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n';
-                    const charBookName = character?.data?.character_book?.name || character?.name || 'Embedded Lorebook';
+                    const charBookName = character?.data?.character_book?.name || 'Embedded Lorebook';
                     if (character &&
                         character.data &&
                         character.data.character_book &&
