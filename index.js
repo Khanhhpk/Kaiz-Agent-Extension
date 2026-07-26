@@ -573,12 +573,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     field: {
                         type: 'string',
-                        enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book'],
-                        description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "character_book" (để gắn Lorebook).',
+                        enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book', 'creator', 'talkativeness', 'fav'],
+                        description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "character_book" (để gắn Lorebook), "talkativeness", "fav".',
                     },
                     value: {
-                        type: 'string',
-                        description: 'Giá trị mới cần cập nhật cho trường này. Có thể truyền mảng đối với alternate_greetings, chuỗi phân cách bởi dấu phẩy đối với tags.',
+                        description: 'Giá trị mới cần cập nhật cho trường này. Có thể truyền chuỗi, mảng, số (như talkativeness), hoặc boolean (như fav).',
                     },
                 },
                 required: ['field', 'value'],
@@ -3482,6 +3481,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 creator_notes: d.creator_notes || char.creator_notes || '',
                 character_version: d.character_version || char.character_version || '',
                 character_book: d.character_book || char.character_book || null,
+                creator: d.creator || char.creator || '',
+                talkativeness: char.talkativeness ?? d.extensions?.talkativeness ?? d.talkativeness ?? '0.5',
+                fav: char.fav ?? d.extensions?.fav ?? d.fav ?? false,
             };
         }
         /**
