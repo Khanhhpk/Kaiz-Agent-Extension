@@ -4164,7 +4164,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 if (options.mode !== 'by_name') {
                     result += '\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n';
-                    const charBookName = character?.data?.character_book?.name || 'Embedded Lorebook';
+                    const charBookName = character?.data?.character_book?.name || character?.name || 'Embedded Lorebook';
                     if (character &&
                         character.data &&
                         character.data.character_book &&

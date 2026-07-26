@@ -993,7 +993,7 @@ export class SillyTavernAdapter {
 
             if (options.mode !== 'by_name') {
                 result += '\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n';
-                const charBookName = character?.data?.character_book?.name || 'Embedded Lorebook';
+                const charBookName = character?.data?.character_book?.name || character?.name || 'Embedded Lorebook';
                 if (
                     character &&
                     character.data &&
