@@ -3582,7 +3582,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 alternate_greetings: d.alternate_greetings || [],
                 creator_notes: d.creator_notes || char.creator_notes || '',
                 character_version: d.character_version || char.character_version || '',
-                character_book: d.character_book || char.character_book || null,
+                character_book: (function() {
+                    const b = d.character_book || char.character_book;
+                    if (!b) return null;
+                    if (typeof b === 'string') return b;
+                    return {
+                        name: b.name || 'Embedded Lorebook',
+                        entries_count: b.entries ? b.entries.length : 0
+                    };
+                })(),
                 creator: d.creator || char.creator || '',
                 talkativeness: char.talkativeness ?? d.extensions?.talkativeness ?? d.talkativeness ?? '0.5',
                 fav: char.fav ?? d.extensions?.fav ?? d.fav ?? false,
