@@ -3627,18 +3627,28 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             
             const targetChar = chars[index];
             
-            // Try standard ST API first if available (avatar filename is typically used as ID in new versions)
-            if (typeof window.selectCharacterById === 'function') {
+            // Try standard ST API first (it expects the numeric ID / index)
+            if (typeof ctx.selectCharacterById === 'function') {
                 try {
-                    window.selectCharacterById(targetChar.avatar);
+                    await ctx.selectCharacterById(index);
+                    return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
+                } catch (e) {
+                    console.warn('[KaizAgent] ctx.selectCharacterById failed, falling back to DOM click', e);
+                }
+            } else if (typeof window.selectCharacterById === 'function') {
+                try {
+                    await window.selectCharacterById(index);
                     return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
                 } catch (e) {
                     console.warn('[KaizAgent] window.selectCharacterById failed, falling back to DOM click', e);
                 }
             }
             
-            // Fallback to DOM click (chid is usually the index in the array, OR the avatar filename in modern ST)
-            let el = document.querySelector(`.character_select[chid="${index}"]`);
+            // Fallback to DOM click (data-chid is often the index in modern ST)
+            let el = document.querySelector(`.character_select[data-chid="${index}"]`);
+            if (!el) {
+                el = document.querySelector(`.character_select[chid="${index}"]`);
+            }
             if (!el) {
                 // Thử tìm bằng avatar
                 try {
@@ -3658,7 +3668,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
 
             if (el) {
-                el.click();
+                if (typeof el.scrollIntoView === 'function') {
+                    try { el.scrollIntoView({ behavior: 'instant', block: 'nearest' }); } catch(e) {}
+                }
+
+                if (typeof $ !== 'undefined') {
+                    $(el).trigger('click');
+                } else {
+                    el.click();
+                }
+                
                 return `Thành công click chuyển sang chat với nhân vật: ${targetChar.name}`;
             }
             
