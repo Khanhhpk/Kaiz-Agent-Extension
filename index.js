@@ -4032,12 +4032,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const chatWorldName = ctx.chatMetadata?.[wiKey];
                 if (chatWorldName && typeof chatWorldName === 'string')
                     names.add(chatWorldName);
-                if (options.bookName && (options.mode === 'by_name' || options.mode === 'summary')) {
-                    // Bỏ qua kiểm tra names.has() để cho phép đọc book đang bị tắt
+                if (options.bookName && options.mode === 'by_name') {
+                    // Chế độ by_name bắt buộc xoá hết và chỉ đọc 1 sách
                     names.clear();
                     names.add(options.bookName);
+                } else if (options.bookName) {
+                    // Với các chế độ khác, nếu có bookName thì ưu tiên lọc
+                    if (names.has(options.bookName) || options.mode === 'summary') {
+                        names.clear();
+                        names.add(options.bookName);
+                    } else {
+                        names.clear();
+                        names.add(options.bookName);
+                    }
                 }
-                else if (options.mode === 'by_name') {
+                
+                if (options.mode === 'by_name' && !options.bookName) {
                     return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
                 }
                 if (options.mode === 'char_full') {
@@ -4147,10 +4157,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 if (options.mode !== 'by_name') {
                     result += '\n=== CHARACTER LOREBOOK (Nhúng vào thẻ) ===\n';
+                    const charBookName = character?.data?.character_book?.name || character?.name || 'Embedded Lorebook';
                     if (character &&
                         character.data &&
                         character.data.character_book &&
-                        character.data.character_book.entries) {
+                        character.data.character_book.entries &&
+                        (!options.bookName || charBookName === options.bookName)) {
                         let bookResult = `\n[Character Lorebook: ${character.name}]\n`;
                         let entriesObj = character.data.character_book.entries;
                         if (Array.isArray(entriesObj)) {
