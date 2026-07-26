@@ -604,6 +604,46 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
+    const createCharacterCardTool = {
+        schema: {
+            name: 'create_character_card',
+            description: 'Tạo một thẻ nhân vật mới hoàn toàn. Cần truyền vào tên và các thông tin cơ bản.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'Tên nhân vật (bắt buộc).' },
+                    description: { type: 'string', description: 'Mô tả ngoại hình, bối cảnh, thông tin chung.' },
+                    personality: { type: 'string', description: 'Tính cách nhân vật.' },
+                    scenario: { type: 'string', description: 'Bối cảnh câu chuyện.' },
+                    first_mes: { type: 'string', description: 'Lời chào/Tin nhắn đầu tiên.' },
+                    mes_example: { type: 'string', description: 'Đoạn hội thoại mẫu.' },
+                    system_prompt: { type: 'string', description: 'System prompt riêng cho nhân vật.' },
+                    tags: { type: 'string', description: 'Danh sách thẻ tag, cách nhau bằng dấu phẩy.' }
+                },
+                required: ['name'],
+            },
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context characters object is missing');
+            }
+        },
+        execute: async (args, context) => {
+            if (!context || !context.adapter) {
+                return { content: 'Error: Adapter not provided in context.', isError: true };
+            }
+            if (!args.name) {
+                return { content: 'Error: name is required.', isError: true };
+            }
+            try {
+                const avatar = await context.adapter.createCharacterCard(args);
+                return { content: `Successfully created new character "${args.name}". Avatar filename: ${avatar}` };
+            } catch (e) {
+                return { content: `Error creating character: ${e.message}`, isError: true };
+            }
+        },
+    };
+
     const sendSystemMessageTool = {
         schema: {
             name: 'send_system_message',
@@ -3113,6 +3153,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     function registerDefaultTools(registry) {
         registry.registerTool(getCharInfoTool);
         registry.registerTool(editCharacterCardTool);
+        registry.registerTool(createCharacterCardTool);
         registry.registerTool(sendSystemMessageTool);
         registry.registerTool(deleteLastMessageTool);
         registry.registerTool(deleteMessageByIndexTool);
@@ -3485,6 +3526,59 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 talkativeness: char.talkativeness ?? d.extensions?.talkativeness ?? d.talkativeness ?? '0.5',
                 fav: char.fav ?? d.extensions?.fav ?? d.fav ?? false,
             };
+        }
+        /**
+         * Tạo thẻ nhân vật mới
+         */
+        async createCharacterCard(data) {
+            const ctx = SillyTavern.getContext();
+            const tagsString = Array.isArray(data.tags) ? data.tags.join(', ') : (typeof data.tags === 'string' ? data.tags : '');
+            
+            const formData = new FormData();
+            formData.append('ch_name', data.name || 'New Character');
+            formData.append('description', data.description || '');
+            formData.append('personality', data.personality || '');
+            formData.append('scenario', data.scenario || '');
+            formData.append('first_mes', data.first_mes || '');
+            formData.append('mes_example', data.mes_example || '');
+            formData.append('system_prompt', data.system_prompt || '');
+            formData.append('tags', tagsString);
+            
+            const headers = ctx.getRequestHeaders();
+            delete headers['Content-Type']; // Browser will set boundary automatically
+            
+            const res = await fetch('/api/characters/create', {
+                method: 'POST',
+                headers,
+                body: formData,
+                cache: 'no-cache',
+            });
+            
+            if (!res.ok) {
+                const errText = await res.text().catch(() => res.statusText);
+                throw new Error(`HTTP ${res.status}: ${errText}`);
+            }
+            
+            const newAvatar = await res.text();
+            
+            await new Promise(r => setTimeout(r, 400));
+            
+            if (typeof ctx.getCharacters === 'function') {
+                await ctx.getCharacters();
+            } else if (typeof window.getCharacters === 'function') {
+                await window.getCharacters();
+            }
+            
+            if (typeof window.PrintCharacterList === 'function') {
+                window.PrintCharacterList();
+            }
+            const es = ctx.eventSource || window.eventSource;
+            const et = ctx.event_types || window.event_types;
+            if (es && et?.CHARACTERS_UPDATED) {
+                es.emit(et.CHARACTERS_UPDATED);
+            }
+            
+            return newAvatar;
         }
         /**
          * Chỉnh sửa trường thông tin của nhân vật hiện tại
