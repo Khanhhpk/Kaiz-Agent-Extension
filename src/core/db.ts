@@ -20,9 +20,17 @@ export interface ChatMessage {
     timestamp: number;
 }
 
+export interface BackupEntry {
+    id?: number;
+    type: 'character' | 'chat' | 'worldbook';
+    name: string;
+    data: string;
+    timestamp: number;
+}
+
 export class KaizDB {
     private dbName = 'KaizAgentDB';
-    private dbVersion = 1;
+    private dbVersion = 2;
     private db: IDBDatabase | null = null;
 
     public async init(): Promise<void> {
@@ -41,6 +49,12 @@ export class KaizDB {
                     const msgStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
                     msgStore.createIndex('chatId', 'chatId', { unique: false });
                     msgStore.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+
+                if (!db.objectStoreNames.contains('backups')) {
+                    const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
+                    backupStore.createIndex('type', 'type', { unique: false });
+                    backupStore.createIndex('timestamp', 'timestamp', { unique: false });
                 }
             };
 
@@ -198,6 +212,58 @@ export class KaizDB {
                 msgs.sort((a, b) => a.timestamp - b.timestamp);
                 resolve(msgs);
             };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- BACKUPS ---
+
+    public async addBackup(type: 'character' | 'chat' | 'worldbook', name: string, data: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['backups'], 'readwrite');
+            const store = transaction.objectStore('backups');
+            const entry: BackupEntry = { type, name, data, timestamp: Date.now() };
+
+            const request = store.add(entry);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getBackups(type?: 'character' | 'chat' | 'worldbook'): Promise<BackupEntry[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['backups'], 'readonly');
+            const store = transaction.objectStore('backups');
+            const index = store.index('timestamp');
+
+            const backups: BackupEntry[] = [];
+            const request = index.openCursor(null, 'prev'); // sort descending
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    const entry = cursor.value as BackupEntry;
+                    if (!type || entry.type === type) {
+                        backups.push(entry);
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(backups);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteBackup(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['backups'], 'readwrite');
+            const store = transaction.objectStore('backups');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
     }

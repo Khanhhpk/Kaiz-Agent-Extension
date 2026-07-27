@@ -5,6 +5,7 @@ import { editCharacterCardTool } from './edit_character_card';
 import { createCharacterCardTool } from './create_character_card';
 import { sendSystemMessageTool } from './send_system_message';
 import { manageWorldbookTool } from './manage_worldbook';
+import { manageBackupTool } from './manage_backup';
 import { deleteLastMessageTool } from './delete_message';
 import { deleteMessageByIndexTool } from './delete_message_by_index';
 import { getChatHistoryTool } from './get_chat_history';
@@ -54,6 +55,7 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getLorebookInfoTool);
     registry.registerTool(manageLorebookEntryTool);
     registry.registerTool(manageWorldbookTool);
+    registry.registerTool(manageBackupTool);
     registry.registerTool(quickChatPreviewTool);
     registry.registerTool(renameAgentChatTool);
     registry.registerTool(openNewAgentChatTool);

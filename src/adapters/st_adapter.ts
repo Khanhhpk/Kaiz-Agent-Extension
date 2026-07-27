@@ -907,6 +907,46 @@ export class SillyTavernAdapter {
     }
 
     /**
+     * Xuất dữ liệu dưới dạng JSON string để sao lưu
+     */
+    public async exportBackupData(
+        type: 'character' | 'chat' | 'worldbook',
+        name?: string,
+    ): Promise<{ name: string; data: string } | null> {
+        const ctx = SillyTavern.getContext();
+        try {
+            if (type === 'character') {
+                const char = ctx.characters?.[ctx.characterId];
+                if (!char) throw new Error('No active character found');
+                const charName = char.name || 'Unknown_Character';
+                const charData = char.data || char;
+                return {
+                    name: charName,
+                    data: JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: charData }, null, 2),
+                };
+            }
+            if (type === 'chat') {
+                const chatName = ctx.chatId || 'Unknown_Chat';
+                const chatData = ctx.chat || [];
+                if (chatData.length === 0) throw new Error('No chat data found');
+                return { name: chatName, data: JSON.stringify(chatData, null, 2) };
+            }
+            if (type === 'worldbook') {
+                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
+                if (!ST_WorldInfo || !ST_WorldInfo.world_info) throw new Error('WorldInfo module not ready');
+                const bookName = name || Object.keys(ST_WorldInfo.world_info)[0];
+                if (!bookName || !ST_WorldInfo.world_info[bookName])
+                    throw new Error('Worldbook not found: ' + bookName);
+                return { name: bookName, data: JSON.stringify(ST_WorldInfo.world_info[bookName], null, 2) };
+            }
+        } catch (e: any) {
+            console.error('[KaizAgent] Backup export error:', e);
+            throw e;
+        }
+        return null;
+    }
+
+    /**
      * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
      * @param options Các tùy chọn lọc dữ liệu
      */

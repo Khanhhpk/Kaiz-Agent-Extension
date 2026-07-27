@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import { AgentLoop } from '../core/loop';
 import { StateManager } from '../core/state';
+import { BackupModal } from './backup_modal';
 
 declare const jQuery: any;
 
@@ -23,9 +24,13 @@ export class ChatWindowUI {
 
         // --- Bổ sung nút và khung Log Request ---
         closeBtn.before(
+            '<i id="kaiz-chat-backup-btn" class="fa-solid fa-save interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Backup Manager"></i>',
+        );
+        closeBtn.before(
             '<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>',
         );
         const logBtn = $('#kaiz-chat-log-btn');
+        const backupBtn = $('#kaiz-chat-backup-btn');
 
         if ($('#kaiz-log-modal').length === 0) {
             $('body').append(`
@@ -63,6 +68,11 @@ export class ChatWindowUI {
         $('#kaiz-persona-memory-close').on('click', () => {
             const modal = $('#kaiz-persona-memory-modal')[0] as HTMLDialogElement;
             if (modal) modal.close();
+        });
+
+        const backupModal = new BackupModal(stateManager.db);
+        backupBtn.on('click', () => {
+            backupModal.show();
         });
 
         logBtn.on('click', () => {
