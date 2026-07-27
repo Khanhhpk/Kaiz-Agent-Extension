@@ -23,7 +23,8 @@ export const searchGoogleTool: ITool = {
                 return { content: JSON.stringify({ error: "Missing 'query' parameter" }), isError: true };
             }
 
-            const url = `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+            const encodedQuery = encodeURIComponent(query).replace(/%20/g, '+');
+            const url = `https://www.google.com/search?q=${encodedQuery}`;
             let html = '';
             try {
                 const response = await fetch(url);
@@ -85,7 +86,7 @@ export const searchGoogleTool: ITool = {
                 console.log(
                     '[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo Lite...',
                 );
-                const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodeURIComponent(query)}`;
+                const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
                 let ddgHtml = '';
                 try {
                     const ddgRes = await fetch(ddgUrl);
@@ -124,7 +125,7 @@ export const searchGoogleTool: ITool = {
 
                 if (results.length === 0) {
                     console.log('[search_google] DuckDuckGo Lite returned 0 results. Falling back to Bing...');
-                    const bingUrl = `https://www.bing.com/search?q=${encodeURIComponent(query)}`;
+                    const bingUrl = `https://www.bing.com/search?q=${encodedQuery}`;
                     let bingHtml = '';
                     try {
                         const bingRes = await fetch(bingUrl);
