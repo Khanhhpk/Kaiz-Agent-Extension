@@ -7613,9 +7613,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
             }
         }
-        // Nạp style.css thủ công
-        const cssPath = `/scripts/extensions/${extPath}/style.css`;
-        if (!$(`link[href="${cssPath}"]`).length) {
+        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
+        const cssPath = `/scripts/extensions/${extPath}/style.css?v=${Date.now()}`;
+        if (!$(`link[href^="/scripts/extensions/${extPath}/style.css"]`).length) {
             $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
         }
         // Nạp thư viện Lucide Icon
