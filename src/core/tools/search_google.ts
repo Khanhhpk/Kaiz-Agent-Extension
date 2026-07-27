@@ -54,44 +54,54 @@ export const searchGoogleTool: ITool = {
                 originalQuery: string,
             ): boolean => {
                 if (items.length === 0) return true;
-                // Kiểm tra 3 kết quả đầu tiên
+                
+                // 1. Kiểm tra domain từ điển
                 const checkCount = Math.min(items.length, 3);
-                let garbageCount = 0;
-                // Các domain từ điển/định nghĩa phổ biến mà Bing hay trả khi bị ngáo NLP
+                let dictGarbageCount = 0;
                 const dictDomains = [
-                    'dictionary.cambridge.org',
-                    'merriam-webster.com',
-                    'en.wiktionary.org',
-                    'tudientienganh.com',
-                    'hvdic.thivien.net',
-                    'lingolandedu.com',
-                    'dict.laban.vn',
-                    'tratu.soha.vn',
-                    'test-english.com',
-                    'langeek.co',
-                    'rdsic.edu.vn',
+                    'dictionary.cambridge.org', 'merriam-webster.com', 'en.wiktionary.org',
+                    'tudientienganh.com', 'hvdic.thivien.net', 'lingolandedu.com',
+                    'dict.laban.vn', 'tratu.soha.vn', 'test-english.com', 'langeek.co', 'rdsic.edu.vn'
                 ];
-                // Các pattern cho thấy kết quả là định nghĩa từ, không phải kết quả search thật
                 const dictPatterns = [
-                    /definition\b/i,
-                    /meaning\b/i,
-                    /nghĩa là gì/i,
-                    /từ điển/i,
-                    /tra từ/i,
-                    /\bdefinition\b.*\bmeaning\b/i,
+                    /definition\b/i, /meaning\b/i, /nghĩa là gì/i, /từ điển/i, /tra từ/i,
+                    /\bdefinition\b.*\bmeaning\b/i
                 ];
+
                 for (let i = 0; i < checkCount; i++) {
                     const item = items[i];
                     const urlLower = item.url.toLowerCase();
                     const titleLower = item.title.toLowerCase();
-                    // Kiểm tra URL thuộc domain từ điển
-                    const isDictUrl = dictDomains.some((d) => urlLower.includes(d));
-                    // Kiểm tra title có pattern từ điển
-                    const isDictTitle = dictPatterns.some((p) => p.test(titleLower));
-                    if (isDictUrl || isDictTitle) garbageCount++;
+                    if (dictDomains.some((d) => urlLower.includes(d)) || dictPatterns.some((p) => p.test(titleLower))) {
+                        dictGarbageCount++;
+                    }
                 }
-                // Nếu 2/3 kết quả đầu là từ điển → rác
-                return garbageCount >= 2;
+                if (dictGarbageCount >= 2) return true;
+
+                // 2. Kiểm tra Keyword Intersection (để loại bỏ kết quả bot-mode sai keyword)
+                const stopWords = ['top', 'best', 'most', 'new', 'latest', 'upcoming', 'good', 'great', 'worst', 'all', 'every', 'some', 'many', 'few', 'several', 'tình', 'các', 'những', 'bộ', 'phim', 'cách', 'hướng', 'danh', 'nhất', 'hay'];
+                const queryWords = originalQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w));
+                
+                if (queryWords.length > 0) {
+                    let missingKeywordCount = 0;
+                    const requiredMatches = Math.min(Math.ceil(queryWords.length / 2), 2);
+                    
+                    for (let i = 0; i < checkCount; i++) {
+                        const content = (items[i].title + ' ' + items[i].snippet).toLowerCase();
+                        let matchCount = 0;
+                        queryWords.forEach(w => {
+                            if (content.includes(w)) matchCount++;
+                        });
+                        
+                        if (matchCount < requiredMatches) {
+                            missingKeywordCount++;
+                        }
+                    }
+                    // Nếu 2/3 kết quả đầu tiên không chứa đủ từ khóa chính của query -> rác (trạc đề)
+                    if (missingKeywordCount >= 2) return true;
+                }
+
+                return false;
             };
 
             // === HELPER: Fetch Bing với params giả lập trình duyệt ===
