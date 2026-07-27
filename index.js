@@ -1760,13 +1760,26 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 catch (_e) {
                     try {
+                        // Fallback 1: corsproxy.io
                         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
                         const proxyRes = await fetch(proxyUrl);
                         if (proxyRes.ok)
                             googleHtml = await proxyRes.text();
                     }
                     catch (_e2) {
-                        /* ignore */
+                        try {
+                            // Fallback 2: allorigins (trả về JSON chứa HTML)
+                            const allOriginsUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(googleUrl)}`;
+                            const aoRes = await fetch(allOriginsUrl);
+                            if (aoRes.ok) {
+                                const aoJson = await aoRes.json();
+                                if (aoJson.contents)
+                                    googleHtml = aoJson.contents;
+                            }
+                        }
+                        catch (_e3) {
+                            /* ignore */
+                        }
                     }
                 }
                 if (googleHtml) {
