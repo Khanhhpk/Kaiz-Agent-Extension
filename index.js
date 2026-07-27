@@ -1674,6 +1674,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(html, 'text/html');
                 const results = [];
+                let engine = 'Google';
                 // Phân tích các khối kết quả tìm kiếm của Google (thường nằm trong div có class "g")
                 const gElements = doc.querySelectorAll('div.g');
                 gElements.forEach((g) => {
@@ -1724,6 +1725,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     let ddgDoc = null;
                     if (ddgHtml) {
+                        engine = 'DuckDuckGo';
                         ddgDoc = parser.parseFromString(ddgHtml, 'text/html');
                         // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
                         const linkElements = ddgDoc.querySelectorAll('a.result-link');
@@ -1759,6 +1761,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 bingHtml = await proxyRes.text();
                         }
                         if (bingHtml) {
+                            engine = 'Bing';
                             const bingDoc = parser.parseFromString(bingHtml, 'text/html');
                             const bingResults = bingDoc.querySelectorAll('.b_algo');
                             bingResults.forEach((res) => {
@@ -1792,6 +1795,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return {
                     content: JSON.stringify({
                         query: query,
+                        engine: engine,
                         results: results.slice(0, 15), // Trả về tối đa 15 kết quả
                     }),
                 };

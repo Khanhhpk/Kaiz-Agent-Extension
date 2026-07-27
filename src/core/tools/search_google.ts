@@ -43,6 +43,7 @@ export const searchGoogleTool: ITool = {
             const doc = parser.parseFromString(html, 'text/html');
 
             const results: { title: string; url: string; snippet: string }[] = [];
+            let engine = 'Google';
 
             // Phân tích các khối kết quả tìm kiếm của Google (thường nằm trong div có class "g")
             const gElements = doc.querySelectorAll('div.g');
@@ -99,6 +100,7 @@ export const searchGoogleTool: ITool = {
 
                 let ddgDoc: Document | null = null;
                 if (ddgHtml) {
+                    engine = 'DuckDuckGo';
                     ddgDoc = parser.parseFromString(ddgHtml, 'text/html');
 
                     // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
@@ -134,6 +136,7 @@ export const searchGoogleTool: ITool = {
                     }
 
                     if (bingHtml) {
+                        engine = 'Bing';
                         const bingDoc = parser.parseFromString(bingHtml, 'text/html');
                         const bingResults = bingDoc.querySelectorAll('.b_algo');
 
@@ -172,6 +175,7 @@ export const searchGoogleTool: ITool = {
             return {
                 content: JSON.stringify({
                     query: query,
+                    engine: engine,
                     results: results.slice(0, 15), // Trả về tối đa 15 kết quả
                 }),
             };
