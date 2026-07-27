@@ -31,7 +31,7 @@ export const scrapeWebpageTool: ITool = {
             } catch (err) {
                 // Tự động Fallback sang Proxy nếu fetch gốc bị lỗi (do CORS của extension không cover được hết các trang)
                 console.log('[scrape_webpage] Direct fetch failed, trying proxy...', err);
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                 const proxyRes = await fetch(proxyUrl);
                 if (!proxyRes.ok) {
                     return {
