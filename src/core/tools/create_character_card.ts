@@ -15,7 +15,7 @@ export const createCharacterCardTool: ITool = {
                 first_mes: { type: 'string', description: 'Lời chào/Tin nhắn đầu tiên.' },
                 mes_example: { type: 'string', description: 'Đoạn hội thoại mẫu.' },
                 system_prompt: { type: 'string', description: 'System prompt riêng cho nhân vật.' },
-                tags: { type: 'string', description: 'Danh sách thẻ tag, cách nhau bằng dấu phẩy.' }
+                tags: { type: 'string', description: 'Danh sách thẻ tag, cách nhau bằng dấu phẩy.' },
             },
             required: ['name'],
         },

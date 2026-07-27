@@ -4,7 +4,8 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const getTavernHelperScriptInfoTool: ITool = {
     schema: {
         name: 'get_tavern_helper_script_info',
-        description: 'Đọc chi tiết (full info) của một Tavern Helper Script dựa vào ID. Trả về cấu trúc JSON đầy đủ gồm cả code content.',
+        description:
+            'Đọc chi tiết (full info) của một Tavern Helper Script dựa vào ID. Trả về cấu trúc JSON đầy đủ gồm cả code content.',
         parameters: {
             type: 'object',
             properties: {
@@ -39,7 +40,11 @@ export const getTavernHelperScriptInfoTool: ITool = {
                         foundScript = node;
                         return true; // Found
                     }
-                    const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                    const children = Array.isArray(node.children)
+                        ? node.children
+                        : Array.isArray(node.scripts)
+                          ? node.scripts
+                          : null;
                     if (children) {
                         if (searchTree(children)) return true;
                     }

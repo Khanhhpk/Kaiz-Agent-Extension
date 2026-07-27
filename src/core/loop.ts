@@ -253,13 +253,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
 
-        const internalHistory = history.map(msg => ({ ...msg }));
-        
+        const internalHistory = history.map((msg) => ({ ...msg }));
+
         for (let i = internalHistory.length - 1; i >= 0; i--) {
             if (internalHistory[i].role === 'user') {
                 const header = '📌 [YÊU CẦU CHÍNH CHỦ CỦA USER]:\n"';
-                const footer = '"\n\n-> NẾU ĐÃ HOÀN THÀNH TRIỆT ĐỂ YÊU CẦU NÀY, hãy DỪNG GỌI TOOL và trả lời kết quả cuối cùng!';
-                
+                const footer =
+                    '"\n\n-> NẾU ĐÃ HOÀN THÀNH TRIỆT ĐỂ YÊU CẦU NÀY, hãy DỪNG GỌI TOOL và trả lời kết quả cuối cùng!';
+
                 if (typeof internalHistory[i].content === 'string') {
                     internalHistory[i].content = header + internalHistory[i].content + footer;
                 } else if (Array.isArray(internalHistory[i].content)) {
@@ -268,7 +269,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (textIndex !== -1) {
                         internalHistory[i].content[textIndex] = {
                             ...internalHistory[i].content[textIndex],
-                            text: header + internalHistory[i].content[textIndex].text + footer
+                            text: header + internalHistory[i].content[textIndex].text + footer,
                         };
                     } else {
                         internalHistory[i].content.unshift({ type: 'text', text: header + footer });
@@ -298,13 +299,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             await onEvent({ type: 'step_start' });
 
             try {
-                const messages = this.buildMessages(
-                    internalHistory,
-                    maxSteps,
-                    step,
-                    lastToolError,
-                    cachedSystemPrompt,
-                );
+                const messages = this.buildMessages(internalHistory, maxSteps, step, lastToolError, cachedSystemPrompt);
 
                 let currentText = '';
 

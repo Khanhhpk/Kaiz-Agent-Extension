@@ -17,7 +17,7 @@ export const updateKaizExtensionTool: ITool = {
     },
     execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
-            let reqHeaders: Record<string, string> = {
+            const reqHeaders: Record<string, string> = {
                 'Content-Type': 'application/json',
             };
             try {
@@ -37,16 +37,12 @@ export const updateKaizExtensionTool: ITool = {
                     }
                     if (token) reqHeaders['X-CSRF-Token'] = token;
                 }
-            } catch (e) {};
+            } catch (e) {}
 
-            let namesToTry = [
-                'Kaiz-Agent-Extension',
-                'Kaiz-Agent',
-                'kaiz-agent-extension',
-                '/Kaiz-Agent-Extension',
-            ];
+            let namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension', '/Kaiz-Agent-Extension'];
 
-            const extTypes = (window as any).extensionTypes || (window as any).SillyTavern?.getContext?.()?.extensionTypes;
+            const extTypes =
+                (window as any).extensionTypes || (window as any).SillyTavern?.getContext?.()?.extensionTypes;
             if (extTypes) {
                 const foundKeys = Object.keys(extTypes).filter((k) => k.toLowerCase().includes('kaiz'));
                 namesToTry = [...foundKeys, ...namesToTry];
@@ -72,9 +68,9 @@ export const updateKaizExtensionTool: ITool = {
                 for (const isGlobal of isGlobalList) {
                     try {
                         const payload = { extensionName: cleanExtName, global: isGlobal };
-                        
+
                         // 1. Dùng API nội bộ của ST để check xem có update thật hay không
-                        let versionRes = await fetch('/api/extensions/version', {
+                        const versionRes = await fetch('/api/extensions/version', {
                             method: 'POST',
                             headers: reqHeaders,
                             body: JSON.stringify(payload),
@@ -82,16 +78,16 @@ export const updateKaizExtensionTool: ITool = {
 
                         if (versionRes.ok) {
                             const versionData = await versionRes.json();
-                            
+
                             // Nếu có bản cập nhật mới (isUpToDate = false)
                             if (versionData && versionData.isUpToDate === false) {
                                 // 2. Kích hoạt logic update của ST
-                                let updateRes = await fetch('/api/extensions/update', {
+                                const updateRes = await fetch('/api/extensions/update', {
                                     method: 'POST',
                                     headers: reqHeaders,
                                     body: JSON.stringify(payload),
                                 });
-                                
+
                                 if (updateRes.ok) {
                                     const updateData = await updateRes.json();
                                     updateFound = true;

@@ -204,7 +204,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async run(history, maxSteps, onEvent) {
             console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
             const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
-            const internalHistory = history.map(msg => ({ ...msg }));
+            const internalHistory = history.map((msg) => ({ ...msg }));
             for (let i = internalHistory.length - 1; i >= 0; i--) {
                 if (internalHistory[i].role === 'user') {
                     const header = '📌 [YÊU CẦU CHÍNH CHỦ CỦA USER]:\n"';
@@ -218,7 +218,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         if (textIndex !== -1) {
                             internalHistory[i].content[textIndex] = {
                                 ...internalHistory[i].content[textIndex],
-                                text: header + internalHistory[i].content[textIndex].text + footer
+                                text: header + internalHistory[i].content[textIndex].text + footer,
                             };
                         }
                         else {
@@ -571,9 +571,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             parameters: {
                 type: 'object',
                 properties: {
-                    search_query: { type: 'string', description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.' }
-                }
-            }
+                    search_query: {
+                        type: 'string',
+                        description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.',
+                    },
+                },
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('characters')) {
@@ -593,7 +596,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 return { content: `Error listing characters: ${e.message}`, isError: true };
             }
-        }
+        },
     };
 
     const switchCharacterChatTool = {
@@ -603,10 +606,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             parameters: {
                 type: 'object',
                 properties: {
-                    character_name: { type: 'string', description: 'Tên nhân vật muốn chuyển chat tới (bắt buộc).' }
+                    character_name: { type: 'string', description: 'Tên nhân vật muốn chuyển chat tới (bắt buộc).' },
                 },
-                required: ['character_name']
-            }
+                required: ['character_name'],
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('characters')) {
@@ -625,7 +628,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 return { content: `Error switching character: ${e.message}`, isError: true };
             }
-        }
+        },
     };
 
     const editCharacterCardTool = {
@@ -637,8 +640,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     field: {
                         type: 'string',
-                        enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book', 'creator', 'talkativeness', 'fav'],
-                        description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "character_book" (để gắn Lorebook), "talkativeness", "fav".',
+                        enum: [
+                            'name',
+                            'description',
+                            'personality',
+                            'scenario',
+                            'first_mes',
+                            'mes_example',
+                            'system_prompt',
+                            'post_history_instructions',
+                            'tags',
+                            'alternate_greetings',
+                            'creator_notes',
+                            'character_version',
+                            'world',
+                            'creator',
+                            'talkativeness',
+                            'fav',
+                        ],
+                        description: 'Trường thông tin cần chỉnh sửa. Quan trọng với Lorebook: Dùng "world" để LIÊN KẾT (link) tên Lorebook. Việc này sẽ tối ưu dung lượng khi chơi. Nếu người dùng muốn xuất/chia sẻ thẻ, chức năng export của ST sẽ tự động đóng gói Lorebook được link này vào trong thẻ mà không cần phải nhúng cứng từ đầu. Các trường khác: "description", "personality", "talkativeness", "fav", v.v.',
                     },
                     value: {
                         type: 'string',
@@ -684,7 +704,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     first_mes: { type: 'string', description: 'Lời chào/Tin nhắn đầu tiên.' },
                     mes_example: { type: 'string', description: 'Đoạn hội thoại mẫu.' },
                     system_prompt: { type: 'string', description: 'System prompt riêng cho nhân vật.' },
-                    tags: { type: 'string', description: 'Danh sách thẻ tag, cách nhau bằng dấu phẩy.' }
+                    tags: { type: 'string', description: 'Danh sách thẻ tag, cách nhau bằng dấu phẩy.' },
                 },
                 required: ['name'],
             },
@@ -817,6 +837,57 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return {
                     content: `[LỖI] Khi thực thi manageWorldbookTool: ${e.message}`,
                     isError: true,
+                };
+            }
+        },
+    };
+
+    const manageBackupTool = {
+        schema: {
+            name: 'manage_backup',
+            description: 'Tạo bản sao lưu (backup) an toàn cho thẻ nhân vật, chat, hoặc worldbook hiện tại vào cơ sở dữ liệu IndexedDB của Kaiz Agent. LUÔN LUÔN gọi công cụ này trước khi sử dụng các công cụ thay đổi dữ liệu nguy hiểm như edit_character_card hoặc xoá tin nhắn.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    target_type: {
+                        type: 'string',
+                        enum: ['character', 'chat', 'worldbook'],
+                        description: 'Loại dữ liệu cần sao lưu.',
+                    },
+                    target_name: {
+                        type: 'string',
+                        description: 'Tên đối tượng cần sao lưu (bắt buộc nếu target_type là worldbook, đối với character và chat sẽ tự động lấy đối tượng hiện tại).',
+                    },
+                },
+                required: ['target_type'],
+            },
+        },
+        validate: (context) => {
+            if (!context.adapter.hasFeature('characters')) {
+                throw new Error('ST Context missing');
+            }
+        },
+        execute: async (args, context) => {
+            try {
+                const type = args.target_type;
+                const name = args.target_name;
+                const exportResult = await context.adapter.exportBackupData(type, name);
+                if (!exportResult) {
+                    return {
+                        isError: true,
+                        content: `Không thể tạo backup cho ${type}. Đối tượng không tồn tại hoặc lỗi trích xuất dữ liệu.`,
+                    };
+                }
+                // Lưu vào IDB
+                const backupId = await context.stateManager.db.addBackup(type, exportResult.name, exportResult.data);
+                return {
+                    content: `✅ Đã tạo backup thành công cho [${type}: ${exportResult.name}] với ID=${backupId}. Người dùng có thể tải về từ Backup Manager.`,
+                };
+            }
+            catch (e) {
+                return {
+                    isError: true,
+                    content: `Lỗi khi sao lưu dữ liệu: ${e.message}`,
                 };
             }
         },
@@ -2020,10 +2091,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             el.getAttribute('data-title')?.trim() ||
                             '';
                         const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                        const value = el.value?.trim() || '';
+                        const value = el.value || ''; // Không trim để giữ khoảng trắng hợp lệ
                         let description = text || title || ariaLabel;
                         if (!description && el.tagName === 'INPUT') {
-                            description = value || el.getAttribute('placeholder') || 'Input field';
+                            description = el.getAttribute('placeholder') || 'Input field';
                         }
                         let isIconOnly = false;
                         if (!description) {
@@ -2063,11 +2134,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         let states = '';
                         if (el.disabled)
                             states += '[Disabled] ';
-                        if (tagName === 'input') {
-                            const type = el.getAttribute('type') || 'text';
-                            states += `(type:${type}) `;
-                            if (el.checked)
-                                states += '[Checked] ';
+                        if (tagName === 'input' || tagName === 'textarea') {
+                            if (tagName === 'input') {
+                                const type = el.getAttribute('type') || 'text';
+                                states += `(type:${type}) `;
+                                if (el.checked)
+                                    states += '[Checked] ';
+                            }
+                            const val = el.value;
+                            if (val !== undefined && val !== null && val !== '') {
+                                const trimmedVal = val.length > 50 ? val.substring(0, 47) + '...' : val;
+                                states += `[Value: "${trimmedVal.replace(/\n/g, '\\n')}"] `;
+                            }
                         }
                         if (tagName === 'select') {
                             const select = el;
@@ -2704,7 +2782,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
         execute: async (args, context) => {
             try {
-                let reqHeaders = {
+                const reqHeaders = {
                     'Content-Type': 'application/json',
                 };
                 try {
@@ -2730,13 +2808,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
                 catch (e) { }
-                ;
-                let namesToTry = [
-                    'Kaiz-Agent-Extension',
-                    'Kaiz-Agent',
-                    'kaiz-agent-extension',
-                    '/Kaiz-Agent-Extension',
-                ];
+                let namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension', '/Kaiz-Agent-Extension'];
                 const extTypes = window.extensionTypes || window.SillyTavern?.getContext?.()?.extensionTypes;
                 if (extTypes) {
                     const foundKeys = Object.keys(extTypes).filter((k) => k.toLowerCase().includes('kaiz'));
@@ -2762,7 +2834,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         try {
                             const payload = { extensionName: cleanExtName, global: isGlobal };
                             // 1. Dùng API nội bộ của ST để check xem có update thật hay không
-                            let versionRes = await fetch('/api/extensions/version', {
+                            const versionRes = await fetch('/api/extensions/version', {
                                 method: 'POST',
                                 headers: reqHeaders,
                                 body: JSON.stringify(payload),
@@ -2772,7 +2844,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 // Nếu có bản cập nhật mới (isUpToDate = false)
                                 if (versionData && versionData.isUpToDate === false) {
                                     // 2. Kích hoạt logic update của ST
-                                    let updateRes = await fetch('/api/extensions/update', {
+                                    const updateRes = await fetch('/api/extensions/update', {
                                         method: 'POST',
                                         headers: reqHeaders,
                                         body: JSON.stringify(payload),
@@ -2854,7 +2926,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return;
                     nodes.forEach((node) => {
                         // Nhận diện folder (có thể qua type, isFolder, hoặc chứa mảng children/scripts)
-                        const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                        const children = Array.isArray(node.children)
+                            ? node.children
+                            : Array.isArray(node.scripts)
+                                ? node.scripts
+                                : null;
                         const isFolder = node.isFolder === true || node.type === 'folder' || children !== null;
                         if (isFolder && children) {
                             const folderName = node.name || 'Unnamed Folder';
@@ -2865,7 +2941,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             // Nếu là script thường
                             results.push({
                                 id: node.id,
-                                name: parentPath ? `[${parentPath}] ${node.name || 'Unnamed Script'}` : (node.name || 'Unnamed Script'),
+                                name: parentPath
+                                    ? `[${parentPath}] ${node.name || 'Unnamed Script'}`
+                                    : node.name || 'Unnamed Script',
                                 scope: scopeName,
                                 enabled: node.enabled !== false,
                                 info: node.info || node.authorNote || '',
@@ -2946,7 +3024,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             foundScript = node;
                             return true; // Found
                         }
-                        const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                        const children = Array.isArray(node.children)
+                            ? node.children
+                            : Array.isArray(node.scripts)
+                                ? node.scripts
+                                : null;
                         if (children) {
                             if (searchTree(children))
                                 return true;
@@ -3026,7 +3108,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     };
                 }
                 const { action, id, data } = args;
-                let { scope } = args;
+                const { scope } = args;
                 // Hàm đệ quy xoá
                 const deleteFromTree = (nodes) => {
                     if (!Array.isArray(nodes))
@@ -3036,7 +3118,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             nodes.splice(i, 1);
                             return true;
                         }
-                        const children = Array.isArray(nodes[i].children) ? nodes[i].children : (Array.isArray(nodes[i].scripts) ? nodes[i].scripts : null);
+                        const children = Array.isArray(nodes[i].children)
+                            ? nodes[i].children
+                            : Array.isArray(nodes[i].scripts)
+                                ? nodes[i].scripts
+                                : null;
                         if (children) {
                             if (deleteFromTree(children))
                                 return true;
@@ -3053,7 +3139,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             mutator(node);
                             return true;
                         }
-                        const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                        const children = Array.isArray(node.children)
+                            ? node.children
+                            : Array.isArray(node.scripts)
+                                ? node.scripts
+                                : null;
                         if (children) {
                             if (editInTree(children, searchId, mutator))
                                 return true;
@@ -3066,18 +3156,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const tempId = targetId + '_temp_sync';
                         // Đổi ID tạm thời để Vue unmount component
                         await th.updateScriptTreesWith((trees) => {
-                            editInTree(trees, targetId, (node) => { node.id = tempId; });
+                            editInTree(trees, targetId, (node) => {
+                                node.id = tempId;
+                            });
                             return trees;
                         }, { type: targetScope });
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        await new Promise((resolve) => setTimeout(resolve, 100));
                         // Trả lại ID gốc để Vue mount lại component với dữ liệu mới
                         await th.updateScriptTreesWith((trees) => {
-                            editInTree(trees, tempId, (node) => { node.id = targetId; });
+                            editInTree(trees, tempId, (node) => {
+                                node.id = targetId;
+                            });
                             return trees;
                         }, { type: targetScope });
                     }
                     catch (e) {
-                        console.error("Lỗi khi force sync UI JS-Slash-Runner:", e);
+                        console.error('Lỗi khi force sync UI JS-Slash-Runner:', e);
                     }
                 };
                 // Helpers tìm script để biết scope hiện tại
@@ -3095,7 +3189,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                         found = true;
                                         return;
                                     }
-                                    const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                                    const children = Array.isArray(node.children)
+                                        ? node.children
+                                        : Array.isArray(node.scripts)
+                                            ? node.scripts
+                                            : null;
                                     if (children)
                                         search(children);
                                 }
@@ -3130,7 +3228,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         trees.push(newScript);
                         return trees;
                     }, { type: targetScope });
-                    return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
+                    return {
+                        content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})`,
+                    };
                 }
                 if (!id)
                     return { isError: true, content: 'Bắt buộc phải cung cấp id cho hành động này.' };
@@ -3232,6 +3332,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(getLorebookInfoTool);
         registry.registerTool(manageLorebookEntryTool);
         registry.registerTool(manageWorldbookTool);
+        registry.registerTool(manageBackupTool);
         registry.registerTool(quickChatPreviewTool);
         registry.registerTool(renameAgentChatTool);
         registry.registerTool(openNewAgentChatTool);
@@ -3569,10 +3670,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const d = char.data || {};
             let actualTags = char.tags || d.tags || [];
             if (ctx.tagMap && ctx.tags && ctx.tagMap[char.avatar]) {
-                const mappedTags = ctx.tagMap[char.avatar].map((id) => {
+                const mappedTags = ctx.tagMap[char.avatar]
+                    .map((id) => {
                     const t = ctx.tags.find((tag) => tag.id === id);
                     return t ? t.name : null;
-                }).filter(Boolean);
+                })
+                    .filter(Boolean);
                 if (mappedTags.length > 0 || actualTags.length === 0) {
                     actualTags = mappedTags;
                 }
@@ -3598,7 +3701,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return b;
                     return {
                         name: b.name || 'Embedded Lorebook',
-                        entries_count: b.entries ? b.entries.length : 0
+                        entries_count: b.entries ? b.entries.length : 0,
                     };
                 })(),
                 creator: d.creator || char.creator || '',
@@ -3625,7 +3728,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     name: c.name,
                     avatar: c.avatar,
                     creator: c.creator || '',
-                    description_snippet: shortDesc
+                    description_snippet: shortDesc,
                 };
             });
         }
@@ -3652,7 +3755,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
             }
             // Minimal Fallback for older versions
-            const el = document.querySelector(`.character_select[data-chid="${index}"]`) || document.querySelector(`.character_select[chid="${index}"]`);
+            const el = document.querySelector(`.character_select[data-chid="${index}"]`) ||
+                document.querySelector(`.character_select[chid="${index}"]`);
             if (el) {
                 if (typeof window.$ !== 'undefined')
                     window.$(el).trigger('click');
@@ -3667,7 +3771,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
          */
         async createCharacterCard(data) {
             const ctx = SillyTavern.getContext();
-            const tagsString = Array.isArray(data.tags) ? data.tags.join(', ') : (typeof data.tags === 'string' ? data.tags : '');
+            const tagsString = Array.isArray(data.tags)
+                ? data.tags.join(', ')
+                : typeof data.tags === 'string'
+                    ? data.tags
+                    : '';
             const formData = new FormData();
             formData.append('ch_name', data.name || 'New Character');
             formData.append('description', data.description || '');
@@ -3690,7 +3798,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 throw new Error(`HTTP ${res.status}: ${errText}`);
             }
             const newAvatar = await res.text();
-            await new Promise(r => setTimeout(r, 400));
+            await new Promise((r) => setTimeout(r, 400));
             if (typeof ctx.getCharacters === 'function') {
                 await ctx.getCharacters();
             }
@@ -3714,7 +3822,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const ctx = SillyTavern.getContext();
             const char = ctx.characters?.[ctx.characterId];
             if (!char)
-                throw new Error("No active character found.");
+                throw new Error('No active character found.');
             if (fieldId === 'name') {
                 const trimmedName = (String(newValue) || '').trim();
                 if (!trimmedName)
@@ -3732,13 +3840,36 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (typeof window.getCharacters === 'function')
                     await window.getCharacters().catch(() => { });
             }
-            else if (fieldId === 'tags') {
-                const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
-                if (ctx.tagMap && ctx.tags) {
+            else {
+                // Special pre-processing for specific fields
+                if (fieldId === 'fav') {
+                    newValue = newValue === 'true' || newValue === true;
+                }
+                else if (fieldId === 'tags') {
+                    newValue =
+                        typeof newValue === 'string'
+                            ? newValue
+                                .split(',')
+                                .map((t) => t.trim())
+                                .filter(Boolean)
+                            : Array.isArray(newValue)
+                                ? newValue
+                                : [];
+                }
+                else if (fieldId === 'alternate_greetings') {
+                    newValue = Array.isArray(newValue) ? newValue : [String(newValue)];
+                }
+                else if (typeof newValue === 'string' && newValue.trim() === '') {
+                    newValue = undefined;
+                }
+                // Sync tags mapping before save if needed
+                if (fieldId === 'tags' && ctx.tagMap && ctx.tags) {
                     const currentTagIds = ctx.tagMap[char.avatar] || [];
                     const toUnlink = currentTagIds.filter((id) => {
                         const tagObj = ctx.tags.find((t) => t.id === id);
-                        return tagObj ? !newTagsNames.some((n) => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
+                        return tagObj
+                            ? !newValue.some((n) => n.toLowerCase() === tagObj.name.toLowerCase())
+                            : false;
                     });
                     if (toUnlink.length > 0) {
                         ctx.tagMap[char.avatar] = currentTagIds.filter((id) => !toUnlink.includes(id));
@@ -3746,38 +3877,89 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             ctx.saveSettingsDebounced();
                     }
                 }
-                if (!char.data)
-                    char.data = {};
-                char.data.tags = newTagsNames;
-                char.tags = newTagsNames;
-                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: 'tags', value: newTagsNames };
-                await fetch('/api/characters/edit-attribute', {
-                    method: 'POST',
-                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (typeof ctx.importTags === 'function') {
-                    await ctx.importTags(char, { importSetting: 3 }).catch(() => { });
+                // Unified Payload Builder for merge-attributes
+                const isExtensionField = fieldId === 'fav' || fieldId === 'talkativeness' || fieldId === 'world';
+                const valueOrUnset = newValue === undefined ? '__@@UNSET@@__' : newValue;
+                const mergePayload = {
+                    avatar: char.avatar,
+                    [fieldId]: valueOrUnset,
+                    data: {},
+                };
+                if (fieldId === 'creator_notes') {
+                    mergePayload.creatorcomment = valueOrUnset;
                 }
-            }
-            else {
-                if (!char.data)
-                    char.data = {};
-                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
-                if (fieldId === 'alternate_greetings') {
-                    char.data.alternate_greetings = Array.isArray(newValue) ? newValue : [String(newValue)];
+                if (isExtensionField) {
+                    mergePayload.data.extensions = { [fieldId]: valueOrUnset };
+                    // Cleanup bad data at root of data if it exists from older agent edits
+                    mergePayload.data[fieldId] = '__@@UNSET@@__';
                 }
                 else {
-                    char.data[fieldId] = newValue;
-                    char[fieldId] = newValue;
+                    mergePayload.data[fieldId] = valueOrUnset;
                 }
-                const res = await fetch('/api/characters/edit-attribute', {
+                // In-memory update for ST Frontend
+                if (!char.data)
+                    char.data = {};
+                if (newValue === undefined) {
+                    delete char[fieldId];
+                    if (fieldId === 'creator_notes')
+                        delete char.creatorcomment;
+                    if (isExtensionField && char.data.extensions)
+                        delete char.data.extensions[fieldId];
+                    else
+                        delete char.data[fieldId];
+                }
+                else {
+                    char[fieldId] = newValue;
+                    if (fieldId === 'creator_notes')
+                        char.creatorcomment = newValue;
+                    if (isExtensionField) {
+                        if (!char.data.extensions)
+                            char.data.extensions = {};
+                        char.data.extensions[fieldId] = newValue;
+                        delete char.data[fieldId]; // remove bad field in memory too
+                    }
+                    else {
+                        char.data[fieldId] = newValue;
+                    }
+                }
+                // Luôn dùng merge-attributes để chuẩn hoá V3 spec và tránh lỗi 400
+                let res = await fetch('/api/characters/merge-attributes', {
                     method: 'POST',
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify(mergePayload),
                 });
+                // Nếu merge-attributes không tồn tại (ST quá cũ), fallback về edit-attribute (tuy có thể sai spec extensions)
+                if (res.status === 404) {
+                    const payload = {
+                        avatar_url: char.avatar,
+                        ch_name: char.name || 'Unknown',
+                        field: fieldId,
+                        value: newValue,
+                    };
+                    res = await fetch('/api/characters/edit-attribute', {
+                        method: 'POST',
+                        headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                }
                 if (!res.ok)
                     throw new Error(`HTTP ${res.status}`);
+                // UI Specific Updates
+                const $ = window.$;
+                if ($) {
+                    if (fieldId === 'world') {
+                        if (typeof window.checkEmbeddedWorld === 'function') {
+                            window.checkEmbeddedWorld(ctx.characterId);
+                        }
+                        $('#character_world')
+                            .val(newValue || '')
+                            .trigger('change');
+                    }
+                }
+                // Post-save actions
+                if (fieldId === 'tags' && typeof ctx.importTags === 'function') {
+                    await ctx.importTags(char, { importSetting: 3 }).catch(() => { });
+                }
             }
             const domMap = {
                 description: 'description_textarea',
@@ -3995,6 +4177,73 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 console.error('[KaizAgent] Error in editUserPersona:', err);
                 return false;
             }
+        }
+        /**
+         * Xuất dữ liệu dưới dạng JSON string để sao lưu
+         */
+        async exportBackupData(type, name) {
+            const ctx = SillyTavern.getContext();
+            try {
+                if (type === 'character') {
+                    const char = ctx.characters?.[ctx.characterId];
+                    if (!char)
+                        throw new Error('No active character found');
+                    const charName = char.name || 'Unknown_Character';
+                    const charData = char.data || char;
+                    return {
+                        name: charName,
+                        data: JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: charData }, null, 2),
+                    };
+                }
+                if (type === 'chat') {
+                    const chatName = ctx.chatId || 'Unknown_Chat';
+                    const chatData = ctx.chat || [];
+                    if (chatData.length === 0)
+                        throw new Error('No chat data found');
+                    // ST requires chat metadata as the first line of JSONL
+                    const w = window;
+                    const metadataLine = {
+                        user_name: w.name1 || 'unused',
+                        character_name: w.name2 || 'unused',
+                        chat_metadata: w.chat_metadata || {},
+                    };
+                    // Convert to JSONL for ST Chat import
+                    const jsonlData = [
+                        JSON.stringify(metadataLine),
+                        ...chatData.map((msg) => JSON.stringify(msg)),
+                    ].join('\n');
+                    return { name: chatName, data: jsonlData };
+                }
+                if (type === 'worldbook') {
+                    const bookName = name;
+                    if (!bookName)
+                        throw new Error('Missing worldbook name');
+                    let data = null;
+                    if (typeof ctx.loadWorldInfo === 'function') {
+                        data = await ctx.loadWorldInfo(bookName);
+                    }
+                    else {
+                        const res = await fetch('/api/worldinfo/get', {
+                            method: 'POST',
+                            headers: {
+                                ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ name: bookName }),
+                        });
+                        if (res.ok)
+                            data = await res.json();
+                    }
+                    if (!data)
+                        throw new Error('Worldbook not found: ' + bookName);
+                    return { name: bookName, data: JSON.stringify(data, null, 2) };
+                }
+            }
+            catch (e) {
+                console.error('[KaizAgent] Backup export error:', e);
+                throw e;
+            }
+            return null;
         }
         /**
          * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
@@ -4484,7 +4733,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 $('#world_editor_select').val(newIdx).trigger('change');
                             }
                         }
-                        return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
+                        return `Đã tạo mới Worldbook "${options.book_name}".`;
                     }
                     else {
                         return '[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.';
@@ -4695,7 +4944,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
     class KaizDB {
         dbName = 'KaizAgentDB';
-        dbVersion = 1;
+        dbVersion = 2;
         db = null;
         async init() {
             return new Promise((resolve, reject) => {
@@ -4710,6 +4959,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const msgStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
                         msgStore.createIndex('chatId', 'chatId', { unique: false });
                         msgStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                    if (!db.objectStoreNames.contains('backups')) {
+                        const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
+                        backupStore.createIndex('type', 'type', { unique: false });
+                        backupStore.createIndex('timestamp', 'timestamp', { unique: false });
                     }
                 };
                 request.onsuccess = (event) => {
@@ -4852,6 +5106,55 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     msgs.sort((a, b) => a.timestamp - b.timestamp);
                     resolve(msgs);
                 };
+                request.onerror = () => reject(request.error);
+            });
+        }
+        // --- BACKUPS ---
+        async addBackup(type, name, data) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['backups'], 'readwrite');
+                const store = transaction.objectStore('backups');
+                const entry = { type, name, data, timestamp: Date.now() };
+                const request = store.add(entry);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+        async getBackups(type) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['backups'], 'readonly');
+                const store = transaction.objectStore('backups');
+                const index = store.index('timestamp');
+                const backups = [];
+                const request = index.openCursor(null, 'prev'); // sort descending
+                request.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        const entry = cursor.value;
+                        if (!type || entry.type === type) {
+                            backups.push(entry);
+                        }
+                        cursor.continue();
+                    }
+                    else {
+                        resolve(backups);
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+        async deleteBackup(id) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['backups'], 'readwrite');
+                const store = transaction.objectStore('backups');
+                const request = store.delete(id);
+                request.onsuccess = () => resolve();
                 request.onerror = () => reject(request.error);
             });
         }
@@ -5609,13 +5912,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
      */
 
     function M(){return {async:false,breaks:false,extensions:null,gfm:true,hooks:null,pedantic:false,renderer:null,silent:false,tokenizer:null,walkTokens:null}}var T=M();function N(l){T=l;}var _={exec:()=>null};function E(l){let e=[];return t=>{let n=Math.max(0,Math.min(3,t-1)),s=e[n];return s||(s=l(n),e[n]=s),s}}function d(l,e=""){let t=typeof l=="string"?l:l.source,n={replace:(s,r)=>{let i=typeof r=="string"?r:r.source;return i=i.replace(m.caret,"$1"),t=t.replace(s,i),n},getRegex:()=>new RegExp(t,e)};return n}var Te=((l="")=>{try{return !!new RegExp("(?<=1)(?<!1)"+l)}catch{return  false}})(),m={codeRemoveIndent:/^(?: {1,4}| {0,3}\t)/gm,outputLinkReplace:/\\([\[\]])/g,indentCodeCompensation:/^(\s+)(?:```)/,beginningSpace:/^\s+/,endingHash:/#$/,startingSpaceChar:/^ /,endingSpaceChar:/ $/,nonSpaceChar:/[^ ]/,newLineCharGlobal:/\n/g,tabCharGlobal:/\t/g,multipleSpaceGlobal:/\s+/g,blankLine:/^[ \t]*$/,doubleBlankLine:/\n[ \t]*\n[ \t]*$/,blockquoteStart:/^ {0,3}>/,blockquoteSetextReplace:/\n {0,3}((?:=+|-+) *)(?=\n|$)/g,blockquoteSetextReplace2:/^ {0,3}>[ \t]?/gm,listReplaceNesting:/^ {1,4}(?=( {4})*[^ ])/g,listIsTask:/^\[[ xX]\] +\S/,listReplaceTask:/^\[[ xX]\] +/,listTaskCheckbox:/\[[ xX]\]/,anyLine:/\n.*\n/,hrefBrackets:/^<(.*)>$/,tableDelimiter:/[:|]/,tableAlignChars:/^\||\| *$/g,tableRowBlankLine:/\n[ \t]*$/,tableAlignRight:/^ *-+: *$/,tableAlignCenter:/^ *:-+: *$/,tableAlignLeft:/^ *:-+ *$/,startATag:/^<a /i,endATag:/^<\/a>/i,startPreScriptTag:/^<(pre|code|kbd|script)(\s|>)/i,endPreScriptTag:/^<\/(pre|code|kbd|script)(\s|>)/i,startAngleBracket:/^</,endAngleBracket:/>$/,pedanticHrefTitle:/^([^'"]*[^\s])\s+(['"])(.*)\2/,unicodeAlphaNumeric:/[\p{L}\p{N}]/u,escapeTest:/[&<>"']/,escapeReplace:/[&<>"']/g,escapeTestNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/,escapeReplaceNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g,caret:/(^|[^\[])\^/g,percentDecode:/%25/g,findPipe:/\|/g,splitPipe:/ \|/,slashPipe:/\\\|/g,carriageReturn:/\r\n|\r/g,spaceLine:/^ +$/gm,notSpaceStart:/^\S*/,endingNewline:/\n$/,listItemRegex:l=>new RegExp(`^( {0,3}${l})((?:[	 ][^\\n]*)?(?:\\n|$))`),nextBulletRegex:E(l=>new RegExp(`^ {0,${l}}(?:[*+-]|\\d{1,9}[.)])((?:[ 	][^\\n]*)?(?:\\n|$))`)),hrRegex:E(l=>new RegExp(`^ {0,${l}}((?:- *){3,}|(?:_ *){3,}|(?:\\* *){3,})(?:\\n+|$)`)),fencesBeginRegex:E(l=>new RegExp(`^ {0,${l}}(?:\`\`\`|~~~)`)),headingBeginRegex:E(l=>new RegExp(`^ {0,${l}}#`)),htmlBeginRegex:E(l=>new RegExp(`^ {0,${l}}<(?:[a-z].*>|!--)`,"i")),blockquoteBeginRegex:E(l=>new RegExp(`^ {0,${l}}>`))},Oe=/^(?:[ \t]*(?:\n|$))+/,we=/^((?: {4}| {0,3}\t)[^\n]+(?:\n(?:[ \t]*(?:\n|$))*)?)+/,ye=/^ {0,3}(`{3,}(?=[^`\n]*(?:\n|$))|~{3,})([^\n]*)(?:\n|$)(?:|([\s\S]*?)(?:\n|$))(?: {0,3}\1[~`]* *(?=\n|$)|$)/,B=/^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/,Pe=/^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/,j=/ {0,3}(?:[*+-]|\d{1,9}[.)])/,oe=/^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |blockCode|fences|blockquote|heading|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/,ae=d(oe).replace(/bull/g,j).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/\|table/g,"").getRegex(),Se=d(oe).replace(/bull/g,j).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/table/g,/ {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex(),F=/^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table| +\n)[^\n]+)*)/,$e=/^[^\n]+/,U=/(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/,Le=d(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label",U).replace("title",/(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex(),_e=d(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g,j).getRegex(),H="address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul",K=/<!--(?:-?>|[\s\S]*?(?:-->|$))/,ze=d("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n+|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>[^\\n]*\\n+|$)|<![A-Z][\\s\\S]*?(?:>[^\\n]*\\n+|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>[^\\n]*\\n+|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][\\w-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][\\w-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))","i").replace("comment",K).replace("tag",H).replace("attribute",/ +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex(),le=l=>d(F).replace("hr",B).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("|table","").replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list",l).replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",H).getRegex(),Me=le(/ {0,3}(?:[*+-]|1[.)])[ \t]+[^ \t\n]/),Ee=le(/ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+[^ \t\n]/),Ie=d(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph",Ee).getRegex(),W={blockquote:Ie,code:we,def:Le,fences:ye,heading:Pe,hr:B,html:ze,lheading:ae,list:_e,newline:Oe,paragraph:Me,table:_,text:$e},se=d("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr",B).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("blockquote"," {0,3}>").replace("code","(?: {4}| {0,3}	)[^\\n]").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",H).getRegex(),Ae={...W,lheading:Se,table:se,paragraph:d(F).replace("hr",B).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("table",se).replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",H).getRegex()},Ce={...W,html:d(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment",K).replace(/tag/g,"(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(),def:/^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/,heading:/^(#{1,6})(.*)(?:\n+|$)/,fences:_,lheading:/^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/,paragraph:d(F).replace("hr",B).replace("heading",` *#{1,6} *[^
-]`).replace("lheading",ae).replace("|table","").replace("blockquote"," {0,3}>").replace("|fences","").replace("|list","").replace("|html","").replace("|tag","").getRegex()},Be=/^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/,qe=/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,ue=/^( {2,}|\\)\n(?!\s*$)/,De=/^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/,I=/[\p{P}\p{S}]/u,Z=/[\s\p{P}\p{S}]/u,X=/[^\s\p{P}\p{S}]/u,ve=d(/^((?![*_])punctSpace)/,"u").replace(/punctSpace/g,Z).getRegex(),pe=/(?!~)[\p{P}\p{S}]/u,He=/(?!~)[\s\p{P}\p{S}]/u,Ze=/(?:[^\s\p{P}\p{S}]|~)/u,Ge=d(/link|precode-code|html/,"g").replace("link",/\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-",Te?"(?<!`)()":"(^^|[^`])").replace("code",/(?<b>`+)[^`]+\k<b>(?!`)/).replace("html",/<(?! )[^<>]*?>/).getRegex(),ce=/^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/,Ne=d(ce,"u").replace(/punct/g,I).getRegex(),Qe=d(ce,"u").replace(/punct/g,pe).getRegex(),he="^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)",je=d(he,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Fe=d(he,"gu").replace(/notPunctSpace/g,Ze).replace(/punctSpace/g,He).replace(/punct/g,pe).getRegex(),Ue=d("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)","gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Ke=d(/^~~?(?:((?!~)punct)|[^\s~])/,"u").replace(/punct/g,I).getRegex(),We="^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)",Xe=d(We,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Je=d(/\\(punct)/,"gu").replace(/punct/g,I).getRegex(),Ve=d(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme",/[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email",/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex(),Ye=d(K).replace("(?:-->|$)","-->").getRegex(),et=d("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment",Ye).replace("attribute",/\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex(),v=/(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/,tt=d(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label",v).replace("href",/<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]+|(?=\))/).replace("title",/"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex(),ke=d(/^!?\[(label)\]\[(ref)\]/).replace("label",v).replace("ref",U).getRegex(),de=d(/^!?\[(ref)\](?:\[\])?/).replace("ref",U).getRegex(),nt=d("reflink|nolink(?!\\()","g").replace("reflink",ke).replace("nolink",de).getRegex(),ie=/[hH][tT][tT][pP][sS]?|[fF][tT][pP]/,J={_backpedal:_,anyPunctuation:Je,autolink:Ve,blockSkip:Ge,br:ue,code:qe,del:_,delLDelim:_,delRDelim:_,emStrongLDelim:Ne,emStrongRDelimAst:je,emStrongRDelimUnd:Ue,escape:Be,link:tt,nolink:de,punctuation:ve,reflink:ke,reflinkSearch:nt,tag:et,text:De,url:_},rt={...J,link:d(/^!?\[(label)\]\((.*?)\)/).replace("label",v).getRegex(),reflink:d(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label",v).getRegex()},Q={...J,emStrongRDelimAst:Fe,emStrongLDelim:Qe,delLDelim:Ke,delRDelim:Xe,url:d(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol",ie).replace("email",/[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(),_backpedal:/(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,del:/^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,text:d(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol",ie).getRegex()},st={...Q,br:d(ue).replace("{2,}","*").getRegex(),text:d(Q.text).replace("\\b_","\\b_| {2,}\\n").replace(/\{2,\}/g,"*").getRegex()},q={normal:W,gfm:Ae,pedantic:Ce},A={normal:J,gfm:Q,breaks:st,pedantic:rt};var it={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"},ge=l=>it[l];function O(l,e){if(e){if(m.escapeTest.test(l))return l.replace(m.escapeReplace,ge)}else if(m.escapeTestNoEncode.test(l))return l.replace(m.escapeReplaceNoEncode,ge);return l}function V(l){try{l=encodeURI(l).replace(m.percentDecode,"%");}catch{return null}return l}function Y(l,e){let t=l.replace(m.findPipe,(r,i,o)=>{let u=false,a=i;for(;--a>=0&&o[a]==="\\";)u=!u;return u?"|":" |"}),n=t.split(m.splitPipe),s=0;if(n[0].trim()||n.shift(),n.length>0&&!n.at(-1)?.trim()&&n.pop(),e)if(n.length>e)n.splice(e);else for(;n.length<e;)n.push("");for(;s<n.length;s++)n[s]=n[s].trim().replace(m.slashPipe,"|");return n}function $(l,e,t){let n=l.length;if(n===0)return "";let s=0;for(;s<n;){let r=l.charAt(n-s-1);if(r===e&&true)s++;else break}return l.slice(0,n-s)}function ee(l){let e=l.split(`
+]`).replace("lheading",ae).replace("|table","").replace("blockquote"," {0,3}>").replace("|fences","").replace("|list","").replace("|html","").replace("|tag","").getRegex()},Be=/^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/,qe=/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,ue=/^( {2,}|\\)\n(?!\s*$)/,De=/^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/,I=/[\p{P}\p{S}]/u,Z=/[\s\p{P}\p{S}]/u,X=/[^\s\p{P}\p{S}]/u,ve=d(/^((?![*_])punctSpace)/,"u").replace(/punctSpace/g,Z).getRegex(),pe=/(?!~)[\p{P}\p{S}]/u,He=/(?!~)[\s\p{P}\p{S}]/u,Ze=/(?:[^\s\p{P}\p{S}]|~)/u,Ge=d(/link|precode-code|html/,"g").replace("link",/\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-",Te?"(?<!`)()":"(^^|[^`])").replace("code",/(?<b>`+)[^`]+\k<b>(?!`)/).replace("html",/<(?! )[^<>]*?>/).getRegex(),ce=/^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/,Ne=d(ce,"u").replace(/punct/g,I).getRegex(),Qe=d(ce,"u").replace(/punct/g,pe).getRegex(),he="^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)",je=d(he,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Fe=d(he,"gu").replace(/notPunctSpace/g,Ze).replace(/punctSpace/g,He).replace(/punct/g,pe).getRegex(),Ue=d("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)","gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Ke=d(/^~~?(?:((?!~)punct)|[^\s~])/,"u").replace(/punct/g,I).getRegex(),We="^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)",Xe=d(We,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Je=d(/\\(punct)/,"gu").replace(/punct/g,I).getRegex(),Ve=d(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme",/[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email",/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex(),Ye=d(K).replace("(?:-->|$)","-->").getRegex(),et=d("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment",Ye).replace("attribute",/\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex(),v=/(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/,tt=d(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label",v).replace("href",/<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]+|(?=\))/).replace("title",/"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex(),ke=d(/^!?\[(label)\]\[(ref)\]/).replace("label",v).replace("ref",U).getRegex(),de=d(/^!?\[(ref)\](?:\[\])?/).replace("ref",U).getRegex(),nt=d("reflink|nolink(?!\\()","g").replace("reflink",ke).replace("nolink",de).getRegex(),ie=/[hH][tT][tT][pP][sS]?|[fF][tT][pP]/,J={_backpedal:_,anyPunctuation:Je,autolink:Ve,blockSkip:Ge,br:ue,code:qe,del:_,delLDelim:_,delRDelim:_,emStrongLDelim:Ne,emStrongRDelimAst:je,emStrongRDelimUnd:Ue,escape:Be,link:tt,nolink:de,punctuation:ve,reflink:ke,reflinkSearch:nt,tag:et,text:De,url:_},rt={...J,link:d(/^!?\[(label)\]\((.*?)\)/).replace("label",v).getRegex(),reflink:d(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label",v).getRegex()},Q={...J,emStrongRDelimAst:Fe,emStrongLDelim:Qe,delLDelim:Ke,delRDelim:Xe,url:d(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol",ie).replace("email",/[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(),_backpedal:/(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,del:/^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,text:d(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol",ie).getRegex()},st={...Q,br:d(ue).replace("{2,}","*").getRegex(),text:d(Q.text).replace("\\b_","\\b_| {2,}\\n").replace(/\{2,\}/g,"*").getRegex()},q={normal:W,gfm:Ae,pedantic:Ce},A={normal:J,gfm:Q,breaks:st,pedantic:rt};var it={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"},ge=l=>it[l];function O(l,e){if(e){if(m.escapeTest.test(l))return l.replace(m.escapeReplace,ge)}else if(m.escapeTestNoEncode.test(l))return l.replace(m.escapeReplaceNoEncode,ge);return l}function V(l){try{l=encodeURI(l).replace(m.percentDecode,"%");}catch{return null}return l}function Y(l,e){let t=l.replace(m.findPipe,(r,i,o)=>{let u=false,a=i;for(;--a>=0&&o[a]==="\\";)u=!u;return u?"|":" |"}),n=t.split(m.splitPipe),s=0;if(n[0].trim()||n.shift(),n.length>0&&!n.at(-1)?.trim()&&n.pop(),e)if(n.length>e)n.splice(e);else for(;n.length<e;)n.push("");for(;s<n.length;s++)n[s]=n[s].trim().replace(m.slashPipe,"|");return n}function $$1(l,e,t){let n=l.length;if(n===0)return "";let s=0;for(;s<n;){let r=l.charAt(n-s-1);if(r===e&&true)s++;else break}return l.slice(0,n-s)}function ee(l){let e=l.split(`
 `),t=e.length-1;for(;t>=0&&m.blankLine.test(e[t]);)t--;return e.length-t<=2?l:e.slice(0,t+1).join(`
 `)}function fe(l,e){if(l.indexOf(e[1])===-1)return  -1;let t=0;for(let n=0;n<l.length;n++)if(l[n]==="\\")n++;else if(l[n]===e[0])t++;else if(l[n]===e[1]&&(t--,t<0))return n;return t>0?-2:-1}function me(l,e=0){let t=e,n="";for(let s of l)if(s==="	"){let r=4-t%4;n+=" ".repeat(r),t+=r;}else n+=s,t++;return n}function xe(l,e,t,n,s){let r=e.href,i=e.title||null,o=l[1].replace(s.other.outputLinkReplace,"$1");n.state.inLink=true;let u={type:l[0].charAt(0)==="!"?"image":"link",raw:t,href:r,title:i,text:o,tokens:n.inlineTokens(o)};return n.state.inLink=false,u}function ot(l,e,t){let n=l.match(t.other.indentCodeCompensation);if(n===null)return e;let s=n[1];return e.split(`
 `).map(r=>{let i=r.match(t.other.beginningSpace);if(i===null)return r;let[o]=i;return o.length>=s.length?r.slice(s.length):r}).join(`
-`)}var w=class{options;rules;lexer;constructor(e){this.options=e||T;}space(e){let t=this.rules.block.newline.exec(e);if(t&&t[0].length>0)return {type:"space",raw:t[0]}}code(e){let t=this.rules.block.code.exec(e);if(t){let n=this.options.pedantic?t[0]:ee(t[0]),s=n.replace(this.rules.other.codeRemoveIndent,"");return {type:"code",raw:n,codeBlockStyle:"indented",text:s}}}fences(e){let t=this.rules.block.fences.exec(e);if(t){let n=t[0],s=ot(n,t[3]||"",this.rules);return {type:"code",raw:n,lang:t[2]?t[2].trim().replace(this.rules.inline.anyPunctuation,"$1"):t[2],text:s}}}heading(e){let t=this.rules.block.heading.exec(e);if(t){let n=t[2].trim();if(this.rules.other.endingHash.test(n)){let s=$(n,"#");(this.options.pedantic||!s||this.rules.other.endingSpaceChar.test(s))&&(n=s.trim());}return {type:"heading",raw:$(t[0],`
-`),depth:t[1].length,text:n,tokens:this.lexer.inline(n)}}}hr(e){let t=this.rules.block.hr.exec(e);if(t)return {type:"hr",raw:$(t[0],`
-`)}}blockquote(e){let t=this.rules.block.blockquote.exec(e);if(t){let n=$(t[0],`
+`)}var w=class{options;rules;lexer;constructor(e){this.options=e||T;}space(e){let t=this.rules.block.newline.exec(e);if(t&&t[0].length>0)return {type:"space",raw:t[0]}}code(e){let t=this.rules.block.code.exec(e);if(t){let n=this.options.pedantic?t[0]:ee(t[0]),s=n.replace(this.rules.other.codeRemoveIndent,"");return {type:"code",raw:n,codeBlockStyle:"indented",text:s}}}fences(e){let t=this.rules.block.fences.exec(e);if(t){let n=t[0],s=ot(n,t[3]||"",this.rules);return {type:"code",raw:n,lang:t[2]?t[2].trim().replace(this.rules.inline.anyPunctuation,"$1"):t[2],text:s}}}heading(e){let t=this.rules.block.heading.exec(e);if(t){let n=t[2].trim();if(this.rules.other.endingHash.test(n)){let s=$$1(n,"#");(this.options.pedantic||!s||this.rules.other.endingSpaceChar.test(s))&&(n=s.trim());}return {type:"heading",raw:$$1(t[0],`
+`),depth:t[1].length,text:n,tokens:this.lexer.inline(n)}}}hr(e){let t=this.rules.block.hr.exec(e);if(t)return {type:"hr",raw:$$1(t[0],`
+`)}}blockquote(e){let t=this.rules.block.blockquote.exec(e);if(t){let n=$$1(t[0],`
 `).split(`
 `),s="",r="",i=[];for(;n.length>0;){let o=false,u=[],a;for(a=0;a<n.length;a++)if(this.rules.other.blockquoteStart.test(n[a]))u.push(n[a]),o=true;else if(!o)u.push(n[a]);else break;n=n.slice(a);let c=u.join(`
 `),p=c.replace(this.rules.other.blockquoteSetextReplace,`
@@ -5633,12 +5936,12 @@ ${p}`:p;let k=this.lexer.state.top;if(this.lexer.state.top=true,this.lexer.block
 `,1)[0],C;if(h=G,this.options.pedantic?(h=h.replace(this.rules.other.listReplaceNesting,"  "),C=h):C=h.replace(this.rules.other.tabCharGlobal,"    "),ne.test(h)||re.test(h)||be.test(h)||Re.test(h)||S.test(h)||te.test(h))break;if(C.search(this.rules.other.nonSpaceChar)>=f||!h.trim())p+=`
 `+C.slice(f);else {if(R||k.replace(this.rules.other.tabCharGlobal,"    ").search(this.rules.other.nonSpaceChar)>=4||ne.test(k)||re.test(k)||te.test(k))break;p+=`
 `+h;}R=!h.trim(),c+=G+`
-`,e=e.substring(G.length+1),k=C.slice(f);}}r.loose||(o?r.loose=true:this.rules.other.doubleBlankLine.test(c)&&(o=true)),r.items.push({type:"list_item",raw:c,task:!!this.options.gfm&&this.rules.other.listIsTask.test(p),loose:false,text:p,tokens:[]}),r.raw+=c;}let u=r.items.at(-1);if(u)u.raw=u.raw.trimEnd(),u.text=u.text.trimEnd();else return;r.raw=r.raw.trimEnd();for(let a of r.items){this.lexer.state.top=false,a.tokens=this.lexer.blockTokens(a.text,[]);let c=a.tokens[0];if(a.task&&(c?.type==="text"||c?.type==="paragraph")){a.text=a.text.replace(this.rules.other.listReplaceTask,""),c.raw=c.raw.replace(this.rules.other.listReplaceTask,""),c.text=c.text.replace(this.rules.other.listReplaceTask,"");for(let k=this.lexer.inlineQueue.length-1;k>=0;k--)if(this.rules.other.listIsTask.test(this.lexer.inlineQueue[k].src)){this.lexer.inlineQueue[k].src=this.lexer.inlineQueue[k].src.replace(this.rules.other.listReplaceTask,"");break}let p=this.rules.other.listTaskCheckbox.exec(a.raw);if(p){let k={type:"checkbox",raw:p[0]+" ",checked:p[0]!=="[ ]"};a.checked=k.checked,r.loose?a.tokens[0]&&["paragraph","text"].includes(a.tokens[0].type)&&"tokens"in a.tokens[0]&&a.tokens[0].tokens?(a.tokens[0].raw=k.raw+a.tokens[0].raw,a.tokens[0].text=k.raw+a.tokens[0].text,a.tokens[0].tokens.unshift(k)):a.tokens.unshift({type:"paragraph",raw:k.raw,text:k.raw,tokens:[k]}):a.tokens.unshift(k);}}else a.task&&(a.task=false);if(!r.loose){let p=a.tokens.filter(h=>h.type==="space"),k=p.length>0&&p.some(h=>this.rules.other.anyLine.test(h.raw));r.loose=k;}}if(r.loose)for(let a of r.items){a.loose=true;for(let c of a.tokens)c.type==="text"&&(c.type="paragraph");}return r}}html(e){let t=this.rules.block.html.exec(e);if(t){let n=ee(t[0]);return {type:"html",block:true,raw:n,pre:t[1]==="pre"||t[1]==="script"||t[1]==="style",text:n}}}def(e){let t=this.rules.block.def.exec(e);if(t){let n=t[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal," "),s=t[2]?t[2].replace(this.rules.other.hrefBrackets,"$1").replace(this.rules.inline.anyPunctuation,"$1"):"",r=t[3]?t[3].substring(1,t[3].length-1).replace(this.rules.inline.anyPunctuation,"$1"):t[3];return {type:"def",tag:n,raw:$(t[0],`
+`,e=e.substring(G.length+1),k=C.slice(f);}}r.loose||(o?r.loose=true:this.rules.other.doubleBlankLine.test(c)&&(o=true)),r.items.push({type:"list_item",raw:c,task:!!this.options.gfm&&this.rules.other.listIsTask.test(p),loose:false,text:p,tokens:[]}),r.raw+=c;}let u=r.items.at(-1);if(u)u.raw=u.raw.trimEnd(),u.text=u.text.trimEnd();else return;r.raw=r.raw.trimEnd();for(let a of r.items){this.lexer.state.top=false,a.tokens=this.lexer.blockTokens(a.text,[]);let c=a.tokens[0];if(a.task&&(c?.type==="text"||c?.type==="paragraph")){a.text=a.text.replace(this.rules.other.listReplaceTask,""),c.raw=c.raw.replace(this.rules.other.listReplaceTask,""),c.text=c.text.replace(this.rules.other.listReplaceTask,"");for(let k=this.lexer.inlineQueue.length-1;k>=0;k--)if(this.rules.other.listIsTask.test(this.lexer.inlineQueue[k].src)){this.lexer.inlineQueue[k].src=this.lexer.inlineQueue[k].src.replace(this.rules.other.listReplaceTask,"");break}let p=this.rules.other.listTaskCheckbox.exec(a.raw);if(p){let k={type:"checkbox",raw:p[0]+" ",checked:p[0]!=="[ ]"};a.checked=k.checked,r.loose?a.tokens[0]&&["paragraph","text"].includes(a.tokens[0].type)&&"tokens"in a.tokens[0]&&a.tokens[0].tokens?(a.tokens[0].raw=k.raw+a.tokens[0].raw,a.tokens[0].text=k.raw+a.tokens[0].text,a.tokens[0].tokens.unshift(k)):a.tokens.unshift({type:"paragraph",raw:k.raw,text:k.raw,tokens:[k]}):a.tokens.unshift(k);}}else a.task&&(a.task=false);if(!r.loose){let p=a.tokens.filter(h=>h.type==="space"),k=p.length>0&&p.some(h=>this.rules.other.anyLine.test(h.raw));r.loose=k;}}if(r.loose)for(let a of r.items){a.loose=true;for(let c of a.tokens)c.type==="text"&&(c.type="paragraph");}return r}}html(e){let t=this.rules.block.html.exec(e);if(t){let n=ee(t[0]);return {type:"html",block:true,raw:n,pre:t[1]==="pre"||t[1]==="script"||t[1]==="style",text:n}}}def(e){let t=this.rules.block.def.exec(e);if(t){let n=t[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal," "),s=t[2]?t[2].replace(this.rules.other.hrefBrackets,"$1").replace(this.rules.inline.anyPunctuation,"$1"):"",r=t[3]?t[3].substring(1,t[3].length-1).replace(this.rules.inline.anyPunctuation,"$1"):t[3];return {type:"def",tag:n,raw:$$1(t[0],`
 `),href:s,title:r}}}table(e){let t=this.rules.block.table.exec(e);if(!t||!this.rules.other.tableDelimiter.test(t[2]))return;let n=Y(t[1]),s=t[2].replace(this.rules.other.tableAlignChars,"").split("|"),r=t[3]?.trim()?t[3].replace(this.rules.other.tableRowBlankLine,"").split(`
-`):[],i={type:"table",raw:$(t[0],`
-`),header:[],align:[],rows:[]};if(n.length===s.length){for(let o of s)this.rules.other.tableAlignRight.test(o)?i.align.push("right"):this.rules.other.tableAlignCenter.test(o)?i.align.push("center"):this.rules.other.tableAlignLeft.test(o)?i.align.push("left"):i.align.push(null);for(let o=0;o<n.length;o++)i.header.push({text:n[o],tokens:this.lexer.inline(n[o]),header:true,align:i.align[o]});for(let o of r)i.rows.push(Y(o,i.header.length).map((u,a)=>({text:u,tokens:this.lexer.inline(u),header:false,align:i.align[a]})));return i}}lheading(e){let t=this.rules.block.lheading.exec(e);if(t){let n=t[1].trim();return {type:"heading",raw:$(t[0],`
+`):[],i={type:"table",raw:$$1(t[0],`
+`),header:[],align:[],rows:[]};if(n.length===s.length){for(let o of s)this.rules.other.tableAlignRight.test(o)?i.align.push("right"):this.rules.other.tableAlignCenter.test(o)?i.align.push("center"):this.rules.other.tableAlignLeft.test(o)?i.align.push("left"):i.align.push(null);for(let o=0;o<n.length;o++)i.header.push({text:n[o],tokens:this.lexer.inline(n[o]),header:true,align:i.align[o]});for(let o of r)i.rows.push(Y(o,i.header.length).map((u,a)=>({text:u,tokens:this.lexer.inline(u),header:false,align:i.align[a]})));return i}}lheading(e){let t=this.rules.block.lheading.exec(e);if(t){let n=t[1].trim();return {type:"heading",raw:$$1(t[0],`
 `),depth:t[2].charAt(0)==="="?1:2,text:n,tokens:this.lexer.inline(n)}}}paragraph(e){let t=this.rules.block.paragraph.exec(e);if(t){let n=t[1].charAt(t[1].length-1)===`
-`?t[1].slice(0,-1):t[1];return {type:"paragraph",raw:t[0],text:n,tokens:this.lexer.inline(n)}}}text(e){let t=this.rules.block.text.exec(e);if(t)return {type:"text",raw:t[0],text:t[0],tokens:this.lexer.inline(t[0])}}escape(e){let t=this.rules.inline.escape.exec(e);if(t)return {type:"escape",raw:t[0],text:t[1]}}tag(e){let t=this.rules.inline.tag.exec(e);if(t)return !this.lexer.state.inLink&&this.rules.other.startATag.test(t[0])?this.lexer.state.inLink=true:this.lexer.state.inLink&&this.rules.other.endATag.test(t[0])&&(this.lexer.state.inLink=false),!this.lexer.state.inRawBlock&&this.rules.other.startPreScriptTag.test(t[0])?this.lexer.state.inRawBlock=true:this.lexer.state.inRawBlock&&this.rules.other.endPreScriptTag.test(t[0])&&(this.lexer.state.inRawBlock=false),{type:"html",raw:t[0],inLink:this.lexer.state.inLink,inRawBlock:this.lexer.state.inRawBlock,block:false,text:t[0]}}link(e){let t=this.rules.inline.link.exec(e);if(t){let n=t[2].trim();if(!this.options.pedantic&&this.rules.other.startAngleBracket.test(n)){if(!this.rules.other.endAngleBracket.test(n))return;let i=$(n.slice(0,-1),"\\");if((n.length-i.length)%2===0)return}else {let i=fe(t[2],"()");if(i===-2)return;if(i>-1){let u=(t[0].indexOf("!")===0?5:4)+t[1].length+i;t[2]=t[2].substring(0,i),t[0]=t[0].substring(0,u).trim(),t[3]="";}}let s=t[2],r="";if(this.options.pedantic){let i=this.rules.other.pedanticHrefTitle.exec(s);i&&(s=i[1],r=i[3]);}else r=t[3]?t[3].slice(1,-1):"";return s=s.trim(),this.rules.other.startAngleBracket.test(s)&&(this.options.pedantic&&!this.rules.other.endAngleBracket.test(n)?s=s.slice(1):s=s.slice(1,-1)),xe(t,{href:s&&s.replace(this.rules.inline.anyPunctuation,"$1"),title:r&&r.replace(this.rules.inline.anyPunctuation,"$1")},t[0],this.lexer,this.rules)}}reflink(e,t){let n;if((n=this.rules.inline.reflink.exec(e))||(n=this.rules.inline.nolink.exec(e))){let s=(n[2]||n[1]).replace(this.rules.other.multipleSpaceGlobal," "),r=t[s.toLowerCase()];if(!r){let i=n[0].charAt(0);return {type:"text",raw:i,text:i}}return xe(n,r,n[0],this.lexer,this.rules)}}emStrong(e,t,n=""){let s=this.rules.inline.emStrongLDelim.exec(e);if(!s||!s[1]&&!s[2]&&!s[3]&&!s[4]||s[4]&&n.match(this.rules.other.unicodeAlphaNumeric))return;if(!(s[1]||s[3]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=0,p=s[0][0]==="*"?this.rules.inline.emStrongRDelimAst:this.rules.inline.emStrongRDelimUnd;for(p.lastIndex=0,t=t.slice(-1*e.length+i);(s=p.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o)continue;if(u=[...o].length,s[3]||s[4]){a+=u;continue}else if((s[5]||s[6])&&i%3&&!((i+u)%3)){c+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a+c);let k=[...s[0]][0].length,h=e.slice(0,i+s.index+k+u);if(Math.min(i,u)%2){let f=h.slice(1,-1);return {type:"em",raw:h,text:f,tokens:this.lexer.inlineTokens(f)}}let R=h.slice(2,-2);return {type:"strong",raw:h,text:R,tokens:this.lexer.inlineTokens(R)}}}}codespan(e){let t=this.rules.inline.code.exec(e);if(t){let n=t[2].replace(this.rules.other.newLineCharGlobal," "),s=this.rules.other.nonSpaceChar.test(n),r=this.rules.other.startingSpaceChar.test(n)&&this.rules.other.endingSpaceChar.test(n);return s&&r&&(n=n.substring(1,n.length-1)),{type:"codespan",raw:t[0],text:n}}}br(e){let t=this.rules.inline.br.exec(e);if(t)return {type:"br",raw:t[0]}}del(e,t,n=""){let s=this.rules.inline.delLDelim.exec(e);if(!s)return;if(!(s[1]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=this.rules.inline.delRDelim;for(c.lastIndex=0,t=t.slice(-1*e.length+i);(s=c.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o||(u=[...o].length,u!==i))continue;if(s[3]||s[4]){a+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a);let p=[...s[0]][0].length,k=e.slice(0,i+s.index+p+u),h=k.slice(i,-i);return {type:"del",raw:k,text:h,tokens:this.lexer.inlineTokens(h)}}}}autolink(e){let t=this.rules.inline.autolink.exec(e);if(t){let n,s;return t[2]==="@"?(n=t[1],s="mailto:"+n):(n=t[1],s=n),{type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}url(e){let t;if(t=this.rules.inline.url.exec(e)){let n,s;if(t[2]==="@")n=t[0],s="mailto:"+n;else {let r;do r=t[0],t[0]=this.rules.inline._backpedal.exec(t[0])?.[0]??"";while(r!==t[0]);n=t[0],t[1]==="www."?s="http://"+t[0]:s=t[0];}return {type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}inlineText(e){let t=this.rules.inline.text.exec(e);if(t){let n=this.lexer.state.inRawBlock;return {type:"text",raw:t[0],text:t[0],escaped:n}}}};var x=class l{tokens;options;state;inlineQueue;tokenizer;constructor(e){this.tokens=[],this.tokens.links=Object.create(null),this.options=e||T,this.options.tokenizer=this.options.tokenizer||new w,this.tokenizer=this.options.tokenizer,this.tokenizer.options=this.options,this.tokenizer.lexer=this,this.inlineQueue=[],this.state={inLink:false,inRawBlock:false,top:true};let t={other:m,block:q.normal,inline:A.normal};this.options.pedantic?(t.block=q.pedantic,t.inline=A.pedantic):this.options.gfm&&(t.block=q.gfm,this.options.breaks?t.inline=A.breaks:t.inline=A.gfm),this.tokenizer.rules=t;}static get rules(){return {block:q,inline:A}}static lex(e,t){return new l(t).lex(e)}static lexInline(e,t){return new l(t).inlineTokens(e)}lex(e){e=e.replace(m.carriageReturn,`
+`?t[1].slice(0,-1):t[1];return {type:"paragraph",raw:t[0],text:n,tokens:this.lexer.inline(n)}}}text(e){let t=this.rules.block.text.exec(e);if(t)return {type:"text",raw:t[0],text:t[0],tokens:this.lexer.inline(t[0])}}escape(e){let t=this.rules.inline.escape.exec(e);if(t)return {type:"escape",raw:t[0],text:t[1]}}tag(e){let t=this.rules.inline.tag.exec(e);if(t)return !this.lexer.state.inLink&&this.rules.other.startATag.test(t[0])?this.lexer.state.inLink=true:this.lexer.state.inLink&&this.rules.other.endATag.test(t[0])&&(this.lexer.state.inLink=false),!this.lexer.state.inRawBlock&&this.rules.other.startPreScriptTag.test(t[0])?this.lexer.state.inRawBlock=true:this.lexer.state.inRawBlock&&this.rules.other.endPreScriptTag.test(t[0])&&(this.lexer.state.inRawBlock=false),{type:"html",raw:t[0],inLink:this.lexer.state.inLink,inRawBlock:this.lexer.state.inRawBlock,block:false,text:t[0]}}link(e){let t=this.rules.inline.link.exec(e);if(t){let n=t[2].trim();if(!this.options.pedantic&&this.rules.other.startAngleBracket.test(n)){if(!this.rules.other.endAngleBracket.test(n))return;let i=$$1(n.slice(0,-1),"\\");if((n.length-i.length)%2===0)return}else {let i=fe(t[2],"()");if(i===-2)return;if(i>-1){let u=(t[0].indexOf("!")===0?5:4)+t[1].length+i;t[2]=t[2].substring(0,i),t[0]=t[0].substring(0,u).trim(),t[3]="";}}let s=t[2],r="";if(this.options.pedantic){let i=this.rules.other.pedanticHrefTitle.exec(s);i&&(s=i[1],r=i[3]);}else r=t[3]?t[3].slice(1,-1):"";return s=s.trim(),this.rules.other.startAngleBracket.test(s)&&(this.options.pedantic&&!this.rules.other.endAngleBracket.test(n)?s=s.slice(1):s=s.slice(1,-1)),xe(t,{href:s&&s.replace(this.rules.inline.anyPunctuation,"$1"),title:r&&r.replace(this.rules.inline.anyPunctuation,"$1")},t[0],this.lexer,this.rules)}}reflink(e,t){let n;if((n=this.rules.inline.reflink.exec(e))||(n=this.rules.inline.nolink.exec(e))){let s=(n[2]||n[1]).replace(this.rules.other.multipleSpaceGlobal," "),r=t[s.toLowerCase()];if(!r){let i=n[0].charAt(0);return {type:"text",raw:i,text:i}}return xe(n,r,n[0],this.lexer,this.rules)}}emStrong(e,t,n=""){let s=this.rules.inline.emStrongLDelim.exec(e);if(!s||!s[1]&&!s[2]&&!s[3]&&!s[4]||s[4]&&n.match(this.rules.other.unicodeAlphaNumeric))return;if(!(s[1]||s[3]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=0,p=s[0][0]==="*"?this.rules.inline.emStrongRDelimAst:this.rules.inline.emStrongRDelimUnd;for(p.lastIndex=0,t=t.slice(-1*e.length+i);(s=p.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o)continue;if(u=[...o].length,s[3]||s[4]){a+=u;continue}else if((s[5]||s[6])&&i%3&&!((i+u)%3)){c+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a+c);let k=[...s[0]][0].length,h=e.slice(0,i+s.index+k+u);if(Math.min(i,u)%2){let f=h.slice(1,-1);return {type:"em",raw:h,text:f,tokens:this.lexer.inlineTokens(f)}}let R=h.slice(2,-2);return {type:"strong",raw:h,text:R,tokens:this.lexer.inlineTokens(R)}}}}codespan(e){let t=this.rules.inline.code.exec(e);if(t){let n=t[2].replace(this.rules.other.newLineCharGlobal," "),s=this.rules.other.nonSpaceChar.test(n),r=this.rules.other.startingSpaceChar.test(n)&&this.rules.other.endingSpaceChar.test(n);return s&&r&&(n=n.substring(1,n.length-1)),{type:"codespan",raw:t[0],text:n}}}br(e){let t=this.rules.inline.br.exec(e);if(t)return {type:"br",raw:t[0]}}del(e,t,n=""){let s=this.rules.inline.delLDelim.exec(e);if(!s)return;if(!(s[1]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=this.rules.inline.delRDelim;for(c.lastIndex=0,t=t.slice(-1*e.length+i);(s=c.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o||(u=[...o].length,u!==i))continue;if(s[3]||s[4]){a+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a);let p=[...s[0]][0].length,k=e.slice(0,i+s.index+p+u),h=k.slice(i,-i);return {type:"del",raw:k,text:h,tokens:this.lexer.inlineTokens(h)}}}}autolink(e){let t=this.rules.inline.autolink.exec(e);if(t){let n,s;return t[2]==="@"?(n=t[1],s="mailto:"+n):(n=t[1],s=n),{type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}url(e){let t;if(t=this.rules.inline.url.exec(e)){let n,s;if(t[2]==="@")n=t[0],s="mailto:"+n;else {let r;do r=t[0],t[0]=this.rules.inline._backpedal.exec(t[0])?.[0]??"";while(r!==t[0]);n=t[0],t[1]==="www."?s="http://"+t[0]:s=t[0];}return {type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}inlineText(e){let t=this.rules.inline.text.exec(e);if(t){let n=this.lexer.state.inRawBlock;return {type:"text",raw:t[0],text:t[0],escaped:n}}}};var x=class l{tokens;options;state;inlineQueue;tokenizer;constructor(e){this.tokens=[],this.tokens.links=Object.create(null),this.options=e||T,this.options.tokenizer=this.options.tokenizer||new w,this.tokenizer=this.options.tokenizer,this.tokenizer.options=this.options,this.tokenizer.lexer=this,this.inlineQueue=[],this.state={inLink:false,inRawBlock:false,top:true};let t={other:m,block:q.normal,inline:A.normal};this.options.pedantic?(t.block=q.pedantic,t.inline=A.pedantic):this.options.gfm&&(t.block=q.gfm,this.options.breaks?t.inline=A.breaks:t.inline=A.gfm),this.tokenizer.rules=t;}static get rules(){return {block:q,inline:A}}static lex(e,t){return new l(t).lex(e)}static lexInline(e,t){return new l(t).inlineTokens(e)}lex(e){e=e.replace(m.carriageReturn,`
 `),this.blockTokens(e,this.tokens);for(let t=0;t<this.inlineQueue.length;t++){let n=this.inlineQueue[t];this.inlineTokens(n.src,n.tokens);}return this.inlineQueue=[],this.tokens}blockTokens(e,t=[],n=false){this.tokenizer.lexer=this,this.options.pedantic&&(e=e.replace(m.tabCharGlobal,"    ").replace(m.spaceLine,""));let s=1/0;for(;e;){if(e.length<s)s=e.length;else {this.infiniteLoopError(e.charCodeAt(0));break}let r;if(this.options.extensions?.block?.some(o=>(r=o.call({lexer:this},e,t))?(e=e.substring(r.raw.length),t.push(r),true):false))continue;if(r=this.tokenizer.space(e)){e=e.substring(r.raw.length);let o=t.at(-1);r.raw.length===1&&o!==void 0?o.raw+=`
 `:t.push(r);continue}if(r=this.tokenizer.code(e)){e=e.substring(r.raw.length);let o=t.at(-1);o?.type==="paragraph"||o?.type==="text"?(o.raw+=(o.raw.endsWith(`
 `)?"":`
@@ -5673,6 +5976,237 @@ ${e}</tr>
 `}strong({tokens:e}){return `<strong>${this.parser.parseInline(e)}</strong>`}em({tokens:e}){return `<em>${this.parser.parseInline(e)}</em>`}codespan({text:e}){return `<code>${O(e,true)}</code>`}br(e){return "<br>"}del({tokens:e}){return `<del>${this.parser.parseInline(e)}</del>`}link({href:e,title:t,tokens:n}){let s=this.parser.parseInline(n),r=V(e);if(r===null)return s;e=r;let i='<a href="'+e+'"';return t&&(i+=' title="'+O(t)+'"'),i+=">"+s+"</a>",i}image({href:e,title:t,text:n,tokens:s}){s&&(n=this.parser.parseInline(s,this.parser.textRenderer));let r=V(e);if(r===null)return O(n);e=r;let i=`<img src="${e}" alt="${O(n)}"`;return t&&(i+=` title="${O(t)}"`),i+=">",i}text(e){return "tokens"in e&&e.tokens?this.parser.parseInline(e.tokens):"escaped"in e&&e.escaped?e.text:O(e.text)}};var L=class{strong({text:e}){return e}em({text:e}){return e}codespan({text:e}){return e}del({text:e}){return e}html({text:e}){return e}text({text:e}){return e}link({text:e}){return ""+e}image({text:e}){return ""+e}br(){return ""}checkbox({raw:e}){return e}};var b=class l{options;renderer;textRenderer;constructor(e){this.options=e||T,this.options.renderer=this.options.renderer||new y,this.renderer=this.options.renderer,this.renderer.options=this.options,this.renderer.parser=this,this.textRenderer=new L;}static parse(e,t){return new l(t).parse(e)}static parseInline(e,t){return new l(t).parseInline(e)}parse(e){this.renderer.parser=this;let t="";for(let n=0;n<e.length;n++){let s=e[n];if(this.options.extensions?.renderers?.[s.type]){let i=s,o=this.options.extensions.renderers[i.type].call({parser:this},i);if(o!==false||!["space","hr","heading","code","table","blockquote","list","html","def","paragraph","text"].includes(i.type)){t+=o||"";continue}}let r=s;switch(r.type){case "space":{t+=this.renderer.space(r);break}case "hr":{t+=this.renderer.hr(r);break}case "heading":{t+=this.renderer.heading(r);break}case "code":{t+=this.renderer.code(r);break}case "table":{t+=this.renderer.table(r);break}case "blockquote":{t+=this.renderer.blockquote(r);break}case "list":{t+=this.renderer.list(r);break}case "checkbox":{t+=this.renderer.checkbox(r);break}case "html":{t+=this.renderer.html(r);break}case "def":{t+=this.renderer.def(r);break}case "paragraph":{t+=this.renderer.paragraph(r);break}case "text":{t+=this.renderer.text(r);break}default:{let i='Token with "'+r.type+'" type was not found.';if(this.options.silent)return console.error(i),"";throw new Error(i)}}}return t}parseInline(e,t=this.renderer){this.renderer.parser=this;let n="";for(let s=0;s<e.length;s++){let r=e[s];if(this.options.extensions?.renderers?.[r.type]){let o=this.options.extensions.renderers[r.type].call({parser:this},r);if(o!==false||!["escape","html","link","image","strong","em","codespan","br","del","text"].includes(r.type)){n+=o||"";continue}}let i=r;switch(i.type){case "escape":{n+=t.text(i);break}case "html":{n+=t.html(i);break}case "link":{n+=t.link(i);break}case "image":{n+=t.image(i);break}case "checkbox":{n+=t.checkbox(i);break}case "strong":{n+=t.strong(i);break}case "em":{n+=t.em(i);break}case "codespan":{n+=t.codespan(i);break}case "br":{n+=t.br(i);break}case "del":{n+=t.del(i);break}case "text":{n+=t.text(i);break}default:{let o='Token with "'+i.type+'" type was not found.';if(this.options.silent)return console.error(o),"";throw new Error(o)}}}return n}};var P=class{options;block;constructor(e){this.options=e||T;}static passThroughHooks=new Set(["preprocess","postprocess","processAllTokens","emStrongMask"]);static passThroughHooksRespectAsync=new Set(["preprocess","postprocess","processAllTokens"]);preprocess(e){return e}postprocess(e){return e}processAllTokens(e){return e}emStrongMask(e){return e}provideLexer(e=this.block){return e?x.lex:x.lexInline}provideParser(e=this.block){return e?b.parse:b.parseInline}};var D=class{defaults=M();options=this.setOptions;parse=this.parseMarkdown(true);parseInline=this.parseMarkdown(false);Parser=b;Renderer=y;TextRenderer=L;Lexer=x;Tokenizer=w;Hooks=P;constructor(...e){this.use(...e);}walkTokens(e,t){let n=[];for(let s of e)switch(n=n.concat(t.call(this,s)),s.type){case "table":{let r=s;for(let i of r.header)n=n.concat(this.walkTokens(i.tokens,t));for(let i of r.rows)for(let o of i)n=n.concat(this.walkTokens(o.tokens,t));break}case "list":{let r=s;n=n.concat(this.walkTokens(r.items,t));break}default:{let r=s;this.defaults.extensions?.childTokens?.[r.type]?this.defaults.extensions.childTokens[r.type].forEach(i=>{let o=r[i].flat(1/0);n=n.concat(this.walkTokens(o,t));}):r.tokens&&(n=n.concat(this.walkTokens(r.tokens,t)));}}return n}use(...e){let t=this.defaults.extensions||{renderers:{},childTokens:{}};return e.forEach(n=>{let s={...n};if(s.async=this.defaults.async||s.async||false,n.extensions&&(n.extensions.forEach(r=>{if(!r.name)throw new Error("extension name required");if("renderer"in r){let i=t.renderers[r.name];i?t.renderers[r.name]=function(...o){let u=r.renderer.apply(this,o);return u===false&&(u=i.apply(this,o)),u}:t.renderers[r.name]=r.renderer;}if("tokenizer"in r){if(!r.level||r.level!=="block"&&r.level!=="inline")throw new Error("extension level must be 'block' or 'inline'");let i=t[r.level];i?i.unshift(r.tokenizer):t[r.level]=[r.tokenizer],r.start&&(r.level==="block"?t.startBlock?t.startBlock.push(r.start):t.startBlock=[r.start]:r.level==="inline"&&(t.startInline?t.startInline.push(r.start):t.startInline=[r.start]));}"childTokens"in r&&r.childTokens&&(t.childTokens[r.name]=r.childTokens);}),s.extensions=t),n.renderer){let r=this.defaults.renderer||new y(this.defaults);for(let i in n.renderer){if(!(i in r))throw new Error(`renderer '${i}' does not exist`);if(["options","parser"].includes(i))continue;let o=i,u=n.renderer[o],a=r[o];r[o]=(...c)=>{let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p||""};}s.renderer=r;}if(n.tokenizer){let r=this.defaults.tokenizer||new w(this.defaults);for(let i in n.tokenizer){if(!(i in r))throw new Error(`tokenizer '${i}' does not exist`);if(["options","rules","lexer"].includes(i))continue;let o=i,u=n.tokenizer[o],a=r[o];r[o]=(...c)=>{let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p};}s.tokenizer=r;}if(n.hooks){let r=this.defaults.hooks||new P;for(let i in n.hooks){if(!(i in r))throw new Error(`hook '${i}' does not exist`);if(["options","block"].includes(i))continue;let o=i,u=n.hooks[o],a=r[o];P.passThroughHooks.has(i)?r[o]=c=>{if(this.defaults.async&&P.passThroughHooksRespectAsync.has(i))return (async()=>{let k=await u.call(r,c);return a.call(r,k)})();let p=u.call(r,c);return a.call(r,p)}:r[o]=(...c)=>{if(this.defaults.async)return (async()=>{let k=await u.apply(r,c);return k===false&&(k=await a.apply(r,c)),k})();let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p};}s.hooks=r;}if(n.walkTokens){let r=this.defaults.walkTokens,i=n.walkTokens;s.walkTokens=function(o){let u=[];return u.push(i.call(this,o)),r&&(u=u.concat(r.call(this,o))),u};}this.defaults={...this.defaults,...s};}),this}setOptions(e){return this.defaults={...this.defaults,...e},this}lexer(e,t){return x.lex(e,t??this.defaults)}parser(e,t){return b.parse(e,t??this.defaults)}parseMarkdown(e){return (n,s)=>{let r={...s},i={...this.defaults,...r},o=this.onError(!!i.silent,!!i.async);if(this.defaults.async===true&&r.async===false)return o(new Error("marked(): The async option was set to true by an extension. Remove async: false from the parse options object to return a Promise."));if(typeof n>"u"||n===null)return o(new Error("marked(): input parameter is undefined or null"));if(typeof n!="string")return o(new Error("marked(): input parameter is of type "+Object.prototype.toString.call(n)+", string expected"));if(i.hooks&&(i.hooks.options=i,i.hooks.block=e),i.async)return (async()=>{let u=i.hooks?await i.hooks.preprocess(n):n,c=await(i.hooks?await i.hooks.provideLexer(e):e?x.lex:x.lexInline)(u,i),p=i.hooks?await i.hooks.processAllTokens(c):c;i.walkTokens&&await Promise.all(this.walkTokens(p,i.walkTokens));let h=await(i.hooks?await i.hooks.provideParser(e):e?b.parse:b.parseInline)(p,i);return i.hooks?await i.hooks.postprocess(h):h})().catch(o);try{i.hooks&&(n=i.hooks.preprocess(n));let a=(i.hooks?i.hooks.provideLexer(e):e?x.lex:x.lexInline)(n,i);i.hooks&&(a=i.hooks.processAllTokens(a)),i.walkTokens&&this.walkTokens(a,i.walkTokens);let p=(i.hooks?i.hooks.provideParser(e):e?b.parse:b.parseInline)(a,i);return i.hooks&&(p=i.hooks.postprocess(p)),p}catch(u){return o(u)}}}onError(e,t){return n=>{if(n.message+=`
 Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error occurred:</p><pre>"+O(n.message+"",true)+"</pre>";return t?Promise.resolve(s):s}if(t)return Promise.reject(n);throw n}}};var z=new D;function g(l,e){return z.parse(l,e)}g.options=g.setOptions=function(l){return z.setOptions(l),g.defaults=z.defaults,N(g.defaults),g};g.getDefaults=M;g.defaults=T;g.use=function(...l){return z.use(...l),g.defaults=z.defaults,N(g.defaults),g};g.walkTokens=function(l,e){return z.walkTokens(l,e)};g.parseInline=z.parseInline;g.Parser=b;g.parser=b.parse;g.Renderer=y;g.TextRenderer=L;g.Lexer=x;g.lexer=x.lex;g.Tokenizer=w;g.Hooks=P;g.parse=g;g.options;g.setOptions;g.use;g.walkTokens;g.parseInline;b.parse;x.lex;
 
+    const $ = jQuery;
+    class BackupModal {
+        modal = null;
+        currentFilter = 'all';
+        db;
+        constructor(db) {
+            this.db = db;
+        }
+        show() {
+            this.render();
+        }
+        render() {
+            if ($('#kaiz-backup-modal').length === 0) {
+                const html = `
+                <div id="kaiz-backup-modal" class="kaiz-modal-overlay">
+                    <div class="kaiz-modal-content" style="width: 600px; max-width: 90vw;">
+                        <div class="kaiz-modal-header">
+                            <h2 style="margin: 0; font-size: 1.2rem;"><i class="fa-solid fa-save"></i> Backup Manager</h2>
+                            <div class="kaiz-modal-close" style="cursor: pointer; font-size: 1.2rem;"><i class="fa-solid fa-xmark"></i></div>
+                        </div>
+                        <div class="kaiz-backup-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;">
+                            <h3 style="margin: 0; font-size: 1.2em;">Backup Manager</h3>
+                            <div id="kaiz-backup-storage-info" style="font-size: 0.85em; color: #aaa;">Calculating storage...</div>
+                        </div>
+                        <div class="kaiz-backup-tabs" style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor);">
+                            <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">All</div>
+                            <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Characters</div>
+                            <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Chats</div>
+                            <div class="kaiz-tab" data-type="worldbook" style="padding: 8px 12px; cursor: pointer;">Worldbooks</div>
+                        </div>
+                        <div class="kaiz-backup-list" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Backup items will be rendered here -->
+                        </div>
+                        <div class="kaiz-modal-footer" style="margin-top: 15px; text-align: right;">
+                            <button id="kaiz-backup-close-btn" class="menu_button">Close</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+                $('body').append(html);
+                // Add basic styles
+                if ($('#kaiz-backup-styles').length === 0) {
+                    $('head').append(`
+                    <style id="kaiz-backup-styles">
+                        .kaiz-modal-overlay {
+                            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+                            background: rgba(0, 0, 0, 0.6); z-index: 99999;
+                            display: flex; justify-content: center; align-items: center;
+                        }
+                        .kaiz-modal-content {
+                            background: var(--SmartThemeBlurTintColor);
+                            backdrop-filter: blur(10px);
+                            border: 1px solid var(--SmartThemeBorderColor);
+                            border-radius: 8px; padding: 20px;
+                            color: var(--SmartThemeBodyColor);
+                            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                        }
+                        .kaiz-modal-header {
+                            display: flex; justify-content: space-between; align-items: center;
+                            margin-bottom: 15px; padding-bottom: 10px;
+                            border-bottom: 1px solid var(--SmartThemeBorderColor);
+                        }
+                        .kaiz-tab {
+                            opacity: 0.6; transition: opacity 0.2s;
+                        }
+                        .kaiz-tab:hover { opacity: 0.8; }
+                        .kaiz-tab.active {
+                            opacity: 1; border-bottom: 2px solid var(--SmartThemeBodyColor);
+                        }
+                        .kaiz-backup-item {
+                            display: flex; justify-content: space-between; align-items: center;
+                            padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
+                        }
+                        .kaiz-backup-item:hover {
+                            background: rgba(255,255,255,0.05);
+                        }
+                        .kaiz-backup-info { flex: 1; }
+                        .kaiz-backup-title { font-weight: bold; font-size: 1.1em; }
+                        .kaiz-backup-meta { font-size: 0.85em; opacity: 0.7; margin-top: 4px; }
+                        .kaiz-backup-actions { display: flex; gap: 8px; }
+                    </style>
+                `);
+                }
+            }
+            this.modal = $('#kaiz-backup-modal');
+            this.bindEvents();
+            this.modal.fadeIn(200);
+            this.loadBackups();
+        }
+        bindEvents() {
+            if (!this.modal)
+                return;
+            // Remove old events
+            this.modal.off();
+            this.modal.find('.kaiz-tab').off();
+            this.modal.find('.kaiz-modal-close, #kaiz-backup-close-btn').off();
+            // Close
+            this.modal.find('.kaiz-modal-close, #kaiz-backup-close-btn').on('click', () => {
+                this.modal?.fadeOut(200, () => {
+                    this.modal?.remove();
+                    this.modal = null;
+                });
+            });
+            // Tabs
+            this.modal.find('.kaiz-tab').on('click', (e) => {
+                const target = $(e.currentTarget);
+                this.modal.find('.kaiz-tab').removeClass('active');
+                target.addClass('active');
+                this.currentFilter = target.attr('data-type');
+                this.loadBackups();
+            });
+            // Backup list actions
+            this.modal.on('click', '.kaiz-backup-download', (e) => {
+                const id = $(e.currentTarget).attr('data-id');
+                if (id)
+                    this.downloadBackup(parseInt(id));
+            });
+            this.modal.on('click', '.kaiz-backup-delete', (e) => {
+                const id = $(e.currentTarget).attr('data-id');
+                if (id) {
+                    if (confirm('Are you sure you want to delete this backup?')) {
+                        this.deleteBackup(parseInt(id));
+                    }
+                }
+            });
+        }
+        async loadBackups() {
+            if (!this.modal)
+                return;
+            const listContainer = this.modal.find('.kaiz-backup-list');
+            listContainer.html('<div style="text-align: center; padding: 20px;">Loading...</div>');
+            try {
+                const allBackups = await this.db.getBackups();
+                let filtered = allBackups;
+                if (this.currentFilter !== 'all') {
+                    filtered = allBackups.filter((b) => b.type === this.currentFilter);
+                }
+                if (filtered.length === 0) {
+                    listContainer.html('<div style="text-align: center; padding: 20px; color: #888;">No backups found.</div>');
+                }
+                else {
+                    let html = '';
+                    let totalBytes = 0;
+                    filtered.forEach((b) => {
+                        const date = new Date(b.timestamp).toLocaleString();
+                        const sizeInBytes = new Blob([b.data]).size;
+                        totalBytes += sizeInBytes;
+                        const sizeKb = (sizeInBytes / 1024).toFixed(1);
+                        const icon = b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
+                        html += `
+                        <div class="kaiz-backup-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px; margin-bottom: 8px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid ${icon}" style="font-size: 1.2em; color: #888;"></i>
+                                <div>
+                                    <div style="font-weight: bold;">${this.escapeHtml(b.name)}</div>
+                                    <div style="font-size: 0.8em; color: #888;">${date} - ${sizeKb} KB</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Download"><i class="fa-solid fa-download"></i></button>
+                                <button class="kaiz-backup-delete kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #c0392b; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            </div>
+                        </div>
+                    `;
+                    });
+                    listContainer.html(html);
+                }
+                // Update storage estimation
+                if (navigator.storage && navigator.storage.estimate) {
+                    const estimate = await navigator.storage.estimate();
+                    const usedMb = ((estimate.usage || 0) / (1024 * 1024)).toFixed(2);
+                    const quotaMb = ((estimate.quota || 0) / (1024 * 1024)).toFixed(2);
+                    this.modal.find('#kaiz-backup-storage-info').text(`Storage: ${usedMb}MB / ${quotaMb}MB used`);
+                }
+                else {
+                    this.modal.find('#kaiz-backup-storage-info').text('Storage info not available');
+                }
+            }
+            catch (error) {
+                console.error('[BackupModal] Error loading backups:', error);
+                listContainer.html('<div style="color: red; padding: 10px;">Error loading backups. Check console.</div>');
+            }
+        }
+        async downloadBackup(id) {
+            try {
+                const backups = await this.db.getBackups();
+                const backup = backups.find((b) => b.id === id);
+                if (!backup) {
+                    alert('Backup not found!');
+                    return;
+                }
+                // Create blob and download
+                const blob = new Blob([backup.data], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                // Format file name
+                const safeName = backup.name.replace(/[\/\\:*?"<>|]/g, '_');
+                const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
+                const extension = backup.type === 'chat' ? 'jsonl' : 'json';
+                a.download = `${safeName}_backup_${dateStr}.${extension}`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            catch (error) {
+                console.error('[BackupModal] Error downloading backup:', error);
+                alert('Failed to download backup.');
+            }
+        }
+        async deleteBackup(id) {
+            try {
+                await this.db.deleteBackup(id);
+                this.loadBackups(); // Refresh list
+            }
+            catch (error) {
+                console.error('[BackupModal] Error deleting backup:', error);
+                alert('Failed to delete backup.');
+            }
+        }
+        escapeHtml(unsafe) {
+            return unsafe
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        }
+    }
+
     const escapeHtml$1 = (s) => s
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -5687,8 +6221,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const win = $('#kaiz-chat-window');
             const closeBtn = $('#kaiz-chat-close');
             // --- Bổ sung nút và khung Log Request ---
+            closeBtn.before('<i id="kaiz-chat-backup-btn" class="fa-solid fa-save interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Backup Manager"></i>');
             closeBtn.before('<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>');
             const logBtn = $('#kaiz-chat-log-btn');
+            const backupBtn = $('#kaiz-chat-backup-btn');
             if ($('#kaiz-log-modal').length === 0) {
                 $('body').append(`
                 <dialog id="kaiz-log-modal" class="kaiz-log-modal">
@@ -5723,6 +6259,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const modal = $('#kaiz-persona-memory-modal')[0];
                 if (modal)
                     modal.close();
+            });
+            const backupModal = new BackupModal(stateManager.db);
+            backupBtn.on('click', () => {
+                backupModal.show();
             });
             logBtn.on('click', () => {
                 $('#kaiz-log-sent').text(lastLogSent);
@@ -6295,7 +6835,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 // Dùng HTML buffer để tránh Reflow/Repaint liên tục
                 let htmlBuffer = '';
                 for (const msg of messages) {
-                    const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content, msg.attachments);
+                    const formatted = msg.role === 'agent'
+                        ? formatMessage(msg.content, true)
+                        : formatUserMessage(msg.content, msg.attachments);
                     const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
                     const avatar = msg.role === 'user'
                         ? '<i class="fa-solid fa-user"></i>'

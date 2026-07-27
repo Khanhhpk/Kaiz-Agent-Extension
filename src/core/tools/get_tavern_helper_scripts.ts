@@ -17,7 +17,8 @@ export const getTavernHelperScriptsTool: ITool = {
             if (!th) {
                 return {
                     isError: true,
-                    content: 'TavernHelper API chưa được tải hoặc extension JS-Slash-Runner chưa được kích hoạt trong SillyTavern.',
+                    content:
+                        'TavernHelper API chưa được tải hoặc extension JS-Slash-Runner chưa được kích hoạt trong SillyTavern.',
                 };
             }
 
@@ -27,9 +28,13 @@ export const getTavernHelperScriptsTool: ITool = {
                 if (!Array.isArray(nodes)) return;
                 nodes.forEach((node: any) => {
                     // Nhận diện folder (có thể qua type, isFolder, hoặc chứa mảng children/scripts)
-                    const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                    const children = Array.isArray(node.children)
+                        ? node.children
+                        : Array.isArray(node.scripts)
+                          ? node.scripts
+                          : null;
                     const isFolder = node.isFolder === true || node.type === 'folder' || children !== null;
-                    
+
                     if (isFolder && children) {
                         const folderName = node.name || 'Unnamed Folder';
                         const currentPath = parentPath ? `${parentPath}/${folderName}` : folderName;
@@ -38,7 +43,9 @@ export const getTavernHelperScriptsTool: ITool = {
                         // Nếu là script thường
                         results.push({
                             id: node.id,
-                            name: parentPath ? `[${parentPath}] ${node.name || 'Unnamed Script'}` : (node.name || 'Unnamed Script'),
+                            name: parentPath
+                                ? `[${parentPath}] ${node.name || 'Unnamed Script'}`
+                                : node.name || 'Unnamed Script',
                             scope: scopeName,
                             enabled: node.enabled !== false,
                             info: node.info || node.authorNote || '',

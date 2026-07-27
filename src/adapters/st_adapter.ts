@@ -367,10 +367,12 @@ export class SillyTavernAdapter {
         const d = char.data || {};
         let actualTags = char.tags || d.tags || [];
         if (ctx.tagMap && ctx.tags && ctx.tagMap[char.avatar]) {
-            const mappedTags = ctx.tagMap[char.avatar].map((id: string) => {
-                const t = ctx.tags.find((tag: any) => tag.id === id);
-                return t ? t.name : null;
-            }).filter(Boolean);
+            const mappedTags = ctx.tagMap[char.avatar]
+                .map((id: string) => {
+                    const t = ctx.tags.find((tag: any) => tag.id === id);
+                    return t ? t.name : null;
+                })
+                .filter(Boolean);
             if (mappedTags.length > 0 || actualTags.length === 0) {
                 actualTags = mappedTags;
             }
@@ -388,13 +390,13 @@ export class SillyTavernAdapter {
             alternate_greetings: d.alternate_greetings || [],
             creator_notes: d.creator_notes || char.creator_notes || '',
             character_version: d.character_version || char.character_version || '',
-            character_book: (function() {
+            character_book: (function () {
                 const b = d.character_book || char.character_book;
                 if (!b) return null;
                 if (typeof b === 'string') return b;
                 return {
                     name: b.name || 'Embedded Lorebook',
-                    entries_count: b.entries ? b.entries.length : 0
+                    entries_count: b.entries ? b.entries.length : 0,
                 };
             })(),
             creator: d.creator || char.creator || '',
@@ -421,7 +423,7 @@ export class SillyTavernAdapter {
                 name: c.name,
                 avatar: c.avatar,
                 creator: c.creator || '',
-                description_snippet: shortDesc
+                description_snippet: shortDesc,
             };
         });
     }
@@ -432,37 +434,43 @@ export class SillyTavernAdapter {
     public async switchCharacterChat(charName: string) {
         const ctx = SillyTavern.getContext();
         const chars = ctx.characters || (window as any).characters || [];
-        
+
         // Search case-insensitive
         const q = charName.toLowerCase();
         const index = chars.findIndex((c: any) => c.name && c.name.toLowerCase() === q);
-        
+
         if (index === -1) {
-            throw new Error(`Không tìm thấy nhân vật nào tên "${charName}". Vui lòng dùng list_characters để kiểm tra lại.`);
+            throw new Error(
+                `Không tìm thấy nhân vật nào tên "${charName}". Vui lòng dùng list_characters để kiểm tra lại.`,
+            );
         }
-        
+
         const targetChar = chars[index];
-        
+
         // Try standard ST API first (it expects the numeric ID / index)
         if (typeof ctx.selectCharacterById === 'function') {
             await ctx.selectCharacterById(index);
             return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
-        } 
-        
+        }
+
         if (typeof (window as any).selectCharacterById === 'function') {
             await (window as any).selectCharacterById(index);
             return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
         }
-        
+
         // Minimal Fallback for older versions
-        const el = document.querySelector(`.character_select[data-chid="${index}"]`) || document.querySelector(`.character_select[chid="${index}"]`);
+        const el =
+            document.querySelector(`.character_select[data-chid="${index}"]`) ||
+            document.querySelector(`.character_select[chid="${index}"]`);
         if (el) {
             if (typeof (window as any).$ !== 'undefined') (window as any).$(el).trigger('click');
             else (el as HTMLElement).click();
             return `Thành công click chuyển sang chat với nhân vật: ${targetChar.name}`;
         }
-        
-        throw new Error(`Không thể chọn nhân vật "${targetChar.name}" vì hàm API không tồn tại và thẻ không hiển thị trên giao diện.`);
+
+        throw new Error(
+            `Không thể chọn nhân vật "${targetChar.name}" vì hàm API không tồn tại và thẻ không hiển thị trên giao diện.`,
+        );
     }
 
     /**
@@ -470,8 +478,12 @@ export class SillyTavernAdapter {
      */
     public async createCharacterCard(data: Record<string, any>) {
         const ctx = SillyTavern.getContext();
-        const tagsString = Array.isArray(data.tags) ? data.tags.join(', ') : (typeof data.tags === 'string' ? data.tags : '');
-        
+        const tagsString = Array.isArray(data.tags)
+            ? data.tags.join(', ')
+            : typeof data.tags === 'string'
+              ? data.tags
+              : '';
+
         const formData = new FormData();
         formData.append('ch_name', data.name || 'New Character');
         formData.append('description', data.description || '');
@@ -481,32 +493,32 @@ export class SillyTavernAdapter {
         formData.append('mes_example', data.mes_example || '');
         formData.append('system_prompt', data.system_prompt || '');
         formData.append('tags', tagsString);
-        
+
         const headers = ctx.getRequestHeaders();
         delete headers['Content-Type']; // Browser will set boundary automatically
-        
+
         const res = await fetch('/api/characters/create', {
             method: 'POST',
             headers,
             body: formData,
             cache: 'no-cache',
         });
-        
+
         if (!res.ok) {
             const errText = await res.text().catch(() => res.statusText);
             throw new Error(`HTTP ${res.status}: ${errText}`);
         }
-        
+
         const newAvatar = await res.text();
-        
-        await new Promise(r => setTimeout(r, 400));
-        
+
+        await new Promise((r) => setTimeout(r, 400));
+
         if (typeof ctx.getCharacters === 'function') {
             await ctx.getCharacters();
         } else if (typeof (window as any).getCharacters === 'function') {
             await (window as any).getCharacters();
         }
-        
+
         if (typeof (window as any).PrintCharacterList === 'function') {
             (window as any).PrintCharacterList();
         }
@@ -515,7 +527,7 @@ export class SillyTavernAdapter {
         if (es && et?.CHARACTERS_UPDATED) {
             es.emit(et.CHARACTERS_UPDATED);
         }
-        
+
         return newAvatar;
     }
 
@@ -525,8 +537,8 @@ export class SillyTavernAdapter {
     public async editCharacterAttribute(fieldId: string, newValue: any) {
         const ctx = SillyTavern.getContext();
         const char = ctx.characters?.[ctx.characterId];
-        if (!char) throw new Error("No active character found.");
-        
+        if (!char) throw new Error('No active character found.');
+
         if (fieldId === 'name') {
             const trimmedName = (String(newValue) || '').trim();
             if (!trimmedName) throw new Error('Character name cannot be empty');
@@ -538,15 +550,36 @@ export class SillyTavernAdapter {
             if (!renameRes.ok) throw new Error(`Rename failed: ${renameRes.status}`);
             char.name = trimmedName;
             if (char.data) char.data.name = trimmedName;
-            if (typeof (window as any).getCharacters === 'function') await (window as any).getCharacters().catch(() => {});
-        } else if (fieldId === 'tags') {
-            const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map((t: string) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
-            
-            if (ctx.tagMap && ctx.tags) {
+            if (typeof (window as any).getCharacters === 'function')
+                await (window as any).getCharacters().catch(() => {});
+        } else {
+            // Special pre-processing for specific fields
+            if (fieldId === 'fav') {
+                newValue = newValue === 'true' || newValue === true;
+            } else if (fieldId === 'tags') {
+                newValue =
+                    typeof newValue === 'string'
+                        ? newValue
+                              .split(',')
+                              .map((t: string) => t.trim())
+                              .filter(Boolean)
+                        : Array.isArray(newValue)
+                          ? newValue
+                          : [];
+            } else if (fieldId === 'alternate_greetings') {
+                newValue = Array.isArray(newValue) ? newValue : [String(newValue)];
+            } else if (typeof newValue === 'string' && newValue.trim() === '') {
+                newValue = undefined;
+            }
+
+            // Sync tags mapping before save if needed
+            if (fieldId === 'tags' && ctx.tagMap && ctx.tags) {
                 const currentTagIds = ctx.tagMap[char.avatar] || [];
                 const toUnlink = currentTagIds.filter((id: string) => {
                     const tagObj = ctx.tags.find((t: any) => t.id === id);
-                    return tagObj ? !newTagsNames.some((n: string) => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
+                    return tagObj
+                        ? !newValue.some((n: string) => n.toLowerCase() === tagObj.name.toLowerCase())
+                        : false;
                 });
                 if (toUnlink.length > 0) {
                     ctx.tagMap[char.avatar] = currentTagIds.filter((id: string) => !toUnlink.includes(id));
@@ -554,34 +587,88 @@ export class SillyTavernAdapter {
                 }
             }
 
+            // Unified Payload Builder for merge-attributes
+            const isExtensionField = fieldId === 'fav' || fieldId === 'talkativeness' || fieldId === 'world';
+            const valueOrUnset = newValue === undefined ? '__@@UNSET@@__' : newValue;
+
+            const mergePayload: any = {
+                avatar: char.avatar,
+                [fieldId]: valueOrUnset,
+                data: {},
+            };
+
+            if (fieldId === 'creator_notes') {
+                mergePayload.creatorcomment = valueOrUnset;
+            }
+
+            if (isExtensionField) {
+                mergePayload.data.extensions = { [fieldId]: valueOrUnset };
+                // Cleanup bad data at root of data if it exists from older agent edits
+                mergePayload.data[fieldId] = '__@@UNSET@@__';
+            } else {
+                mergePayload.data[fieldId] = valueOrUnset;
+            }
+
+            // In-memory update for ST Frontend
             if (!char.data) char.data = {};
-            char.data.tags = newTagsNames;
-            char.tags = newTagsNames;
-            const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: 'tags', value: newTagsNames };
-            await fetch('/api/characters/edit-attribute', {
+            if (newValue === undefined) {
+                delete char[fieldId];
+                if (fieldId === 'creator_notes') delete char.creatorcomment;
+                if (isExtensionField && char.data.extensions) delete char.data.extensions[fieldId];
+                else delete char.data[fieldId];
+            } else {
+                char[fieldId] = newValue;
+                if (fieldId === 'creator_notes') char.creatorcomment = newValue;
+                if (isExtensionField) {
+                    if (!char.data.extensions) char.data.extensions = {};
+                    char.data.extensions[fieldId] = newValue;
+                    delete char.data[fieldId]; // remove bad field in memory too
+                } else {
+                    char.data[fieldId] = newValue;
+                }
+            }
+
+            // Luôn dùng merge-attributes để chuẩn hoá V3 spec và tránh lỗi 400
+            let res = await fetch('/api/characters/merge-attributes', {
                 method: 'POST',
                 headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
+                body: JSON.stringify(mergePayload),
             });
 
-            if (typeof ctx.importTags === 'function') {
+            // Nếu merge-attributes không tồn tại (ST quá cũ), fallback về edit-attribute (tuy có thể sai spec extensions)
+            if (res.status === 404) {
+                const payload = {
+                    avatar_url: char.avatar,
+                    ch_name: char.name || 'Unknown',
+                    field: fieldId,
+                    value: newValue,
+                };
+                res = await fetch('/api/characters/edit-attribute', {
+                    method: 'POST',
+                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+            }
+
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+            // UI Specific Updates
+            const $ = (window as any).$;
+            if ($) {
+                if (fieldId === 'world') {
+                    if (typeof (window as any).checkEmbeddedWorld === 'function') {
+                        (window as any).checkEmbeddedWorld(ctx.characterId);
+                    }
+                    $('#character_world')
+                        .val(newValue || '')
+                        .trigger('change');
+                }
+            }
+
+            // Post-save actions
+            if (fieldId === 'tags' && typeof ctx.importTags === 'function') {
                 await ctx.importTags(char, { importSetting: 3 }).catch(() => {});
             }
-        } else {
-            if (!char.data) char.data = {};
-            const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
-            if (fieldId === 'alternate_greetings') {
-                char.data.alternate_greetings = Array.isArray(newValue) ? newValue : [String(newValue)];
-            } else {
-                char.data[fieldId] = newValue;
-                char[fieldId] = newValue;
-            }
-            const res = await fetch('/api/characters/edit-attribute', {
-                method: 'POST',
-                headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
         }
 
         const domMap: Record<string, string> = {
@@ -601,7 +688,8 @@ export class SillyTavernAdapter {
                 el.dispatchEvent(new Event('input', { bubbles: true }));
             }
         } else if (fieldId === 'alternate_greetings') {
-            if (typeof (window as any).printAlternateGreetings === 'function') (window as any).printAlternateGreetings();
+            if (typeof (window as any).printAlternateGreetings === 'function')
+                (window as any).printAlternateGreetings();
         }
 
         const es = ctx.eventSource || (window as any).eventSource;
@@ -611,7 +699,6 @@ export class SillyTavernAdapter {
             es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
         }
     }
-
 
     /**
      * Gửi tin nhắn hệ thống (không lưu vào lịch sử nhân vật)
@@ -820,6 +907,74 @@ export class SillyTavernAdapter {
     }
 
     /**
+     * Xuất dữ liệu dưới dạng JSON string để sao lưu
+     */
+    public async exportBackupData(
+        type: 'character' | 'chat' | 'worldbook',
+        name?: string,
+    ): Promise<{ name: string; data: string } | null> {
+        const ctx = SillyTavern.getContext();
+        try {
+            if (type === 'character') {
+                const char = ctx.characters?.[ctx.characterId];
+                if (!char) throw new Error('No active character found');
+                const charName = char.name || 'Unknown_Character';
+                const charData = char.data || char;
+                return {
+                    name: charName,
+                    data: JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: charData }, null, 2),
+                };
+            }
+            if (type === 'chat') {
+                const chatName = ctx.chatId || 'Unknown_Chat';
+                const chatData = ctx.chat || [];
+                if (chatData.length === 0) throw new Error('No chat data found');
+
+                // ST requires chat metadata as the first line of JSONL
+                const w = window as any;
+                const metadataLine = {
+                    user_name: w.name1 || 'unused',
+                    character_name: w.name2 || 'unused',
+                    chat_metadata: w.chat_metadata || {},
+                };
+
+                // Convert to JSONL for ST Chat import
+                const jsonlData = [
+                    JSON.stringify(metadataLine),
+                    ...chatData.map((msg: any) => JSON.stringify(msg)),
+                ].join('\n');
+                return { name: chatName, data: jsonlData };
+            }
+            if (type === 'worldbook') {
+                const bookName = name;
+                if (!bookName) throw new Error('Missing worldbook name');
+
+                let data = null;
+                if (typeof ctx.loadWorldInfo === 'function') {
+                    data = await ctx.loadWorldInfo(bookName);
+                } else {
+                    const res = await fetch('/api/worldinfo/get', {
+                        method: 'POST',
+                        headers: {
+                            ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ name: bookName }),
+                    });
+                    if (res.ok) data = await res.json();
+                }
+
+                if (!data) throw new Error('Worldbook not found: ' + bookName);
+                return { name: bookName, data: JSON.stringify(data, null, 2) };
+            }
+        } catch (e: any) {
+            console.error('[KaizAgent] Backup export error:', e);
+            throw e;
+        }
+        return null;
+    }
+
+    /**
      * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
      * @param options Các tùy chọn lọc dữ liệu
      */
@@ -886,7 +1041,7 @@ export class SillyTavernAdapter {
                     names.add(options.bookName);
                 }
             }
-            
+
             if (options.mode === 'by_name' && !options.bookName) {
                 return "Lỗi: Chế độ 'by_name' yêu cầu cung cấp tên Lorebook (bookName).";
             }
@@ -1329,7 +1484,7 @@ export class SillyTavernAdapter {
                         }
                     }
 
-                    return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
+                    return `Đã tạo mới Worldbook "${options.book_name}".`;
                 } else {
                     return '[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.';
                 }

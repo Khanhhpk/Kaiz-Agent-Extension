@@ -47,7 +47,7 @@ export const manageTavernHelperScriptTool: ITool = {
             }
 
             const { action, id, data } = args;
-            let { scope } = args;
+            const { scope } = args;
 
             // Hàm đệ quy xoá
             const deleteFromTree = (nodes: any[]): boolean => {
@@ -57,7 +57,11 @@ export const manageTavernHelperScriptTool: ITool = {
                         nodes.splice(i, 1);
                         return true;
                     }
-                    const children = Array.isArray(nodes[i].children) ? nodes[i].children : (Array.isArray(nodes[i].scripts) ? nodes[i].scripts : null);
+                    const children = Array.isArray(nodes[i].children)
+                        ? nodes[i].children
+                        : Array.isArray(nodes[i].scripts)
+                          ? nodes[i].scripts
+                          : null;
                     if (children) {
                         if (deleteFromTree(children)) return true;
                     }
@@ -73,7 +77,11 @@ export const manageTavernHelperScriptTool: ITool = {
                         mutator(node);
                         return true;
                     }
-                    const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                    const children = Array.isArray(node.children)
+                        ? node.children
+                        : Array.isArray(node.scripts)
+                          ? node.scripts
+                          : null;
                     if (children) {
                         if (editInTree(children, searchId, mutator)) return true;
                     }
@@ -84,22 +92,32 @@ export const manageTavernHelperScriptTool: ITool = {
             const forceSyncUI = async (targetScope: string, targetId: string) => {
                 try {
                     const tempId = targetId + '_temp_sync';
-                    
+
                     // Đổi ID tạm thời để Vue unmount component
-                    await th.updateScriptTreesWith((trees: any[]) => {
-                        editInTree(trees, targetId, (node) => { node.id = tempId; });
-                        return trees;
-                    }, { type: targetScope });
-                    
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    
+                    await th.updateScriptTreesWith(
+                        (trees: any[]) => {
+                            editInTree(trees, targetId, (node) => {
+                                node.id = tempId;
+                            });
+                            return trees;
+                        },
+                        { type: targetScope },
+                    );
+
+                    await new Promise((resolve) => setTimeout(resolve, 100));
+
                     // Trả lại ID gốc để Vue mount lại component với dữ liệu mới
-                    await th.updateScriptTreesWith((trees: any[]) => {
-                        editInTree(trees, tempId, (node) => { node.id = targetId; });
-                        return trees;
-                    }, { type: targetScope });
+                    await th.updateScriptTreesWith(
+                        (trees: any[]) => {
+                            editInTree(trees, tempId, (node) => {
+                                node.id = targetId;
+                            });
+                            return trees;
+                        },
+                        { type: targetScope },
+                    );
                 } catch (e) {
-                    console.error("Lỗi khi force sync UI JS-Slash-Runner:", e);
+                    console.error('Lỗi khi force sync UI JS-Slash-Runner:', e);
                 }
             };
 
@@ -113,8 +131,15 @@ export const manageTavernHelperScriptTool: ITool = {
                         const search = (nodes: any[]) => {
                             if (!Array.isArray(nodes)) return;
                             for (const node of nodes) {
-                                if (node.id === id) { found = true; return; }
-                                const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                                if (node.id === id) {
+                                    found = true;
+                                    return;
+                                }
+                                const children = Array.isArray(node.children)
+                                    ? node.children
+                                    : Array.isArray(node.scripts)
+                                      ? node.scripts
+                                      : null;
                                 if (children) search(children);
                             }
                         };
@@ -145,14 +170,19 @@ export const manageTavernHelperScriptTool: ITool = {
                 };
 
                 const newScript = { ...baseScript, ...(data || {}) };
-                newScript.id = newId; 
+                newScript.id = newId;
 
-                await th.updateScriptTreesWith((trees: any[]) => {
-                    trees.push(newScript);
-                    return trees;
-                }, { type: targetScope });
+                await th.updateScriptTreesWith(
+                    (trees: any[]) => {
+                        trees.push(newScript);
+                        return trees;
+                    },
+                    { type: targetScope },
+                );
 
-                return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
+                return {
+                    content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})`,
+                };
             }
 
             if (!id) return { isError: true, content: 'Bắt buộc phải cung cấp id cho hành động này.' };
@@ -163,24 +193,30 @@ export const manageTavernHelperScriptTool: ITool = {
             }
 
             if (action === 'delete') {
-                await th.updateScriptTreesWith((trees: any[]) => {
-                    deleteFromTree(trees);
-                    return trees;
-                }, { type: foundScope });
+                await th.updateScriptTreesWith(
+                    (trees: any[]) => {
+                        deleteFromTree(trees);
+                        return trees;
+                    },
+                    { type: foundScope },
+                );
                 return { content: `Đã xóa thành công Script (ID: ${id})` };
             }
 
             if (action === 'toggle') {
                 let currentStatus = false;
                 let currentName = '';
-                await th.updateScriptTreesWith((trees: any[]) => {
-                    editInTree(trees, id, (node) => {
-                        node.enabled = !node.enabled;
-                        currentStatus = node.enabled;
-                        currentName = node.name || 'Unnamed';
-                    });
-                    return trees;
-                }, { type: foundScope });
+                await th.updateScriptTreesWith(
+                    (trees: any[]) => {
+                        editInTree(trees, id, (node) => {
+                            node.enabled = !node.enabled;
+                            currentStatus = node.enabled;
+                            currentName = node.name || 'Unnamed';
+                        });
+                        return trees;
+                    },
+                    { type: foundScope },
+                );
                 return { content: `Đã thay đổi trạng thái enabled thành ${currentStatus} cho Script: ${currentName}` };
             }
 
@@ -190,44 +226,47 @@ export const manageTavernHelperScriptTool: ITool = {
                 }
 
                 let currentName = '';
-                await th.updateScriptTreesWith((trees: any[]) => {
-                    editInTree(trees, id, (node) => {
-                        // Không cho phép ghi đè id
-                        const originalId = node.id;
-                        
-                        // Chuẩn hoá: Dùng info, loại bỏ authorNote
-                        if (data.authorNote !== undefined) {
-                            if (data.info === undefined) data.info = data.authorNote;
-                            delete data.authorNote;
-                        }
+                await th.updateScriptTreesWith(
+                    (trees: any[]) => {
+                        editInTree(trees, id, (node) => {
+                            // Không cho phép ghi đè id
+                            const originalId = node.id;
 
-                        // Tính năng siêu việt: Patch mã nguồn thay vì ghi đè toàn bộ content
-                        if (data.content_replacements && Array.isArray(data.content_replacements)) {
-                            let patchError = '';
-                            for (const rep of data.content_replacements) {
-                                if (typeof rep.target === 'string' && typeof rep.replacement === 'string') {
-                                    if (node.content && node.content.includes(rep.target)) {
-                                        node.content = node.content.split(rep.target).join(rep.replacement);
-                                    } else {
-                                        patchError = `Không tìm thấy đoạn mã target: ${rep.target.substring(0, 30)}...`;
-                                        break;
+                            // Chuẩn hoá: Dùng info, loại bỏ authorNote
+                            if (data.authorNote !== undefined) {
+                                if (data.info === undefined) data.info = data.authorNote;
+                                delete data.authorNote;
+                            }
+
+                            // Tính năng siêu việt: Patch mã nguồn thay vì ghi đè toàn bộ content
+                            if (data.content_replacements && Array.isArray(data.content_replacements)) {
+                                let patchError = '';
+                                for (const rep of data.content_replacements) {
+                                    if (typeof rep.target === 'string' && typeof rep.replacement === 'string') {
+                                        if (node.content && node.content.includes(rep.target)) {
+                                            node.content = node.content.split(rep.target).join(rep.replacement);
+                                        } else {
+                                            patchError = `Không tìm thấy đoạn mã target: ${rep.target.substring(0, 30)}...`;
+                                            break;
+                                        }
                                     }
                                 }
+                                delete data.content_replacements;
+                                if (patchError) throw new Error(patchError);
                             }
-                            delete data.content_replacements;
-                            if (patchError) throw new Error(patchError);
-                        }
-                        
-                        Object.assign(node, data);
-                        node.id = originalId;
-                        currentName = node.name || 'Unnamed';
-                        
-                        if (node.authorNote !== undefined) {
-                            delete node.authorNote;
-                        }
-                    });
-                    return trees;
-                }, { type: foundScope });
+
+                            Object.assign(node, data);
+                            node.id = originalId;
+                            currentName = node.name || 'Unnamed';
+
+                            if (node.authorNote !== undefined) {
+                                delete node.authorNote;
+                            }
+                        });
+                        return trees;
+                    },
+                    { type: foundScope },
+                );
                 await forceSyncUI(foundScope, id);
                 return { content: `Đã chỉnh sửa thành công Script: ${currentName}` };
             }

@@ -4,13 +4,17 @@ import { SillyTavernAdapter } from '../../adapters/st_adapter';
 export const listCharactersTool: ITool = {
     schema: {
         name: 'list_characters',
-        description: 'Lấy danh sách các thẻ nhân vật hiện có trong kho của SillyTavern. Trả về tên, avatar, creator, và mô tả ngắn.',
+        description:
+            'Lấy danh sách các thẻ nhân vật hiện có trong kho của SillyTavern. Trả về tên, avatar, creator, và mô tả ngắn.',
         parameters: {
             type: 'object',
             properties: {
-                search_query: { type: 'string', description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.' }
-            }
-        }
+                search_query: {
+                    type: 'string',
+                    description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.',
+                },
+            },
+        },
     },
     validate: (context: { adapter: SillyTavernAdapter }) => {
         if (!context.adapter.hasFeature('characters')) {
@@ -28,5 +32,5 @@ export const listCharactersTool: ITool = {
         } catch (e: any) {
             return { content: `Error listing characters: ${e.message}`, isError: true };
         }
-    }
+    },
 };
