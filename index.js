@@ -653,13 +653,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             'alternate_greetings',
                             'creator_notes',
                             'character_version',
-                            'character_book',
                             'world',
                             'creator',
                             'talkativeness',
                             'fav',
                         ],
-                        description: 'Trường thông tin cần chỉnh sửa. Quan trọng với Lorebook: Dùng "world" để LIÊN KẾT (link) tên Lorebook giúp dung lượng thẻ nhẹ nhàng (phù hợp để người dùng chơi cá nhân). Dùng "character_book" để NHÚNG (embed) toàn bộ data Lorebook vào trong ảnh thẻ (phù hợp khi người dùng yêu cầu đóng gói thẻ để mang đi chia sẻ cho người khác). Các trường khác: "description", "personality", "talkativeness", "fav", v.v.',
+                        description: 'Trường thông tin cần chỉnh sửa. Quan trọng với Lorebook: Dùng "world" để LIÊN KẾT (link) tên Lorebook. Việc này sẽ tối ưu dung lượng khi chơi. Nếu người dùng muốn xuất/chia sẻ thẻ, chức năng export của ST sẽ tự động đóng gói Lorebook được link này vào trong thẻ mà không cần phải nhúng cứng từ đầu. Các trường khác: "description", "personality", "talkativeness", "fav", v.v.',
                     },
                     value: {
                         type: 'string',
@@ -3784,37 +3783,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             else {
                 // Special pre-processing for specific fields
-                if (fieldId === 'character_book') {
-                    if (typeof newValue === 'string' && newValue.trim() !== '') {
-                        let lbData = null;
-                        if (typeof window.ST_WorldInfo?.loadWorldInfo === 'function') {
-                            lbData = await window.ST_WorldInfo.loadWorldInfo(newValue);
-                        }
-                        else if (typeof ctx.loadWorldInfo === 'function') {
-                            lbData = await ctx.loadWorldInfo(newValue);
-                        }
-                        else {
-                            const lbRes = await fetch('/api/worldinfo/get', {
-                                method: 'POST',
-                                headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ name: newValue }),
-                            });
-                            if (lbRes.ok)
-                                lbData = await lbRes.json();
-                        }
-                        if (!lbData)
-                            throw new Error(`Could not find or load lorebook: ${newValue}`);
-                        // Convert entries to Array to comply with V3 spec, but preserve exact original LB fields
-                        lbData.entries = Array.isArray(lbData.entries)
-                            ? lbData.entries
-                            : Object.values(lbData.entries || {});
-                        newValue = lbData;
-                    }
-                    else if (typeof newValue === 'string' && newValue.trim() === '') {
-                        newValue = undefined;
-                    }
-                }
-                else if (fieldId === 'fav') {
+                if (fieldId === 'fav') {
                     newValue = newValue === 'true' || newValue === true;
                 }
                 else if (fieldId === 'tags') {
@@ -3867,13 +3836,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 else {
                     mergePayload.data[fieldId] = valueOrUnset;
-                    if (fieldId === 'character_book' &&
-                        typeof newValue === 'object' &&
-                        newValue !== null &&
-                        newValue.name) {
-                        mergePayload.data.extensions = mergePayload.data.extensions || {};
-                        mergePayload.data.extensions.world = newValue.name;
-                    }
                 }
                 // In-memory update for ST Frontend
                 if (!char.data)
@@ -3899,14 +3861,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     else {
                         char.data[fieldId] = newValue;
-                        if (fieldId === 'character_book' &&
-                            typeof newValue === 'object' &&
-                            newValue !== null &&
-                            newValue.name) {
-                            if (!char.data.extensions)
-                                char.data.extensions = {};
-                            char.data.extensions.world = newValue.name;
-                        }
                     }
                 }
                 // Luôn dùng merge-attributes để chuẩn hoá V3 spec và tránh lỗi 400
@@ -3934,27 +3888,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 // UI Specific Updates
                 const $ = window.$;
                 if ($) {
-                    if (fieldId === 'character_book' || fieldId === 'world') {
+                    if (fieldId === 'world') {
                         if (typeof window.checkEmbeddedWorld === 'function') {
                             window.checkEmbeddedWorld(ctx.characterId);
                         }
-                        else if (char.data?.character_book) {
-                            $('#import_character_info').data('chid', ctx.characterId).show();
-                        }
-                        else {
-                            $('#import_character_info').hide();
-                        }
-                        if (fieldId === 'world') {
-                            $('#character_world')
-                                .val(newValue || '')
-                                .trigger('change');
-                        }
-                        else if (fieldId === 'character_book' &&
-                            typeof newValue === 'object' &&
-                            newValue !== null &&
-                            newValue.name) {
-                            $('#character_world').val(newValue.name).trigger('change');
-                        }
+                        $('#character_world')
+                            .val(newValue || '')
+                            .trigger('change');
                     }
                 }
                 // Post-save actions

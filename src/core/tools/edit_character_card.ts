@@ -24,14 +24,13 @@ export const editCharacterCardTool: ITool = {
                         'alternate_greetings',
                         'creator_notes',
                         'character_version',
-                        'character_book',
                         'world',
                         'creator',
                         'talkativeness',
                         'fav',
                     ],
                     description:
-                        'Trường thông tin cần chỉnh sửa. Quan trọng với Lorebook: Dùng "world" để LIÊN KẾT (link) tên Lorebook giúp dung lượng thẻ nhẹ nhàng (phù hợp để người dùng chơi cá nhân). Dùng "character_book" để NHÚNG (embed) toàn bộ data Lorebook vào trong ảnh thẻ (phù hợp khi người dùng yêu cầu đóng gói thẻ để mang đi chia sẻ cho người khác). Các trường khác: "description", "personality", "talkativeness", "fav", v.v.',
+                        'Trường thông tin cần chỉnh sửa. Quan trọng với Lorebook: Dùng "world" để LIÊN KẾT (link) tên Lorebook. Việc này sẽ tối ưu dung lượng khi chơi. Nếu người dùng muốn xuất/chia sẻ thẻ, chức năng export của ST sẽ tự động đóng gói Lorebook được link này vào trong thẻ mà không cần phải nhúng cứng từ đầu. Các trường khác: "description", "personality", "talkativeness", "fav", v.v.',
                 },
                 value: {
                     type: 'string',

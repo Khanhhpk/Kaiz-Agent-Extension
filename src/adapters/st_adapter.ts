@@ -554,32 +554,7 @@ export class SillyTavernAdapter {
                 await (window as any).getCharacters().catch(() => {});
         } else {
             // Special pre-processing for specific fields
-            if (fieldId === 'character_book') {
-                if (typeof newValue === 'string' && newValue.trim() !== '') {
-                    let lbData: any = null;
-                    if (typeof (window as any).ST_WorldInfo?.loadWorldInfo === 'function') {
-                        lbData = await (window as any).ST_WorldInfo.loadWorldInfo(newValue);
-                    } else if (typeof ctx.loadWorldInfo === 'function') {
-                        lbData = await ctx.loadWorldInfo(newValue);
-                    } else {
-                        const lbRes = await fetch('/api/worldinfo/get', {
-                            method: 'POST',
-                            headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name: newValue }),
-                        });
-                        if (lbRes.ok) lbData = await lbRes.json();
-                    }
-                    if (!lbData) throw new Error(`Could not find or load lorebook: ${newValue}`);
-
-                    // Convert entries to Array to comply with V3 spec, but preserve exact original LB fields
-                    lbData.entries = Array.isArray(lbData.entries)
-                        ? lbData.entries
-                        : Object.values(lbData.entries || {});
-                    newValue = lbData;
-                } else if (typeof newValue === 'string' && newValue.trim() === '') {
-                    newValue = undefined;
-                }
-            } else if (fieldId === 'fav') {
+            if (fieldId === 'fav') {
                 newValue = newValue === 'true' || newValue === true;
             } else if (fieldId === 'tags') {
                 newValue =
@@ -632,15 +607,6 @@ export class SillyTavernAdapter {
                 mergePayload.data[fieldId] = '__@@UNSET@@__';
             } else {
                 mergePayload.data[fieldId] = valueOrUnset;
-                if (
-                    fieldId === 'character_book' &&
-                    typeof newValue === 'object' &&
-                    newValue !== null &&
-                    newValue.name
-                ) {
-                    mergePayload.data.extensions = mergePayload.data.extensions || {};
-                    mergePayload.data.extensions.world = newValue.name;
-                }
             }
 
             // In-memory update for ST Frontend
@@ -659,15 +625,6 @@ export class SillyTavernAdapter {
                     delete char.data[fieldId]; // remove bad field in memory too
                 } else {
                     char.data[fieldId] = newValue;
-                    if (
-                        fieldId === 'character_book' &&
-                        typeof newValue === 'object' &&
-                        newValue !== null &&
-                        newValue.name
-                    ) {
-                        if (!char.data.extensions) char.data.extensions = {};
-                        char.data.extensions.world = newValue.name;
-                    }
                 }
             }
 
@@ -698,27 +655,13 @@ export class SillyTavernAdapter {
             // UI Specific Updates
             const $ = (window as any).$;
             if ($) {
-                if (fieldId === 'character_book' || fieldId === 'world') {
+                if (fieldId === 'world') {
                     if (typeof (window as any).checkEmbeddedWorld === 'function') {
                         (window as any).checkEmbeddedWorld(ctx.characterId);
-                    } else if (char.data?.character_book) {
-                        $('#import_character_info').data('chid', ctx.characterId).show();
-                    } else {
-                        $('#import_character_info').hide();
                     }
-
-                    if (fieldId === 'world') {
-                        $('#character_world')
-                            .val(newValue || '')
-                            .trigger('change');
-                    } else if (
-                        fieldId === 'character_book' &&
-                        typeof newValue === 'object' &&
-                        newValue !== null &&
-                        newValue.name
-                    ) {
-                        $('#character_world').val(newValue.name).trigger('change');
-                    }
+                    $('#character_world')
+                        .val(newValue || '')
+                        .trigger('change');
                 }
             }
 
