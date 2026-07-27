@@ -114,87 +114,130 @@ export const searchGoogleTool: ITool = {
             };
 
             // =====================================================
-            // BƯỚC 1: Bing là PRIMARY (engine duy nhất chấp nhận
-            //         request từ extension có Allow CORS)
+            // BƯỚC 1: SearXNG PRIMARY — meta-search engine tổng hợp
+            //         nhiều nguồn, trả JSON sạch, không bị bot-mode
             // =====================================================
-            console.log('[search] Searching Bing (primary)...');
-            let bingHtml = await fetchBing(encodedQuery);
-            let bingResults = bingHtml ? parseBing(bingHtml) : [];
+            const SEARXNG_INSTANCES = [
+                'https://searx.be/search',
+                'https://priv.au/search',
+                'https://search.inetol.net/search',
+                'https://searx.tiekoetter.com/search',
+                'https://etsi.me/search',
+            ];
 
-            // --- Quality Check + Smart Retry ---
-            // Bing bot-mode chỉ parse từ ĐẦU TIÊN của query.
-            // Nếu từ đó là adjective thông dụng (best, most, top...) → từ điển
-            // Fix: đảo query để noun ý nghĩa lên đầu, hoặc bọc quotes.
-            if (isGarbageResults(bingResults, query)) {
-                console.log('[search] Bing returned garbage. Trying smart retries...');
+            const fetchSearXNG = async (q: string): Promise<{ title: string; url: string; snippet: string }[]> => {
+                // Thử các instances song song, lấy instance nào trả lời đúng trước
+                const tryInstance = (base: string) =>
+                    fetch(`${base}?q=${q}&format=json`, { signal: AbortSignal.timeout(5000) })
+                        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+                        .then((data: any) => {
+                            const items = (data.results || []) as any[];
+                            if (items.length === 0) return Promise.reject('no results');
+                            return items.slice(0, 15).map((item: any) => ({
+                                title: item.title || '',
+                                url: item.url || '',
+                                snippet: item.content || '',
+                            }));
+                        });
 
-                // Danh sách adjective/adverb thông dụng hay làm Bing bị ngáo
-                const leadingStopWords = [
-                    'best',
-                    'most',
-                    'top',
-                    'new',
-                    'latest',
-                    'upcoming',
-                    'good',
-                    'great',
-                    'worst',
-                    'all',
-                    'every',
-                    'some',
-                    'many',
-                    'few',
-                    'several',
-                    'tình',
-                    'các',
-                    'những',
-                    'bộ',
-                    'phim',
-                    'cách',
-                    'hướng',
-                    'danh',
-                ];
+                // Race tất cả instances, lấy kết quả đầu tiên thành công
+                return Promise.any(SEARXNG_INSTANCES.map(tryInstance)).catch(() => []);
+            };
 
-                // Chiến lược 1: Nếu từ đầu tiên là stop-word → đảo query
-                // VD: "best anime 2026" → "anime 2026 best"
-                const firstWord = query.trim().split(/\s+/)[0].toLowerCase();
-                let reorderedUsed = false;
+            console.log('[search] Searching SearXNG (primary)...');
+            const searxResults = await fetchSearXNG(encodedQuery);
 
-                if (leadingStopWords.includes(firstWord)) {
-                    const words = query.trim().split(/\s+/);
-                    const reordered = [...words.slice(1), words[0]].join(' ');
-                    const reorderedEncoded = encodeURIComponent(reordered).replace(/%20/g, '+');
-                    console.log(`[search] Reordering query: "${query}" → "${reordered}"`);
-                    bingHtml = await fetchBing(reorderedEncoded);
-                    const reorderedResults = bingHtml ? parseBing(bingHtml) : [];
-                    if (reorderedResults.length > 0 && !isGarbageResults(reorderedResults, query)) {
-                        bingResults = reorderedResults;
-                        reorderedUsed = true;
-                        console.log('[search] Reordered query returned good results!');
-                    }
-                }
-
-                // Chiến lược 2: Bọc toàn bộ query trong ngoặc kép (tốt cho tiếng Việt)
-                if (!reorderedUsed) {
-                    const quotedQuery = `%22${encodedQuery}%22`;
-                    console.log('[search] Retrying with quoted query...');
-                    bingHtml = await fetchBing(quotedQuery);
-                    const quotedResults = bingHtml ? parseBing(bingHtml) : [];
-                    if (quotedResults.length > 0 && !isGarbageResults(quotedResults, query)) {
-                        bingResults = quotedResults;
-                        console.log('[search] Quoted query returned good results!');
-                    } else {
-                        console.log('[search] All Bing retries failed or returned garbage.');
-                    }
-                }
-            }
-
-            if (bingResults.length > 0) {
-                results.push(...bingResults);
+            if (searxResults.length > 0) {
+                engine = 'SearXNG';
+                results.push(...searxResults);
             }
 
             // =====================================================
-            // BƯỚC 2: Fallback sang DuckDuckGo HTML POST nếu Bing thất bại
+            // BƯỚC 2: Bing SECONDARY — fallback nếu SearXNG fail
+            //         (toàn bộ instances bị rate-limit/blocked)
+            // =====================================================
+            let bingHtml = '';
+            let bingResults: { title: string; url: string; snippet: string }[] = [];
+            if (results.length === 0) {
+                console.log('[search] SearXNG failed. Searching Bing (secondary)...');
+                bingHtml = await fetchBing(encodedQuery);
+                bingResults = bingHtml ? parseBing(bingHtml) : [];
+
+                // --- Quality Check + Smart Retry ---
+                // Bing bot-mode chỉ parse từ ĐẦU TIÊN của query.
+                // Nếu từ đó là adjective thông dụng (best, most, top...) → từ điển
+                // Fix: đảo query để noun ý nghĩa lên đầu, hoặc bọc quotes.
+                if (isGarbageResults(bingResults, query)) {
+                    console.log('[search] Bing returned garbage. Trying smart retries...');
+
+                    // Danh sách adjective/adverb thông dụng hay làm Bing bị ngáo
+                    const leadingStopWords = [
+                        'best',
+                        'most',
+                        'top',
+                        'new',
+                        'latest',
+                        'upcoming',
+                        'good',
+                        'great',
+                        'worst',
+                        'all',
+                        'every',
+                        'some',
+                        'many',
+                        'few',
+                        'several',
+                        'tình',
+                        'các',
+                        'những',
+                        'bộ',
+                        'phim',
+                        'cách',
+                        'hướng',
+                        'danh',
+                    ];
+
+                    // Chiến lược 1: Nếu từ đầu tiên là stop-word → đảo query
+                    // VD: "best anime 2026" → "anime 2026 best"
+                    const firstWord = query.trim().split(/\s+/)[0].toLowerCase();
+                    let reorderedUsed = false;
+
+                    if (leadingStopWords.includes(firstWord)) {
+                        const words = query.trim().split(/\s+/);
+                        const reordered = [...words.slice(1), words[0]].join(' ');
+                        const reorderedEncoded = encodeURIComponent(reordered).replace(/%20/g, '+');
+                        console.log(`[search] Reordering query: "${query}" → "${reordered}"`);
+                        bingHtml = await fetchBing(reorderedEncoded);
+                        const reorderedResults = bingHtml ? parseBing(bingHtml) : [];
+                        if (reorderedResults.length > 0 && !isGarbageResults(reorderedResults, query)) {
+                            bingResults = reorderedResults;
+                            reorderedUsed = true;
+                            console.log('[search] Reordered query returned good results!');
+                        }
+                    }
+
+                    // Chiến lược 2: Bọc toàn bộ query trong ngoặc kép (tốt cho tiếng Việt)
+                    if (!reorderedUsed) {
+                        const quotedQuery = `%22${encodedQuery}%22`;
+                        console.log('[search] Retrying with quoted query...');
+                        bingHtml = await fetchBing(quotedQuery);
+                        const quotedResults = bingHtml ? parseBing(bingHtml) : [];
+                        if (quotedResults.length > 0 && !isGarbageResults(quotedResults, query)) {
+                            bingResults = quotedResults;
+                            console.log('[search] Quoted query returned good results!');
+                        } else {
+                            console.log('[search] All Bing retries failed or returned garbage.');
+                        }
+                    }
+                }
+
+                if (bingResults.length > 0) {
+                    results.push(...bingResults);
+                }
+            } // end if SearXNG failed
+
+            // =====================================================
+            // BƯỚC 3: Fallback sang DuckDuckGo HTML POST
             // =====================================================
             if (results.length === 0) {
                 console.log('[search] Bing returned 0 results. Falling back to DuckDuckGo HTML POST...');
