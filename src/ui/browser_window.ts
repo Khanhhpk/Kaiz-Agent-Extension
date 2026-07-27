@@ -2,29 +2,29 @@ declare const jQuery: any;
 
 export class BrowserWindowUI {
     private static $modal: any;
-    private static $iframe: any;
     private static $address: any;
     
     public static init() {
         const $ = jQuery;
         
-        this.$modal = $('#kaiz-browser-modal');
-        this.$iframe = $('#kaiz-browser-iframe');
-        this.$address = $('#kaiz-browser-address');
+        // Tìm element chính xác để tránh dính cache DOM cũ nếu bị reload
+        this.$modal = $('.kaiz-browser-modal').last();
+        this.$address = this.$modal.find('.kaiz-browser-address');
 
         // Nút mở trình duyệt từ header chat
         $('#kaiz-chat-browser-btn').on('click', () => {
             const dialog = this.$modal[0] as HTMLDialogElement;
             if (dialog && !dialog.open) {
                 dialog.showModal();
-                if (this.$iframe.attr('src') === 'about:blank') {
+                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
+                if (iframe && iframe.src.includes('about:blank')) {
                     this.navigate('https://google.com');
                 }
             }
         });
 
         // Đóng trình duyệt
-        $('#kaiz-browser-close').on('click', () => {
+        this.$modal.find('#kaiz-browser-close').on('click', () => {
             const dialog = this.$modal[0] as HTMLDialogElement;
             if (dialog && dialog.open) {
                 dialog.close();
@@ -47,39 +47,41 @@ export class BrowserWindowUI {
             }
         };
 
-        $('#kaiz-browser-go').on('click', go);
+        this.$modal.find('#kaiz-browser-go').on('click', go);
         this.$address.on('keyup', (e: any) => {
             if (e.key === 'Enter') {
                 go();
             }
         });
 
-        $('#kaiz-browser-reload').on('click', () => {
-            const currentSrc = this.$iframe.attr('src');
-            if (currentSrc && currentSrc !== 'about:blank') {
-                this.$iframe.attr('src', currentSrc);
+        this.$modal.find('#kaiz-browser-reload').on('click', () => {
+            const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
+            if (iframe && iframe.src && !iframe.src.includes('about:blank')) {
+                iframe.src = iframe.src;
             }
         });
 
         // Back / Forward (Chỉ hoạt động ở cùng origin, nhưng vẫn thử)
-        $('#kaiz-browser-back').on('click', () => {
+        this.$modal.find('#kaiz-browser-back').on('click', () => {
             try {
-                this.$iframe[0].contentWindow.history.back();
+                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
+                if(iframe.contentWindow) iframe.contentWindow.history.back();
             } catch (e) {
                 console.warn('[KaizAgent] Cannot use back() due to cross-origin.');
             }
         });
         
-        $('#kaiz-browser-forward').on('click', () => {
+        this.$modal.find('#kaiz-browser-forward').on('click', () => {
             try {
-                this.$iframe[0].contentWindow.history.forward();
+                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
+                if(iframe.contentWindow) iframe.contentWindow.history.forward();
             } catch (e) {
                 console.warn('[KaizAgent] Cannot use forward() due to cross-origin.');
             }
         });
 
         // Bấm chia sẻ trang cho AI
-        $('#kaiz-browser-share').on('click', () => {
+        this.$modal.find('#kaiz-browser-share').on('click', () => {
             const url = this.$address.val().trim();
             if (!url) return;
 
@@ -95,13 +97,16 @@ export class BrowserWindowUI {
         });
         
         // Thử cập nhật URL bar nếu iframe chuyển hướng (chỉ được nếu same-origin)
-        this.$iframe.on('load', () => {
+        this.$modal.find('iframe').on('load', () => {
             try {
-                const newUrl = this.$iframe[0].contentWindow.location.href;
-                if (newUrl && newUrl !== 'about:blank') {
+                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
+                this.$address.css('background-color', ''); // Xóa màu loading
+                const newUrl = iframe.contentWindow?.location.href;
+                if (newUrl && !newUrl.includes('about:blank')) {
                     this.$address.val(newUrl);
                 }
             } catch (e) {
+                this.$address.css('background-color', ''); // Xóa màu loading
                 // Cross-origin, ignore
             }
         });
@@ -109,6 +114,16 @@ export class BrowserWindowUI {
 
     private static navigate(url: string) {
         this.$address.val(url);
-        this.$iframe.attr('src', url);
+        // Hiệu ứng loading nhẹ ở thanh địa chỉ
+        this.$address.css('background-color', '#eef2ff'); 
+        
+        const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
+        if (iframe) {
+            // Ép buộc load URL bằng mọi cách
+            iframe.src = 'about:blank';
+            setTimeout(() => { iframe.src = url; }, 50);
+        } else {
+            alert("Lỗi: Không tìm thấy Iframe để hiển thị web!");
+        }
     }
 }
