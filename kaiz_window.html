@@ -225,24 +225,27 @@
     id="kaiz-browser-modal"
     class="kaiz-modal kaiz-browser-modal"
 >
-    <div class="kaiz-browser-header">
-        <div class="kaiz-browser-nav">
-            <i id="kaiz-browser-back" class="fa-solid fa-arrow-left interactable" title="Back"></i>
-            <i id="kaiz-browser-forward" class="fa-solid fa-arrow-right interactable" title="Forward"></i>
-            <i id="kaiz-browser-reload" class="fa-solid fa-rotate-right interactable" title="Reload"></i>
+    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; width: 100%; height: 100%;">
+        <div class="kaiz-browser-header">
+            <div class="kaiz-browser-nav">
+                <i class="fa-solid fa-arrow-left interactable" id="kaiz-browser-back" title="Back"></i>
+                <i class="fa-solid fa-arrow-right interactable" id="kaiz-browser-forward" title="Forward"></i>
+                <i class="fa-solid fa-rotate-right interactable" id="kaiz-browser-reload" title="Reload"></i>
+            </div>
+            
+            <div class="kaiz-browser-address-container">
+                <input type="text" id="kaiz-browser-address" class="kaiz-browser-address text_pole" placeholder="Nhập URL (vd: google.com) và ấn Enter" />
+                <i class="fa-solid fa-share-nodes interactable" id="kaiz-browser-share" title="Share link to Kaiz"></i>
+            </div>
+
+            <div class="kaiz-browser-actions">
+                <i class="fa-solid fa-arrow-right-to-bracket interactable" id="kaiz-browser-go" title="Go"></i>
+                <i class="fa-solid fa-xmark interactable" id="kaiz-browser-close" title="Đóng"></i>
+            </div>
         </div>
-        <div class="kaiz-browser-address-container">
-            <input type="text" id="kaiz-browser-address" class="kaiz-browser-address text_pole" placeholder="Nhập URL (VD: https://google.com)..." />
-            <i id="kaiz-browser-go" class="fa-solid fa-arrow-right-to-bracket interactable" title="Go"></i>
+        
+        <div class="kaiz-browser-content">
+            <iframe id="kaiz-browser-iframe" src="about:blank"></iframe>
         </div>
-        <div class="kaiz-browser-actions">
-            <button id="kaiz-browser-share" class="menu_button interactable kaiz-browser-btn-share" title="Chia sẻ trang này cho Kaiz">
-                <i class="fa-solid fa-share-nodes"></i> Share
-            </button>
-            <i id="kaiz-browser-close" class="fa-solid fa-xmark interactable" title="Đóng"></i>
-        </div>
-    </div>
-    <div class="kaiz-browser-content">
-        <iframe id="kaiz-browser-iframe" src="about:blank"></iframe>
     </div>
 </dialog>
