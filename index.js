@@ -3763,11 +3763,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
                 char.data[fieldId] = newValue;
                 char[fieldId] = newValue;
-                const res = await fetch('/api/characters/edit-attribute', {
+                let res = await fetch('/api/characters/edit-attribute', {
                     method: 'POST',
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload),
                 });
+                // Fallback to merge-attributes if edit-attribute fails (e.g. 400 for non-existent field)
+                if (res.status === 400) {
+                    const mergePayload = {
+                        avatar: char.avatar,
+                        data: {
+                            [fieldId]: newValue === undefined ? '__@@UNSET@@__' : newValue
+                        }
+                    };
+                    res = await fetch('/api/characters/merge-attributes', {
+                        method: 'POST',
+                        headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify(mergePayload)
+                    });
+                }
                 if (!res.ok)
                     throw new Error(`HTTP ${res.status}`);
                 // Cập nhật UI icon phát sáng
