@@ -4200,8 +4200,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const chatData = ctx.chat || [];
                     if (chatData.length === 0)
                         throw new Error('No chat data found');
+                    // ST requires chat metadata as the first line of JSONL
+                    const w = window;
+                    const metadataLine = {
+                        user_name: w.name1 || 'unused',
+                        character_name: w.name2 || 'unused',
+                        chat_metadata: w.chat_metadata || {},
+                    };
                     // Convert to JSONL for ST Chat import
-                    const jsonlData = chatData.map((msg) => JSON.stringify(msg)).join('\n');
+                    const jsonlData = [
+                        JSON.stringify(metadataLine),
+                        ...chatData.map((msg) => JSON.stringify(msg)),
+                    ].join('\n');
                     return { name: chatName, data: jsonlData };
                 }
                 if (type === 'worldbook') {
