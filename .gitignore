@@ -2,3 +2,9 @@ node_modules/
 dist/
 *.log
 eslint-report.json
+
+# Test files and dumps
+*_test*.html
+tools_dump.txt
+docs/*_dump.txt
+*.cjs
