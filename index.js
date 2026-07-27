@@ -7438,6 +7438,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
     class BrowserWindowUI {
         static $modal;
         static $address;
+        // Hệ thống lịch sử tự quản lý
+        static historyStack = [];
+        static historyIndex = -1;
         static init() {
             const $ = jQuery;
             // Tìm element chính xác để tránh dính cache DOM cũ nếu bị reload
@@ -7459,7 +7462,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     dialog.showModal();
                     const iframe = this.$modal.find('iframe')[0];
                     if (iframe && iframe.src.includes('about:blank')) {
-                        this.navigate('https://google.com');
+                        this.goToUrl('https://google.com');
                     }
                 }
             });
@@ -7483,7 +7486,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             url = `https://${url}`;
                         }
                     }
-                    this.navigate(url);
+                    this.goToUrl(url);
                 }
             };
             this.$modal.find('#kaiz-browser-go').on('click', go);
@@ -7495,28 +7498,25 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             this.$modal.find('#kaiz-browser-reload').on('click', () => {
                 const iframe = this.$modal.find('iframe')[0];
                 if (iframe && iframe.src && !iframe.src.includes('about:blank')) {
-                    iframe.src = iframe.src;
+                    // Ép load lại
+                    const current = iframe.src;
+                    iframe.src = 'about:blank';
+                    setTimeout(() => { iframe.src = current; }, 50);
                 }
             });
-            // Back / Forward (Chỉ hoạt động ở cùng origin, nhưng vẫn thử)
+            // Hệ thống Back / Forward tự xây dựng
             this.$modal.find('#kaiz-browser-back').on('click', () => {
-                try {
-                    const iframe = this.$modal.find('iframe')[0];
-                    if (iframe.contentWindow)
-                        iframe.contentWindow.history.back();
-                }
-                catch (e) {
-                    console.warn('[KaizAgent] Cannot use back() due to cross-origin.');
+                if (this.historyIndex > 0) {
+                    this.historyIndex--;
+                    const prevUrl = this.historyStack[this.historyIndex];
+                    this.navigate(prevUrl, false);
                 }
             });
             this.$modal.find('#kaiz-browser-forward').on('click', () => {
-                try {
-                    const iframe = this.$modal.find('iframe')[0];
-                    if (iframe.contentWindow)
-                        iframe.contentWindow.history.forward();
-                }
-                catch (e) {
-                    console.warn('[KaizAgent] Cannot use forward() due to cross-origin.');
+                if (this.historyIndex < this.historyStack.length - 1) {
+                    this.historyIndex++;
+                    const nextUrl = this.historyStack[this.historyIndex];
+                    this.navigate(nextUrl, false);
                 }
             });
             // Bấm chia sẻ trang cho AI
@@ -7532,30 +7532,50 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 // Highlight nút gửi hoặc focus vào input
                 $chatInput.focus();
             });
-            // Thử cập nhật URL bar nếu iframe chuyển hướng (chỉ được nếu same-origin)
+            // Cập nhật lại thanh địa chỉ nếu iframe load xong (chỉ read được nếu same-origin)
             this.$modal.find('iframe').on('load', () => {
                 try {
-                    const iframe = this.$modal.find('iframe')[0];
                     this.$address.css('background-color', ''); // Xóa màu loading
+                    const iframe = this.$modal.find('iframe')[0];
                     const newUrl = iframe.contentWindow?.location.href;
                     if (newUrl && !newUrl.includes('about:blank')) {
                         this.$address.val(newUrl);
+                        // Nếu url thay đổi do click link bên trong, có thể cập nhật lại state hiện tại
+                        if (this.historyIndex >= 0 && this.historyStack[this.historyIndex] !== newUrl) {
+                            this.historyStack[this.historyIndex] = newUrl;
+                        }
                     }
                 }
                 catch (e) {
                     this.$address.css('background-color', ''); // Xóa màu loading
-                    // Cross-origin, ignore
+                    // Cross-origin: Không thể đọc được URL mới nếu người dùng click link bên trong trang web khác domain.
                 }
             });
         }
-        static navigate(url) {
+        static goToUrl(url) {
+            // Cắt bỏ phần history tương lai nếu đang ở quá khứ mà lại nhập URL mới
+            if (this.historyIndex < this.historyStack.length - 1) {
+                this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
+            }
+            if (this.historyStack[this.historyIndex] !== url) {
+                this.historyStack.push(url);
+                this.historyIndex++;
+            }
+            this.navigate(url, true);
+        }
+        static navigate(url, forceReload) {
             this.$address.val(url);
             // Hiệu ứng loading nhẹ ở thanh địa chỉ
             this.$address.css('background-color', '#eef2ff');
             const iframe = this.$modal.find('iframe')[0];
             if (iframe) {
-                // Ép buộc load URL bằng mọi cách
-                iframe.src = url;
+                if (forceReload) {
+                    iframe.src = 'about:blank';
+                    setTimeout(() => { iframe.src = url; }, 50);
+                }
+                else {
+                    iframe.src = url;
+                }
             }
             else {
                 alert("Lỗi: Không tìm thấy Iframe để hiển thị web!");
