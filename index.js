@@ -7486,13 +7486,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             url = `https://${url}`;
                         }
                     }
-                    // Bypass X-Frame-Options cho Google Search gốc
-                    if (url === 'https://google.com' || url === 'https://www.google.com' || url === 'https://google.com/' || url === 'https://www.google.com/') {
-                        url = 'https://www.google.com/webhp?igu=1';
-                    }
-                    else if (url.startsWith('https://www.google.com/search?') && !url.includes('igu=1')) {
-                        url += '&igu=1';
-                    }
                     this.goToUrl(url);
                 }
             };
@@ -7560,6 +7553,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             });
         }
         static goToUrl(url) {
+            // Xử lý chung các trường hợp bypass iframe block cho Google
+            if (url === 'https://google.com' || url === 'https://www.google.com' || url === 'https://google.com/' || url === 'https://www.google.com/') {
+                url = 'https://www.google.com/webhp?igu=1';
+            }
+            else if (url.startsWith('https://www.google.com/search?') && !url.includes('igu=1')) {
+                url += '&igu=1';
+            }
             // Cắt bỏ phần history tương lai nếu đang ở quá khứ mà lại nhập URL mới
             if (this.historyIndex < this.historyStack.length - 1) {
                 this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
