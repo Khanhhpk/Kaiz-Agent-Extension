@@ -2040,10 +2040,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             el.getAttribute('data-title')?.trim() ||
                             '';
                         const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                        const value = el.value?.trim() || '';
+                        const value = el.value || ''; // Không trim để giữ khoảng trắng hợp lệ
                         let description = text || title || ariaLabel;
                         if (!description && el.tagName === 'INPUT') {
-                            description = value || el.getAttribute('placeholder') || 'Input field';
+                            description = el.getAttribute('placeholder') || 'Input field';
                         }
                         let isIconOnly = false;
                         if (!description) {
@@ -2083,11 +2083,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         let states = '';
                         if (el.disabled)
                             states += '[Disabled] ';
-                        if (tagName === 'input') {
-                            const type = el.getAttribute('type') || 'text';
-                            states += `(type:${type}) `;
-                            if (el.checked)
-                                states += '[Checked] ';
+                        if (tagName === 'input' || tagName === 'textarea') {
+                            if (tagName === 'input') {
+                                const type = el.getAttribute('type') || 'text';
+                                states += `(type:${type}) `;
+                                if (el.checked)
+                                    states += '[Checked] ';
+                            }
+                            const val = el.value;
+                            if (val !== undefined && val !== null && val !== '') {
+                                const trimmedVal = val.length > 50 ? val.substring(0, 47) + '...' : val;
+                                states += `[Value: "${trimmedVal.replace(/\n/g, '\\n')}"] `;
+                            }
                         }
                         if (tagName === 'select') {
                             const select = el;

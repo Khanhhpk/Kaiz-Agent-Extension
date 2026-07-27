@@ -85,11 +85,11 @@ export const scanUITool: ITool = {
                         el.getAttribute('data-title')?.trim() ||
                         '';
                     const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                    const value = (el as HTMLInputElement).value?.trim() || '';
+                    const value = (el as HTMLInputElement).value || ''; // Không trim để giữ khoảng trắng hợp lệ
                     let description = text || title || ariaLabel;
 
                     if (!description && el.tagName === 'INPUT') {
-                        description = value || el.getAttribute('placeholder') || 'Input field';
+                        description = el.getAttribute('placeholder') || 'Input field';
                     }
 
                     let isIconOnly = false;
@@ -130,10 +130,17 @@ export const scanUITool: ITool = {
                     let states = '';
                     if ((el as any).disabled) states += '[Disabled] ';
 
-                    if (tagName === 'input') {
-                        const type = el.getAttribute('type') || 'text';
-                        states += `(type:${type}) `;
-                        if ((el as HTMLInputElement).checked) states += '[Checked] ';
+                    if (tagName === 'input' || tagName === 'textarea') {
+                        if (tagName === 'input') {
+                            const type = el.getAttribute('type') || 'text';
+                            states += `(type:${type}) `;
+                            if ((el as HTMLInputElement).checked) states += '[Checked] ';
+                        }
+                        const val = (el as HTMLInputElement).value;
+                        if (val !== undefined && val !== null && val !== '') {
+                            const trimmedVal = val.length > 50 ? val.substring(0, 47) + '...' : val;
+                            states += `[Value: "${trimmedVal.replace(/\n/g, '\\n')}"] `;
+                        }
                     }
 
                     if (tagName === 'select') {
