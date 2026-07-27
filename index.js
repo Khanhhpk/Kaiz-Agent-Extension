@@ -3805,6 +3805,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 else {
                     mergePayload.data[fieldId] = valueOrUnset;
+                    if (fieldId === 'character_book' && typeof newValue === 'object' && newValue !== null && newValue.name) {
+                        mergePayload.data.extensions = mergePayload.data.extensions || {};
+                        mergePayload.data.extensions.world = newValue.name;
+                    }
                 }
                 // In-memory update for ST Frontend
                 if (!char.data)
@@ -3830,6 +3834,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     else {
                         char.data[fieldId] = newValue;
+                        if (fieldId === 'character_book' && typeof newValue === 'object' && newValue !== null && newValue.name) {
+                            if (!char.data.extensions)
+                                char.data.extensions = {};
+                            char.data.extensions.world = newValue.name;
+                        }
                     }
                 }
                 // Luôn dùng merge-attributes để chuẩn hoá V3 spec và tránh lỗi 400
@@ -3864,6 +3873,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                         if (fieldId === 'world') {
                             $('#character_world').val(newValue || '').trigger('change');
+                        }
+                        else if (fieldId === 'character_book' && typeof newValue === 'object' && newValue !== null && newValue.name) {
+                            $('#character_world').val(newValue.name).trigger('change');
                         }
                     }
                 }
