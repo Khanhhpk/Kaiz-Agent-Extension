@@ -2724,7 +2724,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
         execute: async (args, context) => {
             try {
-                let reqHeaders = {
+                const reqHeaders = {
                     'Content-Type': 'application/json',
                 };
                 try {
@@ -2776,7 +2776,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         try {
                             const payload = { extensionName: cleanExtName, global: isGlobal };
                             // 1. Dùng API nội bộ của ST để check xem có update thật hay không
-                            let versionRes = await fetch('/api/extensions/version', {
+                            const versionRes = await fetch('/api/extensions/version', {
                                 method: 'POST',
                                 headers: reqHeaders,
                                 body: JSON.stringify(payload),
@@ -2786,7 +2786,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 // Nếu có bản cập nhật mới (isUpToDate = false)
                                 if (versionData && versionData.isUpToDate === false) {
                                     // 2. Kích hoạt logic update của ST
-                                    let updateRes = await fetch('/api/extensions/update', {
+                                    const updateRes = await fetch('/api/extensions/update', {
                                         method: 'POST',
                                         headers: reqHeaders,
                                         body: JSON.stringify(payload),
@@ -3050,7 +3050,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     };
                 }
                 const { action, id, data } = args;
-                let { scope } = args;
+                const { scope } = args;
                 // Hàm đệ quy xoá
                 const deleteFromTree = (nodes) => {
                     if (!Array.isArray(nodes))

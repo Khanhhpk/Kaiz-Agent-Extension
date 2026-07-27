@@ -47,7 +47,7 @@ export const manageTavernHelperScriptTool: ITool = {
             }
 
             const { action, id, data } = args;
-            let { scope } = args;
+            const { scope } = args;
 
             // Hàm đệ quy xoá
             const deleteFromTree = (nodes: any[]): boolean => {
