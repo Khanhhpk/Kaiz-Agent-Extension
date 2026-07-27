@@ -1550,7 +1550,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 catch (err) {
                     // Tự động Fallback sang Proxy nếu fetch gốc bị lỗi (do CORS của extension không cover được hết các trang)
                     console.log('[scrape_webpage] Direct fetch failed, trying proxy...', err);
-                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                     const proxyRes = await fetch(proxyUrl);
                     if (!proxyRes.ok) {
                         return {
@@ -1665,7 +1665,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 catch (err) {
                     // Tự động Fallback sang proxy nếu fetch gốc bị chặn
                     console.log('[search_google] Direct fetch failed, trying proxy...', err);
-                    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                     const proxyRes = await fetch(proxyUrl);
                     if (proxyRes.ok) {
                         html = await proxyRes.text();
@@ -1718,7 +1718,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     catch (e) {
                         // Proxy fallback for DuckDuckGo
-                        const ddgProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ddgUrl)}`;
+                        const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgUrl)}`;
                         const proxyRes = await fetch(ddgProxyUrl);
                         if (proxyRes.ok)
                             ddgHtml = await proxyRes.text();
@@ -1755,7 +1755,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 bingHtml = await bingRes.text();
                         }
                         catch (e) {
-                            const bingProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(bingUrl)}`;
+                            const bingProxyUrl = `https://corsproxy.io/?${encodeURIComponent(bingUrl)}`;
                             const proxyRes = await fetch(bingProxyUrl);
                             if (proxyRes.ok)
                                 bingHtml = await proxyRes.text();

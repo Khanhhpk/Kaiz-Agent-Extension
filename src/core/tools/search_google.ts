@@ -32,7 +32,7 @@ export const searchGoogleTool: ITool = {
             } catch (err) {
                 // Tự động Fallback sang proxy nếu fetch gốc bị chặn
                 console.log('[search_google] Direct fetch failed, trying proxy...', err);
-                const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+                const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(url)}`;
                 const proxyRes = await fetch(proxyUrl);
                 if (proxyRes.ok) {
                     html = await proxyRes.text();
@@ -93,7 +93,7 @@ export const searchGoogleTool: ITool = {
                     else throw new Error('DDG Fetch Not OK');
                 } catch (e) {
                     // Proxy fallback for DuckDuckGo
-                    const ddgProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(ddgUrl)}`;
+                    const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgUrl)}`;
                     const proxyRes = await fetch(ddgProxyUrl);
                     if (proxyRes.ok) ddgHtml = await proxyRes.text();
                 }
@@ -130,7 +130,7 @@ export const searchGoogleTool: ITool = {
                         const bingRes = await fetch(bingUrl);
                         if (bingRes.ok) bingHtml = await bingRes.text();
                     } catch (e) {
-                        const bingProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(bingUrl)}`;
+                        const bingProxyUrl = `https://corsproxy.io/?${encodeURIComponent(bingUrl)}`;
                         const proxyRes = await fetch(bingProxyUrl);
                         if (proxyRes.ok) bingHtml = await proxyRes.text();
                     }
