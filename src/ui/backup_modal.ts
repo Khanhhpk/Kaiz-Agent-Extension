@@ -24,16 +24,18 @@ export class BackupModal {
                             <h2 style="margin: 0; font-size: 1.2rem;"><i class="fa-solid fa-save"></i> Backup Manager</h2>
                             <div class="kaiz-modal-close" style="cursor: pointer; font-size: 1.2rem;"><i class="fa-solid fa-xmark"></i></div>
                         </div>
-                        <div class="kaiz-modal-body">
-                            <div class="kaiz-backup-tabs" style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor);">
-                                <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">All</div>
-                                <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Characters</div>
-                                <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Chats</div>
-                                <div class="kaiz-tab" data-type="worldbook" style="padding: 8px 12px; cursor: pointer;">Worldbooks</div>
-                            </div>
-                            <div class="kaiz-backup-list" style="max-height: 400px; overflow-y: auto;">
-                                <!-- Backup items will be rendered here -->
-                            </div>
+                        <div class="kaiz-backup-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;">
+                            <h3 style="margin: 0; font-size: 1.2em;">Backup Manager</h3>
+                            <div id="kaiz-backup-storage-info" style="font-size: 0.85em; color: #aaa;">Calculating storage...</div>
+                        </div>
+                        <div class="kaiz-backup-tabs" style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor);">
+                            <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">All</div>
+                            <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Characters</div>
+                            <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Chats</div>
+                            <div class="kaiz-tab" data-type="worldbook" style="padding: 8px 12px; cursor: pointer;">Worldbooks</div>
+                        </div>
+                        <div class="kaiz-backup-list" style="max-height: 400px; overflow-y: auto;">
+                            <!-- Backup items will be rendered here -->
                         </div>
                         <div class="kaiz-modal-footer" style="margin-top: 15px; text-align: right;">
                             <button id="kaiz-backup-close-btn" class="menu_button">Close</button>
@@ -150,39 +152,48 @@ export class BackupModal {
 
             if (filtered.length === 0) {
                 listContainer.html(
-                    '<div style="text-align: center; padding: 20px; opacity: 0.5;">No backups found.</div>',
+                    '<div style="text-align: center; padding: 20px; color: #888;">No backups found.</div>',
                 );
-                return;
-            }
+            } else {
+                let html = '';
+                let totalBytes = 0;
+                filtered.forEach((b: any) => {
+                    const date = new Date(b.timestamp).toLocaleString();
+                    const sizeInBytes = new Blob([b.data]).size;
+                    totalBytes += sizeInBytes;
+                    const sizeKb = (sizeInBytes / 1024).toFixed(1);
 
-            let html = '';
-            for (const backup of filtered) {
-                const date = new Date(backup.timestamp).toLocaleString();
-                let icon = 'fa-file';
-                if (backup.type === 'character') icon = 'fa-user';
-                else if (backup.type === 'chat') icon = 'fa-comments';
-                else if (backup.type === 'worldbook') icon = 'fa-book';
+                    const icon =
+                        b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
 
-                html += `
-                    <div class="kaiz-backup-item">
-                        <div class="kaiz-backup-info">
-                            <div class="kaiz-backup-title"><i class="fa-solid ${icon}"></i> ${this.escapeHtml(backup.name)}</div>
-                            <div class="kaiz-backup-meta">
-                                <span>${date}</span> &bull; <span>${backup.type.toUpperCase()}</span>
+                    html += `
+                        <div class="kaiz-backup-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px; margin-bottom: 8px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid ${icon}" style="font-size: 1.2em; color: #888;"></i>
+                                <div>
+                                    <div style="font-weight: bold;">${this.escapeHtml(b.name)}</div>
+                                    <div style="font-size: 0.8em; color: #888;">${date} - ${sizeKb} KB</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 5px;">
+                                <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Download"><i class="fa-solid fa-download"></i></button>
+                                <button class="kaiz-backup-delete kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #c0392b; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Delete"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
-                        <div class="kaiz-backup-actions">
-                            <button class="menu_button kaiz-backup-download" data-id="${backup.id}" title="Download JSON">
-                                <i class="fa-solid fa-download"></i>
-                            </button>
-                            <button class="menu_button kaiz-backup-delete" data-id="${backup.id}" title="Delete" style="color: #ff6b6b;">
-                                <i class="fa-solid fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
+                    `;
+                });
+                listContainer.html(html);
             }
-            listContainer.html(html);
+
+            // Update storage estimation
+            if (navigator.storage && navigator.storage.estimate) {
+                const estimate = await navigator.storage.estimate();
+                const usedMb = ((estimate.usage || 0) / (1024 * 1024)).toFixed(2);
+                const quotaMb = ((estimate.quota || 0) / (1024 * 1024)).toFixed(2);
+                this.modal.find('#kaiz-backup-storage-info').text(`Storage: ${usedMb}MB / ${quotaMb}MB used`);
+            } else {
+                this.modal.find('#kaiz-backup-storage-info').text('Storage info not available');
+            }
         } catch (error) {
             console.error('[BackupModal] Error loading backups:', error);
             listContainer.html('<div style="color: red; padding: 10px;">Error loading backups. Check console.</div>');
@@ -207,7 +218,8 @@ export class BackupModal {
             // Format file name
             const safeName = backup.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
             const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
-            a.download = `${safeName}_backup_${dateStr}.json`;
+            const extension = backup.type === 'chat' ? 'jsonl' : 'json';
+            a.download = `${safeName}_backup_${dateStr}.${extension}`;
 
             document.body.appendChild(a);
             a.click();

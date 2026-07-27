@@ -929,15 +929,31 @@ export class SillyTavernAdapter {
                 const chatName = ctx.chatId || 'Unknown_Chat';
                 const chatData = ctx.chat || [];
                 if (chatData.length === 0) throw new Error('No chat data found');
-                return { name: chatName, data: JSON.stringify(chatData, null, 2) };
+                // Convert to JSONL for ST Chat import
+                const jsonlData = chatData.map((msg: any) => JSON.stringify(msg)).join('\n');
+                return { name: chatName, data: jsonlData };
             }
             if (type === 'worldbook') {
-                const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')();
-                if (!ST_WorldInfo || !ST_WorldInfo.world_info) throw new Error('WorldInfo module not ready');
-                const bookName = name || Object.keys(ST_WorldInfo.world_info)[0];
-                if (!bookName || !ST_WorldInfo.world_info[bookName])
-                    throw new Error('Worldbook not found: ' + bookName);
-                return { name: bookName, data: JSON.stringify(ST_WorldInfo.world_info[bookName], null, 2) };
+                const bookName = name;
+                if (!bookName) throw new Error('Missing worldbook name');
+
+                let data = null;
+                if (typeof ctx.loadWorldInfo === 'function') {
+                    data = await ctx.loadWorldInfo(bookName);
+                } else {
+                    const res = await fetch('/api/worldinfo/get', {
+                        method: 'POST',
+                        headers: {
+                            ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ name: bookName }),
+                    });
+                    if (res.ok) data = await res.json();
+                }
+
+                if (!data) throw new Error('Worldbook not found: ' + bookName);
+                return { name: bookName, data: JSON.stringify(data, null, 2) };
             }
         } catch (e: any) {
             console.error('[KaizAgent] Backup export error:', e);
