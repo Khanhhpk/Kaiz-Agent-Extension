@@ -1747,131 +1747,138 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return '';
                 };
                 // =====================================================
-                // BƯỚC 1: SearXNG PRIMARY — meta-search engine tổng hợp
-                //         nhiều nguồn, trả JSON sạch, không bị bot-mode
+                // BƯỚC 1: GOOGLE SEARCH (Ưu tiên 1 nếu có CORS Extension)
                 // =====================================================
-                const SEARXNG_INSTANCES = [
-                    'https://searx.be/search',
-                    'https://priv.au/search',
-                    'https://search.inetol.net/search',
-                    'https://searx.tiekoetter.com/search',
-                    'https://etsi.me/search',
-                ];
-                const fetchSearXNG = async (rawQuery) => {
-                    // SearXNG cần %20 cho khoảng trắng, KHÔNG dùng + (SearXNG không decode + thành space)
-                    const q = encodeURIComponent(rawQuery);
-                    // Thử các instances song song, lấy instance nào trả lời đúng trước
-                    const tryInstance = (base) => fetch(`${base}?q=${q}&format=json&language=all`, { signal: AbortSignal.timeout(5000) })
-                        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-                        .then((data) => {
-                        const items = (data.results || []);
-                        if (items.length === 0)
-                            return Promise.reject('no results');
-                        return items.slice(0, 15).map((item) => ({
-                            title: item.title || '',
-                            url: item.url || '',
-                            snippet: item.content || '',
-                        }));
+                console.log('[search] Searching Google (primary)...');
+                // Kẹp thêm bùa igu=1 để tối ưu khi dùng kèm Iframe và CORS Extension
+                const googleUrl = `https://www.google.com/search?q=${encodedQuery}&igu=1`;
+                let googleHtml = '';
+                try {
+                    const googleRes = await fetch(googleUrl);
+                    if (googleRes.ok)
+                        googleHtml = await googleRes.text();
+                }
+                catch (_e) {
+                    try {
+                        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
+                        const proxyRes = await fetch(proxyUrl);
+                        if (proxyRes.ok)
+                            googleHtml = await proxyRes.text();
+                    }
+                    catch (_e2) {
+                        /* ignore */
+                    }
+                }
+                if (googleHtml) {
+                    const googleDoc = parser.parseFromString(googleHtml, 'text/html');
+                    const gElements = googleDoc.querySelectorAll('div.g');
+                    gElements.forEach((g) => {
+                        const aElement = g.querySelector('a');
+                        const h3Element = g.querySelector('h3');
+                        if (aElement && h3Element) {
+                            const title = h3Element.textContent?.trim() || '';
+                            const link = aElement.getAttribute('href');
+                            if (title && link && link.startsWith('http')) {
+                                let snippet = g.textContent?.trim() || '';
+                                if (snippet.startsWith(title)) {
+                                    snippet = snippet.substring(title.length).trim();
+                                }
+                                snippet = snippet
+                                    .replace(/Translate this page/g, '')
+                                    .replace(/Cached/g, '')
+                                    .trim();
+                                results.push({ title, url: link, snippet });
+                            }
+                        }
                     });
-                    // Race tất cả instances, lấy kết quả đầu tiên thành công
-                    return Promise.any(SEARXNG_INSTANCES.map(tryInstance)).catch(() => []);
-                };
-                console.log('[search] Searching SearXNG (primary)...');
-                const searxResults = await fetchSearXNG(query); // truyền raw query, encode bên trong
-                // SearXNG aggregate từ nhiều nguồn, nhưng upstream (Bing/Google bot-mode)
-                // cũng có thể trả rác cho queries bắt đầu bằng "top", "best", "most"...
-                // Chỉ accept nếu kết quả KHÔNG phải rác
-                if (searxResults.length > 0 && !isGarbageResults(searxResults, query)) {
-                    engine = 'SearXNG';
-                    results.push(...searxResults);
-                    console.log('[search] SearXNG returned good results!');
-                }
-                else if (searxResults.length > 0) {
-                    console.log('[search] SearXNG returned garbage results. Falling through to Bing...');
+                    if (results.length > 0) {
+                        engine = 'Google';
+                        console.log('[search] Google returned good results!');
+                    }
                 }
                 // =====================================================
-                // BƯỚC 2: Bing SECONDARY — fallback nếu SearXNG fail
-                //         (toàn bộ instances bị rate-limit/blocked)
+                // BƯỚC 2: SearXNG — meta-search engine tổng hợp (Fallback 1)
+                // =====================================================
+                if (results.length === 0) {
+                    console.log('[search] Google failed. Searching SearXNG (fallback 1)...');
+                    const SEARXNG_INSTANCES = [
+                        'https://searx.be/search',
+                        'https://priv.au/search',
+                        'https://search.inetol.net/search',
+                        'https://searx.tiekoetter.com/search',
+                        'https://etsi.me/search',
+                    ];
+                    const fetchSearXNG = async (rawQuery) => {
+                        const q = encodeURIComponent(rawQuery);
+                        const tryInstance = (base) => fetch(`${base}?q=${q}&format=json&language=all`, { signal: AbortSignal.timeout(5000) })
+                            .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+                            .then((data) => {
+                            const items = (data.results || []);
+                            if (items.length === 0)
+                                return Promise.reject('no results');
+                            return items.slice(0, 15).map((item) => ({
+                                title: item.title || '',
+                                url: item.url || '',
+                                snippet: item.content || '',
+                            }));
+                        });
+                        return Promise.any(SEARXNG_INSTANCES.map(tryInstance)).catch(() => []);
+                    };
+                    const searxResults = await fetchSearXNG(query);
+                    if (searxResults.length > 0 && !isGarbageResults(searxResults, query)) {
+                        engine = 'SearXNG';
+                        results.push(...searxResults);
+                        console.log('[search] SearXNG returned good results!');
+                    }
+                }
+                // =====================================================
+                // BƯỚC 3: Bing — Fallback 2
                 // =====================================================
                 let bingHtml = '';
-                let bingResults = [];
                 if (results.length === 0) {
-                    console.log('[search] SearXNG failed. Searching Bing (secondary)...');
+                    console.log('[search] SearXNG failed. Searching Bing (fallback 2)...');
+                    let bingResults = [];
                     bingHtml = await fetchBing(encodedQuery);
                     bingResults = bingHtml ? parseBing(bingHtml) : [];
-                    // --- Quality Check + Smart Retry ---
-                    // Bing bot-mode chỉ parse từ ĐẦU TIÊN của query.
-                    // Nếu từ đó là adjective thông dụng (best, most, top...) → từ điển
-                    // Fix: đảo query để noun ý nghĩa lên đầu, hoặc bọc quotes.
                     if (isGarbageResults(bingResults, query)) {
                         console.log('[search] Bing returned garbage. Trying smart retries...');
-                        // Danh sách adjective/adverb thông dụng hay làm Bing bị ngáo
                         const leadingStopWords = [
-                            'best',
-                            'most',
-                            'top',
-                            'new',
-                            'latest',
-                            'upcoming',
-                            'good',
-                            'great',
-                            'worst',
-                            'all',
-                            'every',
-                            'some',
-                            'many',
-                            'few',
-                            'several',
-                            'tình',
-                            'các',
-                            'những',
-                            'bộ',
-                            'phim',
-                            'cách',
-                            'hướng',
-                            'danh',
+                            'best', 'most', 'top', 'new', 'latest', 'upcoming', 'good', 'great', 'worst',
+                            'all', 'every', 'some', 'many', 'few', 'several', 'tình', 'các', 'những', 'bộ',
+                            'phim', 'cách', 'hướng', 'danh',
                         ];
-                        // Chiến lược 1: Nếu từ đầu tiên là stop-word → đảo query
-                        // VD: "best anime 2026" → "anime 2026 best"
                         const firstWord = query.trim().split(/\s+/)[0].toLowerCase();
                         let reorderedUsed = false;
                         if (leadingStopWords.includes(firstWord)) {
                             const words = query.trim().split(/\s+/);
                             const reordered = [...words.slice(1), words[0]].join(' ');
                             const reorderedEncoded = encodeURIComponent(reordered).replace(/%20/g, '+');
-                            console.log(`[search] Reordering query: "${query}" → "${reordered}"`);
                             bingHtml = await fetchBing(reorderedEncoded);
                             const reorderedResults = bingHtml ? parseBing(bingHtml) : [];
                             if (reorderedResults.length > 0 && !isGarbageResults(reorderedResults, query)) {
                                 bingResults = reorderedResults;
                                 reorderedUsed = true;
-                                console.log('[search] Reordered query returned good results!');
                             }
                         }
-                        // Chiến lược 2: Bọc toàn bộ query trong ngoặc kép (tốt cho tiếng Việt)
                         if (!reorderedUsed) {
                             const quotedQuery = `%22${encodedQuery}%22`;
-                            console.log('[search] Retrying with quoted query...');
                             bingHtml = await fetchBing(quotedQuery);
                             const quotedResults = bingHtml ? parseBing(bingHtml) : [];
                             if (quotedResults.length > 0 && !isGarbageResults(quotedResults, query)) {
                                 bingResults = quotedResults;
-                                console.log('[search] Quoted query returned good results!');
-                            }
-                            else {
-                                console.log('[search] All Bing retries failed or returned garbage.');
                             }
                         }
                     }
                     if (bingResults.length > 0) {
+                        engine = 'Bing';
                         results.push(...bingResults);
                     }
-                } // end if SearXNG failed
+                }
                 // =====================================================
-                // BƯỚC 3: Fallback sang DuckDuckGo HTML POST
+                // BƯỚC 4: Fallback sang DuckDuckGo HTML POST
                 // =====================================================
                 if (results.length === 0) {
-                    console.log('[search] Bing returned 0 results. Falling back to DuckDuckGo HTML POST...');
+                    console.log('[search] Bing failed. Falling back to DuckDuckGo HTML POST...');
                     const ddgPostUrl = `https://html.duckduckgo.com/html/`;
                     let ddgHtml = '';
                     try {
@@ -1886,7 +1893,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             throw new Error('DDG HTML POST Not OK');
                     }
                     catch (_e) {
-                        // DDG Lite GET via proxy
                         try {
                             const ddgLiteUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
                             const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgLiteUrl)}`;
@@ -1899,9 +1905,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                     }
                     if (ddgHtml) {
-                        engine = 'DuckDuckGo';
                         const ddgDoc = parser.parseFromString(ddgHtml, 'text/html');
-                        // Parse DDG HTML POST results
                         const resultElements = ddgDoc.querySelectorAll('.result');
                         if (resultElements.length > 0) {
                             resultElements.forEach((res) => {
@@ -1920,7 +1924,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             });
                         }
                         else {
-                            // Parse DDG Lite results (if proxy fallback was used)
                             const linkElements = ddgDoc.querySelectorAll('a.result-link');
                             const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');
                             for (let i = 0; i < linkElements.length; i++) {
@@ -1938,56 +1941,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 }
                             }
                         }
-                    }
-                }
-                // =====================================================
-                // BƯỚC 3: Fallback cuối cùng sang Google
-                // =====================================================
-                if (results.length === 0) {
-                    console.log('[search] DDG also failed. Falling back to Google...');
-                    // Kẹp thêm bùa igu=1 để nếu fetch thất bại do CORS, ta có thể dùng Browser Box hiển thị Iframe 
-                    // hoặc kết hợp với extension Allow CORS để vượt rào dễ hơn.
-                    const googleUrl = `https://www.google.com/search?q=${encodedQuery}&igu=1`;
-                    let googleHtml = '';
-                    try {
-                        const googleRes = await fetch(googleUrl);
-                        if (googleRes.ok)
-                            googleHtml = await googleRes.text();
-                    }
-                    catch (_e) {
-                        try {
-                            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
-                            const proxyRes = await fetch(proxyUrl);
-                            if (proxyRes.ok)
-                                googleHtml = await proxyRes.text();
+                        if (results.length > 0) {
+                            engine = 'DuckDuckGo';
                         }
-                        catch (_e2) {
-                            /* ignore */
-                        }
-                    }
-                    if (googleHtml) {
-                        engine = 'Google';
-                        const googleDoc = parser.parseFromString(googleHtml, 'text/html');
-                        const gElements = googleDoc.querySelectorAll('div.g');
-                        gElements.forEach((g) => {
-                            const aElement = g.querySelector('a');
-                            const h3Element = g.querySelector('h3');
-                            if (aElement && h3Element) {
-                                const title = h3Element.textContent?.trim() || '';
-                                const link = aElement.getAttribute('href');
-                                if (title && link && link.startsWith('http')) {
-                                    let snippet = g.textContent?.trim() || '';
-                                    if (snippet.startsWith(title)) {
-                                        snippet = snippet.substring(title.length).trim();
-                                    }
-                                    snippet = snippet
-                                        .replace(/Translate this page/g, '')
-                                        .replace(/Cached/g, '')
-                                        .trim();
-                                    results.push({ title, url: link, snippet });
-                                }
-                            }
-                        });
                     }
                 }
                 // =====================================================
