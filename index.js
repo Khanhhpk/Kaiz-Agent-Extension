@@ -1754,32 +1754,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const googleUrl = `https://www.google.com/search?q=${encodedQuery}&igu=1`;
                 let googleHtml = '';
                 try {
-                    const googleRes = await fetch(googleUrl);
+                    // Thêm credentials: 'include' để trình duyệt gửi kèm Cookie thật của người dùng
+                    // Giúp Google nhận diện đây là người thật (đã login) thay vì bot trắng tinh, từ đó bypass trang JS Challenge (Cloudflare-like)
+                    const googleRes = await fetch(googleUrl, { credentials: 'include' });
                     if (googleRes.ok)
                         googleHtml = await googleRes.text();
                 }
                 catch (_e) {
                     try {
-                        // Fallback 1: corsproxy.io
                         const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
                         const proxyRes = await fetch(proxyUrl);
                         if (proxyRes.ok)
                             googleHtml = await proxyRes.text();
                     }
                     catch (_e2) {
-                        try {
-                            // Fallback 2: allorigins (trả về JSON chứa HTML)
-                            const allOriginsUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(googleUrl)}`;
-                            const aoRes = await fetch(allOriginsUrl);
-                            if (aoRes.ok) {
-                                const aoJson = await aoRes.json();
-                                if (aoJson.contents)
-                                    googleHtml = aoJson.contents;
-                            }
-                        }
-                        catch (_e3) {
-                            /* ignore */
-                        }
+                        /* ignore */
                     }
                 }
                 if (googleHtml) {
