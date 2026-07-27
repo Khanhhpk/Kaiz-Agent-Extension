@@ -225,8 +225,8 @@
     id="kaiz-browser-modal"
     class="kaiz-modal kaiz-browser-modal"
 >
-    <div style="position: absolute; inset: 0; display: flex; flex-direction: column; width: 100%; height: 100%;">
-        <div class="kaiz-browser-header">
+    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;">
+        <div class="kaiz-browser-header" style="height: 50px; flex-shrink: 0; z-index: 10;">
             <div class="kaiz-browser-nav">
                 <i class="fa-solid fa-arrow-left interactable" id="kaiz-browser-back" title="Back"></i>
                 <i class="fa-solid fa-arrow-right interactable" id="kaiz-browser-forward" title="Forward"></i>
@@ -244,8 +244,8 @@
             </div>
         </div>
         
-        <div class="kaiz-browser-content">
-            <iframe id="kaiz-browser-iframe" src="about:blank"></iframe>
+        <div class="kaiz-browser-content" style="flex: 1; min-height: 0; width: 100%; background-color: #ffffff; position: relative;">
+            <iframe id="kaiz-browser-iframe" src="about:blank" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: block; z-index: 5;"></iframe>
         </div>
     </div>
 </dialog>
