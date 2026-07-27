@@ -10,8 +10,8 @@ export const editCharacterCardTool: ITool = {
             properties: {
                 field: {
                     type: 'string',
-                    enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book', 'creator', 'talkativeness', 'fav'],
-                    description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "character_book" (để gắn Lorebook), "talkativeness", "fav".',
+                    enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book', 'world', 'creator', 'talkativeness', 'fav'],
+                    description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "world" (để liên kết Lorebook), "character_book" (để nhúng Lorebook), "talkativeness", "fav".',
                 },
                 value: {
                     type: 'string',

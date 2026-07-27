@@ -637,8 +637,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     field: {
                         type: 'string',
-                        enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book', 'creator', 'talkativeness', 'fav'],
-                        description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "character_book" (để gắn Lorebook), "talkativeness", "fav".',
+                        enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book', 'world', 'creator', 'talkativeness', 'fav'],
+                        description: 'Trường thông tin cần chỉnh sửa. Ví dụ: "description", "personality", "world" (để liên kết Lorebook), "character_book" (để nhúng Lorebook), "talkativeness", "fav".',
                     },
                     value: {
                         type: 'string',
@@ -3732,79 +3732,52 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (typeof window.getCharacters === 'function')
                     await window.getCharacters().catch(() => { });
             }
-            else if (fieldId === 'character_book') {
-                if (typeof newValue === 'string' && newValue.trim() !== '') {
-                    let lbData = null;
-                    if (typeof window.ST_WorldInfo?.loadWorldInfo === 'function') {
-                        lbData = await window.ST_WorldInfo.loadWorldInfo(newValue);
+            else {
+                // Special pre-processing for specific fields
+                if (fieldId === 'character_book') {
+                    if (typeof newValue === 'string' && newValue.trim() !== '') {
+                        let lbData = null;
+                        if (typeof window.ST_WorldInfo?.loadWorldInfo === 'function') {
+                            lbData = await window.ST_WorldInfo.loadWorldInfo(newValue);
+                        }
+                        else if (typeof ctx.loadWorldInfo === 'function') {
+                            lbData = await ctx.loadWorldInfo(newValue);
+                        }
+                        else {
+                            const lbRes = await fetch('/api/worldinfo/get', {
+                                method: 'POST',
+                                headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ name: newValue })
+                            });
+                            if (lbRes.ok)
+                                lbData = await lbRes.json();
+                        }
+                        if (!lbData)
+                            throw new Error(`Could not find or load lorebook: ${newValue}`);
+                        newValue = lbData;
                     }
-                    else if (typeof ctx.loadWorldInfo === 'function') {
-                        lbData = await ctx.loadWorldInfo(newValue);
+                    else if (typeof newValue === 'string' && newValue.trim() === '') {
+                        newValue = undefined;
                     }
-                    else {
-                        const lbRes = await fetch('/api/worldinfo/get', {
-                            method: 'POST',
-                            headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ name: newValue })
-                        });
-                        if (lbRes.ok)
-                            lbData = await lbRes.json();
-                    }
-                    if (!lbData)
-                        throw new Error(`Could not find or load lorebook: ${newValue}`);
-                    newValue = lbData;
+                }
+                else if (fieldId === 'fav') {
+                    newValue = (newValue === 'true' || newValue === true);
+                }
+                else if (fieldId === 'tags') {
+                    newValue = typeof newValue === 'string' ? newValue.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
+                }
+                else if (fieldId === 'alternate_greetings') {
+                    newValue = Array.isArray(newValue) ? newValue : [String(newValue)];
                 }
                 else if (typeof newValue === 'string' && newValue.trim() === '') {
                     newValue = undefined;
                 }
-                // Xử lý lưu lại
-                if (!char.data)
-                    char.data = {};
-                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
-                char.data[fieldId] = newValue;
-                char[fieldId] = newValue;
-                let res = await fetch('/api/characters/edit-attribute', {
-                    method: 'POST',
-                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
-                });
-                // Fallback to merge-attributes if edit-attribute fails (e.g. 400 for non-existent field)
-                if (res.status === 400) {
-                    const mergePayload = {
-                        avatar: char.avatar,
-                        data: {
-                            [fieldId]: newValue === undefined ? '__@@UNSET@@__' : newValue
-                        }
-                    };
-                    res = await fetch('/api/characters/merge-attributes', {
-                        method: 'POST',
-                        headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                        body: JSON.stringify(mergePayload)
-                    });
-                }
-                if (!res.ok)
-                    throw new Error(`HTTP ${res.status}`);
-                // Cập nhật UI icon phát sáng
-                const $ = window.$;
-                if ($) {
-                    if (typeof window.checkEmbeddedWorld === 'function') {
-                        window.checkEmbeddedWorld(ctx.characterId);
-                    }
-                    else if (char.data?.character_book) {
-                        $('#import_character_info').data('chid', ctx.characterId).show();
-                    }
-                    else {
-                        $('#import_character_info').hide();
-                    }
-                }
-            }
-            else if (fieldId === 'tags') {
-                const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
-                if (ctx.tagMap && ctx.tags) {
+                // Sync tags mapping before save if needed
+                if (fieldId === 'tags' && ctx.tagMap && ctx.tags) {
                     const currentTagIds = ctx.tagMap[char.avatar] || [];
                     const toUnlink = currentTagIds.filter((id) => {
                         const tagObj = ctx.tags.find((t) => t.id === id);
-                        return tagObj ? !newTagsNames.some((n) => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
+                        return tagObj ? !newValue.some((n) => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
                     });
                     if (toUnlink.length > 0) {
                         ctx.tagMap[char.avatar] = currentTagIds.filter((id) => !toUnlink.includes(id));
@@ -3812,38 +3785,90 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             ctx.saveSettingsDebounced();
                     }
                 }
-                if (!char.data)
-                    char.data = {};
-                char.data.tags = newTagsNames;
-                char.tags = newTagsNames;
-                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: 'tags', value: newTagsNames };
-                await fetch('/api/characters/edit-attribute', {
-                    method: 'POST',
-                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                if (typeof ctx.importTags === 'function') {
-                    await ctx.importTags(char, { importSetting: 3 }).catch(() => { });
+                // Unified Payload Builder for merge-attributes
+                const isExtensionField = fieldId === 'fav' || fieldId === 'talkativeness' || fieldId === 'world';
+                const valueOrUnset = newValue === undefined ? '__@@UNSET@@__' : newValue;
+                const mergePayload = {
+                    avatar: char.avatar,
+                    [fieldId]: valueOrUnset,
+                    data: {}
+                };
+                if (fieldId === 'creator_notes') {
+                    mergePayload.creatorcomment = valueOrUnset;
                 }
-            }
-            else {
-                if (!char.data)
-                    char.data = {};
-                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
-                if (fieldId === 'alternate_greetings') {
-                    char.data.alternate_greetings = Array.isArray(newValue) ? newValue : [String(newValue)];
+                if (isExtensionField) {
+                    mergePayload.data.extensions = { [fieldId]: valueOrUnset };
+                    // Cleanup bad data at root of data if it exists from older agent edits
+                    mergePayload.data[fieldId] = '__@@UNSET@@__';
                 }
                 else {
-                    char.data[fieldId] = newValue;
-                    char[fieldId] = newValue;
+                    mergePayload.data[fieldId] = valueOrUnset;
                 }
-                const res = await fetch('/api/characters/edit-attribute', {
+                // In-memory update for ST Frontend
+                if (!char.data)
+                    char.data = {};
+                if (newValue === undefined) {
+                    delete char[fieldId];
+                    if (fieldId === 'creator_notes')
+                        delete char.creatorcomment;
+                    if (isExtensionField && char.data.extensions)
+                        delete char.data.extensions[fieldId];
+                    else
+                        delete char.data[fieldId];
+                }
+                else {
+                    char[fieldId] = newValue;
+                    if (fieldId === 'creator_notes')
+                        char.creatorcomment = newValue;
+                    if (isExtensionField) {
+                        if (!char.data.extensions)
+                            char.data.extensions = {};
+                        char.data.extensions[fieldId] = newValue;
+                        delete char.data[fieldId]; // remove bad field in memory too
+                    }
+                    else {
+                        char.data[fieldId] = newValue;
+                    }
+                }
+                // Luôn dùng merge-attributes để chuẩn hoá V3 spec và tránh lỗi 400
+                let res = await fetch('/api/characters/merge-attributes', {
                     method: 'POST',
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload),
+                    body: JSON.stringify(mergePayload)
                 });
+                // Nếu merge-attributes không tồn tại (ST quá cũ), fallback về edit-attribute (tuy có thể sai spec extensions)
+                if (res.status === 404) {
+                    const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
+                    res = await fetch('/api/characters/edit-attribute', {
+                        method: 'POST',
+                        headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                }
                 if (!res.ok)
                     throw new Error(`HTTP ${res.status}`);
+                // UI Specific Updates
+                const $ = window.$;
+                if ($) {
+                    if (fieldId === 'character_book' || fieldId === 'world') {
+                        if (typeof window.checkEmbeddedWorld === 'function') {
+                            window.checkEmbeddedWorld(ctx.characterId);
+                        }
+                        else if (char.data?.character_book) {
+                            $('#import_character_info').data('chid', ctx.characterId).show();
+                        }
+                        else {
+                            $('#import_character_info').hide();
+                        }
+                        if (fieldId === 'world') {
+                            $('#character_world').val(newValue || '').trigger('change');
+                        }
+                    }
+                }
+                // Post-save actions
+                if (fieldId === 'tags' && typeof ctx.importTags === 'function') {
+                    await ctx.importTags(char, { importSetting: 3 }).catch(() => { });
+                }
             }
             const domMap = {
                 description: 'description_textarea',
