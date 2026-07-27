@@ -5994,8 +5994,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         render() {
             if ($('#kaiz-backup-modal').length === 0) {
                 const html = `
-                <div id="kaiz-backup-modal" class="kaiz-modal-overlay">
-                    <div class="kaiz-modal-content" style="width: 600px; max-width: 90vw;">
+                <dialog id="kaiz-backup-modal" class="kaiz-modal-content" style="width: 600px; max-width: 90vw; padding: 0; background: transparent; border: none;">
+                    <div style="background: var(--SmartThemeBlurTintColor); backdrop-filter: blur(10px); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px; padding: 20px; color: var(--SmartThemeBodyColor); box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                         <div class="kaiz-modal-header">
                             <h2 style="margin: 0; font-size: 1.2rem;"><i class="fa-solid fa-save"></i> Backup Manager</h2>
                             <div class="kaiz-modal-close" style="cursor: pointer; font-size: 1.2rem;"><i class="fa-solid fa-xmark"></i></div>
@@ -6017,25 +6017,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             <button id="kaiz-backup-close-btn" class="menu_button">Close</button>
                         </div>
                     </div>
-                </div>
+                </dialog>
             `;
                 $('body').append(html);
                 // Add basic styles
                 if ($('#kaiz-backup-styles').length === 0) {
                     $('head').append(`
                     <style id="kaiz-backup-styles">
-                        .kaiz-modal-overlay {
-                            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-                            background: rgba(0, 0, 0, 0.6); z-index: 99999;
-                            display: flex; justify-content: center; align-items: center;
-                        }
-                        .kaiz-modal-content {
-                            background: var(--SmartThemeBlurTintColor);
-                            backdrop-filter: blur(10px);
-                            border: 1px solid var(--SmartThemeBorderColor);
-                            border-radius: 8px; padding: 20px;
-                            color: var(--SmartThemeBodyColor);
-                            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                        dialog#kaiz-backup-modal::backdrop {
+                            background: rgba(0, 0, 0, 0.6);
+                            backdrop-filter: blur(2px);
                         }
                         .kaiz-modal-header {
                             display: flex; justify-content: space-between; align-items: center;
@@ -6066,7 +6057,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             }
             this.modal = $('#kaiz-backup-modal');
             this.bindEvents();
-            this.modal.fadeIn(200);
+            if (!this.modal[0].open) {
+                this.modal[0].showModal();
+            }
             this.loadBackups();
         }
         bindEvents() {
@@ -6078,10 +6071,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             this.modal.find('.kaiz-modal-close, #kaiz-backup-close-btn').off();
             // Close
             this.modal.find('.kaiz-modal-close, #kaiz-backup-close-btn').on('click', () => {
-                this.modal?.fadeOut(200, () => {
-                    this.modal?.remove();
-                    this.modal = null;
-                });
+                this.modal[0].close();
+                this.modal.remove();
+                this.modal = null;
             });
             // Tabs
             this.modal.find('.kaiz-tab').on('click', (e) => {
