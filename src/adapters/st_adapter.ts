@@ -1416,7 +1416,7 @@ export class SillyTavernAdapter {
                         }
                     }
 
-                    return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
+                    return `Đã tạo mới Worldbook "${options.book_name}".`;
                 } else {
                     return '[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.';
                 }

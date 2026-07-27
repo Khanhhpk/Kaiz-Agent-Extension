@@ -4607,7 +4607,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 $('#world_editor_select').val(newIdx).trigger('change');
                             }
                         }
-                        return `Đã tạo mới Worldbook "${options.book_name}".\nLưu ý: Bạn có thể cần gọi hàm toggle để bật (enable) worldbook này nếu muốn nó tự động nạp.`;
+                        return `Đã tạo mới Worldbook "${options.book_name}".`;
                     }
                     else {
                         return '[LỖI] Phiên bản SillyTavern này không hỗ trợ hàm createNewWorldInfo, hoặc API đã thay đổi.';
