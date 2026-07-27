@@ -734,3 +734,102 @@
     border-left: 3px solid #4ade80;
     color: #ddd;
 }
+
+/* Browser Modal */
+.kaiz-browser-modal {
+    width: 85vw;
+    height: 85vh;
+    max-width: 1400px;
+    background: rgba(20, 25, 35, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    color: #ddd;
+    padding: 0;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    display: flex;
+    flex-direction: column;
+}
+.kaiz-browser-modal:not([open]) {
+    display: none !important;
+}
+.kaiz-browser-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 15px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 15px;
+}
+.kaiz-browser-nav {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.7);
+}
+.kaiz-browser-nav i:hover {
+    color: #fff;
+    cursor: pointer;
+}
+.kaiz-browser-address-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 4px 12px;
+}
+.kaiz-browser-address {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #fff;
+    outline: none;
+    font-size: 13px;
+}
+.kaiz-browser-address-container i {
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.7);
+    margin-left: 8px;
+}
+.kaiz-browser-address-container i:hover {
+    color: #fff;
+}
+.kaiz-browser-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+.kaiz-browser-btn-share {
+    padding: 4px 12px;
+    font-size: 12px;
+    height: auto;
+    background: rgba(74, 222, 128, 0.1);
+    border-color: rgba(74, 222, 128, 0.3);
+    color: #4ade80;
+}
+.kaiz-browser-btn-share:hover {
+    background: rgba(74, 222, 128, 0.2);
+}
+#kaiz-browser-close {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+}
+#kaiz-browser-close:hover {
+    color: #ff5e5e;
+}
+.kaiz-browser-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+}
+#kaiz-browser-iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #fff;
+}

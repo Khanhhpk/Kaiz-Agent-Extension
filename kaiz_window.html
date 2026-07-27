@@ -16,6 +16,12 @@
         </div>
         <div class="kaiz-header-actions">
             <i
+                id="kaiz-chat-browser-btn"
+                class="fa-solid fa-globe interactable"
+                style="cursor: pointer; margin-right: 8px"
+                title="Mở trình duyệt"
+            ></i>
+            <i
                 id="kaiz-chat-settings-btn"
                 class="fa-solid fa-gear interactable"
                 style="cursor: pointer; margin-right: 8px"
@@ -211,5 +217,32 @@
         style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px"
     >
         <!-- Memory items will be injected here -->
+    </div>
+</dialog>
+
+<!-- Browser Modal -->
+<dialog
+    id="kaiz-browser-modal"
+    class="kaiz-modal kaiz-browser-modal"
+>
+    <div class="kaiz-browser-header">
+        <div class="kaiz-browser-nav">
+            <i id="kaiz-browser-back" class="fa-solid fa-arrow-left interactable" title="Back"></i>
+            <i id="kaiz-browser-forward" class="fa-solid fa-arrow-right interactable" title="Forward"></i>
+            <i id="kaiz-browser-reload" class="fa-solid fa-rotate-right interactable" title="Reload"></i>
+        </div>
+        <div class="kaiz-browser-address-container">
+            <input type="text" id="kaiz-browser-address" class="kaiz-browser-address text_pole" placeholder="Nhập URL (VD: https://google.com)..." />
+            <i id="kaiz-browser-go" class="fa-solid fa-arrow-right-to-bracket interactable" title="Go"></i>
+        </div>
+        <div class="kaiz-browser-actions">
+            <button id="kaiz-browser-share" class="menu_button interactable kaiz-browser-btn-share" title="Chia sẻ trang này cho Kaiz">
+                <i class="fa-solid fa-share-nodes"></i> Share
+            </button>
+            <i id="kaiz-browser-close" class="fa-solid fa-xmark interactable" title="Đóng"></i>
+        </div>
+    </div>
+    <div class="kaiz-browser-content">
+        <iframe id="kaiz-browser-iframe" src="about:blank"></iframe>
     </div>
 </dialog>
