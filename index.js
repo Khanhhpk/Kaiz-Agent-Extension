@@ -3732,6 +3732,58 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (typeof window.getCharacters === 'function')
                     await window.getCharacters().catch(() => { });
             }
+            else if (fieldId === 'character_book') {
+                if (typeof newValue === 'string' && newValue.trim() !== '') {
+                    let lbData = null;
+                    if (typeof window.ST_WorldInfo?.loadWorldInfo === 'function') {
+                        lbData = await window.ST_WorldInfo.loadWorldInfo(newValue);
+                    }
+                    else if (typeof ctx.loadWorldInfo === 'function') {
+                        lbData = await ctx.loadWorldInfo(newValue);
+                    }
+                    else {
+                        const lbRes = await fetch('/api/worldinfo/get', {
+                            method: 'POST',
+                            headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ name: newValue })
+                        });
+                        if (lbRes.ok)
+                            lbData = await lbRes.json();
+                    }
+                    if (!lbData)
+                        throw new Error(`Could not find or load lorebook: ${newValue}`);
+                    newValue = lbData;
+                }
+                else if (typeof newValue === 'string' && newValue.trim() === '') {
+                    newValue = undefined;
+                }
+                // Xử lý lưu lại
+                if (!char.data)
+                    char.data = {};
+                const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
+                char.data[fieldId] = newValue;
+                char[fieldId] = newValue;
+                const res = await fetch('/api/characters/edit-attribute', {
+                    method: 'POST',
+                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!res.ok)
+                    throw new Error(`HTTP ${res.status}`);
+                // Cập nhật UI icon phát sáng
+                const $ = window.$;
+                if ($) {
+                    if (typeof window.checkEmbeddedWorld === 'function') {
+                        window.checkEmbeddedWorld(ctx.characterId);
+                    }
+                    else if (char.data?.character_book) {
+                        $('#import_character_info').data('chid', ctx.characterId).show();
+                    }
+                    else {
+                        $('#import_character_info').hide();
+                    }
+                }
+            }
             else if (fieldId === 'tags') {
                 const newTagsNames = typeof newValue === 'string' ? newValue.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
                 if (ctx.tagMap && ctx.tags) {
