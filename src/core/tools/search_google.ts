@@ -151,9 +151,15 @@ export const searchGoogleTool: ITool = {
             console.log('[search] Searching SearXNG (primary)...');
             const searxResults = await fetchSearXNG(query); // truyền raw query, encode bên trong
 
-            if (searxResults.length > 0) {
+            // SearXNG aggregate từ nhiều nguồn, nhưng upstream (Bing/Google bot-mode)
+            // cũng có thể trả rác cho queries bắt đầu bằng "top", "best", "most"...
+            // Chỉ accept nếu kết quả KHÔNG phải rác
+            if (searxResults.length > 0 && !isGarbageResults(searxResults, query)) {
                 engine = 'SearXNG';
                 results.push(...searxResults);
+                console.log('[search] SearXNG returned good results!');
+            } else if (searxResults.length > 0) {
+                console.log('[search] SearXNG returned garbage results. Falling through to Bing...');
             }
 
             // =====================================================
