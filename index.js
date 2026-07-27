@@ -1707,19 +1707,24 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 });
                 if (results.length === 0) {
-                    console.log('[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo Lite...');
-                    const ddgUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
+                    console.log('[search_google] Google returned 0 results (maybe captcha). Falling back to DuckDuckGo HTML POST...');
+                    const ddgPostUrl = `https://html.duckduckgo.com/html/`;
                     let ddgHtml = '';
                     try {
-                        const ddgRes = await fetch(ddgUrl);
+                        const ddgRes = await fetch(ddgPostUrl, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                            body: `q=${encodedQuery}`,
+                        });
                         if (ddgRes.ok)
                             ddgHtml = await ddgRes.text();
                         else
-                            throw new Error('DDG Fetch Not OK');
+                            throw new Error('DDG HTML POST Fetch Not OK');
                     }
                     catch (e) {
-                        // Proxy fallback for DuckDuckGo
-                        const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgUrl)}`;
+                        // Proxy fallback for DuckDuckGo (proxies often block POST, so we fallback to DDG Lite GET via proxy)
+                        const ddgLiteUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
+                        const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgLiteUrl)}`;
                         const proxyRes = await fetch(ddgProxyUrl);
                         if (proxyRes.ok)
                             ddgHtml = await proxyRes.text();
@@ -1728,21 +1733,42 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (ddgHtml) {
                         engine = 'DuckDuckGo';
                         ddgDoc = parser.parseFromString(ddgHtml, 'text/html');
-                        // DuckDuckGo Lite trả về HTML thuần, parse rất dễ
-                        const linkElements = ddgDoc.querySelectorAll('a.result-link');
-                        const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');
-                        for (let i = 0; i < linkElements.length; i++) {
-                            const aEl = linkElements[i];
-                            const snippetEl = snippetElements[i];
-                            if (aEl) {
-                                let link = aEl.getAttribute('href') || '';
-                                if (link.startsWith('//'))
-                                    link = 'https:' + link;
-                                results.push({
-                                    title: aEl.textContent?.trim() || '',
-                                    url: link,
-                                    snippet: snippetEl?.textContent?.trim() || '',
-                                });
+                        // 1. Parse DDG HTML POST results
+                        const resultElements = ddgDoc.querySelectorAll('.result');
+                        if (resultElements.length > 0) {
+                            resultElements.forEach((res) => {
+                                const aEl = res.querySelector('h2.result__title a.result__a');
+                                const snippetEl = res.querySelector('.result__snippet');
+                                if (aEl) {
+                                    let link = aEl.getAttribute('href') || '';
+                                    // Extract true URL if it's a DuckDuckGo redirect
+                                    if (link.startsWith('//'))
+                                        link = 'https:' + link;
+                                    results.push({
+                                        title: aEl.textContent?.trim() || '',
+                                        url: link,
+                                        snippet: snippetEl?.textContent?.trim() || '',
+                                    });
+                                }
+                            });
+                        }
+                        else {
+                            // 2. Parse DDG Lite results (if fallback proxy was used)
+                            const linkElements = ddgDoc.querySelectorAll('a.result-link');
+                            const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');
+                            for (let i = 0; i < linkElements.length; i++) {
+                                const aEl = linkElements[i];
+                                const snippetEl = snippetElements[i];
+                                if (aEl) {
+                                    let link = aEl.getAttribute('href') || '';
+                                    if (link.startsWith('//'))
+                                        link = 'https:' + link;
+                                    results.push({
+                                        title: aEl.textContent?.trim() || '',
+                                        url: link,
+                                        snippet: snippetEl?.textContent?.trim() || '',
+                                    });
+                                }
                             }
                         }
                     }
