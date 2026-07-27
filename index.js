@@ -7479,12 +7479,19 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 if (url) {
                     if (!url.startsWith('http://') && !url.startsWith('https://')) {
                         if (url.includes(' ') || !url.includes('.')) {
-                            // Tìm kiếm bằng google
-                            url = `https://www.google.com/search?q=${encodeURIComponent(url)}`;
+                            // Tìm kiếm bằng google (Dùng tham số bí mật igu=1 để bypass X-Frame-Options)
+                            url = `https://www.google.com/search?q=${encodeURIComponent(url)}&igu=1`;
                         }
                         else {
                             url = `https://${url}`;
                         }
+                    }
+                    // Bypass X-Frame-Options cho Google Search gốc
+                    if (url === 'https://google.com' || url === 'https://www.google.com' || url === 'https://google.com/' || url === 'https://www.google.com/') {
+                        url = 'https://www.google.com/webhp?igu=1';
+                    }
+                    else if (url.startsWith('https://www.google.com/search?') && !url.includes('igu=1')) {
+                        url += '&igu=1';
                     }
                     this.goToUrl(url);
                 }
