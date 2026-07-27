@@ -204,7 +204,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         async run(history, maxSteps, onEvent) {
             console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
             const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
-            const internalHistory = history.map(msg => ({ ...msg }));
+            const internalHistory = history.map((msg) => ({ ...msg }));
             for (let i = internalHistory.length - 1; i >= 0; i--) {
                 if (internalHistory[i].role === 'user') {
                     const header = '📌 [YÊU CẦU CHÍNH CHỦ CỦA USER]:\n"';
@@ -218,7 +218,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         if (textIndex !== -1) {
                             internalHistory[i].content[textIndex] = {
                                 ...internalHistory[i].content[textIndex],
-                                text: header + internalHistory[i].content[textIndex].text + footer
+                                text: header + internalHistory[i].content[textIndex].text + footer,
                             };
                         }
                         else {
@@ -571,9 +571,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             parameters: {
                 type: 'object',
                 properties: {
-                    search_query: { type: 'string', description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.' }
-                }
-            }
+                    search_query: {
+                        type: 'string',
+                        description: 'Từ khóa tìm kiếm (tuỳ chọn) để lọc danh sách theo tên nhân vật.',
+                    },
+                },
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('characters')) {
@@ -593,7 +596,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 return { content: `Error listing characters: ${e.message}`, isError: true };
             }
-        }
+        },
     };
 
     const switchCharacterChatTool = {
@@ -603,10 +606,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             parameters: {
                 type: 'object',
                 properties: {
-                    character_name: { type: 'string', description: 'Tên nhân vật muốn chuyển chat tới (bắt buộc).' }
+                    character_name: { type: 'string', description: 'Tên nhân vật muốn chuyển chat tới (bắt buộc).' },
                 },
-                required: ['character_name']
-            }
+                required: ['character_name'],
+            },
         },
         validate: (context) => {
             if (!context.adapter.hasFeature('characters')) {
@@ -625,7 +628,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             catch (e) {
                 return { content: `Error switching character: ${e.message}`, isError: true };
             }
-        }
+        },
     };
 
     const editCharacterCardTool = {
@@ -637,7 +640,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 properties: {
                     field: {
                         type: 'string',
-                        enum: ['name', 'description', 'personality', 'scenario', 'first_mes', 'mes_example', 'system_prompt', 'post_history_instructions', 'tags', 'alternate_greetings', 'creator_notes', 'character_version', 'character_book', 'world', 'creator', 'talkativeness', 'fav'],
+                        enum: [
+                            'name',
+                            'description',
+                            'personality',
+                            'scenario',
+                            'first_mes',
+                            'mes_example',
+                            'system_prompt',
+                            'post_history_instructions',
+                            'tags',
+                            'alternate_greetings',
+                            'creator_notes',
+                            'character_version',
+                            'character_book',
+                            'world',
+                            'creator',
+                            'talkativeness',
+                            'fav',
+                        ],
                         description: 'Trường thông tin cần chỉnh sửa. Quan trọng với Lorebook: Dùng "world" để LIÊN KẾT (link) tên Lorebook giúp dung lượng thẻ nhẹ nhàng (phù hợp để người dùng chơi cá nhân). Dùng "character_book" để NHÚNG (embed) toàn bộ data Lorebook vào trong ảnh thẻ (phù hợp khi người dùng yêu cầu đóng gói thẻ để mang đi chia sẻ cho người khác). Các trường khác: "description", "personality", "talkativeness", "fav", v.v.',
                     },
                     value: {
@@ -684,7 +705,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     first_mes: { type: 'string', description: 'Lời chào/Tin nhắn đầu tiên.' },
                     mes_example: { type: 'string', description: 'Đoạn hội thoại mẫu.' },
                     system_prompt: { type: 'string', description: 'System prompt riêng cho nhân vật.' },
-                    tags: { type: 'string', description: 'Danh sách thẻ tag, cách nhau bằng dấu phẩy.' }
+                    tags: { type: 'string', description: 'Danh sách thẻ tag, cách nhau bằng dấu phẩy.' },
                 },
                 required: ['name'],
             },
@@ -2730,13 +2751,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
                 catch (e) { }
-                ;
-                let namesToTry = [
-                    'Kaiz-Agent-Extension',
-                    'Kaiz-Agent',
-                    'kaiz-agent-extension',
-                    '/Kaiz-Agent-Extension',
-                ];
+                let namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension', '/Kaiz-Agent-Extension'];
                 const extTypes = window.extensionTypes || window.SillyTavern?.getContext?.()?.extensionTypes;
                 if (extTypes) {
                     const foundKeys = Object.keys(extTypes).filter((k) => k.toLowerCase().includes('kaiz'));
@@ -2854,7 +2869,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return;
                     nodes.forEach((node) => {
                         // Nhận diện folder (có thể qua type, isFolder, hoặc chứa mảng children/scripts)
-                        const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                        const children = Array.isArray(node.children)
+                            ? node.children
+                            : Array.isArray(node.scripts)
+                                ? node.scripts
+                                : null;
                         const isFolder = node.isFolder === true || node.type === 'folder' || children !== null;
                         if (isFolder && children) {
                             const folderName = node.name || 'Unnamed Folder';
@@ -2865,7 +2884,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             // Nếu là script thường
                             results.push({
                                 id: node.id,
-                                name: parentPath ? `[${parentPath}] ${node.name || 'Unnamed Script'}` : (node.name || 'Unnamed Script'),
+                                name: parentPath
+                                    ? `[${parentPath}] ${node.name || 'Unnamed Script'}`
+                                    : node.name || 'Unnamed Script',
                                 scope: scopeName,
                                 enabled: node.enabled !== false,
                                 info: node.info || node.authorNote || '',
@@ -2946,7 +2967,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             foundScript = node;
                             return true; // Found
                         }
-                        const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                        const children = Array.isArray(node.children)
+                            ? node.children
+                            : Array.isArray(node.scripts)
+                                ? node.scripts
+                                : null;
                         if (children) {
                             if (searchTree(children))
                                 return true;
@@ -3036,7 +3061,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             nodes.splice(i, 1);
                             return true;
                         }
-                        const children = Array.isArray(nodes[i].children) ? nodes[i].children : (Array.isArray(nodes[i].scripts) ? nodes[i].scripts : null);
+                        const children = Array.isArray(nodes[i].children)
+                            ? nodes[i].children
+                            : Array.isArray(nodes[i].scripts)
+                                ? nodes[i].scripts
+                                : null;
                         if (children) {
                             if (deleteFromTree(children))
                                 return true;
@@ -3053,7 +3082,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             mutator(node);
                             return true;
                         }
-                        const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                        const children = Array.isArray(node.children)
+                            ? node.children
+                            : Array.isArray(node.scripts)
+                                ? node.scripts
+                                : null;
                         if (children) {
                             if (editInTree(children, searchId, mutator))
                                 return true;
@@ -3066,18 +3099,22 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const tempId = targetId + '_temp_sync';
                         // Đổi ID tạm thời để Vue unmount component
                         await th.updateScriptTreesWith((trees) => {
-                            editInTree(trees, targetId, (node) => { node.id = tempId; });
+                            editInTree(trees, targetId, (node) => {
+                                node.id = tempId;
+                            });
                             return trees;
                         }, { type: targetScope });
-                        await new Promise(resolve => setTimeout(resolve, 100));
+                        await new Promise((resolve) => setTimeout(resolve, 100));
                         // Trả lại ID gốc để Vue mount lại component với dữ liệu mới
                         await th.updateScriptTreesWith((trees) => {
-                            editInTree(trees, tempId, (node) => { node.id = targetId; });
+                            editInTree(trees, tempId, (node) => {
+                                node.id = targetId;
+                            });
                             return trees;
                         }, { type: targetScope });
                     }
                     catch (e) {
-                        console.error("Lỗi khi force sync UI JS-Slash-Runner:", e);
+                        console.error('Lỗi khi force sync UI JS-Slash-Runner:', e);
                     }
                 };
                 // Helpers tìm script để biết scope hiện tại
@@ -3095,7 +3132,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                         found = true;
                                         return;
                                     }
-                                    const children = Array.isArray(node.children) ? node.children : (Array.isArray(node.scripts) ? node.scripts : null);
+                                    const children = Array.isArray(node.children)
+                                        ? node.children
+                                        : Array.isArray(node.scripts)
+                                            ? node.scripts
+                                            : null;
                                     if (children)
                                         search(children);
                                 }
@@ -3130,7 +3171,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         trees.push(newScript);
                         return trees;
                     }, { type: targetScope });
-                    return { content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})` };
+                    return {
+                        content: `Tạo mới thành công Script: ${newScript.name} (ID: ${newId}, Scope: ${targetScope})`,
+                    };
                 }
                 if (!id)
                     return { isError: true, content: 'Bắt buộc phải cung cấp id cho hành động này.' };
@@ -3569,10 +3612,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const d = char.data || {};
             let actualTags = char.tags || d.tags || [];
             if (ctx.tagMap && ctx.tags && ctx.tagMap[char.avatar]) {
-                const mappedTags = ctx.tagMap[char.avatar].map((id) => {
+                const mappedTags = ctx.tagMap[char.avatar]
+                    .map((id) => {
                     const t = ctx.tags.find((tag) => tag.id === id);
                     return t ? t.name : null;
-                }).filter(Boolean);
+                })
+                    .filter(Boolean);
                 if (mappedTags.length > 0 || actualTags.length === 0) {
                     actualTags = mappedTags;
                 }
@@ -3598,7 +3643,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         return b;
                     return {
                         name: b.name || 'Embedded Lorebook',
-                        entries_count: b.entries ? b.entries.length : 0
+                        entries_count: b.entries ? b.entries.length : 0,
                     };
                 })(),
                 creator: d.creator || char.creator || '',
@@ -3625,7 +3670,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     name: c.name,
                     avatar: c.avatar,
                     creator: c.creator || '',
-                    description_snippet: shortDesc
+                    description_snippet: shortDesc,
                 };
             });
         }
@@ -3652,7 +3697,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 return `Thành công chuyển sang chat với nhân vật: ${targetChar.name}`;
             }
             // Minimal Fallback for older versions
-            const el = document.querySelector(`.character_select[data-chid="${index}"]`) || document.querySelector(`.character_select[chid="${index}"]`);
+            const el = document.querySelector(`.character_select[data-chid="${index}"]`) ||
+                document.querySelector(`.character_select[chid="${index}"]`);
             if (el) {
                 if (typeof window.$ !== 'undefined')
                     window.$(el).trigger('click');
@@ -3667,7 +3713,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
          */
         async createCharacterCard(data) {
             const ctx = SillyTavern.getContext();
-            const tagsString = Array.isArray(data.tags) ? data.tags.join(', ') : (typeof data.tags === 'string' ? data.tags : '');
+            const tagsString = Array.isArray(data.tags)
+                ? data.tags.join(', ')
+                : typeof data.tags === 'string'
+                    ? data.tags
+                    : '';
             const formData = new FormData();
             formData.append('ch_name', data.name || 'New Character');
             formData.append('description', data.description || '');
@@ -3690,7 +3740,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 throw new Error(`HTTP ${res.status}: ${errText}`);
             }
             const newAvatar = await res.text();
-            await new Promise(r => setTimeout(r, 400));
+            await new Promise((r) => setTimeout(r, 400));
             if (typeof ctx.getCharacters === 'function') {
                 await ctx.getCharacters();
             }
@@ -3714,7 +3764,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const ctx = SillyTavern.getContext();
             const char = ctx.characters?.[ctx.characterId];
             if (!char)
-                throw new Error("No active character found.");
+                throw new Error('No active character found.');
             if (fieldId === 'name') {
                 const trimmedName = (String(newValue) || '').trim();
                 if (!trimmedName)
@@ -3747,7 +3797,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             const lbRes = await fetch('/api/worldinfo/get', {
                                 method: 'POST',
                                 headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ name: newValue })
+                                body: JSON.stringify({ name: newValue }),
                             });
                             if (lbRes.ok)
                                 lbData = await lbRes.json();
@@ -3755,7 +3805,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         if (!lbData)
                             throw new Error(`Could not find or load lorebook: ${newValue}`);
                         // Convert entries to Array to comply with V3 spec, but preserve exact original LB fields
-                        lbData.entries = Array.isArray(lbData.entries) ? lbData.entries : Object.values(lbData.entries || {});
+                        lbData.entries = Array.isArray(lbData.entries)
+                            ? lbData.entries
+                            : Object.values(lbData.entries || {});
                         newValue = lbData;
                     }
                     else if (typeof newValue === 'string' && newValue.trim() === '') {
@@ -3763,10 +3815,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                 }
                 else if (fieldId === 'fav') {
-                    newValue = (newValue === 'true' || newValue === true);
+                    newValue = newValue === 'true' || newValue === true;
                 }
                 else if (fieldId === 'tags') {
-                    newValue = typeof newValue === 'string' ? newValue.split(',').map((t) => t.trim()).filter(Boolean) : (Array.isArray(newValue) ? newValue : []);
+                    newValue =
+                        typeof newValue === 'string'
+                            ? newValue
+                                .split(',')
+                                .map((t) => t.trim())
+                                .filter(Boolean)
+                            : Array.isArray(newValue)
+                                ? newValue
+                                : [];
                 }
                 else if (fieldId === 'alternate_greetings') {
                     newValue = Array.isArray(newValue) ? newValue : [String(newValue)];
@@ -3779,7 +3839,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const currentTagIds = ctx.tagMap[char.avatar] || [];
                     const toUnlink = currentTagIds.filter((id) => {
                         const tagObj = ctx.tags.find((t) => t.id === id);
-                        return tagObj ? !newValue.some((n) => n.toLowerCase() === tagObj.name.toLowerCase()) : false;
+                        return tagObj
+                            ? !newValue.some((n) => n.toLowerCase() === tagObj.name.toLowerCase())
+                            : false;
                     });
                     if (toUnlink.length > 0) {
                         ctx.tagMap[char.avatar] = currentTagIds.filter((id) => !toUnlink.includes(id));
@@ -3793,7 +3855,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const mergePayload = {
                     avatar: char.avatar,
                     [fieldId]: valueOrUnset,
-                    data: {}
+                    data: {},
                 };
                 if (fieldId === 'creator_notes') {
                     mergePayload.creatorcomment = valueOrUnset;
@@ -3805,7 +3867,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 }
                 else {
                     mergePayload.data[fieldId] = valueOrUnset;
-                    if (fieldId === 'character_book' && typeof newValue === 'object' && newValue !== null && newValue.name) {
+                    if (fieldId === 'character_book' &&
+                        typeof newValue === 'object' &&
+                        newValue !== null &&
+                        newValue.name) {
                         mergePayload.data.extensions = mergePayload.data.extensions || {};
                         mergePayload.data.extensions.world = newValue.name;
                     }
@@ -3834,7 +3899,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     }
                     else {
                         char.data[fieldId] = newValue;
-                        if (fieldId === 'character_book' && typeof newValue === 'object' && newValue !== null && newValue.name) {
+                        if (fieldId === 'character_book' &&
+                            typeof newValue === 'object' &&
+                            newValue !== null &&
+                            newValue.name) {
                             if (!char.data.extensions)
                                 char.data.extensions = {};
                             char.data.extensions.world = newValue.name;
@@ -3845,11 +3913,16 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 let res = await fetch('/api/characters/merge-attributes', {
                     method: 'POST',
                     headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(mergePayload)
+                    body: JSON.stringify(mergePayload),
                 });
                 // Nếu merge-attributes không tồn tại (ST quá cũ), fallback về edit-attribute (tuy có thể sai spec extensions)
                 if (res.status === 404) {
-                    const payload = { avatar_url: char.avatar, ch_name: char.name || 'Unknown', field: fieldId, value: newValue };
+                    const payload = {
+                        avatar_url: char.avatar,
+                        ch_name: char.name || 'Unknown',
+                        field: fieldId,
+                        value: newValue,
+                    };
                     res = await fetch('/api/characters/edit-attribute', {
                         method: 'POST',
                         headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
@@ -3872,9 +3945,14 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             $('#import_character_info').hide();
                         }
                         if (fieldId === 'world') {
-                            $('#character_world').val(newValue || '').trigger('change');
+                            $('#character_world')
+                                .val(newValue || '')
+                                .trigger('change');
                         }
-                        else if (fieldId === 'character_book' && typeof newValue === 'object' && newValue !== null && newValue.name) {
+                        else if (fieldId === 'character_book' &&
+                            typeof newValue === 'object' &&
+                            newValue !== null &&
+                            newValue.name) {
                             $('#character_world').val(newValue.name).trigger('change');
                         }
                     }
@@ -6400,7 +6478,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 // Dùng HTML buffer để tránh Reflow/Repaint liên tục
                 let htmlBuffer = '';
                 for (const msg of messages) {
-                    const formatted = msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content, msg.attachments);
+                    const formatted = msg.role === 'agent'
+                        ? formatMessage(msg.content, true)
+                        : formatUserMessage(msg.content, msg.attachments);
                     const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
                     const avatar = msg.role === 'user'
                         ? '<i class="fa-solid fa-user"></i>'

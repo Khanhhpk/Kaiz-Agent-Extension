@@ -688,7 +688,9 @@ export class ChatWindowUI {
             let htmlBuffer = '';
             for (const msg of messages) {
                 const formatted =
-                    msg.role === 'agent' ? formatMessage(msg.content, true) : formatUserMessage(msg.content, msg.attachments);
+                    msg.role === 'agent'
+                        ? formatMessage(msg.content, true)
+                        : formatUserMessage(msg.content, msg.attachments);
                 const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
 
                 const avatar =
