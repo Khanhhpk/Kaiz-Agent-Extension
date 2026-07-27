@@ -1721,18 +1721,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     // Nếu 2/3 kết quả đầu là từ điển → rác
                     return garbageCount >= 2;
                 };
-                // === HELPER: Fetch Bing với params và cookies giả lập trình duyệt ===
+                // === HELPER: Fetch Bing với params giả lập trình duyệt ===
                 const fetchBing = async (q) => {
-                    // ghc=1, lq=0, pq=query, cvid=uuid: giả lập session search thật
-                    // credentials: 'include': gửi kèm cookies Bing (MUID, _EDGE_V...) từ browser
-                    // → Bing nhận diện là user thật, dùng NLP đầy đủ thay vì bot-mode
+                    // ghc=1, lq=0, pq=query, cvid=uuid: giả lập params của session search thật
+                    // KHÔNG dùng credentials:'include' vì xung đột với Allow CORS extension
+                    // (extension set ACAO:* nhưng credentials yêu cầu ACAO:<specific-origin>)
                     const cvid = Array.from(crypto.getRandomValues(new Uint8Array(16)))
                         .map((b) => b.toString(16).padStart(2, '0'))
                         .join('')
                         .toUpperCase();
                     const bingUrl = `https://www.bing.com/search?q=${q}&qs=n&form=QBRE&sp=-1&ghc=1&lq=0&pq=${q}&cvid=${cvid}`;
                     try {
-                        const res = await fetch(bingUrl, { credentials: 'include' });
+                        const res = await fetch(bingUrl);
                         if (res.ok)
                             return await res.text();
                     }
