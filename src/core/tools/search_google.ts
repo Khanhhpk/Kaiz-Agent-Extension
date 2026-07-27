@@ -329,7 +329,9 @@ export const searchGoogleTool: ITool = {
             // =====================================================
             if (results.length === 0) {
                 console.log('[search] DDG also failed. Falling back to Google...');
-                const googleUrl = `https://www.google.com/search?q=${encodedQuery}`;
+                // Kẹp thêm bùa igu=1 để nếu fetch thất bại do CORS, ta có thể dùng Browser Box hiển thị Iframe 
+                // hoặc kết hợp với extension Allow CORS để vượt rào dễ hơn.
+                const googleUrl = `https://www.google.com/search?q=${encodedQuery}&igu=1`;
                 let googleHtml = '';
                 try {
                     const googleRes = await fetch(googleUrl);
