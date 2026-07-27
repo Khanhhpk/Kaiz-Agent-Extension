@@ -11,6 +11,16 @@ export class BrowserWindowUI {
         this.$modal = $('.kaiz-browser-modal').last();
         this.$address = this.$modal.find('.kaiz-browser-address');
 
+        // Khởi tạo thẻ iframe động vì SillyTavern DOMPurify sẽ xóa thẻ <iframe> tĩnh trong file HTML
+        const container = this.$modal.find('#kaiz-browser-iframe-container');
+        if (container.length > 0 && container.find('iframe').length === 0) {
+            const iframe = document.createElement('iframe');
+            iframe.id = 'kaiz-browser-iframe';
+            iframe.src = 'about:blank';
+            iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: block; z-index: 5;';
+            container.append(iframe);
+        }
+
         // Nút mở trình duyệt từ header chat
         $('#kaiz-chat-browser-btn').on('click', () => {
             const dialog = this.$modal[0] as HTMLDialogElement;
@@ -120,8 +130,7 @@ export class BrowserWindowUI {
         const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
         if (iframe) {
             // Ép buộc load URL bằng mọi cách
-            iframe.src = 'about:blank';
-            setTimeout(() => { iframe.src = url; }, 50);
+            iframe.src = url;
         } else {
             alert("Lỗi: Không tìm thấy Iframe để hiển thị web!");
         }
