@@ -6163,7 +6163,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const a = document.createElement('a');
                 a.href = url;
                 // Format file name
-                const safeName = backup.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                const safeName = backup.name.replace(/[\/\\:*?"<>|]/g, '_');
                 const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
                 const extension = backup.type === 'chat' ? 'jsonl' : 'json';
                 a.download = `${safeName}_backup_${dateStr}.${extension}`;
