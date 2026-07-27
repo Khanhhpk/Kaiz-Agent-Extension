@@ -1748,22 +1748,68 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 console.log('[search] Searching Bing (primary)...');
                 let bingHtml = await fetchBing(encodedQuery);
                 let bingResults = bingHtml ? parseBing(bingHtml) : [];
-                // --- Quality Check: Phát hiện kết quả rác ---
-                // Bing bot-mode hay chỉ hiểu từ đầu tiên khi query dài
-                // (VD: "tình hình thời tiết" → chỉ search "tình")
-                // Nếu kết quả rác → retry với query bọc trong ngoặc kép
+                // --- Quality Check + Smart Retry ---
+                // Bing bot-mode chỉ parse từ ĐẦU TIÊN của query.
+                // Nếu từ đó là adjective thông dụng (best, most, top...) → từ điển
+                // Fix: đảo query để noun ý nghĩa lên đầu, hoặc bọc quotes.
                 if (isGarbageResults(bingResults, query)) {
-                    console.log('[search] Bing returned garbage (dictionary results). Retrying with quoted query...');
-                    const quotedQuery = `%22${encodedQuery}%22`;
-                    bingHtml = await fetchBing(quotedQuery);
-                    const retryResults = bingHtml ? parseBing(bingHtml) : [];
-                    if (retryResults.length > 0 && !isGarbageResults(retryResults, query)) {
-                        // Quoted query cho kết quả tốt hơn
-                        bingResults = retryResults;
-                        console.log('[search] Quoted query returned good results!');
+                    console.log('[search] Bing returned garbage. Trying smart retries...');
+                    // Danh sách adjective/adverb thông dụng hay làm Bing bị ngáo
+                    const leadingStopWords = [
+                        'best',
+                        'most',
+                        'top',
+                        'new',
+                        'latest',
+                        'upcoming',
+                        'good',
+                        'great',
+                        'worst',
+                        'all',
+                        'every',
+                        'some',
+                        'many',
+                        'few',
+                        'several',
+                        'tình',
+                        'các',
+                        'những',
+                        'bộ',
+                        'phim',
+                        'cách',
+                        'hướng',
+                        'danh',
+                    ];
+                    // Chiến lược 1: Nếu từ đầu tiên là stop-word → đảo query
+                    // VD: "best anime 2026" → "anime 2026 best"
+                    const firstWord = query.trim().split(/\s+/)[0].toLowerCase();
+                    let reorderedUsed = false;
+                    if (leadingStopWords.includes(firstWord)) {
+                        const words = query.trim().split(/\s+/);
+                        const reordered = [...words.slice(1), words[0]].join(' ');
+                        const reorderedEncoded = encodeURIComponent(reordered).replace(/%20/g, '+');
+                        console.log(`[search] Reordering query: "${query}" → "${reordered}"`);
+                        bingHtml = await fetchBing(reorderedEncoded);
+                        const reorderedResults = bingHtml ? parseBing(bingHtml) : [];
+                        if (reorderedResults.length > 0 && !isGarbageResults(reorderedResults, query)) {
+                            bingResults = reorderedResults;
+                            reorderedUsed = true;
+                            console.log('[search] Reordered query returned good results!');
+                        }
                     }
-                    else {
-                        console.log('[search] Quoted query also failed or returned garbage.');
+                    // Chiến lược 2: Bọc toàn bộ query trong ngoặc kép (tốt cho tiếng Việt)
+                    if (!reorderedUsed) {
+                        const quotedQuery = `%22${encodedQuery}%22`;
+                        console.log('[search] Retrying with quoted query...');
+                        bingHtml = await fetchBing(quotedQuery);
+                        const quotedResults = bingHtml ? parseBing(bingHtml) : [];
+                        if (quotedResults.length > 0 && !isGarbageResults(quotedResults, query)) {
+                            bingResults = quotedResults;
+                            console.log('[search] Quoted query returned good results!');
+                        }
+                        else {
+                            console.log('[search] All Bing retries failed or returned garbage.');
+                        }
                     }
                 }
                 if (bingResults.length > 0) {
