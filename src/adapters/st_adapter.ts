@@ -558,16 +558,9 @@ export class SillyTavernAdapter {
                     }
                     if (!lbData) throw new Error(`Could not find or load lorebook: ${newValue}`);
                     
-                    // Convert to V3 character_book schema
-                    newValue = {
-                        name: lbData.name || newValue,
-                        description: lbData.description || 'Embedded Lorebook',
-                        scan_depth: lbData.scan_depth || 50,
-                        token_budget: lbData.token_budget || 500,
-                        recursive_scanning: lbData.recursive_scanning || false,
-                        extensions: lbData.extensions || {},
-                        entries: Array.isArray(lbData.entries) ? lbData.entries : Object.values(lbData.entries || {})
-                    };
+                    // Convert entries to Array to comply with V3 spec, but preserve exact original LB fields
+                    lbData.entries = Array.isArray(lbData.entries) ? lbData.entries : Object.values(lbData.entries || {});
+                    newValue = lbData;
                 } else if (typeof newValue === 'string' && newValue.trim() === '') {
                     newValue = undefined;
                 }
