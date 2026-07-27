@@ -125,10 +125,14 @@ export const searchGoogleTool: ITool = {
                 'https://etsi.me/search',
             ];
 
-            const fetchSearXNG = async (q: string): Promise<{ title: string; url: string; snippet: string }[]> => {
+            const fetchSearXNG = async (
+                rawQuery: string,
+            ): Promise<{ title: string; url: string; snippet: string }[]> => {
+                // SearXNG cần %20 cho khoảng trắng, KHÔNG dùng + (SearXNG không decode + thành space)
+                const q = encodeURIComponent(rawQuery);
                 // Thử các instances song song, lấy instance nào trả lời đúng trước
                 const tryInstance = (base: string) =>
-                    fetch(`${base}?q=${q}&format=json`, { signal: AbortSignal.timeout(5000) })
+                    fetch(`${base}?q=${q}&format=json&language=all`, { signal: AbortSignal.timeout(5000) })
                         .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
                         .then((data: any) => {
                             const items = (data.results || []) as any[];
@@ -145,7 +149,7 @@ export const searchGoogleTool: ITool = {
             };
 
             console.log('[search] Searching SearXNG (primary)...');
-            const searxResults = await fetchSearXNG(encodedQuery);
+            const searxResults = await fetchSearXNG(query); // truyền raw query, encode bên trong
 
             if (searxResults.length > 0) {
                 engine = 'SearXNG';

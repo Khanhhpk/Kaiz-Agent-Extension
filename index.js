@@ -1752,9 +1752,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     'https://searx.tiekoetter.com/search',
                     'https://etsi.me/search',
                 ];
-                const fetchSearXNG = async (q) => {
+                const fetchSearXNG = async (rawQuery) => {
+                    // SearXNG cần %20 cho khoảng trắng, KHÔNG dùng + (SearXNG không decode + thành space)
+                    const q = encodeURIComponent(rawQuery);
                     // Thử các instances song song, lấy instance nào trả lời đúng trước
-                    const tryInstance = (base) => fetch(`${base}?q=${q}&format=json`, { signal: AbortSignal.timeout(5000) })
+                    const tryInstance = (base) => fetch(`${base}?q=${q}&format=json&language=all`, { signal: AbortSignal.timeout(5000) })
                         .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
                         .then((data) => {
                         const items = (data.results || []);
@@ -1770,7 +1772,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return Promise.any(SEARXNG_INSTANCES.map(tryInstance)).catch(() => []);
                 };
                 console.log('[search] Searching SearXNG (primary)...');
-                const searxResults = await fetchSearXNG(encodedQuery);
+                const searxResults = await fetchSearXNG(query); // truyền raw query, encode bên trong
                 if (searxResults.length > 0) {
                     engine = 'SearXNG';
                     results.push(...searxResults);
