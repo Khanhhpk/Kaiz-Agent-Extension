@@ -12,9 +12,7 @@ const escapeHtml = (s: string): string =>
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
-declare const jQuery: any;
 declare const SillyTavern: any;
-declare const toastr: any;
 
 export class ChatWindowUI {
     private static currentAttachments: import('../core/db').ChatAttachment[] = [];

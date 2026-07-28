@@ -6663,7 +6663,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                         $corsCheck.html('<i class="fa-solid fa-xmark"></i> Failed').css('color', '#e74c3c');
                     }
                 }
-                catch (e) {
+                catch (_e) {
                     $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
                 }
                 let scriptDetected = false;
