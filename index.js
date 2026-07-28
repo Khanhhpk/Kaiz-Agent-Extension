@@ -5919,18 +5919,35 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         }
         async ensureSystemWorkspaces() {
             const workspaces = await this.getAllWorkspaces();
-            const roleplayWs = workspaces.find(w => w.systemId === 'roleplay');
+            const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
             if (!roleplayWs) {
                 await this.createSystemWorkspace('roleplay', 'Roleplay & Story', `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`, ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input']);
             }
-            const modderWs = workspaces.find(w => w.systemId === 'modder');
+            const modderWs = workspaces.find((w) => w.systemId === 'modder');
             if (!modderWs) {
-                await this.createSystemWorkspace('modder', 'Modding & Editor', `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`, ['get_char_info', 'list_characters', 'edit_character_card', 'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook', 'get_regex_list', 'get_regex_info', 'manage_regex', 'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script', 'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup']);
+                await this.createSystemWorkspace('modder', 'Modding & Editor', `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`, [
+                    'get_char_info',
+                    'list_characters',
+                    'edit_character_card',
+                    'get_lorebook_info',
+                    'manage_lorebook_entry',
+                    'manage_worldbook',
+                    'get_regex_list',
+                    'get_regex_info',
+                    'manage_regex',
+                    'get_tavern_helper_scripts',
+                    'get_tavern_helper_script_info',
+                    'manage_tavern_helper_script',
+                    'get_user_persona',
+                    'edit_user_persona',
+                    'manage_chat_text',
+                    'manage_backup',
+                ]);
             }
         }
         async createSystemWorkspace(systemId, name, systemPrompt, toolNames) {
             const toolsConfig = {};
-            toolNames.forEach(t => toolsConfig[t] = true);
+            toolNames.forEach((t) => (toolsConfig[t] = true));
             return new Promise((resolve, reject) => {
                 if (!this.db)
                     return reject(new Error('DB not initialized'));
@@ -6011,7 +6028,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 throw new Error('DB not initialized');
             // Check if it's a system workspace
             const workspaces = await this.getAllWorkspaces();
-            const ws = workspaces.find(w => w.id === id);
+            const ws = workspaces.find((w) => w.id === id);
             if (ws && ws.systemId) {
                 throw new Error('Cannot delete a system workspace');
             }
@@ -6036,7 +6053,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         }
         async resetSystemWorkspace(id) {
             const workspaces = await this.getAllWorkspaces();
-            const ws = workspaces.find(w => w.id === id);
+            const ws = workspaces.find((w) => w.id === id);
             if (!ws || !ws.systemId)
                 return;
             let defaultName = '';
@@ -6045,19 +6062,42 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             if (ws.systemId === 'roleplay') {
                 defaultName = 'Roleplay & Story';
                 defaultPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
-                defaultTools = ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input'];
+                defaultTools = [
+                    'get_char_info',
+                    'get_chat_history',
+                    'get_lorebook_info',
+                    'get_user_persona',
+                    'manage_user_input',
+                ];
             }
             else if (ws.systemId === 'modder') {
                 defaultName = 'Modding & Editor';
                 defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
-                defaultTools = ['get_char_info', 'list_characters', 'edit_character_card', 'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook', 'get_regex_list', 'get_regex_info', 'manage_regex', 'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script', 'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup'];
+                defaultTools = [
+                    'get_char_info',
+                    'list_characters',
+                    'edit_character_card',
+                    'get_lorebook_info',
+                    'manage_lorebook_entry',
+                    'manage_worldbook',
+                    'get_regex_list',
+                    'get_regex_info',
+                    'manage_regex',
+                    'get_tavern_helper_scripts',
+                    'get_tavern_helper_script_info',
+                    'manage_tavern_helper_script',
+                    'get_user_persona',
+                    'edit_user_persona',
+                    'manage_chat_text',
+                    'manage_backup',
+                ];
             }
             const toolsConfig = {};
-            defaultTools.forEach(t => toolsConfig[t] = true);
+            defaultTools.forEach((t) => (toolsConfig[t] = true));
             return this.updateWorkspace(id, {
                 name: defaultName,
                 systemPrompt: defaultPrompt,
-                toolsConfig
+                toolsConfig,
             });
         }
         // --- CHATS ---
@@ -7811,6 +7851,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
             };
             wsSelect.on('change', () => {
+                if (loop.isRunning) {
+                    wsSelect.val(stateManager.currentWorkspaceId ? stateManager.currentWorkspaceId.toString() : 'default');
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Kaiz Agent');
+                    return;
+                }
                 const val = wsSelect.val();
                 if (val === 'default') {
                     stateManager.switchWorkspace(null);
@@ -7963,7 +8008,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         const workspaces = await stateManager.db.getAllWorkspaces();
                         if (stateManager.onWorkspacesListUpdated)
                             stateManager.onWorkspacesListUpdated(workspaces);
-                        stateManager.currentWorkspace = workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
+                        stateManager.currentWorkspace =
+                            workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
                         if (stateManager.onWorkspaceSwitched)
                             stateManager.onWorkspaceSwitched(stateManager.currentWorkspace);
                         $('#kaiz-workspace-settings-modal')[0].close();
@@ -8049,6 +8095,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             menuBtn.on('click', toggleSidebar);
             // New Chat
             newChatBtn.on('click', async () => {
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Kaiz Agent');
+                    return;
+                }
                 history.empty();
                 // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
                 stateManager.currentChatId = null;
@@ -8062,6 +8112,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             chatList.on('click', '.kaiz-chat-item', function (e) {
                 if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit'))
                     return; // Bỏ qua nếu click nút xóa hoặc sửa
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Kaiz Agent');
+                    return;
+                }
                 const id = parseInt($(this).attr('data-id') || '0', 10);
                 if (id) {
                     stateManager.switchChat(id);
@@ -8071,6 +8125,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             });
             chatList.on('click', '.kaiz-chat-delete', async function (e) {
                 e.stopPropagation();
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Kaiz Agent');
+                    return;
+                }
                 const id = parseInt($(this).attr('data-id') || '0', 10);
                 if (id) {
                     if (confirm('Delete this chat?')) {

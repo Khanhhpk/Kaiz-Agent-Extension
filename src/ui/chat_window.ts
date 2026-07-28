@@ -14,6 +14,7 @@ const escapeHtml = (s: string): string =>
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 declare const SillyTavern: any;
+declare const toastr: any;
 
 export class ChatWindowUI {
     private static currentAttachments: import('../core/db').ChatAttachment[] = [];
@@ -415,6 +416,11 @@ export class ChatWindowUI {
         };
 
         wsSelect.on('change', () => {
+            if (loop.isRunning) {
+                wsSelect.val(stateManager.currentWorkspaceId ? stateManager.currentWorkspaceId.toString() : 'default');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Kaiz Agent');
+                return;
+            }
             const val = wsSelect.val();
             if (val === 'default') {
                 stateManager.switchWorkspace(null);
@@ -693,6 +699,10 @@ export class ChatWindowUI {
 
         // New Chat
         newChatBtn.on('click', async () => {
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Kaiz Agent');
+                return;
+            }
             history.empty();
             // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
             stateManager.currentChatId = null;
@@ -707,6 +717,10 @@ export class ChatWindowUI {
         // Cài đặt Event Delegation cho danh sách chat (chỉ gán 1 lần duy nhất)
         chatList.on('click', '.kaiz-chat-item', function (this: HTMLElement, e: any) {
             if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Kaiz Agent');
+                return;
+            }
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 stateManager.switchChat(id);
@@ -717,6 +731,10 @@ export class ChatWindowUI {
 
         chatList.on('click', '.kaiz-chat-delete', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Kaiz Agent');
+                return;
+            }
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 if (confirm('Delete this chat?')) {
