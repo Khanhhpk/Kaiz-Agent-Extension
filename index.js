@@ -7760,7 +7760,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             $('#kaiz-ws-delete-btn').on('click', async () => {
                 if (!stateManager.currentWorkspaceId)
                     return;
-                if (confirm('Xóa Workspace này? (Các đoạn chat bên trong vẫn sẽ còn trong DB nhưng sẽ mồ côi hoặc không hiển thị, bạn có chắc không?)')) {
+                const wsName = stateManager.currentWorkspace?.name || 'này';
+                if (confirm(`Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`)) {
                     await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
                     $('#kaiz-workspace-settings-modal')[0].close();
                 }
