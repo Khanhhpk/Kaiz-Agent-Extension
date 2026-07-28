@@ -130,6 +130,26 @@ export class BrowserWindowUI {
                 // Cross-origin: Không thể đọc được URL mới nếu người dùng click link bên trong trang web khác domain.
             }
         });
+
+        // Lắng nghe message từ Tampermonkey (Content Script) để bắt sự kiện đổi URL trong Iframe
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'KAIZ_IFRAME_URL' && event.data.url) {
+                const newUrl = event.data.url;
+                // Nếu URL nhận được khác với URL hiện tại trên thanh địa chỉ
+                if (this.$address.val() !== newUrl) {
+                    this.$address.val(newUrl);
+                    // Cập nhật lại lịch sử
+                    if (this.historyStack[this.historyIndex] !== newUrl) {
+                        // Xóa tương lai nếu đang ở quá khứ
+                        if (this.historyIndex < this.historyStack.length - 1) {
+                            this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
+                        }
+                        this.historyStack.push(newUrl);
+                        this.historyIndex++;
+                    }
+                }
+            }
+        });
     }
 
     private static goToUrl(url: string) {
