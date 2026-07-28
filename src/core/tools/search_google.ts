@@ -54,18 +54,30 @@ export const searchGoogleTool: ITool = {
                 originalQuery: string,
             ): boolean => {
                 if (items.length === 0) return true;
-                
+
                 // 1. Kiểm tra domain từ điển
                 const checkCount = Math.min(items.length, 3);
                 let dictGarbageCount = 0;
                 const dictDomains = [
-                    'dictionary.cambridge.org', 'merriam-webster.com', 'en.wiktionary.org',
-                    'tudientienganh.com', 'hvdic.thivien.net', 'lingolandedu.com',
-                    'dict.laban.vn', 'tratu.soha.vn', 'test-english.com', 'langeek.co', 'rdsic.edu.vn'
+                    'dictionary.cambridge.org',
+                    'merriam-webster.com',
+                    'en.wiktionary.org',
+                    'tudientienganh.com',
+                    'hvdic.thivien.net',
+                    'lingolandedu.com',
+                    'dict.laban.vn',
+                    'tratu.soha.vn',
+                    'test-english.com',
+                    'langeek.co',
+                    'rdsic.edu.vn',
                 ];
                 const dictPatterns = [
-                    /definition\b/i, /meaning\b/i, /nghĩa là gì/i, /từ điển/i, /tra từ/i,
-                    /\bdefinition\b.*\bmeaning\b/i
+                    /definition\b/i,
+                    /meaning\b/i,
+                    /nghĩa là gì/i,
+                    /từ điển/i,
+                    /tra từ/i,
+                    /\bdefinition\b.*\bmeaning\b/i,
                 ];
 
                 for (let i = 0; i < checkCount; i++) {
@@ -79,20 +91,49 @@ export const searchGoogleTool: ITool = {
                 if (dictGarbageCount >= 2) return true;
 
                 // 2. Kiểm tra Keyword Intersection (để loại bỏ kết quả bot-mode sai keyword)
-                const stopWords = ['top', 'best', 'most', 'new', 'latest', 'upcoming', 'good', 'great', 'worst', 'all', 'every', 'some', 'many', 'few', 'several', 'tình', 'các', 'những', 'bộ', 'phim', 'cách', 'hướng', 'danh', 'nhất', 'hay'];
-                const queryWords = originalQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w));
-                
+                const stopWords = [
+                    'top',
+                    'best',
+                    'most',
+                    'new',
+                    'latest',
+                    'upcoming',
+                    'good',
+                    'great',
+                    'worst',
+                    'all',
+                    'every',
+                    'some',
+                    'many',
+                    'few',
+                    'several',
+                    'tình',
+                    'các',
+                    'những',
+                    'bộ',
+                    'phim',
+                    'cách',
+                    'hướng',
+                    'danh',
+                    'nhất',
+                    'hay',
+                ];
+                const queryWords = originalQuery
+                    .toLowerCase()
+                    .split(/\s+/)
+                    .filter((w) => w.length > 2 && !stopWords.includes(w));
+
                 if (queryWords.length > 0) {
                     let missingKeywordCount = 0;
                     const requiredMatches = Math.min(Math.ceil(queryWords.length / 2), 2);
-                    
+
                     for (let i = 0; i < checkCount; i++) {
                         const content = (items[i].title + ' ' + items[i].snippet).toLowerCase();
                         let matchCount = 0;
-                        queryWords.forEach(w => {
+                        queryWords.forEach((w) => {
                             if (content.includes(w)) matchCount++;
                         });
-                        
+
                         if (matchCount < requiredMatches) {
                             missingKeywordCount++;
                         }
@@ -167,7 +208,7 @@ export const searchGoogleTool: ITool = {
                         }
                     }
                 });
-                
+
                 if (results.length > 0) {
                     engine = 'Google';
                     console.log('[search] Google returned good results!');
@@ -227,9 +268,29 @@ export const searchGoogleTool: ITool = {
                 if (isGarbageResults(bingResults, query)) {
                     console.log('[search] Bing returned garbage. Trying smart retries...');
                     const leadingStopWords = [
-                        'best', 'most', 'top', 'new', 'latest', 'upcoming', 'good', 'great', 'worst',
-                        'all', 'every', 'some', 'many', 'few', 'several', 'tình', 'các', 'những', 'bộ',
-                        'phim', 'cách', 'hướng', 'danh',
+                        'best',
+                        'most',
+                        'top',
+                        'new',
+                        'latest',
+                        'upcoming',
+                        'good',
+                        'great',
+                        'worst',
+                        'all',
+                        'every',
+                        'some',
+                        'many',
+                        'few',
+                        'several',
+                        'tình',
+                        'các',
+                        'những',
+                        'bộ',
+                        'phim',
+                        'cách',
+                        'hướng',
+                        'danh',
                     ];
 
                     const firstWord = query.trim().split(/\s+/)[0].toLowerCase();

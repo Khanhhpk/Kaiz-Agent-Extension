@@ -15,19 +15,26 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         parameters: {
             type: 'object',
             properties: {
-                action: { 
-                    type: 'string', 
+                action: {
+                    type: 'string',
                     enum: ['read', 'click', 'type', 'scroll', 'navigate', 'go_back', 'press_key'],
-                    description: 'Hành động cần thực hiện trên trình duyệt.' 
+                    description: 'Hành động cần thực hiện trên trình duyệt.',
                 },
                 url: { type: 'string', description: '(Dành cho navigate) Địa chỉ URL cần truy cập.' },
-                elementId: { type: 'number', description: '(Dành cho click, type, press_key) ID của phần tử lấy từ lệnh read.' },
+                elementId: {
+                    type: 'number',
+                    description: '(Dành cho click, type, press_key) ID của phần tử lấy từ lệnh read.',
+                },
                 text: { type: 'string', description: '(Dành cho type) Nội dung văn bản cần gõ.' },
-                direction: { type: 'string', enum: ['up', 'down'], description: '(Dành cho scroll) Hướng cuộn trang (mặc định down).' },
-                key: { type: 'string', description: '(Dành cho press_key) Phím cần bấm, mặc định là Enter.' }
+                direction: {
+                    type: 'string',
+                    enum: ['up', 'down'],
+                    description: '(Dành cho scroll) Hướng cuộn trang (mặc định down).',
+                },
+                key: { type: 'string', description: '(Dành cho press_key) Phím cần bấm, mặc định là Enter.' },
             },
-            required: ['action']
-        }
+            required: ['action'],
+        },
     },
     execute: async (args: Record<string, any>, context: any): Promise<ToolResult> => {
         const action = args.action;
@@ -48,31 +55,46 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 case 'click': {
                     if (!args.elementId) return { content: 'Lỗi: Thiếu elementId.', isError: true };
                     const data = await BrowserWindowUI.executeAgentCommand('CLICK', { elementId: args.elementId });
-                    return { content: `Thành công: ${data.message}. Gợi ý: Nếu trang tải nội dung mới, hãy dùng hành động 'read' để cập nhật.` };
+                    return {
+                        content: `Thành công: ${data.message}. Gợi ý: Nếu trang tải nội dung mới, hãy dùng hành động 'read' để cập nhật.`,
+                    };
                 }
                 case 'type': {
-                    if (!args.elementId || args.text === undefined) return { content: 'Lỗi: Thiếu elementId hoặc text.', isError: true };
-                    const data = await BrowserWindowUI.executeAgentCommand('TYPE', { elementId: args.elementId, text: args.text });
+                    if (!args.elementId || args.text === undefined)
+                        return { content: 'Lỗi: Thiếu elementId hoặc text.', isError: true };
+                    const data = await BrowserWindowUI.executeAgentCommand('TYPE', {
+                        elementId: args.elementId,
+                        text: args.text,
+                    });
                     return { content: `Thành công: ${data.message}.` };
                 }
                 case 'scroll': {
                     const dir = args.direction || 'down';
                     const data = await BrowserWindowUI.executeAgentCommand('SCROLL', { direction: dir });
-                    return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc phần nội dung mới xuất hiện.` };
+                    return {
+                        content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc phần nội dung mới xuất hiện.`,
+                    };
                 }
                 case 'navigate': {
                     if (!args.url) return { content: 'Lỗi: Thiếu url.', isError: true };
                     const data = await BrowserWindowUI.executeAgentCommand('NAVIGATE', { url: args.url });
-                    return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web mới.` };
+                    return {
+                        content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web mới.`,
+                    };
                 }
                 case 'go_back': {
                     const data = await BrowserWindowUI.executeAgentCommand('GO_BACK');
-                    return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web trước đó.` };
+                    return {
+                        content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web trước đó.`,
+                    };
                 }
                 case 'press_key': {
                     if (!args.elementId) return { content: 'Lỗi: Thiếu elementId.', isError: true };
                     const key = args.key || 'Enter';
-                    const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', { elementId: args.elementId, key: key });
+                    const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', {
+                        elementId: args.elementId,
+                        key: key,
+                    });
                     return { content: `Thành công: ${data.message}.` };
                 }
                 default:
@@ -81,5 +103,5 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         } catch (error: any) {
             return { content: `Lỗi: ${error.message}`, isError: true };
         }
-    }
+    },
 };
