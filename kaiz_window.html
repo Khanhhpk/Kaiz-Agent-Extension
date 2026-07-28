@@ -6,12 +6,21 @@
 <!-- Khung chat -->
 <dialog id="kaiz-chat-window" class="kaiz-chat-window">
     <div id="kaiz-browser-container" class="kaiz-browser-container" style="display: none; flex-direction: column; flex: 1; min-width: 0; overflow: hidden; position: relative; border-right: 1px solid rgba(255,255,255,0.1);">
+        <div class="kaiz-browser-tabs-container" style="display: flex; background: rgba(10, 15, 20, 0.95); padding: 5px 5px 0 5px; border-bottom: 1px solid rgba(255,255,255,0.05); gap: 2px; overflow-x: auto;">
+            <div id="kaiz-browser-tabs-list" style="display: flex; flex: 1; gap: 2px;">
+                <!-- Tabs will be injected here -->
+            </div>
+            <div id="kaiz-browser-new-tab" class="interactable" title="New Tab" style="width: 32px; display: flex; align-items: center; justify-content: center; border-radius: 6px 6px 0 0; background: rgba(255,255,255,0.05); color: #aaa; cursor: pointer;">
+                <i class="fa-solid fa-plus"></i>
+            </div>
+        </div>
         <div class="kaiz-browser-header" style="height: 50px; flex-shrink: 0; z-index: 10;">
             <div class="kaiz-browser-nav">
                 <i class="fa-solid fa-arrow-left interactable" id="kaiz-browser-back" title="Back"></i>
                 <i class="fa-solid fa-arrow-right interactable" id="kaiz-browser-forward" title="Forward"></i>
                 <i class="fa-solid fa-rotate-right interactable" id="kaiz-browser-reload" title="Reload"></i>
                 <i class="fa-solid fa-house interactable" id="kaiz-browser-home" title="Trang chủ"></i>
+                <i class="fa-solid fa-clock-rotate-left interactable" id="kaiz-browser-history-btn" title="Lịch sử"></i>
             </div>
             
             <div class="kaiz-browser-address-container">
@@ -244,6 +253,58 @@
         style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px"
     >
         <!-- Memory items will be injected here -->
+    </div>
+</dialog>
+
+<!-- Web History Modal -->
+<dialog
+    id="kaiz-web-history-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(20, 25, 35, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #ddd;
+        padding: 15px;
+        width: 500px;
+        max-width: 90vw;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        "
+    >
+        <h3 style="margin: 0; font-size: 16px"><i class="fa-solid fa-clock-rotate-left"></i> Lịch sử duyệt web</h3>
+        <i
+            id="kaiz-web-history-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px"
+        ></i>
+    </div>
+
+    <div style="margin-bottom: 15px; display: flex; justify-content: flex-end;">
+        <button
+            id="kaiz-web-history-clear-all"
+            class="menu_button interactable"
+            style="padding: 4px 8px; font-size: 11px; height: auto"
+        >
+            <i class="fa-solid fa-trash"></i> Xóa lịch sử
+        </button>
+    </div>
+
+    <div
+        id="kaiz-web-history-list"
+        style="display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; padding-right: 5px"
+    >
+        <!-- History items will be injected here -->
     </div>
 </dialog>
 

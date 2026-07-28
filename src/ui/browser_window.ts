@@ -1,45 +1,42 @@
 declare const jQuery: any;
 
+interface BrowserTab {
+    id: string;
+    iframe: HTMLIFrameElement;
+    historyStack: string[];
+    historyIndex: number;
+    lastHistoryPushTime: number;
+    title: string;
+}
+
+interface WebHistoryItem {
+    url: string;
+    title: string;
+    timestamp: number;
+}
+
 export class BrowserWindowUI {
     private static $modal: any;
     private static $address: any;
     
-    // Hệ thống lịch sử tự quản lý
-    private static historyStack: string[] = [];
-    private static historyIndex: number = -1;
-    private static lastHistoryPushTime: number = 0;
-    
+    private static tabs: BrowserTab[] = [];
+    private static activeTabId: string | null = null;
+
     public static init() {
         const $ = jQuery;
         
-        // Cập nhật: bây giờ nó là một phần của chat window, không phải modal riêng
         this.$modal = $('#kaiz-browser-container').last();
         this.$address = this.$modal.find('.kaiz-browser-address');
 
-        // Khởi tạo thẻ iframe động vì SillyTavern DOMPurify sẽ xóa thẻ <iframe> tĩnh trong file HTML
-        const container = this.$modal.find('#kaiz-browser-iframe-container');
-        if (container.length > 0 && container.find('iframe').length === 0) {
-            const iframe = document.createElement('iframe');
-            iframe.id = 'kaiz-browser-iframe';
-            iframe.src = 'about:blank';
-            // Khóa chặt iframe bằng sandbox để ngăn các trang web dùng JS hoặc target="_top" đá văng SillyTavern
-            iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
-            iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: block; z-index: 5;';
-            container.append(iframe);
+        // Khởi tạo tab đầu tiên nếu chưa có
+        if (this.tabs.length === 0) {
+            this.createNewTab('https://www.google.com/webhp?igu=1');
         }
 
         // Nút mở trình duyệt từ header chat (toggle split-screen)
         $('#kaiz-chat-browser-btn').on('click', () => {
             const $chatWindow = $('#kaiz-chat-window');
             $chatWindow.toggleClass('kaiz-browser-mode');
-            
-            // Nếu vừa bật mode browser, thì load trang mặc định nếu đang trống
-            if ($chatWindow.hasClass('kaiz-browser-mode')) {
-                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
-                if (iframe && iframe.src.includes('about:blank')) {
-                    this.goToUrl('https://google.com');
-                }
-            }
         });
 
         // Đóng trình duyệt
@@ -53,13 +50,11 @@ export class BrowserWindowUI {
             if (url) {
                 if (!url.startsWith('http://') && !url.startsWith('https://')) {
                     if (url.includes(' ') || !url.includes('.')) {
-                        // Tìm kiếm bằng google (Dùng tham số bí mật igu=1 để bypass X-Frame-Options)
                         url = `https://www.google.com/search?q=${encodeURIComponent(url)}&igu=1`;
                     } else {
                         url = `https://${url}`;
                     }
                 }
-                
                 this.goToUrl(url);
             }
         };
@@ -72,108 +67,299 @@ export class BrowserWindowUI {
         });
 
         this.$modal.find('#kaiz-browser-reload').on('click', () => {
-            const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
-            if (iframe && iframe.src && !iframe.src.includes('about:blank')) {
-                // Ép load lại
-                const current = iframe.src;
-                iframe.src = 'about:blank';
-                setTimeout(() => { iframe.src = current; }, 50);
+            const activeTab = this.getActiveTab();
+            if (activeTab && activeTab.iframe.src && !activeTab.iframe.src.includes('about:blank')) {
+                const current = activeTab.iframe.src;
+                activeTab.iframe.src = 'about:blank';
+                setTimeout(() => { activeTab.iframe.src = current; }, 50);
             }
         });
 
         // Nút trang chủ
         this.$modal.find('#kaiz-browser-home').on('click', () => {
-            this.goToUrl('https://google.com');
+            this.goToUrl('https://www.google.com/webhp?igu=1');
         });
 
-        // Hệ thống Back / Forward tự xây dựng
+        // Hệ thống Tabs UI
+        $('#kaiz-browser-new-tab').on('click', () => {
+            this.createNewTab('https://www.google.com/webhp?igu=1');
+        });
+
+        // Bấm chia sẻ trang
+        this.$modal.find('#kaiz-browser-share').on('click', () => {
+            const url = this.$address.val().trim();
+            if (!url) return;
+            const $chatInput = $('#kaiz-chat-input');
+            const currentText = $chatInput.val();
+            const shareText = `Hãy xem trang web này: ${url}\n`;
+            $chatInput.val(currentText ? currentText + '\n' + shareText : shareText);
+            $chatInput.focus();
+        });
+        
+        // Modal Lịch sử
+        $('#kaiz-browser-history-btn').on('click', () => {
+            this.renderHistoryModal();
+            (document.getElementById('kaiz-web-history-modal') as any).showModal();
+        });
+        $('#kaiz-web-history-close').on('click', () => {
+            (document.getElementById('kaiz-web-history-modal') as any).close();
+        });
+        $('#kaiz-web-history-clear-all').on('click', () => {
+            if (confirm('Bạn có chắc muốn xóa toàn bộ lịch sử?')) {
+                localStorage.removeItem('kaiz_web_history');
+                this.renderHistoryModal();
+            }
+        });
+
+        // Thuật toán Back / Forward thông minh
         this.$modal.find('#kaiz-browser-back').on('click', () => {
-            if (this.historyIndex > 0) {
-                this.historyIndex--;
-                const prevUrl = this.historyStack[this.historyIndex];
-                this.navigate(prevUrl, false);
+            const tab = this.getActiveTab();
+            if (tab && tab.historyIndex > 0) {
+                tab.historyIndex--;
+                const prevUrl = tab.historyStack[tab.historyIndex];
+                this.navigate(tab, prevUrl, false);
             }
         });
         
         this.$modal.find('#kaiz-browser-forward').on('click', () => {
-            if (this.historyIndex < this.historyStack.length - 1) {
-                this.historyIndex++;
-                const nextUrl = this.historyStack[this.historyIndex];
-                this.navigate(nextUrl, false);
-            }
-        });
-
-        // Bấm chia sẻ trang cho AI
-        this.$modal.find('#kaiz-browser-share').on('click', () => {
-            const url = this.$address.val().trim();
-            if (!url) return;
-
-            // Đưa URL vào thanh chat
-            const $chatInput = $('#kaiz-chat-input');
-            const currentText = $chatInput.val();
-            const shareText = `Hãy xem trang web này: ${url}\n`;
-            
-            $chatInput.val(currentText ? currentText + '\n' + shareText : shareText);
-            
-            // Highlight nút gửi hoặc focus vào input
-            $chatInput.focus();
-        });
-        
-        // Cập nhật lại thanh địa chỉ nếu iframe load xong (chỉ read được nếu same-origin)
-        this.$modal.find('iframe').on('load', () => {
-            try {
-                this.$address.css('background-color', ''); // Xóa màu loading
-                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
-                const newUrl = iframe.contentWindow?.location.href;
-                if (newUrl && !newUrl.includes('about:blank')) {
-                    this.$address.val(newUrl);
-                    // Nếu url thay đổi do click link bên trong, có thể cập nhật lại state hiện tại
-                    if (this.historyIndex >= 0 && this.historyStack[this.historyIndex] !== newUrl) {
-                        this.historyStack[this.historyIndex] = newUrl;
-                    }
-                }
-            } catch (e) {
-                this.$address.css('background-color', ''); // Xóa màu loading
-                // Cross-origin: Không thể đọc được URL mới nếu người dùng click link bên trong trang web khác domain.
+            const tab = this.getActiveTab();
+            if (tab && tab.historyIndex < tab.historyStack.length - 1) {
+                tab.historyIndex++;
+                const nextUrl = tab.historyStack[tab.historyIndex];
+                this.navigate(tab, nextUrl, false);
             }
         });
 
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'KAIZ_IFRAME_URL' && event.data.url) {
-                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
-                // Chỉ nhận message từ đúng iframe chính gốc, bỏ qua nếu message đến từ iframe con (quảng cáo, widget...)
-                if (iframe && event.source !== iframe.contentWindow) {
+                const activeTab = this.getActiveTab();
+                if (!activeTab) return;
+                
+                if (event.source !== activeTab.iframe.contentWindow) {
                     return;
                 }
                 
                 const newUrl = event.data.url;
-                // Nếu URL nhận được khác với URL hiện tại trên thanh địa chỉ
+                
+                // Cập nhật title nếu có
+                if (event.data.title && event.data.title !== activeTab.title) {
+                    activeTab.title = event.data.title;
+                } else if (activeTab.title === 'New Tab') {
+                    activeTab.title = newUrl.replace('https://', '').replace('http://', '').replace('www.', '');
+                }
+                this.updateTabUI();
+
+                // Lưu vào Global History
+                this.saveToGlobalHistory(newUrl, activeTab.title);
+
                 if (this.$address.val() !== newUrl) {
                     this.$address.val(newUrl);
+                    this.$address.css('background-color', ''); 
                     
                     const now = Date.now();
-                    // Nếu thời gian thay đổi URL quá nhanh (dưới 1.5s), khả năng cao là link rác do redirect xen giữa
-                    // Ta sẽ ghi đè lịch sử hiện tại thay vì đẩy (push) lịch sử mới
-                    if (now - this.lastHistoryPushTime < 1500 && this.historyIndex >= 0) {
-                        this.historyStack[this.historyIndex] = newUrl;
-                        this.lastHistoryPushTime = now; // Gia hạn thêm thời gian debounce
+                    
+                    // Thuật toán nhận dạng Back / Forward từ web bên trong iframe
+                    if (activeTab.historyIndex > 0 && activeTab.historyStack[activeTab.historyIndex - 1] === newUrl) {
+                        activeTab.historyIndex--;
+                        activeTab.lastHistoryPushTime = now;
                     } 
-                    // Ngược lại, cập nhật lịch sử tạo điểm neo mới
-                    else if (this.historyStack[this.historyIndex] !== newUrl) {
-                        // Xóa tương lai nếu đang ở quá khứ
-                        if (this.historyIndex < this.historyStack.length - 1) {
-                            this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
+                    else if (activeTab.historyIndex < activeTab.historyStack.length - 1 && activeTab.historyStack[activeTab.historyIndex + 1] === newUrl) {
+                        activeTab.historyIndex++;
+                        activeTab.lastHistoryPushTime = now;
+                    }
+                    else if (now - activeTab.lastHistoryPushTime < 1500 && activeTab.historyIndex >= 0) {
+                        activeTab.historyStack[activeTab.historyIndex] = newUrl;
+                        activeTab.lastHistoryPushTime = now;
+                    } 
+                    else if (activeTab.historyStack[activeTab.historyIndex] !== newUrl) {
+                        if (activeTab.historyIndex < activeTab.historyStack.length - 1) {
+                            activeTab.historyStack = activeTab.historyStack.slice(0, activeTab.historyIndex + 1);
                         }
-                        this.historyStack.push(newUrl);
-                        this.historyIndex++;
-                        this.lastHistoryPushTime = now;
+                        activeTab.historyStack.push(newUrl);
+                        activeTab.historyIndex++;
+                        activeTab.lastHistoryPushTime = now;
                     }
                 }
             }
         });
         
-        // Khởi tạo tính năng kéo giãn (resize)
         this.initResizer();
+    }
+
+    private static createNewTab(url: string) {
+        const id = 'tab_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+        
+        const iframe = document.createElement('iframe');
+        iframe.id = 'iframe_' + id;
+        iframe.src = url;
+        iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
+        iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: none; z-index: 5;';
+        
+        this.$modal.find('#kaiz-browser-iframe-container').append(iframe);
+        
+        const newTab: BrowserTab = {
+            id,
+            iframe,
+            historyStack: [url],
+            historyIndex: 0,
+            lastHistoryPushTime: Date.now(),
+            title: 'New Tab'
+        };
+        
+        this.tabs.push(newTab);
+        this.switchTab(id);
+        this.updateTabUI();
+    }
+
+    private static switchTab(id: string) {
+        this.activeTabId = id;
+        this.tabs.forEach(tab => {
+            if (tab.id === id) {
+                tab.iframe.style.display = 'block';
+                this.$address.val(tab.historyStack[tab.historyIndex]);
+            } else {
+                tab.iframe.style.display = 'none';
+            }
+        });
+        this.updateTabUI();
+    }
+
+    private static closeTab(id: string, e: any) {
+        e.stopPropagation();
+        
+        const index = this.tabs.findIndex(t => t.id === id);
+        if (index > -1) {
+            const tab = this.tabs[index];
+            tab.iframe.remove();
+            this.tabs.splice(index, 1);
+            
+            if (this.tabs.length === 0) {
+                this.createNewTab('https://www.google.com/webhp?igu=1');
+            } else if (this.activeTabId === id) {
+                // Chuyển sang tab bên trái nó
+                const nextIndex = Math.max(0, index - 1);
+                this.switchTab(this.tabs[nextIndex].id);
+            } else {
+                this.updateTabUI();
+            }
+        }
+    }
+
+    private static updateTabUI() {
+        const $ = jQuery;
+        const $list = $('#kaiz-browser-tabs-list');
+        $list.empty();
+        
+        this.tabs.forEach(tab => {
+            const titleDisplay = tab.title.length > 20 ? tab.title.substring(0, 20) + '...' : tab.title;
+            const $tab = $(`
+                <div class="kaiz-browser-tab ${this.activeTabId === tab.id ? 'active-tab' : ''}" title="${tab.title}">
+                    <div class="kaiz-browser-tab-title">${titleDisplay}</div>
+                    <div class="kaiz-browser-tab-close"><i class="fa-solid fa-xmark"></i></div>
+                </div>
+            `);
+            
+            $tab.on('click', () => this.switchTab(tab.id));
+            $tab.find('.kaiz-browser-tab-close').on('click', (e: any) => this.closeTab(tab.id, e));
+            
+            $list.append($tab);
+        });
+    }
+
+    private static getActiveTab(): BrowserTab | null {
+        return this.tabs.find(t => t.id === this.activeTabId) || null;
+    }
+
+    private static goToUrl(url: string) {
+        if (url === 'https://google.com' || url === 'https://www.google.com' || url === 'https://google.com/' || url === 'https://www.google.com/') {
+            url = 'https://www.google.com/webhp?igu=1';
+        } else if (url.startsWith('https://www.google.com/search?') && !url.includes('igu=1')) {
+            url += '&igu=1';
+        }
+
+        const tab = this.getActiveTab();
+        if (!tab) return;
+
+        if (tab.historyIndex < tab.historyStack.length - 1) {
+            tab.historyStack = tab.historyStack.slice(0, tab.historyIndex + 1);
+        }
+        
+        if (tab.historyStack[tab.historyIndex] !== url) {
+            tab.historyStack.push(url);
+            tab.historyIndex++;
+            tab.lastHistoryPushTime = Date.now();
+        }
+        
+        this.navigate(tab, url, true);
+    }
+
+    private static navigate(tab: BrowserTab, url: string, forceReload: boolean) {
+        this.$address.val(url);
+        this.$address.css('background-color', '#eef2ff'); 
+        
+        if (forceReload) {
+            tab.iframe.src = 'about:blank';
+            setTimeout(() => { tab.iframe.src = url; }, 50);
+        } else {
+            tab.iframe.src = url;
+        }
+        
+        this.saveToGlobalHistory(url, url);
+    }
+
+    private static saveToGlobalHistory(url: string, title: string) {
+        if (url.includes('about:blank')) return;
+        
+        try {
+            const raw = localStorage.getItem('kaiz_web_history');
+            let history: WebHistoryItem[] = raw ? JSON.parse(raw) : [];
+            
+            history = history.filter(h => h.url !== url);
+            
+            history.unshift({
+                url,
+                title,
+                timestamp: Date.now()
+            });
+            
+            if (history.length > 200) {
+                history = history.slice(0, 200);
+            }
+            
+            localStorage.setItem('kaiz_web_history', JSON.stringify(history));
+        } catch (e) { }
+    }
+
+    private static renderHistoryModal() {
+        const $ = jQuery;
+        const $list = $('#kaiz-web-history-list');
+        $list.empty();
+        
+        try {
+            const raw = localStorage.getItem('kaiz_web_history');
+            if (!raw) return;
+            const history: WebHistoryItem[] = JSON.parse(raw);
+            
+            history.forEach(item => {
+                const date = new Date(item.timestamp);
+                const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')} ${date.getDate()}/${date.getMonth()+1}`;
+                
+                const $el = $(`
+                    <div class="kaiz-history-item" title="${item.url}">
+                        <div class="kaiz-history-title">${item.title}</div>
+                        <div class="kaiz-history-url">${item.url}</div>
+                        <div class="kaiz-history-time">${timeStr}</div>
+                    </div>
+                `);
+                
+                $el.on('click', () => {
+                    this.goToUrl(item.url);
+                    (document.getElementById('kaiz-web-history-modal') as any).close();
+                });
+                
+                $list.append($el);
+            });
+        } catch (e) { }
     }
 
     private static initResizer() {
@@ -184,16 +370,11 @@ export class BrowserWindowUI {
         
         if (!chatWindowEl) return;
 
-        // Khôi phục kích thước từ localStorage
         const savedWidth = localStorage.getItem('kaiz_chat_split_width');
         const savedHeight = localStorage.getItem('kaiz_chat_split_height');
         
-        if (savedWidth) {
-            chatWindowEl.style.setProperty('--kaiz-chat-width', savedWidth + 'px');
-        }
-        if (savedHeight) {
-            chatWindowEl.style.setProperty('--kaiz-chat-height', savedHeight + 'px');
-        }
+        if (savedWidth) chatWindowEl.style.setProperty('--kaiz-chat-width', savedWidth + 'px');
+        if (savedHeight) chatWindowEl.style.setProperty('--kaiz-chat-height', savedHeight + 'px');
 
         let isDragging = false;
         let isVertical = false;
@@ -203,8 +384,6 @@ export class BrowserWindowUI {
             isDragging = true;
             isVertical = window.innerWidth <= 900;
             $resizer.addClass('active');
-            
-            // Vô hiệu hóa pointer-events để di chuột qua browser mượt hơn
             $('#kaiz-browser-container').css('pointer-events', 'none');
             $('body').css('user-select', 'none');
             e.preventDefault();
@@ -212,23 +391,18 @@ export class BrowserWindowUI {
 
         $(document).on('mousemove', (e: any) => {
             if (!isDragging) return;
-            
             if (isVertical) {
-                // Xếp chồng dọc (màn hình nhỏ) - Chat ở dưới
                 const totalHeight = window.innerHeight;
                 let newHeight = totalHeight - e.clientY;
                 if (newHeight < 100) newHeight = 100;
                 if (newHeight > totalHeight - 100) newHeight = totalHeight - 100;
-                
                 chatWindowEl.style.setProperty('--kaiz-chat-height', newHeight + 'px');
                 localStorage.setItem('kaiz_chat_split_height', newHeight.toString());
             } else {
-                // Xếp ngang (màn hình to) - Chat ở phải
                 const totalWidth = window.innerWidth;
                 let newWidth = totalWidth - e.clientX;
                 if (newWidth < 250) newWidth = 250;
                 if (newWidth > totalWidth - 300) newWidth = totalWidth - 300;
-                
                 chatWindowEl.style.setProperty('--kaiz-chat-width', newWidth + 'px');
                 localStorage.setItem('kaiz_chat_split_width', newWidth.toString());
             }
@@ -242,45 +416,5 @@ export class BrowserWindowUI {
                 $('body').css('user-select', '');
             }
         });
-    }
-
-    private static goToUrl(url: string) {
-        // Xử lý chung các trường hợp bypass iframe block cho Google
-        if (url === 'https://google.com' || url === 'https://www.google.com' || url === 'https://google.com/' || url === 'https://www.google.com/') {
-            url = 'https://www.google.com/webhp?igu=1';
-        } else if (url.startsWith('https://www.google.com/search?') && !url.includes('igu=1')) {
-            url += '&igu=1';
-        }
-
-        // Cắt bỏ phần history tương lai nếu đang ở quá khứ mà lại nhập URL mới
-        if (this.historyIndex < this.historyStack.length - 1) {
-            this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
-        }
-        
-        if (this.historyStack[this.historyIndex] !== url) {
-            this.historyStack.push(url);
-            this.historyIndex++;
-            this.lastHistoryPushTime = Date.now();
-        }
-        
-        this.navigate(url, true);
-    }
-
-    private static navigate(url: string, forceReload: boolean) {
-        this.$address.val(url);
-        // Hiệu ứng loading nhẹ ở thanh địa chỉ
-        this.$address.css('background-color', '#eef2ff'); 
-        
-        const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
-        if (iframe) {
-            if (forceReload) {
-                iframe.src = 'about:blank';
-                setTimeout(() => { iframe.src = url; }, 50);
-            } else {
-                iframe.src = url;
-            }
-        } else {
-            alert("Lỗi: Không tìm thấy Iframe để hiển thị web!");
-        }
     }
 }
