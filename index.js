@@ -7659,78 +7659,84 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const toolsList = $('#kaiz-ws-tools-list');
                 toolsList.empty();
                 const allSchemas = registry.getAllSchemas();
-                const enabledTools = allSchemas.filter(s => toolsConfig[s.name] === true);
-                const availableTools = allSchemas.filter(s => toolsConfig[s.name] !== true);
-                // Render enabled tool chips
-                const chipsContainer = $('<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:32px;"></div>');
-                if (enabledTools.length === 0) {
-                    chipsContainer.append('<span style="color:#888; font-size:12px; align-self:center;">Chưa có tool nào. Thêm từ danh sách bên dưới.</span>');
+                // --- Chips (tools đang được bật) ---
+                const chipsContainer = $('<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>');
+                // --- Ô search ---
+                const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`);
+                // --- Result list (luôn hiện, mặc định = tất cả) ---
+                const resultList = $(`<div style="max-height:140px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`);
+                toolsList.append(chipsContainer, searchInput, resultList);
+                toolsList.data('toolsConfig', toolsConfig);
+                function refreshChips() {
+                    chipsContainer.empty();
+                    const enabled = allSchemas.filter(s => toolsConfig[s.name] === true);
+                    if (enabled.length === 0) {
+                        chipsContainer.append('<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>');
+                        return;
+                    }
+                    enabled.forEach(schema => {
+                        const chip = $(`
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$1(schema.name)}" style="
+                            display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+                            background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
+                            border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
+                        ">
+                            ${escapeHtml$1(schema.name)}
+                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$1(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                        </span>
+                    `);
+                        chipsContainer.append(chip);
+                    });
                 }
-                enabledTools.forEach(schema => {
-                    const chip = $(`
-                    <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$1(schema.name)}" style="
-                        display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
-                        background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
-                        border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
-                    ">
-                        ${escapeHtml$1(schema.name)}
-                        <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$1(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
-                    </span>
-                `);
-                    chipsContainer.append(chip);
-                });
-                // Ô search + danh sách kết quả có thể thêm
-                const addRow = $('<div style="display:flex; flex-direction:column; gap:5px; margin-top:8px;"></div>');
-                const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px;">`);
-                const resultList = $(`<div style="max-height:120px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2); display:none;"></div>`);
-                addRow.append(searchInput, resultList);
-                function renderSearchResults(query) {
+                function refreshResults(query) {
                     resultList.empty();
+                    const available = allSchemas.filter(s => toolsConfig[s.name] !== true);
                     const q = query.trim().toLowerCase();
-                    if (!q) {
-                        resultList.hide();
-                        return;
-                    }
-                    const matches = availableTools.filter(s => s.name.toLowerCase().includes(q) ||
-                        (s.description && s.description.toLowerCase().includes(q)));
+                    const matches = q
+                        ? available.filter(s => s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q)))
+                        : available;
                     if (matches.length === 0) {
-                        resultList.show().append('<div style="padding:8px; color:#888; font-size:12px;">Không tìm thấy tool nào.</div>');
+                        resultList.append('<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>');
                         return;
                     }
-                    resultList.show();
                     matches.forEach(schema => {
                         const item = $(`
                         <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$1(schema.name)}" style="
                             padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
-                            border-bottom:1px solid rgba(255,255,255,0.05);
+                            border-bottom:1px solid rgba(255,255,255,0.04);
                         ">
                             <span style="color:#fff; font-weight:500;">${escapeHtml$1(schema.name)}</span>
-                            ${schema.description ? `<span style="color:#888; font-size:11px; margin-left:6px;">${escapeHtml$1(schema.description.substring(0, 60))}${schema.description.length > 60 ? '...' : ''}</span>` : ''}
+                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$1(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
                         </div>
                     `);
                         item.on('mouseenter', function () { $(this).css('background', 'rgba(255,255,255,0.07)'); });
                         item.on('mouseleave', function () { $(this).css('background', ''); });
                         item.on('click', () => {
                             toolsConfig[schema.name] = true;
-                            renderWsToolsUI(toolsConfig);
+                            toolsList.data('toolsConfig', toolsConfig);
+                            refreshChips();
+                            // Giữ nguyên filter hiện tại, chỉ refresh results
+                            refreshResults(String(searchInput.val() || ''));
                         });
                         resultList.append(item);
                     });
                 }
-                searchInput.on('input', function () {
-                    renderSearchResults(String($(this).val() || ''));
-                });
-                toolsList.append(chipsContainer, addRow);
-                // Remove tool chip
-                toolsList.on('click', '.kaiz-ws-tool-remove', function () {
+                // Chip remove — dùng event delegation trên chipsContainer
+                chipsContainer.on('click', '.kaiz-ws-tool-remove', function () {
                     const toolName = $(this).attr('data-tool');
                     if (toolName) {
                         delete toolsConfig[toolName];
-                        renderWsToolsUI(toolsConfig);
+                        toolsList.data('toolsConfig', toolsConfig);
+                        refreshChips();
+                        refreshResults(String(searchInput.val() || ''));
                     }
                 });
-                // Store toolsConfig reference on DOM for save
-                toolsList.data('toolsConfig', toolsConfig);
+                searchInput.on('input', function () {
+                    refreshResults(String($(this).val() || ''));
+                });
+                // Render lần đầu
+                refreshChips();
+                refreshResults('');
             }
             $('#kaiz-workspace-settings-close').on('click', () => {
                 $('#kaiz-workspace-settings-modal')[0].close();
