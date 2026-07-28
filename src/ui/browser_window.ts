@@ -23,7 +23,7 @@ export class BrowserWindowUI {
             iframe.id = 'kaiz-browser-iframe';
             iframe.src = 'about:blank';
             // Khóa chặt iframe bằng sandbox để ngăn các trang web dùng JS hoặc target="_top" đá văng SillyTavern
-            iframe.sandbox.add('allow-forms', 'allow-scripts', 'allow-same-origin', 'allow-popups', 'allow-modals', 'allow-downloads');
+            iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
             iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: block; z-index: 5;';
             container.append(iframe);
         }
