@@ -3625,15 +3625,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (BrowserWindowUI['activeTabId']) {
                     const tab = BrowserWindowUI['tabs'].find((t) => t.id === BrowserWindowUI['activeTabId']);
                     if (tab && tab.iframe) {
-                        const currentFilter = tab.iframe.style.filter;
-                        if (currentFilter.includes('invert(1)')) {
-                            tab.iframe.style.filter = '';
+                        if (tab.isDarkMode) {
+                            tab.isDarkMode = false;
                             $btn.css('color', '');
                         }
                         else {
-                            // Invert color, rotate hue back so images look normal-ish, slightly dim
-                            tab.iframe.style.filter = 'invert(1) hue-rotate(180deg) brightness(0.9)';
+                            tab.isDarkMode = true;
                             $btn.css('color', '#f1c40f'); // Highlight button
+                        }
+                        try {
+                            tab.iframe.style.filter = ''; // Xóa hack CSS cũ
+                            tab.iframe.contentWindow?.postMessage({ type: 'KAIZ_TOGGLE_DARK_MODE' }, '*');
+                        }
+                        catch (e) {
+                            // Bỏ qua lỗi CORS
                         }
                     }
                 }
