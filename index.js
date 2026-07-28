@@ -7969,6 +7969,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             });
             input.on('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
+                    // Trong phone mode, Enter dùng để xuống dòng
+                    if ($('#kaiz-chat-window').hasClass('kaiz-phone-mode')) {
+                        return;
+                    }
                     e.preventDefault();
                     sendMessage();
                 }

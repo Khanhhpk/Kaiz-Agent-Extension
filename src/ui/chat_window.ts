@@ -1014,6 +1014,10 @@ export class ChatWindowUI {
         });
         input.on('keydown', (e: any) => {
             if (e.key === 'Enter' && !e.shiftKey) {
+                // Trong phone mode, Enter dùng để xuống dòng
+                if ($('#kaiz-chat-window').hasClass('kaiz-phone-mode')) {
+                    return;
+                }
                 e.preventDefault();
                 sendMessage();
             }

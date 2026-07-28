@@ -107,6 +107,10 @@
     margin: 0 !important;
 }
 
+.kaiz-chat-window.kaiz-phone-mode .kaiz-chat-header {
+    padding-top: max(16px, env(safe-area-inset-top));
+}
+
 /* Giao diện Split-Screen (Trình duyệt + Chat) */
 .kaiz-chat-window.kaiz-browser-mode {
     width: 100vw !important;
