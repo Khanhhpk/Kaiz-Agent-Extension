@@ -1685,13 +1685,25 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     const checkCount = Math.min(items.length, 3);
                     let dictGarbageCount = 0;
                     const dictDomains = [
-                        'dictionary.cambridge.org', 'merriam-webster.com', 'en.wiktionary.org',
-                        'tudientienganh.com', 'hvdic.thivien.net', 'lingolandedu.com',
-                        'dict.laban.vn', 'tratu.soha.vn', 'test-english.com', 'langeek.co', 'rdsic.edu.vn'
+                        'dictionary.cambridge.org',
+                        'merriam-webster.com',
+                        'en.wiktionary.org',
+                        'tudientienganh.com',
+                        'hvdic.thivien.net',
+                        'lingolandedu.com',
+                        'dict.laban.vn',
+                        'tratu.soha.vn',
+                        'test-english.com',
+                        'langeek.co',
+                        'rdsic.edu.vn',
                     ];
                     const dictPatterns = [
-                        /definition\b/i, /meaning\b/i, /nghĩa là gì/i, /từ điển/i, /tra từ/i,
-                        /\bdefinition\b.*\bmeaning\b/i
+                        /definition\b/i,
+                        /meaning\b/i,
+                        /nghĩa là gì/i,
+                        /từ điển/i,
+                        /tra từ/i,
+                        /\bdefinition\b.*\bmeaning\b/i,
                     ];
                     for (let i = 0; i < checkCount; i++) {
                         const item = items[i];
@@ -1704,15 +1716,44 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (dictGarbageCount >= 2)
                         return true;
                     // 2. Kiểm tra Keyword Intersection (để loại bỏ kết quả bot-mode sai keyword)
-                    const stopWords = ['top', 'best', 'most', 'new', 'latest', 'upcoming', 'good', 'great', 'worst', 'all', 'every', 'some', 'many', 'few', 'several', 'tình', 'các', 'những', 'bộ', 'phim', 'cách', 'hướng', 'danh', 'nhất', 'hay'];
-                    const queryWords = originalQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2 && !stopWords.includes(w));
+                    const stopWords = [
+                        'top',
+                        'best',
+                        'most',
+                        'new',
+                        'latest',
+                        'upcoming',
+                        'good',
+                        'great',
+                        'worst',
+                        'all',
+                        'every',
+                        'some',
+                        'many',
+                        'few',
+                        'several',
+                        'tình',
+                        'các',
+                        'những',
+                        'bộ',
+                        'phim',
+                        'cách',
+                        'hướng',
+                        'danh',
+                        'nhất',
+                        'hay',
+                    ];
+                    const queryWords = originalQuery
+                        .toLowerCase()
+                        .split(/\s+/)
+                        .filter((w) => w.length > 2 && !stopWords.includes(w));
                     if (queryWords.length > 0) {
                         let missingKeywordCount = 0;
                         const requiredMatches = Math.min(Math.ceil(queryWords.length / 2), 2);
                         for (let i = 0; i < checkCount; i++) {
                             const content = (items[i].title + ' ' + items[i].snippet).toLowerCase();
                             let matchCount = 0;
-                            queryWords.forEach(w => {
+                            queryWords.forEach((w) => {
                                 if (content.includes(w))
                                     matchCount++;
                             });
@@ -1845,9 +1886,29 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     if (isGarbageResults(bingResults, query)) {
                         console.log('[search] Bing returned garbage. Trying smart retries...');
                         const leadingStopWords = [
-                            'best', 'most', 'top', 'new', 'latest', 'upcoming', 'good', 'great', 'worst',
-                            'all', 'every', 'some', 'many', 'few', 'several', 'tình', 'các', 'những', 'bộ',
-                            'phim', 'cách', 'hướng', 'danh',
+                            'best',
+                            'most',
+                            'top',
+                            'new',
+                            'latest',
+                            'upcoming',
+                            'good',
+                            'great',
+                            'worst',
+                            'all',
+                            'every',
+                            'some',
+                            'many',
+                            'few',
+                            'several',
+                            'tình',
+                            'các',
+                            'những',
+                            'bộ',
+                            'phim',
+                            'cách',
+                            'hướng',
+                            'danh',
                         ];
                         const firstWord = query.trim().split(/\s+/)[0].toLowerCase();
                         let reorderedUsed = false;
@@ -3536,7 +3597,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (activeTab && activeTab.iframe.src && !activeTab.iframe.src.includes('about:blank')) {
                     const current = activeTab.iframe.src;
                     activeTab.iframe.src = 'about:blank';
-                    setTimeout(() => { activeTab.iframe.src = current; }, 50);
+                    setTimeout(() => {
+                        activeTab.iframe.src = current;
+                    }, 50);
                 }
             });
             // Nút trang chủ
@@ -3616,7 +3679,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             activeTab.historyIndex--;
                             activeTab.lastHistoryPushTime = now;
                         }
-                        else if (activeTab.historyIndex < activeTab.historyStack.length - 1 && activeTab.historyStack[activeTab.historyIndex + 1] === newUrl) {
+                        else if (activeTab.historyIndex < activeTab.historyStack.length - 1 &&
+                            activeTab.historyStack[activeTab.historyIndex + 1] === newUrl) {
                             activeTab.historyIndex++;
                             activeTab.lastHistoryPushTime = now;
                         }
@@ -3656,7 +3720,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             iframe.id = 'iframe_' + id;
             iframe.src = url;
             iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
-            iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: none; z-index: 5;';
+            iframe.style.cssText =
+                'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: none; z-index: 5;';
             this.$modal.find('#kaiz-browser-iframe-container').append(iframe);
             const newTab = {
                 id,
@@ -3664,7 +3729,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 historyStack: [url],
                 historyIndex: 0,
                 lastHistoryPushTime: Date.now(),
-                title: 'New Tab'
+                title: 'New Tab',
             };
             this.tabs.push(newTab);
             this.switchTab(id);
@@ -3672,7 +3737,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
         static switchTab(id) {
             this.activeTabId = id;
-            this.tabs.forEach(tab => {
+            this.tabs.forEach((tab) => {
                 if (tab.id === id) {
                     tab.iframe.style.display = 'block';
                     this.$address.val(tab.historyStack[tab.historyIndex]);
@@ -3685,7 +3750,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
         static closeTab(id, e) {
             e.stopPropagation();
-            const index = this.tabs.findIndex(t => t.id === id);
+            const index = this.tabs.findIndex((t) => t.id === id);
             if (index > -1) {
                 const tab = this.tabs[index];
                 tab.iframe.remove();
@@ -3707,7 +3772,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const $ = jQuery;
             const $list = $('#kaiz-browser-tabs-list');
             $list.empty();
-            this.tabs.forEach(tab => {
+            this.tabs.forEach((tab) => {
                 const titleDisplay = tab.title.length > 20 ? tab.title.substring(0, 20) + '...' : tab.title;
                 const $tab = $(`
                 <div class="kaiz-browser-tab ${this.activeTabId === tab.id ? 'active-tab' : ''}" title="${tab.title}">
@@ -3721,10 +3786,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             });
         }
         static getActiveTab() {
-            return this.tabs.find(t => t.id === this.activeTabId) || null;
+            return this.tabs.find((t) => t.id === this.activeTabId) || null;
         }
         static goToUrl(url) {
-            if (url === 'https://google.com' || url === 'https://www.google.com' || url === 'https://google.com/' || url === 'https://www.google.com/') {
+            if (url === 'https://google.com' ||
+                url === 'https://www.google.com' ||
+                url === 'https://google.com/' ||
+                url === 'https://www.google.com/') {
                 url = 'https://www.google.com/webhp?igu=1';
             }
             else if (url.startsWith('https://www.google.com/search?') && !url.includes('igu=1')) {
@@ -3747,7 +3815,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             this.$address.val(url);
             if (forceReload) {
                 tab.iframe.src = 'about:blank';
-                setTimeout(() => { tab.iframe.src = url; }, 50);
+                setTimeout(() => {
+                    tab.iframe.src = url;
+                }, 50);
             }
             else {
                 tab.iframe.src = url;
@@ -3783,7 +3853,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     type: 'KAIZ_AGENT_COMMAND',
                     command: command,
                     msgId: msgId,
-                    ...args
+                    ...args,
                 };
                 const timer = setTimeout(() => {
                     if (this.agentCommandCallbacks.has(msgId)) {
@@ -3802,11 +3872,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             try {
                 const raw = localStorage.getItem('kaiz_web_history');
                 let history = raw ? JSON.parse(raw) : [];
-                history = history.filter(h => h.url !== url);
+                history = history.filter((h) => h.url !== url);
                 history.unshift({
                     url,
                     title,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
                 });
                 if (history.length > 200) {
                     history = history.slice(0, 200);
@@ -3824,7 +3894,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (!raw)
                     return;
                 const history = JSON.parse(raw);
-                history.forEach(item => {
+                history.forEach((item) => {
                     const date = new Date(item.timestamp);
                     const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')} ${date.getDate()}/${date.getMonth() + 1}`;
                     const $el = $(`
@@ -3920,16 +3990,23 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                     action: {
                         type: 'string',
                         enum: ['read', 'click', 'type', 'scroll', 'navigate', 'go_back', 'press_key'],
-                        description: 'Hành động cần thực hiện trên trình duyệt.'
+                        description: 'Hành động cần thực hiện trên trình duyệt.',
                     },
                     url: { type: 'string', description: '(Dành cho navigate) Địa chỉ URL cần truy cập.' },
-                    elementId: { type: 'number', description: '(Dành cho click, type, press_key) ID của phần tử lấy từ lệnh read.' },
+                    elementId: {
+                        type: 'number',
+                        description: '(Dành cho click, type, press_key) ID của phần tử lấy từ lệnh read.',
+                    },
                     text: { type: 'string', description: '(Dành cho type) Nội dung văn bản cần gõ.' },
-                    direction: { type: 'string', enum: ['up', 'down'], description: '(Dành cho scroll) Hướng cuộn trang (mặc định down).' },
-                    key: { type: 'string', description: '(Dành cho press_key) Phím cần bấm, mặc định là Enter.' }
+                    direction: {
+                        type: 'string',
+                        enum: ['up', 'down'],
+                        description: '(Dành cho scroll) Hướng cuộn trang (mặc định down).',
+                    },
+                    key: { type: 'string', description: '(Dành cho press_key) Phím cần bấm, mặc định là Enter.' },
                 },
-                required: ['action']
-            }
+                required: ['action'],
+            },
         },
         execute: async (args, context) => {
             const action = args.action;
@@ -3952,34 +4029,48 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                         if (!args.elementId)
                             return { content: 'Lỗi: Thiếu elementId.', isError: true };
                         const data = await BrowserWindowUI.executeAgentCommand('CLICK', { elementId: args.elementId });
-                        return { content: `Thành công: ${data.message}. Gợi ý: Nếu trang tải nội dung mới, hãy dùng hành động 'read' để cập nhật.` };
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Nếu trang tải nội dung mới, hãy dùng hành động 'read' để cập nhật.`,
+                        };
                     }
                     case 'type': {
                         if (!args.elementId || args.text === undefined)
                             return { content: 'Lỗi: Thiếu elementId hoặc text.', isError: true };
-                        const data = await BrowserWindowUI.executeAgentCommand('TYPE', { elementId: args.elementId, text: args.text });
+                        const data = await BrowserWindowUI.executeAgentCommand('TYPE', {
+                            elementId: args.elementId,
+                            text: args.text,
+                        });
                         return { content: `Thành công: ${data.message}.` };
                     }
                     case 'scroll': {
                         const dir = args.direction || 'down';
                         const data = await BrowserWindowUI.executeAgentCommand('SCROLL', { direction: dir });
-                        return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc phần nội dung mới xuất hiện.` };
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc phần nội dung mới xuất hiện.`,
+                        };
                     }
                     case 'navigate': {
                         if (!args.url)
                             return { content: 'Lỗi: Thiếu url.', isError: true };
                         const data = await BrowserWindowUI.executeAgentCommand('NAVIGATE', { url: args.url });
-                        return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web mới.` };
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web mới.`,
+                        };
                     }
                     case 'go_back': {
                         const data = await BrowserWindowUI.executeAgentCommand('GO_BACK');
-                        return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web trước đó.` };
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web trước đó.`,
+                        };
                     }
                     case 'press_key': {
                         if (!args.elementId)
                             return { content: 'Lỗi: Thiếu elementId.', isError: true };
                         const key = args.key || 'Enter';
-                        const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', { elementId: args.elementId, key: key });
+                        const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', {
+                            elementId: args.elementId,
+                            key: key,
+                        });
                         return { content: `Thành công: ${data.message}.` };
                     }
                     default:
@@ -3989,7 +4080,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             catch (error) {
                 return { content: `Lỗi: ${error.message}`, isError: true };
             }
-        }
+        },
     };
 
     /**
