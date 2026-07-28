@@ -48,6 +48,10 @@ export class BrowserWindowUI {
         $('#kaiz-chat-browser-btn').on('click', () => {
             const $chatWindow = $('#kaiz-chat-window');
             $chatWindow.toggleClass('kaiz-browser-mode');
+            // Tự động tạo tab mới nếu đang trống (do clear hoặc bị tắt hết)
+            if ($chatWindow.hasClass('kaiz-browser-mode') && this.tabs.length === 0) {
+                this.createNewTab('https://www.google.com/webhp?igu=1');
+            }
         });
 
         // Đóng trình duyệt
