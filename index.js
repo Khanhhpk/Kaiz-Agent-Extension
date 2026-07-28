@@ -7872,6 +7872,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
             });
             wsAddBtn.on('click', async () => {
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Kaiz Agent');
+                    return;
+                }
                 const name = prompt('Nhập tên Workspace mới:');
                 if (name && name.trim()) {
                     await stateManager.createWorkspace(name.trim());
