@@ -3,6 +3,7 @@ declare const SillyTavern: any;
 declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
+import { BrowserWindowUI } from './browser_window';
 
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -665,6 +666,7 @@ export class SettingsUI {
                 $browserBtn.hide();
                 settings.disabledTools['browser_tools_manage'] = true;
                 $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
+                BrowserWindowUI.destroyAll(); // Clear iframe to free memory
             }
             renderTools();
         });

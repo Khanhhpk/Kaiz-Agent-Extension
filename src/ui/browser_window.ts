@@ -45,6 +45,16 @@ export class BrowserWindowUI {
             $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
         });
 
+    public static destroyAll() {
+        this.tabs.forEach((tab) => {
+            tab.iframe.src = 'about:blank';
+            tab.iframe.remove();
+        });
+        this.tabs = [];
+        this.activeTabId = null;
+        this.updateTabUI();
+    }
+
         // Điều hướng
         const go = () => {
             let url = this.$address.val().trim();
