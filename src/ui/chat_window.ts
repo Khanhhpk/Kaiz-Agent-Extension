@@ -12,6 +12,7 @@ const escapeHtml = (s: string): string =>
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+declare const SillyTavern: any;
 
 export class ChatWindowUI {
     private static currentAttachments: import('../core/db').ChatAttachment[] = [];
@@ -21,6 +22,11 @@ export class ChatWindowUI {
         const btn = $('#kaiz-floating-btn');
         const win = $('#kaiz-chat-window');
         const closeBtn = $('#kaiz-chat-close');
+        const ctx = SillyTavern.getContext();
+        const settings = ctx.extensionSettings['kaiz_agent'] || {};
+        if (settings.enableBrowser === false) {
+            $('#kaiz-chat-browser-btn').hide();
+        }
 
         // --- Bổ sung nút và khung Log Request ---
         closeBtn.before(
@@ -315,7 +321,9 @@ export class ChatWindowUI {
                     try {
                         const parsed = JSON.parse(savedPos);
                         el.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
-                    } catch (e) {}
+                    } catch {
+                        // ignore error
+                    }
                 }
 
                 el.draggable({
@@ -1006,6 +1014,10 @@ export class ChatWindowUI {
         });
         input.on('keydown', (e: any) => {
             if (e.key === 'Enter' && !e.shiftKey) {
+                // Trong phone mode, Enter dùng để xuống dòng
+                if ($('#kaiz-chat-window').hasClass('kaiz-phone-mode')) {
+                    return;
+                }
                 e.preventDefault();
                 sendMessage();
             }

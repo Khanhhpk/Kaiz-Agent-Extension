@@ -3,6 +3,7 @@ declare const SillyTavern: any;
 declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
+import { BrowserWindowUI } from './browser_window';
 
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -649,6 +650,97 @@ export class SettingsUI {
             renderTools(this.value);
         });
         // --- END TOOLS MANAGER LOGIC ---
+
+        // --- BROWSER SETUP LOGIC ---
+        $('#kaiz-enable-browser').prop('checked', settings.enableBrowser);
+        $('#kaiz-enable-browser').on('change', function (this: HTMLInputElement) {
+            settings.enableBrowser = !!this.checked;
+            ctx.saveSettingsDebounced();
+
+            const $browserBtn = $('#kaiz-chat-browser-btn');
+
+            if (settings.enableBrowser) {
+                $browserBtn.show();
+                delete settings.disabledTools['browser_tools_manage'];
+            } else {
+                $browserBtn.hide();
+                settings.disabledTools['browser_tools_manage'] = true;
+                $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
+                BrowserWindowUI.destroyAll(); // Clear iframe to free memory
+            }
+            renderTools();
+        });
+
+        $('#kaiz-check-browser-reqs').on('click', async () => {
+            const $results = $('#kaiz-browser-check-results');
+            const $corsCheck = $('#kaiz-check-cors');
+            const $scriptCheck = $('#kaiz-check-script');
+            const $xframeCheck = $('#kaiz-check-xframe');
+
+            $results.slideDown();
+            $corsCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+            $xframeCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+            $scriptCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+
+            try {
+                const res = await fetch('https://www.google.com');
+                if (res.ok) {
+                    $corsCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                } else {
+                    $corsCheck.html('<i class="fa-solid fa-xmark"></i> Failed').css('color', '#e74c3c');
+                }
+            } catch (_e) {
+                $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
+            }
+
+            let scriptDetected = false;
+            let xframeDetected = false;
+
+            const checkIframe1 = document.createElement('iframe');
+            checkIframe1.src = 'https://example.com';
+            checkIframe1.style.display = 'none';
+            document.body.appendChild(checkIframe1);
+
+            const checkIframe2 = document.createElement('iframe');
+            checkIframe2.src = 'https://www.google.com/';
+            checkIframe2.style.display = 'none';
+            document.body.appendChild(checkIframe2);
+
+            const onMessage = (e: MessageEvent) => {
+                if (e.data && e.data.type === 'KAIZ_IFRAME_URL') {
+                    if (e.data.url.includes('example.com')) {
+                        scriptDetected = true;
+                    }
+                    if (e.data.url.includes('google.com')) {
+                        xframeDetected = true;
+                    }
+                }
+            };
+            window.addEventListener('message', onMessage);
+
+            setTimeout(() => {
+                window.removeEventListener('message', onMessage);
+                document.body.removeChild(checkIframe1);
+                document.body.removeChild(checkIframe2);
+
+                if (scriptDetected) {
+                    $scriptCheck.html('<i class="fa-solid fa-check"></i> Installed').css('color', '#2ecc71');
+                } else {
+                    $scriptCheck.html('<i class="fa-solid fa-xmark"></i> Not Installed').css('color', '#e74c3c');
+                }
+
+                if (xframeDetected) {
+                    $xframeCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                } else {
+                    if (!scriptDetected) {
+                        $xframeCheck.html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test').css('color', '#e67e22');
+                    } else {
+                        $xframeCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)').css('color', '#e74c3c');
+                    }
+                }
+            }, 2000);
+        });
+        // --- END BROWSER SETUP LOGIC ---
 
         // Lắng nghe chọn từ Dropdown -> Cập nhật Input
         $('#kaiz-custom-model').on('change', function (this: HTMLSelectElement) {

@@ -107,6 +107,74 @@
     margin: 0 !important;
 }
 
+.kaiz-chat-window.kaiz-phone-mode .kaiz-chat-header {
+    padding-top: max(16px, env(safe-area-inset-top));
+}
+
+/* Giao diện Split-Screen (Trình duyệt + Chat) */
+.kaiz-chat-window.kaiz-browser-mode {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    margin: 0 !important;
+    flex-direction: row;
+    background: rgba(20, 25, 35, 1); /* Nền đậm hơn khi mở full */
+}
+
+.kaiz-chat-window.kaiz-browser-mode #kaiz-browser-container {
+    display: flex !important; /* Ghi đè inline style none */
+}
+
+.kaiz-split-resizer {
+    display: none;
+}
+
+.kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer {
+    display: block;
+    width: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: col-resize;
+    flex: none;
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer:hover,
+.kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer.active {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
+    width: var(--kaiz-chat-width, 400px) !important;
+    height: 100% !important;
+    flex: none !important;
+}
+
+@media (max-width: 900px) {
+    /* Màn hình nhỏ thì ưu tiên browser hoặc xếp chồng dọc */
+    .kaiz-chat-window.kaiz-browser-mode {
+        flex-direction: column;
+    }
+
+    .kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer {
+        width: 100% !important;
+        height: 6px !important;
+        cursor: row-resize;
+    }
+
+    .kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
+        width: 100% !important;
+        height: var(--kaiz-chat-height, 35vh) !important; /* Chat chiếm 35% bên dưới */
+    }
+}
+
 /* Header */
 .kaiz-chat-header {
     padding: 16px 20px;
@@ -733,4 +801,174 @@
     font-size: 12px;
     border-left: 3px solid #4ade80;
     color: #ddd;
+}
+
+/* Browser Panel */
+.kaiz-browser-container {
+    /* Style for the browser container when inside split screen */
+    background: rgba(20, 25, 35, 0.95);
+}
+.kaiz-browser-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 15px;
+    height: 50px;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 15px;
+}
+.kaiz-browser-nav {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.7);
+}
+.kaiz-browser-nav i:hover {
+    color: #fff;
+    cursor: pointer;
+}
+.kaiz-browser-address-container {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    padding: 4px 12px;
+}
+.kaiz-browser-address {
+    flex: 1;
+    background: transparent;
+    border: none;
+    color: #fff;
+    outline: none;
+    font-size: 13px;
+}
+.kaiz-browser-address-container i {
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.7);
+    margin-left: 8px;
+}
+.kaiz-browser-address-container i:hover {
+    color: #fff;
+}
+.kaiz-browser-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+.kaiz-browser-btn-share {
+    padding: 4px 12px;
+    font-size: 12px;
+    height: auto;
+    background: rgba(74, 222, 128, 0.1);
+    border-color: rgba(74, 222, 128, 0.3);
+    color: #4ade80;
+}
+.kaiz-browser-btn-share:hover {
+    background: rgba(74, 222, 128, 0.2);
+}
+#kaiz-browser-close {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: pointer;
+}
+#kaiz-browser-close:hover {
+    color: #ff5e5e;
+}
+.kaiz-browser-content {
+    width: 100%;
+    height: calc(100% - 50px);
+    display: block;
+}
+#kaiz-browser-iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    background: #fff;
+    display: block;
+}
+
+/* Tabs */
+.kaiz-browser-tab {
+    display: flex;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0 10px;
+    height: 32px;
+    border-radius: 6px 6px 0 0;
+    color: #aaa;
+    font-size: 13px;
+    cursor: pointer;
+    min-width: 100px;
+    max-width: 200px;
+    gap: 8px;
+    user-select: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    border-left: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+}
+.kaiz-browser-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+.kaiz-browser-tab.active-tab {
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    border-bottom: 2px solid #5865f2;
+}
+.kaiz-browser-tab-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.kaiz-browser-tab-close {
+    font-size: 11px;
+    padding: 4px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.kaiz-browser-tab-close:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #ff4444;
+}
+
+/* History Items */
+.kaiz-history-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.02);
+}
+.kaiz-history-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+.kaiz-history-title {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #fff;
+    font-size: 13px;
+}
+.kaiz-history-url {
+    color: #888;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 250px;
+}
+.kaiz-history-time {
+    color: #666;
+    font-size: 11px;
+    white-space: nowrap;
 }

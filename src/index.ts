@@ -7,6 +7,7 @@ import { StateManager } from './core/state';
 import { SettingsUI } from './ui/settings';
 import { ChatWindowUI } from './ui/chat_window';
 import { ToolCheckerUI } from './ui/tool_checker';
+import { BrowserWindowUI } from './ui/browser_window';
 
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
@@ -65,6 +66,7 @@ jQuery(async () => {
             safeMode: false,
             safeModeBlacklist: {},
             quickPrompts: [],
+            enableBrowser: true,
         };
     } else {
         if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
@@ -88,11 +90,14 @@ jQuery(async () => {
         if (ctx.extensionSettings[EXT_NAME].retryDelay === undefined) {
             ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
         }
+        if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
+            ctx.extensionSettings[EXT_NAME].enableBrowser = true;
+        }
     }
 
-    // Nạp style.css thủ công
-    const cssPath = `/scripts/extensions/${extPath}/style.css`;
-    if (!$(`link[href="${cssPath}"]`).length) {
+    // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
+    const cssPath = `/scripts/extensions/${extPath}/style.css?v=${Date.now()}`;
+    if (!$(`link[href^="/scripts/extensions/${extPath}/style.css"]`).length) {
         $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
     }
 
@@ -121,6 +126,7 @@ jQuery(async () => {
             // Gắn kết UI trước để đăng ký callback
             ChatWindowUI.init(loop, stateManager);
             ToolCheckerUI.init(registry, adapter);
+            BrowserWindowUI.init();
 
             // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
             await stateManager.init();

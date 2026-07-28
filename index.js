@@ -1681,10 +1681,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const isGarbageResults = (items, originalQuery) => {
                     if (items.length === 0)
                         return true;
-                    // Kiểm tra 3 kết quả đầu tiên
+                    // 1. Kiểm tra domain từ điển
                     const checkCount = Math.min(items.length, 3);
-                    let garbageCount = 0;
-                    // Các domain từ điển/định nghĩa phổ biến mà Bing hay trả khi bị ngáo NLP
+                    let dictGarbageCount = 0;
                     const dictDomains = [
                         'dictionary.cambridge.org',
                         'merriam-webster.com',
@@ -1698,7 +1697,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         'langeek.co',
                         'rdsic.edu.vn',
                     ];
-                    // Các pattern cho thấy kết quả là định nghĩa từ, không phải kết quả search thật
                     const dictPatterns = [
                         /definition\b/i,
                         /meaning\b/i,
@@ -1711,15 +1709,63 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         const item = items[i];
                         const urlLower = item.url.toLowerCase();
                         const titleLower = item.title.toLowerCase();
-                        // Kiểm tra URL thuộc domain từ điển
-                        const isDictUrl = dictDomains.some((d) => urlLower.includes(d));
-                        // Kiểm tra title có pattern từ điển
-                        const isDictTitle = dictPatterns.some((p) => p.test(titleLower));
-                        if (isDictUrl || isDictTitle)
-                            garbageCount++;
+                        if (dictDomains.some((d) => urlLower.includes(d)) || dictPatterns.some((p) => p.test(titleLower))) {
+                            dictGarbageCount++;
+                        }
                     }
-                    // Nếu 2/3 kết quả đầu là từ điển → rác
-                    return garbageCount >= 2;
+                    if (dictGarbageCount >= 2)
+                        return true;
+                    // 2. Kiểm tra Keyword Intersection (để loại bỏ kết quả bot-mode sai keyword)
+                    const stopWords = [
+                        'top',
+                        'best',
+                        'most',
+                        'new',
+                        'latest',
+                        'upcoming',
+                        'good',
+                        'great',
+                        'worst',
+                        'all',
+                        'every',
+                        'some',
+                        'many',
+                        'few',
+                        'several',
+                        'tình',
+                        'các',
+                        'những',
+                        'bộ',
+                        'phim',
+                        'cách',
+                        'hướng',
+                        'danh',
+                        'nhất',
+                        'hay',
+                    ];
+                    const queryWords = originalQuery
+                        .toLowerCase()
+                        .split(/\s+/)
+                        .filter((w) => w.length > 2 && !stopWords.includes(w));
+                    if (queryWords.length > 0) {
+                        let missingKeywordCount = 0;
+                        const requiredMatches = Math.min(Math.ceil(queryWords.length / 2), 2);
+                        for (let i = 0; i < checkCount; i++) {
+                            const content = (items[i].title + ' ' + items[i].snippet).toLowerCase();
+                            let matchCount = 0;
+                            queryWords.forEach((w) => {
+                                if (content.includes(w))
+                                    matchCount++;
+                            });
+                            if (matchCount < requiredMatches) {
+                                missingKeywordCount++;
+                            }
+                        }
+                        // Nếu 2/3 kết quả đầu tiên không chứa đủ từ khóa chính của query -> rác (trạc đề)
+                        if (missingKeywordCount >= 2)
+                            return true;
+                    }
+                    return false;
                 };
                 // === HELPER: Fetch Bing với params giả lập trình duyệt ===
                 const fetchBing = async (q) => {
@@ -1742,65 +1788,103 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     return '';
                 };
                 // =====================================================
-                // BƯỚC 1: SearXNG PRIMARY — meta-search engine tổng hợp
-                //         nhiều nguồn, trả JSON sạch, không bị bot-mode
+                // BƯỚC 1: GOOGLE SEARCH (Ưu tiên 1 nếu có CORS Extension)
                 // =====================================================
-                const SEARXNG_INSTANCES = [
-                    'https://searx.be/search',
-                    'https://priv.au/search',
-                    'https://search.inetol.net/search',
-                    'https://searx.tiekoetter.com/search',
-                    'https://etsi.me/search',
-                ];
-                const fetchSearXNG = async (rawQuery) => {
-                    // SearXNG cần %20 cho khoảng trắng, KHÔNG dùng + (SearXNG không decode + thành space)
-                    const q = encodeURIComponent(rawQuery);
-                    // Thử các instances song song, lấy instance nào trả lời đúng trước
-                    const tryInstance = (base) => fetch(`${base}?q=${q}&format=json&language=all`, { signal: AbortSignal.timeout(5000) })
-                        .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
-                        .then((data) => {
-                        const items = (data.results || []);
-                        if (items.length === 0)
-                            return Promise.reject('no results');
-                        return items.slice(0, 15).map((item) => ({
-                            title: item.title || '',
-                            url: item.url || '',
-                            snippet: item.content || '',
-                        }));
+                console.log('[search] Searching Google (primary)...');
+                // Kẹp thêm bùa igu=1 để tối ưu khi dùng kèm Iframe và CORS Extension
+                const googleUrl = `https://www.google.com/search?q=${encodedQuery}&igu=1`;
+                let googleHtml = '';
+                try {
+                    // Thêm credentials: 'include' để trình duyệt gửi kèm Cookie thật của người dùng
+                    // Giúp Google nhận diện đây là người thật (đã login) thay vì bot trắng tinh, từ đó bypass trang JS Challenge (Cloudflare-like)
+                    const googleRes = await fetch(googleUrl, { credentials: 'include' });
+                    if (googleRes.ok)
+                        googleHtml = await googleRes.text();
+                }
+                catch (_e) {
+                    try {
+                        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
+                        const proxyRes = await fetch(proxyUrl);
+                        if (proxyRes.ok)
+                            googleHtml = await proxyRes.text();
+                    }
+                    catch (_e2) {
+                        /* ignore */
+                    }
+                }
+                if (googleHtml) {
+                    const googleDoc = parser.parseFromString(googleHtml, 'text/html');
+                    const gElements = googleDoc.querySelectorAll('div.g');
+                    gElements.forEach((g) => {
+                        const aElement = g.querySelector('a');
+                        const h3Element = g.querySelector('h3');
+                        if (aElement && h3Element) {
+                            const title = h3Element.textContent?.trim() || '';
+                            const link = aElement.getAttribute('href');
+                            if (title && link && link.startsWith('http')) {
+                                let snippet = g.textContent?.trim() || '';
+                                if (snippet.startsWith(title)) {
+                                    snippet = snippet.substring(title.length).trim();
+                                }
+                                snippet = snippet
+                                    .replace(/Translate this page/g, '')
+                                    .replace(/Cached/g, '')
+                                    .trim();
+                                results.push({ title, url: link, snippet });
+                            }
+                        }
                     });
-                    // Race tất cả instances, lấy kết quả đầu tiên thành công
-                    return Promise.any(SEARXNG_INSTANCES.map(tryInstance)).catch(() => []);
-                };
-                console.log('[search] Searching SearXNG (primary)...');
-                const searxResults = await fetchSearXNG(query); // truyền raw query, encode bên trong
-                // SearXNG aggregate từ nhiều nguồn, nhưng upstream (Bing/Google bot-mode)
-                // cũng có thể trả rác cho queries bắt đầu bằng "top", "best", "most"...
-                // Chỉ accept nếu kết quả KHÔNG phải rác
-                if (searxResults.length > 0 && !isGarbageResults(searxResults, query)) {
-                    engine = 'SearXNG';
-                    results.push(...searxResults);
-                    console.log('[search] SearXNG returned good results!');
-                }
-                else if (searxResults.length > 0) {
-                    console.log('[search] SearXNG returned garbage results. Falling through to Bing...');
+                    if (results.length > 0) {
+                        engine = 'Google';
+                        console.log('[search] Google returned good results!');
+                    }
                 }
                 // =====================================================
-                // BƯỚC 2: Bing SECONDARY — fallback nếu SearXNG fail
-                //         (toàn bộ instances bị rate-limit/blocked)
+                // BƯỚC 2: SearXNG — meta-search engine tổng hợp (Fallback 1)
+                // =====================================================
+                if (results.length === 0) {
+                    console.log('[search] Google failed. Searching SearXNG (fallback 1)...');
+                    const SEARXNG_INSTANCES = [
+                        'https://searx.be/search',
+                        'https://priv.au/search',
+                        'https://search.inetol.net/search',
+                        'https://searx.tiekoetter.com/search',
+                        'https://etsi.me/search',
+                    ];
+                    const fetchSearXNG = async (rawQuery) => {
+                        const q = encodeURIComponent(rawQuery);
+                        const tryInstance = (base) => fetch(`${base}?q=${q}&format=json&language=all`, { signal: AbortSignal.timeout(5000) })
+                            .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+                            .then((data) => {
+                            const items = (data.results || []);
+                            if (items.length === 0)
+                                return Promise.reject('no results');
+                            return items.slice(0, 15).map((item) => ({
+                                title: item.title || '',
+                                url: item.url || '',
+                                snippet: item.content || '',
+                            }));
+                        });
+                        return Promise.any(SEARXNG_INSTANCES.map(tryInstance)).catch(() => []);
+                    };
+                    const searxResults = await fetchSearXNG(query);
+                    if (searxResults.length > 0 && !isGarbageResults(searxResults, query)) {
+                        engine = 'SearXNG';
+                        results.push(...searxResults);
+                        console.log('[search] SearXNG returned good results!');
+                    }
+                }
+                // =====================================================
+                // BƯỚC 3: Bing — Fallback 2
                 // =====================================================
                 let bingHtml = '';
-                let bingResults = [];
                 if (results.length === 0) {
-                    console.log('[search] SearXNG failed. Searching Bing (secondary)...');
+                    console.log('[search] SearXNG failed. Searching Bing (fallback 2)...');
+                    let bingResults = [];
                     bingHtml = await fetchBing(encodedQuery);
                     bingResults = bingHtml ? parseBing(bingHtml) : [];
-                    // --- Quality Check + Smart Retry ---
-                    // Bing bot-mode chỉ parse từ ĐẦU TIÊN của query.
-                    // Nếu từ đó là adjective thông dụng (best, most, top...) → từ điển
-                    // Fix: đảo query để noun ý nghĩa lên đầu, hoặc bọc quotes.
                     if (isGarbageResults(bingResults, query)) {
                         console.log('[search] Bing returned garbage. Trying smart retries...');
-                        // Danh sách adjective/adverb thông dụng hay làm Bing bị ngáo
                         const leadingStopWords = [
                             'best',
                             'most',
@@ -1826,47 +1910,38 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             'hướng',
                             'danh',
                         ];
-                        // Chiến lược 1: Nếu từ đầu tiên là stop-word → đảo query
-                        // VD: "best anime 2026" → "anime 2026 best"
                         const firstWord = query.trim().split(/\s+/)[0].toLowerCase();
                         let reorderedUsed = false;
                         if (leadingStopWords.includes(firstWord)) {
                             const words = query.trim().split(/\s+/);
                             const reordered = [...words.slice(1), words[0]].join(' ');
                             const reorderedEncoded = encodeURIComponent(reordered).replace(/%20/g, '+');
-                            console.log(`[search] Reordering query: "${query}" → "${reordered}"`);
                             bingHtml = await fetchBing(reorderedEncoded);
                             const reorderedResults = bingHtml ? parseBing(bingHtml) : [];
                             if (reorderedResults.length > 0 && !isGarbageResults(reorderedResults, query)) {
                                 bingResults = reorderedResults;
                                 reorderedUsed = true;
-                                console.log('[search] Reordered query returned good results!');
                             }
                         }
-                        // Chiến lược 2: Bọc toàn bộ query trong ngoặc kép (tốt cho tiếng Việt)
                         if (!reorderedUsed) {
                             const quotedQuery = `%22${encodedQuery}%22`;
-                            console.log('[search] Retrying with quoted query...');
                             bingHtml = await fetchBing(quotedQuery);
                             const quotedResults = bingHtml ? parseBing(bingHtml) : [];
                             if (quotedResults.length > 0 && !isGarbageResults(quotedResults, query)) {
                                 bingResults = quotedResults;
-                                console.log('[search] Quoted query returned good results!');
-                            }
-                            else {
-                                console.log('[search] All Bing retries failed or returned garbage.');
                             }
                         }
                     }
                     if (bingResults.length > 0) {
+                        engine = 'Bing';
                         results.push(...bingResults);
                     }
-                } // end if SearXNG failed
+                }
                 // =====================================================
-                // BƯỚC 3: Fallback sang DuckDuckGo HTML POST
+                // BƯỚC 4: Fallback sang DuckDuckGo HTML POST
                 // =====================================================
                 if (results.length === 0) {
-                    console.log('[search] Bing returned 0 results. Falling back to DuckDuckGo HTML POST...');
+                    console.log('[search] Bing failed. Falling back to DuckDuckGo HTML POST...');
                     const ddgPostUrl = `https://html.duckduckgo.com/html/`;
                     let ddgHtml = '';
                     try {
@@ -1881,7 +1956,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             throw new Error('DDG HTML POST Not OK');
                     }
                     catch (_e) {
-                        // DDG Lite GET via proxy
                         try {
                             const ddgLiteUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
                             const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgLiteUrl)}`;
@@ -1894,9 +1968,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         }
                     }
                     if (ddgHtml) {
-                        engine = 'DuckDuckGo';
                         const ddgDoc = parser.parseFromString(ddgHtml, 'text/html');
-                        // Parse DDG HTML POST results
                         const resultElements = ddgDoc.querySelectorAll('.result');
                         if (resultElements.length > 0) {
                             resultElements.forEach((res) => {
@@ -1915,7 +1987,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             });
                         }
                         else {
-                            // Parse DDG Lite results (if proxy fallback was used)
                             const linkElements = ddgDoc.querySelectorAll('a.result-link');
                             const snippetElements = ddgDoc.querySelectorAll('td.result-snippet');
                             for (let i = 0; i < linkElements.length; i++) {
@@ -1933,54 +2004,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                 }
                             }
                         }
-                    }
-                }
-                // =====================================================
-                // BƯỚC 3: Fallback cuối cùng sang Google
-                // =====================================================
-                if (results.length === 0) {
-                    console.log('[search] DDG also failed. Falling back to Google...');
-                    const googleUrl = `https://www.google.com/search?q=${encodedQuery}`;
-                    let googleHtml = '';
-                    try {
-                        const googleRes = await fetch(googleUrl);
-                        if (googleRes.ok)
-                            googleHtml = await googleRes.text();
-                    }
-                    catch (_e) {
-                        try {
-                            const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
-                            const proxyRes = await fetch(proxyUrl);
-                            if (proxyRes.ok)
-                                googleHtml = await proxyRes.text();
+                        if (results.length > 0) {
+                            engine = 'DuckDuckGo';
                         }
-                        catch (_e2) {
-                            /* ignore */
-                        }
-                    }
-                    if (googleHtml) {
-                        engine = 'Google';
-                        const googleDoc = parser.parseFromString(googleHtml, 'text/html');
-                        const gElements = googleDoc.querySelectorAll('div.g');
-                        gElements.forEach((g) => {
-                            const aElement = g.querySelector('a');
-                            const h3Element = g.querySelector('h3');
-                            if (aElement && h3Element) {
-                                const title = h3Element.textContent?.trim() || '';
-                                const link = aElement.getAttribute('href');
-                                if (title && link && link.startsWith('http')) {
-                                    let snippet = g.textContent?.trim() || '';
-                                    if (snippet.startsWith(title)) {
-                                        snippet = snippet.substring(title.length).trim();
-                                    }
-                                    snippet = snippet
-                                        .replace(/Translate this page/g, '')
-                                        .replace(/Cached/g, '')
-                                        .trim();
-                                    results.push({ title, url: link, snippet });
-                                }
-                            }
-                        });
                     }
                 }
                 // =====================================================
@@ -3522,6 +3548,554 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
+    class BrowserWindowUI {
+        static $modal;
+        static $address;
+        static tabs = [];
+        static activeTabId = null;
+        static agentCommandCallbacks = new Map();
+        static destroyAll() {
+            this.tabs.forEach((tab) => {
+                tab.iframe.src = 'about:blank';
+                tab.iframe.remove();
+            });
+            this.tabs = [];
+            this.activeTabId = null;
+            this.updateTabUI();
+        }
+        static init() {
+            const $ = jQuery;
+            this.$modal = $('#kaiz-browser-container').last();
+            this.$address = this.$modal.find('.kaiz-browser-address');
+            // Khởi tạo tab đầu tiên nếu chưa có
+            if (this.tabs.length === 0) {
+                this.createNewTab('https://www.google.com/webhp?igu=1');
+            }
+            // Nút mở trình duyệt từ header chat (toggle split-screen)
+            $('#kaiz-chat-browser-btn').on('click', () => {
+                const $chatWindow = $('#kaiz-chat-window');
+                $chatWindow.toggleClass('kaiz-browser-mode');
+                // Tự động tạo tab mới nếu đang trống (do clear hoặc bị tắt hết)
+                if ($chatWindow.hasClass('kaiz-browser-mode') && this.tabs.length === 0) {
+                    this.createNewTab('https://www.google.com/webhp?igu=1');
+                }
+            });
+            // Đóng trình duyệt
+            this.$modal.find('#kaiz-browser-close').on('click', () => {
+                $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
+            });
+            // Điều hướng
+            const go = () => {
+                let url = this.$address.val().trim();
+                if (url) {
+                    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                        if (url.includes(' ') || !url.includes('.')) {
+                            url = `https://www.google.com/search?q=${encodeURIComponent(url)}&igu=1`;
+                        }
+                        else {
+                            url = `https://${url}`;
+                        }
+                    }
+                    this.goToUrl(url);
+                }
+            };
+            this.$modal.find('#kaiz-browser-go').on('click', go);
+            this.$address.on('keyup', (e) => {
+                if (e.key === 'Enter') {
+                    go();
+                }
+            });
+            this.$modal.find('#kaiz-browser-reload').on('click', () => {
+                const activeTab = this.getActiveTab();
+                if (activeTab && activeTab.iframe.src && !activeTab.iframe.src.includes('about:blank')) {
+                    const current = activeTab.iframe.src;
+                    activeTab.iframe.src = 'about:blank';
+                    setTimeout(() => {
+                        activeTab.iframe.src = current;
+                    }, 50);
+                }
+            });
+            // Nút trang chủ
+            this.$modal.find('#kaiz-browser-home').on('click', () => {
+                this.goToUrl('https://www.google.com/webhp?igu=1');
+            });
+            // Hệ thống Tabs UI
+            $('#kaiz-browser-new-tab').on('click', () => {
+                this.createNewTab('https://www.google.com/webhp?igu=1');
+            });
+            // Bấm chia sẻ trang
+            this.$modal.find('#kaiz-browser-share').on('click', () => {
+                const url = this.$address.val().trim();
+                if (!url)
+                    return;
+                const $chatInput = $('#kaiz-chat-input');
+                const currentText = $chatInput.val();
+                const shareText = `Hãy xem trang web này: ${url}\n`;
+                $chatInput.val(currentText ? currentText + '\n' + shareText : shareText);
+                $chatInput.focus();
+            });
+            // Modal Lịch sử
+            $('#kaiz-browser-history-btn').on('click', () => {
+                this.renderHistoryModal();
+                document.getElementById('kaiz-web-history-modal').showModal();
+            });
+            $('#kaiz-web-history-close').on('click', () => {
+                document.getElementById('kaiz-web-history-modal').close();
+            });
+            $('#kaiz-web-history-clear-all').on('click', () => {
+                if (confirm('Bạn có chắc muốn xóa toàn bộ lịch sử?')) {
+                    localStorage.removeItem('kaiz_web_history');
+                    this.renderHistoryModal();
+                }
+            });
+            // Thuật toán Back / Forward thông minh
+            this.$modal.find('#kaiz-browser-back').on('click', () => {
+                const tab = this.getActiveTab();
+                if (tab && tab.historyIndex > 0) {
+                    tab.historyIndex--;
+                    const prevUrl = tab.historyStack[tab.historyIndex];
+                    this.navigate(tab, prevUrl, false);
+                }
+            });
+            this.$modal.find('#kaiz-browser-forward').on('click', () => {
+                const tab = this.getActiveTab();
+                if (tab && tab.historyIndex < tab.historyStack.length - 1) {
+                    tab.historyIndex++;
+                    const nextUrl = tab.historyStack[tab.historyIndex];
+                    this.navigate(tab, nextUrl, false);
+                }
+            });
+            window.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'KAIZ_IFRAME_URL' && event.data.url) {
+                    const activeTab = this.getActiveTab();
+                    if (!activeTab)
+                        return;
+                    if (event.source !== activeTab.iframe.contentWindow) {
+                        return;
+                    }
+                    const newUrl = event.data.url;
+                    // Cập nhật title nếu có
+                    if (event.data.title && event.data.title !== activeTab.title) {
+                        activeTab.title = event.data.title;
+                    }
+                    else if (activeTab.title === 'New Tab') {
+                        activeTab.title = newUrl.replace('https://', '').replace('http://', '').replace('www.', '');
+                    }
+                    this.updateTabUI();
+                    // Lưu vào Global History
+                    this.saveToGlobalHistory(newUrl, activeTab.title);
+                    if (this.$address.val() !== newUrl) {
+                        this.$address.val(newUrl);
+                        const now = Date.now();
+                        // Thuật toán nhận dạng Back / Forward từ web bên trong iframe
+                        if (activeTab.historyIndex > 0 && activeTab.historyStack[activeTab.historyIndex - 1] === newUrl) {
+                            activeTab.historyIndex--;
+                            activeTab.lastHistoryPushTime = now;
+                        }
+                        else if (activeTab.historyIndex < activeTab.historyStack.length - 1 &&
+                            activeTab.historyStack[activeTab.historyIndex + 1] === newUrl) {
+                            activeTab.historyIndex++;
+                            activeTab.lastHistoryPushTime = now;
+                        }
+                        else if (now - activeTab.lastHistoryPushTime < 1500 && activeTab.historyIndex >= 0) {
+                            activeTab.historyStack[activeTab.historyIndex] = newUrl;
+                            activeTab.lastHistoryPushTime = now;
+                        }
+                        else if (activeTab.historyStack[activeTab.historyIndex] !== newUrl) {
+                            if (activeTab.historyIndex < activeTab.historyStack.length - 1) {
+                                activeTab.historyStack = activeTab.historyStack.slice(0, activeTab.historyIndex + 1);
+                            }
+                            activeTab.historyStack.push(newUrl);
+                            activeTab.historyIndex++;
+                            activeTab.lastHistoryPushTime = now;
+                        }
+                    }
+                }
+                else if (event.data && event.data.type === 'KAIZ_AGENT_RESPONSE') {
+                    const cb = this.agentCommandCallbacks.get(event.data.msgId);
+                    if (cb) {
+                        clearTimeout(cb.timer);
+                        this.agentCommandCallbacks.delete(event.data.msgId);
+                        if (event.data.success) {
+                            cb.resolve(event.data.data);
+                        }
+                        else {
+                            cb.reject(new Error(event.data.error || 'Unknown execution error'));
+                        }
+                    }
+                }
+            });
+            this.initResizer();
+        }
+        static createNewTab(url) {
+            const id = 'tab_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+            const iframe = document.createElement('iframe');
+            iframe.id = 'iframe_' + id;
+            iframe.src = url;
+            iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
+            iframe.style.cssText =
+                'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: none; z-index: 5;';
+            this.$modal.find('#kaiz-browser-iframe-container').append(iframe);
+            const newTab = {
+                id,
+                iframe,
+                historyStack: [url],
+                historyIndex: 0,
+                lastHistoryPushTime: Date.now(),
+                title: 'New Tab',
+            };
+            this.tabs.push(newTab);
+            this.switchTab(id);
+            this.updateTabUI();
+        }
+        static switchTab(id) {
+            this.activeTabId = id;
+            this.tabs.forEach((tab) => {
+                if (tab.id === id) {
+                    tab.iframe.style.display = 'block';
+                    this.$address.val(tab.historyStack[tab.historyIndex]);
+                }
+                else {
+                    tab.iframe.style.display = 'none';
+                }
+            });
+            this.updateTabUI();
+        }
+        static closeTab(id, e) {
+            e.stopPropagation();
+            const index = this.tabs.findIndex((t) => t.id === id);
+            if (index > -1) {
+                const tab = this.tabs[index];
+                tab.iframe.remove();
+                this.tabs.splice(index, 1);
+                if (this.tabs.length === 0) {
+                    this.createNewTab('https://www.google.com/webhp?igu=1');
+                }
+                else if (this.activeTabId === id) {
+                    // Chuyển sang tab bên trái nó
+                    const nextIndex = Math.max(0, index - 1);
+                    this.switchTab(this.tabs[nextIndex].id);
+                }
+                else {
+                    this.updateTabUI();
+                }
+            }
+        }
+        static updateTabUI() {
+            const $ = jQuery;
+            const $list = $('#kaiz-browser-tabs-list');
+            $list.empty();
+            this.tabs.forEach((tab) => {
+                const titleDisplay = tab.title.length > 20 ? tab.title.substring(0, 20) + '...' : tab.title;
+                const $tab = $(`
+                <div class="kaiz-browser-tab ${this.activeTabId === tab.id ? 'active-tab' : ''}" title="${tab.title}">
+                    <div class="kaiz-browser-tab-title">${titleDisplay}</div>
+                    <div class="kaiz-browser-tab-close"><i class="fa-solid fa-xmark"></i></div>
+                </div>
+            `);
+                $tab.on('click', () => this.switchTab(tab.id));
+                $tab.find('.kaiz-browser-tab-close').on('click', (e) => this.closeTab(tab.id, e));
+                $list.append($tab);
+            });
+        }
+        static getActiveTab() {
+            return this.tabs.find((t) => t.id === this.activeTabId) || null;
+        }
+        static goToUrl(url) {
+            if (url === 'https://google.com' ||
+                url === 'https://www.google.com' ||
+                url === 'https://google.com/' ||
+                url === 'https://www.google.com/') {
+                url = 'https://www.google.com/webhp?igu=1';
+            }
+            else if (url.startsWith('https://www.google.com/search?') && !url.includes('igu=1')) {
+                url += '&igu=1';
+            }
+            const tab = this.getActiveTab();
+            if (!tab)
+                return;
+            if (tab.historyIndex < tab.historyStack.length - 1) {
+                tab.historyStack = tab.historyStack.slice(0, tab.historyIndex + 1);
+            }
+            if (tab.historyStack[tab.historyIndex] !== url) {
+                tab.historyStack.push(url);
+                tab.historyIndex++;
+                tab.lastHistoryPushTime = Date.now();
+            }
+            this.navigate(tab, url, true);
+        }
+        static navigate(tab, url, forceReload) {
+            this.$address.val(url);
+            if (forceReload) {
+                tab.iframe.src = 'about:blank';
+                setTimeout(() => {
+                    tab.iframe.src = url;
+                }, 50);
+            }
+            else {
+                tab.iframe.src = url;
+            }
+            this.saveToGlobalHistory(url, url);
+        }
+        /**
+         * Executes a command on the active tab's iframe via Tampermonkey
+         */
+        static executeAgentCommand(command, args = {}) {
+            return new Promise((resolve, reject) => {
+                if (!this.activeTabId) {
+                    return reject(new Error('No active browser tab.'));
+                }
+                const activeTab = this.getActiveTab();
+                if (!activeTab || !activeTab.iframe.contentWindow) {
+                    return reject(new Error('Iframe is not ready.'));
+                }
+                // Xử lý các lệnh đặc biệt không cần gọi xuống Tampermonkey
+                if (command === 'NAVIGATE') {
+                    if (args.url) {
+                        this.goToUrl(args.url);
+                        return resolve({ message: `Đang điều hướng đến ${args.url}...` });
+                    }
+                    return reject(new Error('Missing URL for NAVIGATE'));
+                }
+                if (command === 'GO_BACK') {
+                    this.$modal.find('#kaiz-browser-back').click();
+                    return resolve({ message: `Đã nhấn nút Quay lại (Back).` });
+                }
+                const msgId = 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                const payload = {
+                    type: 'KAIZ_AGENT_COMMAND',
+                    command: command,
+                    msgId: msgId,
+                    ...args,
+                };
+                const timer = setTimeout(() => {
+                    if (this.agentCommandCallbacks.has(msgId)) {
+                        this.agentCommandCallbacks.delete(msgId);
+                        reject(new Error(`Command ${command} timed out after 10s. Vui lòng cài đặt script Tampermonkey v4.0 mới nhất.`));
+                    }
+                }, 10000);
+                this.agentCommandCallbacks.set(msgId, { resolve, reject, timer });
+                // Gửi lệnh xuống iframe
+                activeTab.iframe.contentWindow.postMessage(payload, '*');
+            });
+        }
+        static saveToGlobalHistory(url, title) {
+            if (url.includes('about:blank'))
+                return;
+            try {
+                const raw = localStorage.getItem('kaiz_web_history');
+                let history = raw ? JSON.parse(raw) : [];
+                history = history.filter((h) => h.url !== url);
+                history.unshift({
+                    url,
+                    title,
+                    timestamp: Date.now(),
+                });
+                if (history.length > 200) {
+                    history = history.slice(0, 200);
+                }
+                localStorage.setItem('kaiz_web_history', JSON.stringify(history));
+            }
+            catch (e) { }
+        }
+        static renderHistoryModal() {
+            const $ = jQuery;
+            const $list = $('#kaiz-web-history-list');
+            $list.empty();
+            try {
+                const raw = localStorage.getItem('kaiz_web_history');
+                if (!raw)
+                    return;
+                const history = JSON.parse(raw);
+                history.forEach((item) => {
+                    const date = new Date(item.timestamp);
+                    const timeStr = `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')} ${date.getDate()}/${date.getMonth() + 1}`;
+                    const $el = $(`
+                    <div class="kaiz-history-item" title="${item.url}">
+                        <div class="kaiz-history-title">${item.title}</div>
+                        <div class="kaiz-history-url">${item.url}</div>
+                        <div class="kaiz-history-time">${timeStr}</div>
+                    </div>
+                `);
+                    $el.on('click', () => {
+                        this.goToUrl(item.url);
+                        document.getElementById('kaiz-web-history-modal').close();
+                    });
+                    $list.append($el);
+                });
+            }
+            catch (e) { }
+        }
+        static initResizer() {
+            const $ = jQuery;
+            const $resizer = $('#kaiz-split-resizer');
+            const $chatWindow = $('#kaiz-chat-window');
+            const chatWindowEl = $chatWindow[0];
+            if (!chatWindowEl)
+                return;
+            const savedWidth = localStorage.getItem('kaiz_chat_split_width');
+            const savedHeight = localStorage.getItem('kaiz_chat_split_height');
+            if (savedWidth)
+                chatWindowEl.style.setProperty('--kaiz-chat-width', savedWidth + 'px');
+            if (savedHeight)
+                chatWindowEl.style.setProperty('--kaiz-chat-height', savedHeight + 'px');
+            let isDragging = false;
+            let isVertical = false;
+            $resizer.on('mousedown', (e) => {
+                if (!$chatWindow.hasClass('kaiz-browser-mode'))
+                    return;
+                isDragging = true;
+                isVertical = window.innerWidth <= 900;
+                $resizer.addClass('active');
+                $('#kaiz-browser-container').css('pointer-events', 'none');
+                $('body').css('user-select', 'none');
+                e.preventDefault();
+            });
+            $(document).on('mousemove', (e) => {
+                if (!isDragging)
+                    return;
+                if (isVertical) {
+                    const totalHeight = window.innerHeight;
+                    let newHeight = totalHeight - e.clientY;
+                    if (newHeight < 100)
+                        newHeight = 100;
+                    if (newHeight > totalHeight - 100)
+                        newHeight = totalHeight - 100;
+                    chatWindowEl.style.setProperty('--kaiz-chat-height', newHeight + 'px');
+                    localStorage.setItem('kaiz_chat_split_height', newHeight.toString());
+                }
+                else {
+                    const totalWidth = window.innerWidth;
+                    let newWidth = totalWidth - e.clientX;
+                    if (newWidth < 250)
+                        newWidth = 250;
+                    if (newWidth > totalWidth - 300)
+                        newWidth = totalWidth - 300;
+                    chatWindowEl.style.setProperty('--kaiz-chat-width', newWidth + 'px');
+                    localStorage.setItem('kaiz_chat_split_width', newWidth.toString());
+                }
+            });
+            $(document).on('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    $resizer.removeClass('active');
+                    $('#kaiz-browser-container').css('pointer-events', 'auto');
+                    $('body').css('user-select', '');
+                }
+            });
+        }
+    }
+
+    const browser_tools_manage = {
+        schema: {
+            name: 'browser_tools_manage',
+            description: `Quản lý và điều khiển Kaiz Browser (Trình duyệt web tích hợp trong SillyTavern). KHÔNG dùng cho trình duyệt bên ngoài. 
+Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
+1. Luôn dùng action='read' trước để đọc nội dung trang và lấy danh sách 'elementId' (ID của các nút bấm, ô nhập liệu).
+2. Dùng action='type' (cần elementId + text) để điền vào ô form.
+3. Nếu form không có nút Submit rõ ràng, dùng action='press_key' (cần elementId + key='Enter') để nhấn Enter gửi form.
+4. Dùng action='click' (cần elementId) để bấm nút hoặc link.
+5. Dùng action='navigate' (cần url) để truy cập thẳng một địa chỉ web mới.
+6. Sau khi trang chuyển hướng (do click, navigate, go_back, hoặc press_key), trang web thay đổi nên các ID cũ sẽ mất hiệu lực. BẠN PHẢI GỌI LẠI action='read' để lấy danh sách ID mới trước khi thao tác tiếp.`,
+            parameters: {
+                type: 'object',
+                properties: {
+                    action: {
+                        type: 'string',
+                        enum: ['read', 'click', 'type', 'scroll', 'navigate', 'go_back', 'press_key'],
+                        description: 'Hành động cần thực hiện trên trình duyệt.',
+                    },
+                    url: { type: 'string', description: '(Dành cho navigate) Địa chỉ URL cần truy cập.' },
+                    elementId: {
+                        type: 'number',
+                        description: '(Dành cho click, type, press_key) ID của phần tử lấy từ lệnh read.',
+                    },
+                    text: { type: 'string', description: '(Dành cho type) Nội dung văn bản cần gõ.' },
+                    direction: {
+                        type: 'string',
+                        enum: ['up', 'down'],
+                        description: '(Dành cho scroll) Hướng cuộn trang (mặc định down).',
+                    },
+                    key: { type: 'string', description: '(Dành cho press_key) Phím cần bấm, mặc định là Enter.' },
+                },
+                required: ['action'],
+            },
+        },
+        execute: async (args, context) => {
+            const action = args.action;
+            try {
+                switch (action) {
+                    case 'read': {
+                        const data = await BrowserWindowUI.executeAgentCommand('READ_PAGE');
+                        let content = `--- URL: ${data.url} ---\n--- TITLE: ${data.title} ---\n\n`;
+                        content += `[CÁC PHẦN TỬ CÓ THỂ TƯƠNG TÁC (ID)]\n`;
+                        if (data.interactables && data.interactables.length > 0) {
+                            content += data.interactables.join('\n');
+                        }
+                        else {
+                            content += '(Không tìm thấy phần tử tương tác nào trên màn hình hiện tại)';
+                        }
+                        content += `\n\n[NỘI DUNG VĂN BẢN TRÊN TRANG]\n${data.mainText}`;
+                        return { content: content };
+                    }
+                    case 'click': {
+                        if (!args.elementId)
+                            return { content: 'Lỗi: Thiếu elementId.', isError: true };
+                        const data = await BrowserWindowUI.executeAgentCommand('CLICK', { elementId: args.elementId });
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Nếu trang tải nội dung mới, hãy dùng hành động 'read' để cập nhật.`,
+                        };
+                    }
+                    case 'type': {
+                        if (!args.elementId || args.text === undefined)
+                            return { content: 'Lỗi: Thiếu elementId hoặc text.', isError: true };
+                        const data = await BrowserWindowUI.executeAgentCommand('TYPE', {
+                            elementId: args.elementId,
+                            text: args.text,
+                        });
+                        return { content: `Thành công: ${data.message}.` };
+                    }
+                    case 'scroll': {
+                        const dir = args.direction || 'down';
+                        const data = await BrowserWindowUI.executeAgentCommand('SCROLL', { direction: dir });
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc phần nội dung mới xuất hiện.`,
+                        };
+                    }
+                    case 'navigate': {
+                        if (!args.url)
+                            return { content: 'Lỗi: Thiếu url.', isError: true };
+                        const data = await BrowserWindowUI.executeAgentCommand('NAVIGATE', { url: args.url });
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web mới.`,
+                        };
+                    }
+                    case 'go_back': {
+                        const data = await BrowserWindowUI.executeAgentCommand('GO_BACK');
+                        return {
+                            content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web trước đó.`,
+                        };
+                    }
+                    case 'press_key': {
+                        if (!args.elementId)
+                            return { content: 'Lỗi: Thiếu elementId.', isError: true };
+                        const key = args.key || 'Enter';
+                        const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', {
+                            elementId: args.elementId,
+                            key: key,
+                        });
+                        return { content: `Thành công: ${data.message}.` };
+                    }
+                    default:
+                        return { content: `Lỗi: Hành động '${action}' không hợp lệ.`, isError: true };
+                }
+            }
+            catch (error) {
+                return { content: `Lỗi: ${error.message}`, isError: true };
+            }
+        },
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -3561,6 +4135,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(getTavernHelperScriptsTool);
         registry.registerTool(getTavernHelperScriptInfoTool);
         registry.registerTool(manageTavernHelperScriptTool);
+        registry.registerTool(browser_tools_manage);
     }
 
     /**
@@ -6054,6 +6629,90 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 renderTools(this.value);
             });
             // --- END TOOLS MANAGER LOGIC ---
+            // --- BROWSER SETUP LOGIC ---
+            $('#kaiz-enable-browser').prop('checked', settings.enableBrowser);
+            $('#kaiz-enable-browser').on('change', function () {
+                settings.enableBrowser = !!this.checked;
+                ctx.saveSettingsDebounced();
+                const $browserBtn = $('#kaiz-chat-browser-btn');
+                if (settings.enableBrowser) {
+                    $browserBtn.show();
+                    delete settings.disabledTools['browser_tools_manage'];
+                }
+                else {
+                    $browserBtn.hide();
+                    settings.disabledTools['browser_tools_manage'] = true;
+                    $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
+                    BrowserWindowUI.destroyAll(); // Clear iframe to free memory
+                }
+                renderTools();
+            });
+            $('#kaiz-check-browser-reqs').on('click', async () => {
+                const $results = $('#kaiz-browser-check-results');
+                const $corsCheck = $('#kaiz-check-cors');
+                const $scriptCheck = $('#kaiz-check-script');
+                const $xframeCheck = $('#kaiz-check-xframe');
+                $results.slideDown();
+                $corsCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+                $xframeCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+                $scriptCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+                try {
+                    const res = await fetch('https://www.google.com');
+                    if (res.ok) {
+                        $corsCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                    }
+                    else {
+                        $corsCheck.html('<i class="fa-solid fa-xmark"></i> Failed').css('color', '#e74c3c');
+                    }
+                }
+                catch (_e) {
+                    $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
+                }
+                let scriptDetected = false;
+                let xframeDetected = false;
+                const checkIframe1 = document.createElement('iframe');
+                checkIframe1.src = 'https://example.com';
+                checkIframe1.style.display = 'none';
+                document.body.appendChild(checkIframe1);
+                const checkIframe2 = document.createElement('iframe');
+                checkIframe2.src = 'https://www.google.com/';
+                checkIframe2.style.display = 'none';
+                document.body.appendChild(checkIframe2);
+                const onMessage = (e) => {
+                    if (e.data && e.data.type === 'KAIZ_IFRAME_URL') {
+                        if (e.data.url.includes('example.com')) {
+                            scriptDetected = true;
+                        }
+                        if (e.data.url.includes('google.com')) {
+                            xframeDetected = true;
+                        }
+                    }
+                };
+                window.addEventListener('message', onMessage);
+                setTimeout(() => {
+                    window.removeEventListener('message', onMessage);
+                    document.body.removeChild(checkIframe1);
+                    document.body.removeChild(checkIframe2);
+                    if (scriptDetected) {
+                        $scriptCheck.html('<i class="fa-solid fa-check"></i> Installed').css('color', '#2ecc71');
+                    }
+                    else {
+                        $scriptCheck.html('<i class="fa-solid fa-xmark"></i> Not Installed').css('color', '#e74c3c');
+                    }
+                    if (xframeDetected) {
+                        $xframeCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                    }
+                    else {
+                        if (!scriptDetected) {
+                            $xframeCheck.html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test').css('color', '#e67e22');
+                        }
+                        else {
+                            $xframeCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)').css('color', '#e74c3c');
+                        }
+                    }
+                }, 2000);
+            });
+            // --- END BROWSER SETUP LOGIC ---
             // Lắng nghe chọn từ Dropdown -> Cập nhật Input
             $('#kaiz-custom-model').on('change', function () {
                 if (this.value) {
@@ -6420,6 +7079,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const btn = $('#kaiz-floating-btn');
             const win = $('#kaiz-chat-window');
             const closeBtn = $('#kaiz-chat-close');
+            const ctx = SillyTavern.getContext();
+            const settings = ctx.extensionSettings['kaiz_agent'] || {};
+            if (settings.enableBrowser === false) {
+                $('#kaiz-chat-browser-btn').hide();
+            }
             // --- Bổ sung nút và khung Log Request ---
             closeBtn.before('<i id="kaiz-chat-backup-btn" class="fa-solid fa-save interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Backup Manager"></i>');
             closeBtn.before('<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>');
@@ -6689,7 +7353,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             const parsed = JSON.parse(savedPos);
                             el.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
                         }
-                        catch (e) { }
+                        catch {
+                            // ignore error
+                        }
                     }
                     el.draggable({
                         containment: 'window',
@@ -7303,6 +7969,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             });
             input.on('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
+                    // Trong phone mode, Enter dùng để xuống dòng
+                    if ($('#kaiz-chat-window').hasClass('kaiz-phone-mode')) {
+                        return;
+                    }
                     e.preventDefault();
                     sendMessage();
                 }
@@ -7363,7 +8033,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             </dialog>`;
                 $('body').append(modalHtml);
             }
-            $('#kaiz-checker-modal');
             const closeBtn = $('#kaiz-checker-close');
             const runBtn = $('#kaiz-checker-run');
             const list = $('#kaiz-checker-list');
@@ -7480,6 +8149,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 safeMode: false,
                 safeModeBlacklist: {},
                 quickPrompts: [],
+                enableBrowser: true,
             };
         }
         else {
@@ -7504,10 +8174,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             if (ctx.extensionSettings[EXT_NAME].retryDelay === undefined) {
                 ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
             }
+            if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
+                ctx.extensionSettings[EXT_NAME].enableBrowser = true;
+            }
         }
-        // Nạp style.css thủ công
-        const cssPath = `/scripts/extensions/${extPath}/style.css`;
-        if (!$(`link[href="${cssPath}"]`).length) {
+        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
+        const cssPath = `/scripts/extensions/${extPath}/style.css?v=${Date.now()}`;
+        if (!$(`link[href^="/scripts/extensions/${extPath}/style.css"]`).length) {
             $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
         }
         // Nạp thư viện Lucide Icon
@@ -7530,6 +8203,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 // Gắn kết UI trước để đăng ký callback
                 ChatWindowUI.init(loop, stateManager);
                 ToolCheckerUI.init(registry, adapter);
+                BrowserWindowUI.init();
                 // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
                 await stateManager.init();
             }
