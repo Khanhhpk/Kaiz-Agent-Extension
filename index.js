@@ -7463,6 +7463,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     setTimeout(() => { iframe.src = current; }, 50);
                 }
             });
+            // Nút trang chủ
+            this.$modal.find('#kaiz-browser-home').on('click', () => {
+                this.goToUrl('https://google.com');
+            });
             // Hệ thống Back / Forward tự xây dựng
             this.$modal.find('#kaiz-browser-back').on('click', () => {
                 if (this.historyIndex > 0) {

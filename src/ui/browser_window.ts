@@ -79,6 +79,11 @@ export class BrowserWindowUI {
             }
         });
 
+        // Nút trang chủ
+        this.$modal.find('#kaiz-browser-home').on('click', () => {
+            this.goToUrl('https://google.com');
+        });
+
         // Hệ thống Back / Forward tự xây dựng
         this.$modal.find('#kaiz-browser-back').on('click', () => {
             if (this.historyIndex > 0) {
