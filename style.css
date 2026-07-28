@@ -128,10 +128,29 @@
     display: flex !important; /* Ghi đè inline style none */
 }
 
-.kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
-    width: 400px;
+.kaiz-split-resizer {
+    display: none;
+}
+
+.kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer {
+    display: block;
+    width: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: col-resize;
     flex: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.1);
+    z-index: 10;
+    transition: background 0.2s;
+}
+
+.kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer:hover,
+.kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer.active {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
+    width: var(--kaiz-chat-width, 400px);
+    height: 100%;
+    flex: none;
 }
 
 @media (max-width: 900px) {
@@ -139,11 +158,16 @@
     .kaiz-chat-window.kaiz-browser-mode {
         flex-direction: column;
     }
+    
+    .kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer {
+        width: 100%;
+        height: 6px;
+        cursor: row-resize;
+    }
+
     .kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
         width: 100%;
-        height: 35vh; /* Chat chiếm 35% bên dưới */
-        border-left: none;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        height: var(--kaiz-chat-height, 35vh); /* Chat chiếm 35% bên dưới */
     }
 }
 

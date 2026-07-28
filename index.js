@@ -7537,6 +7537,72 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     }
                 }
             });
+            // Khởi tạo tính năng kéo giãn (resize)
+            this.initResizer();
+        }
+        static initResizer() {
+            const $ = jQuery;
+            const $resizer = $('#kaiz-split-resizer');
+            const $chatWindow = $('#kaiz-chat-window');
+            const chatWindowEl = $chatWindow[0];
+            if (!chatWindowEl)
+                return;
+            // Khôi phục kích thước từ localStorage
+            const savedWidth = localStorage.getItem('kaiz_chat_split_width');
+            const savedHeight = localStorage.getItem('kaiz_chat_split_height');
+            if (savedWidth) {
+                chatWindowEl.style.setProperty('--kaiz-chat-width', savedWidth + 'px');
+            }
+            if (savedHeight) {
+                chatWindowEl.style.setProperty('--kaiz-chat-height', savedHeight + 'px');
+            }
+            let isDragging = false;
+            let isVertical = false;
+            $resizer.on('mousedown', (e) => {
+                if (!$chatWindow.hasClass('kaiz-browser-mode'))
+                    return;
+                isDragging = true;
+                isVertical = window.innerWidth <= 900;
+                $resizer.addClass('active');
+                // Vô hiệu hóa pointer-events để di chuột qua iframe mượt hơn
+                $('#kaiz-browser-iframe').css('pointer-events', 'none');
+                $('body').css('user-select', 'none');
+                e.preventDefault();
+            });
+            $(document).on('mousemove', (e) => {
+                if (!isDragging)
+                    return;
+                if (isVertical) {
+                    // Xếp chồng dọc (màn hình nhỏ) - Chat ở dưới
+                    const totalHeight = window.innerHeight;
+                    let newHeight = totalHeight - e.clientY;
+                    if (newHeight < 100)
+                        newHeight = 100;
+                    if (newHeight > totalHeight - 100)
+                        newHeight = totalHeight - 100;
+                    chatWindowEl.style.setProperty('--kaiz-chat-height', newHeight + 'px');
+                    localStorage.setItem('kaiz_chat_split_height', newHeight.toString());
+                }
+                else {
+                    // Xếp ngang (màn hình to) - Chat ở phải
+                    const totalWidth = window.innerWidth;
+                    let newWidth = totalWidth - e.clientX;
+                    if (newWidth < 250)
+                        newWidth = 250;
+                    if (newWidth > totalWidth - 300)
+                        newWidth = totalWidth - 300;
+                    chatWindowEl.style.setProperty('--kaiz-chat-width', newWidth + 'px');
+                    localStorage.setItem('kaiz_chat_split_width', newWidth.toString());
+                }
+            });
+            $(document).on('mouseup', () => {
+                if (isDragging) {
+                    isDragging = false;
+                    $resizer.removeClass('active');
+                    $('#kaiz-browser-iframe').css('pointer-events', 'auto');
+                    $('body').css('user-select', '');
+                }
+            });
         }
         static goToUrl(url) {
             // Xử lý chung các trường hợp bypass iframe block cho Google
