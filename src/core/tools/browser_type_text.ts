@@ -4,7 +4,7 @@ import { BrowserWindowUI } from '../../ui/browser_window';
 export const browser_type_text: ITool = {
     schema: {
         name: 'browser_type_text',
-        description: 'Gõ văn bản vào một ô input trên trang web bằng ID của nó. (ID lấy từ lệnh browser_read_page).',
+        description: 'Gõ văn bản vào một ô input trên trang web bằng ID của nó. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern. (ID lấy từ lệnh browser_read_page). Để submit, hãy gọi thêm lệnh browser_press_key.',
         parameters: {
             type: 'object',
             properties: {

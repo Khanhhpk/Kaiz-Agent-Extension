@@ -206,6 +206,31 @@
                     respond(false, null, `Input element [ID: ${id}] not found or not editable.`);
                 }
             }
+            else if (cmd === 'PRESS_KEY') {
+                const id = event.data.elementId;
+                const key = event.data.key || 'Enter';
+                const el = window.kaizElementMap.get(id);
+                if (el) {
+                    el.focus();
+                    // Giả lập sự kiện bấm phím Enter
+                    const keyEvent = new KeyboardEvent('keydown', {
+                        bubbles: true, cancelable: true, key: key, code: key === 'Enter' ? 'Enter' : key
+                    });
+                    el.dispatchEvent(keyEvent);
+                    const keyUpEvent = new KeyboardEvent('keyup', {
+                        bubbles: true, cancelable: true, key: key, code: key === 'Enter' ? 'Enter' : key
+                    });
+                    el.dispatchEvent(keyUpEvent);
+                    
+                    // Thử trigger form submit nếu có
+                    if (key === 'Enter' && el.form) {
+                        el.form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+                    }
+                    respond(true, { message: `Pressed ${key} on element [ID: ${id}]` });
+                } else {
+                    respond(false, null, `Element [ID: ${id}] not found.`);
+                }
+            }
             else if (cmd === 'SCROLL') {
                 const dir = event.data.direction; // 'up' or 'down'
                 const amount = window.innerHeight * 0.8;

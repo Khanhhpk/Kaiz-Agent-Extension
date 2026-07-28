@@ -330,6 +330,19 @@ export class BrowserWindowUI {
                 return reject(new Error('Iframe is not ready.'));
             }
 
+            // Xử lý các lệnh đặc biệt không cần gọi xuống Tampermonkey
+            if (command === 'NAVIGATE') {
+                if (args.url) {
+                    this.goToUrl(args.url);
+                    return resolve({ message: `Đang điều hướng đến ${args.url}...` });
+                }
+                return reject(new Error('Missing URL for NAVIGATE'));
+            }
+            if (command === 'GO_BACK') {
+                this.$modal.find('#kaiz-browser-back').click();
+                return resolve({ message: `Đã nhấn nút Quay lại (Back).` });
+            }
+
             const msgId = 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
             const payload = {
                 type: 'KAIZ_AGENT_COMMAND',

@@ -3766,6 +3766,18 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 if (!activeTab || !activeTab.iframe.contentWindow) {
                     return reject(new Error('Iframe is not ready.'));
                 }
+                // Xử lý các lệnh đặc biệt không cần gọi xuống Tampermonkey
+                if (command === 'NAVIGATE') {
+                    if (args.url) {
+                        this.goToUrl(args.url);
+                        return resolve({ message: `Đang điều hướng đến ${args.url}...` });
+                    }
+                    return reject(new Error('Missing URL for NAVIGATE'));
+                }
+                if (command === 'GO_BACK') {
+                    this.$modal.find('#kaiz-browser-back').click();
+                    return resolve({ message: `Đã nhấn nút Quay lại (Back).` });
+                }
                 const msgId = 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                 const payload = {
                     type: 'KAIZ_AGENT_COMMAND',
@@ -3894,7 +3906,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const browser_read_page = {
         schema: {
             name: 'browser_read_page',
-            description: 'Đọc nội dung và quét các phần tử tương tác (như nút bấm, liên kết) trên trang web hiện tại đang mở trong Kaiz Browser.',
+            description: 'Đọc nội dung và quét các phần tử tương tác (như nút bấm, liên kết) trên trang web hiện tại đang mở trong Kaiz Browser. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern, KHÔNG dùng cho trình duyệt ngoài.',
             parameters: {
                 type: 'object',
                 properties: {}
@@ -3926,7 +3938,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const browser_click_element = {
         schema: {
             name: 'browser_click_element',
-            description: 'Click vào một phần tử trên trang web bằng ID của nó. (ID lấy từ lệnh browser_read_page).',
+            description: 'Click vào một phần tử trên trang web bằng ID của nó. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern. (ID lấy từ lệnh browser_read_page).',
             parameters: {
                 type: 'object',
                 properties: {
@@ -3951,7 +3963,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const browser_type_text = {
         schema: {
             name: 'browser_type_text',
-            description: 'Gõ văn bản vào một ô input trên trang web bằng ID của nó. (ID lấy từ lệnh browser_read_page).',
+            description: 'Gõ văn bản vào một ô input trên trang web bằng ID của nó. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern. (ID lấy từ lệnh browser_read_page). Để submit, hãy gọi thêm lệnh browser_press_key.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -3979,7 +3991,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const browser_scroll = {
         schema: {
             name: 'browser_scroll',
-            description: 'Cuộn trang web lên hoặc xuống để xem thêm nội dung.',
+            description: 'Cuộn trang web lên hoặc xuống để xem thêm nội dung. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -3997,6 +4009,78 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             catch (error) {
                 return { content: `Lỗi khi cuộn trang: ${error.message}`, isError: true };
+            }
+        }
+    };
+
+    const browser_navigate = {
+        schema: {
+            name: 'browser_navigate',
+            description: 'Đi tới một URL cụ thể trên Kaiz Browser. Dành riêng cho trình duyệt web tích hợp bên trong SillyTavern.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    url: { type: 'string', description: 'Địa chỉ URL cần đi tới (VD: https://youtube.com)' }
+                },
+                required: ['url']
+            }
+        },
+        execute: async (args, context) => {
+            if (!args.url)
+                return { content: 'Lỗi: Thiếu url.', isError: true };
+            try {
+                const data = await BrowserWindowUI.executeAgentCommand('NAVIGATE', { url: args.url });
+                return { content: `Thành công: ${data.message}. Gợi ý: Gọi browser_read_page để đọc nội dung trang web mới tải.` };
+            }
+            catch (error) {
+                return { content: `Lỗi: ${error.message}`, isError: true };
+            }
+        }
+    };
+
+    const browser_go_back = {
+        schema: {
+            name: 'browser_go_back',
+            description: 'Nhấn nút Quay lại (Back) trên Kaiz Browser để trở về trang web trước đó. Dành riêng cho trình duyệt tích hợp.',
+            parameters: {
+                type: 'object',
+                properties: {}
+            }
+        },
+        execute: async (args, context) => {
+            try {
+                const data = await BrowserWindowUI.executeAgentCommand('GO_BACK');
+                return { content: `Thành công: ${data.message}. Gợi ý: Gọi browser_read_page để đọc nội dung.` };
+            }
+            catch (error) {
+                return { content: `Lỗi: ${error.message}`, isError: true };
+            }
+        }
+    };
+
+    const browser_press_key = {
+        schema: {
+            name: 'browser_press_key',
+            description: 'Bấm một phím (VD: Enter) trên một phần tử đang chọn. Dùng để submit form tìm kiếm sau khi đã gọi browser_type_text. Dành riêng cho Kaiz Browser.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    elementId: { type: 'number', description: 'ID của ô input/phần tử đang thao tác.' },
+                    key: { type: 'string', description: 'Tên phím cần bấm (Mặc định: Enter)' }
+                },
+                required: ['elementId']
+            }
+        },
+        execute: async (args, context) => {
+            if (!args.elementId)
+                return { content: 'Lỗi: Thiếu elementId.', isError: true };
+            const key = args.key || 'Enter';
+            try {
+                const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', { elementId: args.elementId, key: key });
+                return { content: `Thành công: ${data.message}. Nếu phím Enter chuyển trang, hãy gọi browser_read_page để đọc trang mới.` };
+            }
+            catch (error) {
+                return { content: `Lỗi khi bấm phím: ${error.message}`, isError: true };
             }
         }
     };
@@ -4044,6 +4128,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(browser_click_element);
         registry.registerTool(browser_type_text);
         registry.registerTool(browser_scroll);
+        registry.registerTool(browser_navigate);
+        registry.registerTool(browser_go_back);
+        registry.registerTool(browser_press_key);
     }
 
     /**

@@ -4,7 +4,7 @@ import { BrowserWindowUI } from '../../ui/browser_window';
 export const browser_click_element: ITool = {
     schema: {
         name: 'browser_click_element',
-        description: 'Click vào một phần tử trên trang web bằng ID của nó. (ID lấy từ lệnh browser_read_page).',
+        description: 'Click vào một phần tử trên trang web bằng ID của nó. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern. (ID lấy từ lệnh browser_read_page).',
         parameters: {
             type: 'object',
             properties: {

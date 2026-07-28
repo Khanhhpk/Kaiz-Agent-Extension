@@ -4,7 +4,7 @@ import { BrowserWindowUI } from '../../ui/browser_window';
 export const browser_scroll: ITool = {
     schema: {
         name: 'browser_scroll',
-        description: 'Cuộn trang web lên hoặc xuống để xem thêm nội dung.',
+        description: 'Cuộn trang web lên hoặc xuống để xem thêm nội dung. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern.',
         parameters: {
             type: 'object',
             properties: {

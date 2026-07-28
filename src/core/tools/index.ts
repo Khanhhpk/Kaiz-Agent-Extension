@@ -39,6 +39,9 @@ import { browser_read_page } from './browser_read_page';
 import { browser_click_element } from './browser_click_element';
 import { browser_type_text } from './browser_type_text';
 import { browser_scroll } from './browser_scroll';
+import { browser_navigate } from './browser_navigate';
+import { browser_go_back } from './browser_go_back';
+import { browser_press_key } from './browser_press_key';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -84,4 +87,7 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(browser_click_element);
     registry.registerTool(browser_type_text);
     registry.registerTool(browser_scroll);
+    registry.registerTool(browser_navigate);
+    registry.registerTool(browser_go_back);
+    registry.registerTool(browser_press_key);
 }

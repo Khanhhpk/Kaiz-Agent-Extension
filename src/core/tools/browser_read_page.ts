@@ -4,7 +4,7 @@ import { BrowserWindowUI } from '../../ui/browser_window';
 export const browser_read_page: ITool = {
     schema: {
         name: 'browser_read_page',
-        description: 'Đọc nội dung và quét các phần tử tương tác (như nút bấm, liên kết) trên trang web hiện tại đang mở trong Kaiz Browser.',
+        description: 'Đọc nội dung và quét các phần tử tương tác (như nút bấm, liên kết) trên trang web hiện tại đang mở trong Kaiz Browser. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern, KHÔNG dùng cho trình duyệt ngoài.',
         parameters: {
             type: 'object',
             properties: {}
