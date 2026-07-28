@@ -6654,7 +6654,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 }
                 let scriptDetected = false;
                 const checkIframe = document.createElement('iframe');
-                checkIframe.src = 'about:blank';
+                checkIframe.src = 'https://example.com';
                 checkIframe.style.display = 'none';
                 document.body.appendChild(checkIframe);
                 const onMessage = (e) => {
@@ -6672,7 +6672,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                     else {
                         $scriptCheck.html('<i class="fa-solid fa-xmark"></i> Not Installed').css('color', '#e74c3c');
                     }
-                }, 1000);
+                }, 2000);
             });
             // --- END BROWSER SETUP LOGIC ---
             // Lắng nghe chọn từ Dropdown -> Cập nhật Input

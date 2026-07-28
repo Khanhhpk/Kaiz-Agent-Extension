@@ -691,7 +691,7 @@ export class SettingsUI {
 
             let scriptDetected = false;
             const checkIframe = document.createElement('iframe');
-            checkIframe.src = 'about:blank';
+            checkIframe.src = 'https://example.com';
             checkIframe.style.display = 'none';
             document.body.appendChild(checkIframe);
 
@@ -711,7 +711,7 @@ export class SettingsUI {
                 } else {
                     $scriptCheck.html('<i class="fa-solid fa-xmark"></i> Not Installed').css('color', '#e74c3c');
                 }
-            }, 1000);
+            }, 2000);
         });
         // --- END BROWSER SETUP LOGIC ---
 
