@@ -293,19 +293,6 @@ export class BrowserWindowUI {
     }
 
     private static navigate(tab: BrowserTab, url: string, forceReload: boolean) {
-        // --- BYPASS X-FRAME-OPTIONS CHO CÁC TRANG PHỔ BIẾN ---
-        // Chuyển Youtube watch thành Youtube embed
-        if (url.includes('youtube.com/watch?v=')) {
-            try {
-                const urlObj = new URL(url);
-                const videoId = urlObj.searchParams.get('v');
-                if (videoId) {
-                    url = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
-                }
-            } catch (e) {}
-        }
-        // -----------------------------------------------------
-
         this.$address.val(url);
         
         if (forceReload) {
