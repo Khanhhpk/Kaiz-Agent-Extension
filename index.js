@@ -3605,14 +3605,37 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     go();
                 }
             });
+            // Nút Reload
             this.$modal.find('#kaiz-browser-reload').on('click', () => {
-                const activeTab = this.getActiveTab();
-                if (activeTab && activeTab.iframe.src && !activeTab.iframe.src.includes('about:blank')) {
-                    const current = activeTab.iframe.src;
-                    activeTab.iframe.src = 'about:blank';
-                    setTimeout(() => {
-                        activeTab.iframe.src = current;
-                    }, 50);
+                if (this.activeTabId) {
+                    const tab = this.tabs.find((t) => t.id === this.activeTabId);
+                    if (tab && tab.iframe) {
+                        try {
+                            tab.iframe.contentWindow?.location.reload();
+                        }
+                        catch (e) {
+                            tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
+                        }
+                    }
+                }
+            });
+            // Nút Dark Mode
+            this.$modal.find('#kaiz-browser-darkmode').on('click', function () {
+                const $btn = $(this);
+                if (BrowserWindowUI['activeTabId']) {
+                    const tab = BrowserWindowUI['tabs'].find((t) => t.id === BrowserWindowUI['activeTabId']);
+                    if (tab && tab.iframe) {
+                        const currentFilter = tab.iframe.style.filter;
+                        if (currentFilter.includes('invert(1)')) {
+                            tab.iframe.style.filter = '';
+                            $btn.css('color', '');
+                        }
+                        else {
+                            // Invert color, rotate hue back so images look normal-ish, slightly dim
+                            tab.iframe.style.filter = 'invert(1) hue-rotate(180deg) brightness(0.9)';
+                            $btn.css('color', '#f1c40f'); // Highlight button
+                        }
+                    }
                 }
             });
             // Nút trang chủ
