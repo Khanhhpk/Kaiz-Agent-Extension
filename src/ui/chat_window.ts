@@ -500,8 +500,8 @@ export class ChatWindowUI {
                             ${schema.description ? `<span style="color:#888; font-size:11px; margin-left:6px;">${escapeHtml(schema.description.substring(0, 60))}${schema.description.length > 60 ? '...' : ''}</span>` : ''}
                         </div>
                     `);
-                    item.on('mouseenter', function() { $(this).css('background', 'rgba(255,255,255,0.07)'); });
-                    item.on('mouseleave', function() { $(this).css('background', ''); });
+                    item.on('mouseenter', function(this: any) { $(this).css('background', 'rgba(255,255,255,0.07)'); });
+                    item.on('mouseleave', function(this: any) { $(this).css('background', ''); });
                     item.on('click', () => {
                         toolsConfig[schema.name] = true;
                         renderWsToolsUI(toolsConfig);
@@ -510,7 +510,7 @@ export class ChatWindowUI {
                 });
             }
 
-            searchInput.on('input', function() {
+            searchInput.on('input', function(this: any) {
                 renderSearchResults(String($(this).val() || ''));
             });
 
