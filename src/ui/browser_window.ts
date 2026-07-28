@@ -131,9 +131,14 @@ export class BrowserWindowUI {
             }
         });
 
-        // Lắng nghe message từ Tampermonkey (Content Script) để bắt sự kiện đổi URL trong Iframe
         window.addEventListener('message', (event) => {
             if (event.data && event.data.type === 'KAIZ_IFRAME_URL' && event.data.url) {
+                const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
+                // Chỉ nhận message từ đúng iframe chính gốc, bỏ qua nếu message đến từ iframe con (quảng cáo, widget...)
+                if (iframe && event.source !== iframe.contentWindow) {
+                    return;
+                }
+                
                 const newUrl = event.data.url;
                 // Nếu URL nhận được khác với URL hiện tại trên thanh địa chỉ
                 if (this.$address.val() !== newUrl) {
