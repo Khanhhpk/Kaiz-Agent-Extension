@@ -436,6 +436,15 @@ export class ChatWindowUI {
             $('#kaiz-ws-name').val(ws.name);
             $('#kaiz-ws-prompt').val(ws.systemPrompt || '');
 
+            const delBtn = $('#kaiz-ws-delete-btn');
+            if (ws.systemId) {
+                delBtn.html('<i class="fa-solid fa-rotate-left"></i> Khôi phục mặc định');
+                delBtn.css({ color: '#f39c12', borderColor: 'rgba(243, 156, 18, 0.3)' });
+            } else {
+                delBtn.html('<i class="fa-solid fa-trash"></i> Xóa Workspace');
+                delBtn.css({ color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' });
+            }
+
             renderWsToolsUI(ws.toolsConfig || {});
 
             ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).showModal();
@@ -578,14 +587,32 @@ export class ChatWindowUI {
 
         $('#kaiz-ws-delete-btn').on('click', async () => {
             if (!stateManager.currentWorkspaceId) return;
-            const wsName = stateManager.currentWorkspace?.name || 'này';
-            if (
-                confirm(
-                    `Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`,
-                )
-            ) {
-                await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
-                ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+            const ws = stateManager.currentWorkspace;
+            if (!ws) return;
+            const wsName = ws.name || 'này';
+            
+            if (ws.systemId) {
+                if (
+                    confirm(
+                        `Khôi phục Workspace "${wsName}" về trạng thái mặc định gốc?\n\nTên, Prompt và Danh sách Tools sẽ bị reset. (Lịch sử chat VẪN ĐƯỢC GIỮ NGUYÊN).`,
+                    )
+                ) {
+                    await stateManager.db.resetSystemWorkspace(stateManager.currentWorkspaceId);
+                    const workspaces = await stateManager.db.getAllWorkspaces();
+                    if (stateManager.onWorkspacesListUpdated) stateManager.onWorkspacesListUpdated(workspaces);
+                    stateManager.currentWorkspace = workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
+                    if (stateManager.onWorkspaceSwitched) stateManager.onWorkspaceSwitched(stateManager.currentWorkspace);
+                    ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+                }
+            } else {
+                if (
+                    confirm(
+                        `Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`,
+                    )
+                ) {
+                    await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
+                    ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+                }
             }
         });
         // --------------------------
