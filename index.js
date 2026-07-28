@@ -7927,8 +7927,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             </dialog>`;
                 $('body').append(modalHtml);
             }
-            // @ts-ignore
-            $('#kaiz-checker-modal');
             const closeBtn = $('#kaiz-checker-close');
             const runBtn = $('#kaiz-checker-run');
             const list = $('#kaiz-checker-list');

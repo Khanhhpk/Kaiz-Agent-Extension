@@ -31,8 +31,6 @@ export class ToolCheckerUI {
             $('body').append(modalHtml);
         }
 
-        // @ts-ignore
-        const _modal = $('#kaiz-checker-modal');
         const closeBtn = $('#kaiz-checker-close');
         const runBtn = $('#kaiz-checker-run');
         const list = $('#kaiz-checker-list');
