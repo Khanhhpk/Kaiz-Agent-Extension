@@ -255,26 +255,18 @@
 
                         <div
                             id="kaiz-browser-check-results"
-                            style="
-                                display: none;
-                                font-size: 12px;
-                                padding: 8px;
-                                background: rgba(0, 0, 0, 0.2);
-                                border-radius: 5px;
-                                border: 1px solid rgba(255, 255, 255, 0.1);
-                            "
-                        >
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px">
-                                <span>CORS Bypass:</span>
-                                <span id="kaiz-check-cors" style="color: #f1c40f"
-                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
-                                >
+                        <div id="kaiz-browser-check-results" style="display: none; font-size: 12px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>1. CORS Bypass:</span>
+                                <span id="kaiz-check-cors" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
                             </div>
-                            <div style="display: flex; justify-content: space-between">
-                                <span>Companion Script:</span>
-                                <span id="kaiz-check-script" style="color: #f1c40f"
-                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
-                                >
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>2. X-Frame Bypass:</span>
+                                <span id="kaiz-check-xframe" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>3. Companion Script:</span>
+                                <span id="kaiz-check-script" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
                             </div>
                         </div>
                     </div>

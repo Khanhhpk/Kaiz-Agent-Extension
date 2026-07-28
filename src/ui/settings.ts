@@ -675,9 +675,11 @@ export class SettingsUI {
             const $results = $('#kaiz-browser-check-results');
             const $corsCheck = $('#kaiz-check-cors');
             const $scriptCheck = $('#kaiz-check-script');
+            const $xframeCheck = $('#kaiz-check-xframe');
 
             $results.slideDown();
             $corsCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+            $xframeCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
             $scriptCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
 
             try {
@@ -692,26 +694,49 @@ export class SettingsUI {
             }
 
             let scriptDetected = false;
-            const checkIframe = document.createElement('iframe');
-            checkIframe.src = 'https://example.com';
-            checkIframe.style.display = 'none';
-            document.body.appendChild(checkIframe);
+            let xframeDetected = false;
 
-            const onMessage = (e: any) => {
+            const checkIframe1 = document.createElement('iframe');
+            checkIframe1.src = 'https://example.com';
+            checkIframe1.style.display = 'none';
+            document.body.appendChild(checkIframe1);
+
+            const checkIframe2 = document.createElement('iframe');
+            checkIframe2.src = 'https://www.google.com/';
+            checkIframe2.style.display = 'none';
+            document.body.appendChild(checkIframe2);
+
+            const onMessage = (e: MessageEvent) => {
                 if (e.data && e.data.type === 'KAIZ_IFRAME_URL') {
-                    scriptDetected = true;
+                    if (e.data.url.includes('example.com')) {
+                        scriptDetected = true;
+                    }
+                    if (e.data.url.includes('google.com')) {
+                        xframeDetected = true;
+                    }
                 }
             };
             window.addEventListener('message', onMessage);
 
             setTimeout(() => {
                 window.removeEventListener('message', onMessage);
-                document.body.removeChild(checkIframe);
+                document.body.removeChild(checkIframe1);
+                document.body.removeChild(checkIframe2);
 
                 if (scriptDetected) {
                     $scriptCheck.html('<i class="fa-solid fa-check"></i> Installed').css('color', '#2ecc71');
                 } else {
                     $scriptCheck.html('<i class="fa-solid fa-xmark"></i> Not Installed').css('color', '#e74c3c');
+                }
+
+                if (xframeDetected) {
+                    $xframeCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                } else {
+                    if (!scriptDetected) {
+                        $xframeCheck.html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test').css('color', '#e67e22');
+                    } else {
+                        $xframeCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)').css('color', '#e74c3c');
+                    }
                 }
             }, 2000);
         });
