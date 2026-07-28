@@ -6616,6 +6616,65 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 renderTools(this.value);
             });
             // --- END TOOLS MANAGER LOGIC ---
+            // --- BROWSER SETUP LOGIC ---
+            $('#kaiz-enable-browser').prop('checked', settings.enableBrowser);
+            $('#kaiz-enable-browser').on('change', function () {
+                settings.enableBrowser = !!this.checked;
+                ctx.saveSettingsDebounced();
+                const $browserBtn = $('#kaiz-chat-browser-btn');
+                if (settings.enableBrowser) {
+                    $browserBtn.show();
+                    delete settings.disabledTools['browser_tools_manage'];
+                }
+                else {
+                    $browserBtn.hide();
+                    settings.disabledTools['browser_tools_manage'] = true;
+                    $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
+                }
+                renderTools();
+            });
+            $('#kaiz-check-browser-reqs').on('click', async () => {
+                const $results = $('#kaiz-browser-check-results');
+                const $corsCheck = $('#kaiz-check-cors');
+                const $scriptCheck = $('#kaiz-check-script');
+                $results.slideDown();
+                $corsCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+                $scriptCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+                try {
+                    const res = await fetch('https://www.google.com');
+                    if (res.ok) {
+                        $corsCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                    }
+                    else {
+                        $corsCheck.html('<i class="fa-solid fa-xmark"></i> Failed').css('color', '#e74c3c');
+                    }
+                }
+                catch (e) {
+                    $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
+                }
+                let scriptDetected = false;
+                const checkIframe = document.createElement('iframe');
+                checkIframe.src = 'about:blank';
+                checkIframe.style.display = 'none';
+                document.body.appendChild(checkIframe);
+                const onMessage = (e) => {
+                    if (e.data && e.data.type === 'KAIZ_IFRAME_URL') {
+                        scriptDetected = true;
+                    }
+                };
+                window.addEventListener('message', onMessage);
+                setTimeout(() => {
+                    window.removeEventListener('message', onMessage);
+                    document.body.removeChild(checkIframe);
+                    if (scriptDetected) {
+                        $scriptCheck.html('<i class="fa-solid fa-check"></i> Installed').css('color', '#2ecc71');
+                    }
+                    else {
+                        $scriptCheck.html('<i class="fa-solid fa-xmark"></i> Not Installed').css('color', '#e74c3c');
+                    }
+                }, 1000);
+            });
+            // --- END BROWSER SETUP LOGIC ---
             // Lắng nghe chọn từ Dropdown -> Cập nhật Input
             $('#kaiz-custom-model').on('change', function () {
                 if (this.value) {
@@ -6982,6 +7041,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const btn = $('#kaiz-floating-btn');
             const win = $('#kaiz-chat-window');
             const closeBtn = $('#kaiz-chat-close');
+            const ctx = SillyTavern.getContext();
+            const settings = ctx.extensionSettings['kaiz_agent'] || {};
+            if (settings.enableBrowser === false) {
+                $('#kaiz-chat-browser-btn').hide();
+            }
             // --- Bổ sung nút và khung Log Request ---
             closeBtn.before('<i id="kaiz-chat-backup-btn" class="fa-solid fa-save interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Backup Manager"></i>');
             closeBtn.before('<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>');
@@ -8043,6 +8107,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 safeMode: false,
                 safeModeBlacklist: {},
                 quickPrompts: [],
+                enableBrowser: true,
             };
         }
         else {
@@ -8066,6 +8131,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             }
             if (ctx.extensionSettings[EXT_NAME].retryDelay === undefined) {
                 ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
+            }
+            if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
+                ctx.extensionSettings[EXT_NAME].enableBrowser = true;
             }
         }
         // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)

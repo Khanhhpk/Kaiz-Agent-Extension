@@ -21,6 +21,11 @@ export class ChatWindowUI {
         const btn = $('#kaiz-floating-btn');
         const win = $('#kaiz-chat-window');
         const closeBtn = $('#kaiz-chat-close');
+        const ctx = SillyTavern.getContext();
+        const settings = ctx.extensionSettings['kaiz_agent'] || {};
+        if (settings.enableBrowser === false) {
+            $('#kaiz-chat-browser-btn').hide();
+        }
 
         // --- Bổ sung nút và khung Log Request ---
         closeBtn.before(

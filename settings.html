@@ -187,6 +187,41 @@
                     </div>
                 </div>
 
+                <!-- Browser Setup Settings -->
+                <div class="scp-settings-flat-section" style="margin-top: 15px">
+                    <div class="scp-settings-flat-title"><i class="fa-brands fa-chrome"></i> Browser Setup</div>
+                    
+                    <label class="checkbox_label" style="margin-bottom: 8px">
+                        <input id="kaiz-enable-browser" type="checkbox" />
+                        <span>Enable Kaiz Browser Feature</span>
+                    </label>
+
+                    <div style="font-size: 11px; color: #888; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; margin-bottom: 8px; border-left: 3px solid #3498db;">
+                        <strong>Required Extensions:</strong><br/>
+                        1. <a href="https://chromewebstore.google.com/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf" target="_blank" style="color: #3498db;">Allow CORS</a> (Bypass CORS)<br/>
+                        2. <a href="https://chromewebstore.google.com/detail/ignore-x-frame-headers/gleekbfjekiniecknbkamfmkohkpodhe" target="_blank" style="color: #3498db;">Ignore X-Frame</a> (Allow iframe)<br/>
+                        3. <a href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" style="color: #3498db;">Tampermonkey</a> (For Script)<br/><br/>
+                        <a href="https://github.com/Khanhhpk/Kaiz-Agent-Extension/raw/beta/userscripts/kaiz-browser-companion.user.js" target="_blank" style="display: inline-block; padding: 4px 8px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; color: #fff; text-decoration: none; margin-top: 4px;"><i class="fa-solid fa-download"></i> Install Companion Script</a>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        <button id="kaiz-check-browser-reqs" class="menu_button interactable" style="width: 100%">
+                            <i class="fa-solid fa-stethoscope"></i> Check Setup Requirements
+                        </button>
+                        
+                        <div id="kaiz-browser-check-results" style="display: none; font-size: 12px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px; border: 1px solid rgba(255,255,255,0.1);">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <span>CORS Bypass:</span>
+                                <span id="kaiz-check-cors" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between;">
+                                <span>Companion Script:</span>
+                                <span id="kaiz-check-script" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Quick Prompts Settings -->
                 <div class="scp-settings-flat-section" style="margin-top: 15px">
                     <div class="scp-settings-flat-title"><i class="fa-solid fa-bolt"></i> Quick Prompts</div>
