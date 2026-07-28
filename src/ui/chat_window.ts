@@ -590,7 +590,7 @@ export class ChatWindowUI {
             const ws = stateManager.currentWorkspace;
             if (!ws) return;
             const wsName = ws.name || 'này';
-            
+
             if (ws.systemId) {
                 if (
                     confirm(
@@ -600,8 +600,10 @@ export class ChatWindowUI {
                     await stateManager.db.resetSystemWorkspace(stateManager.currentWorkspaceId);
                     const workspaces = await stateManager.db.getAllWorkspaces();
                     if (stateManager.onWorkspacesListUpdated) stateManager.onWorkspacesListUpdated(workspaces);
-                    stateManager.currentWorkspace = workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
-                    if (stateManager.onWorkspaceSwitched) stateManager.onWorkspaceSwitched(stateManager.currentWorkspace);
+                    stateManager.currentWorkspace =
+                        workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
+                    if (stateManager.onWorkspaceSwitched)
+                        stateManager.onWorkspaceSwitched(stateManager.currentWorkspace);
                     ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
                 }
             } else {
