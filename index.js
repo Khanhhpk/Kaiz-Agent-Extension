@@ -3903,184 +3903,84 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         }
     }
 
-    const browser_read_page = {
+    const browser_tools_manage = {
         schema: {
-            name: 'browser_read_page',
-            description: 'Đọc nội dung và quét các phần tử tương tác (như nút bấm, liên kết) trên trang web hiện tại đang mở trong Kaiz Browser. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern, KHÔNG dùng cho trình duyệt ngoài.',
+            name: 'browser_tools_manage',
+            description: 'Quản lý và điều khiển Kaiz Browser (Trình duyệt web tích hợp trong SillyTavern). Gộp chung các chức năng duyệt web. KHÔNG dùng cho trình duyệt bên ngoài.',
             parameters: {
                 type: 'object',
-                properties: {}
+                properties: {
+                    action: {
+                        type: 'string',
+                        enum: ['read', 'click', 'type', 'scroll', 'navigate', 'go_back', 'press_key'],
+                        description: 'Hành động cần thực hiện trên trình duyệt.'
+                    },
+                    url: { type: 'string', description: '(Dành cho navigate) Địa chỉ URL cần truy cập.' },
+                    elementId: { type: 'number', description: '(Dành cho click, type, press_key) ID của phần tử lấy từ lệnh read.' },
+                    text: { type: 'string', description: '(Dành cho type) Nội dung văn bản cần gõ.' },
+                    direction: { type: 'string', enum: ['up', 'down'], description: '(Dành cho scroll) Hướng cuộn trang (mặc định down).' },
+                    key: { type: 'string', description: '(Dành cho press_key) Phím cần bấm, mặc định là Enter.' }
+                },
+                required: ['action']
             }
         },
         execute: async (args, context) => {
+            const action = args.action;
             try {
-                const data = await BrowserWindowUI.executeAgentCommand('READ_PAGE');
-                let result = `=== KAIZ BROWSER STATE ===\n`;
-                result += `URL: ${data.url}\n`;
-                result += `Title: ${data.title}\n\n`;
-                result += `--- PHẦN TỬ CÓ THỂ TƯƠNG TÁC (Dùng ID để click/type) ---\n`;
-                if (data.interactables && data.interactables.length > 0) {
-                    result += data.interactables.join('\n') + '\n';
+                switch (action) {
+                    case 'read': {
+                        const data = await BrowserWindowUI.executeAgentCommand('READ_PAGE');
+                        let content = `--- URL: ${data.url} ---\n--- TITLE: ${data.title} ---\n\n`;
+                        content += `[CÁC PHẦN TỬ CÓ THỂ TƯƠNG TÁC (ID)]\n`;
+                        if (data.interactables && data.interactables.length > 0) {
+                            content += data.interactables.join('\n');
+                        }
+                        else {
+                            content += '(Không tìm thấy phần tử tương tác nào trên màn hình hiện tại)';
+                        }
+                        content += `\n\n[NỘI DUNG VĂN BẢN TRÊN TRANG]\n${data.mainText}`;
+                        return { content: content };
+                    }
+                    case 'click': {
+                        if (!args.elementId)
+                            return { content: 'Lỗi: Thiếu elementId.', isError: true };
+                        const data = await BrowserWindowUI.executeAgentCommand('CLICK', { elementId: args.elementId });
+                        return { content: `Thành công: ${data.message}. Gợi ý: Nếu trang tải nội dung mới, hãy dùng hành động 'read' để cập nhật.` };
+                    }
+                    case 'type': {
+                        if (!args.elementId || args.text === undefined)
+                            return { content: 'Lỗi: Thiếu elementId hoặc text.', isError: true };
+                        const data = await BrowserWindowUI.executeAgentCommand('TYPE', { elementId: args.elementId, text: args.text });
+                        return { content: `Thành công: ${data.message}.` };
+                    }
+                    case 'scroll': {
+                        const dir = args.direction || 'down';
+                        const data = await BrowserWindowUI.executeAgentCommand('SCROLL', { direction: dir });
+                        return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc phần nội dung mới xuất hiện.` };
+                    }
+                    case 'navigate': {
+                        if (!args.url)
+                            return { content: 'Lỗi: Thiếu url.', isError: true };
+                        const data = await BrowserWindowUI.executeAgentCommand('NAVIGATE', { url: args.url });
+                        return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web mới.` };
+                    }
+                    case 'go_back': {
+                        const data = await BrowserWindowUI.executeAgentCommand('GO_BACK');
+                        return { content: `Thành công: ${data.message}. Gợi ý: Dùng hành động 'read' để đọc trang web trước đó.` };
+                    }
+                    case 'press_key': {
+                        if (!args.elementId)
+                            return { content: 'Lỗi: Thiếu elementId.', isError: true };
+                        const key = args.key || 'Enter';
+                        const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', { elementId: args.elementId, key: key });
+                        return { content: `Thành công: ${data.message}.` };
+                    }
+                    default:
+                        return { content: `Lỗi: Hành động '${action}' không hợp lệ.`, isError: true };
                 }
-                else {
-                    result += `(Không tìm thấy phần tử tương tác nào trên màn hình hiện tại)\n`;
-                }
-                result += `\n--- NỘI DUNG VĂN BẢN CHÍNH ---\n`;
-                result += data.mainText;
-                return { content: result };
-            }
-            catch (error) {
-                return { content: `Lỗi khi đọc trang: ${error.message}`, isError: true };
-            }
-        }
-    };
-
-    const browser_click_element = {
-        schema: {
-            name: 'browser_click_element',
-            description: 'Click vào một phần tử trên trang web bằng ID của nó. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern. (ID lấy từ lệnh browser_read_page).',
-            parameters: {
-                type: 'object',
-                properties: {
-                    elementId: { type: 'number', description: 'ID của phần tử cần click.' }
-                },
-                required: ['elementId']
-            }
-        },
-        execute: async (args, context) => {
-            if (!args.elementId)
-                return { content: 'Lỗi: Thiếu elementId.', isError: true };
-            try {
-                const data = await BrowserWindowUI.executeAgentCommand('CLICK', { elementId: args.elementId });
-                return { content: `Thành công: ${data.message}` };
-            }
-            catch (error) {
-                return { content: `Lỗi khi click: ${error.message}`, isError: true };
-            }
-        }
-    };
-
-    const browser_type_text = {
-        schema: {
-            name: 'browser_type_text',
-            description: 'Gõ văn bản vào một ô input trên trang web bằng ID của nó. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern. (ID lấy từ lệnh browser_read_page). Để submit, hãy gọi thêm lệnh browser_press_key.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    elementId: { type: 'number', description: 'ID của ô input.' },
-                    text: { type: 'string', description: 'Văn bản cần gõ.' }
-                },
-                required: ['elementId', 'text']
-            }
-        },
-        execute: async (args, context) => {
-            if (!args.elementId)
-                return { content: 'Lỗi: Thiếu elementId.', isError: true };
-            if (args.text === undefined)
-                return { content: 'Lỗi: Thiếu text.', isError: true };
-            try {
-                const data = await BrowserWindowUI.executeAgentCommand('TYPE', { elementId: args.elementId, text: args.text });
-                return { content: `Thành công: ${data.message}` };
-            }
-            catch (error) {
-                return { content: `Lỗi khi gõ văn bản: ${error.message}`, isError: true };
-            }
-        }
-    };
-
-    const browser_scroll = {
-        schema: {
-            name: 'browser_scroll',
-            description: 'Cuộn trang web lên hoặc xuống để xem thêm nội dung. Dành riêng cho Kaiz Browser tích hợp bên trong SillyTavern.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    direction: { type: 'string', description: 'Hướng cuộn: "up" hoặc "down".' }
-                },
-                required: ['direction']
-            }
-        },
-        execute: async (args, context) => {
-            if (args.direction !== 'up' && args.direction !== 'down')
-                return { content: 'Lỗi: direction phải là "up" hoặc "down".', isError: true };
-            try {
-                const data = await BrowserWindowUI.executeAgentCommand('SCROLL', { direction: args.direction });
-                return { content: `Thành công: ${data.message}. Gợi ý: Hãy gọi browser_read_page để xem nội dung mới.` };
-            }
-            catch (error) {
-                return { content: `Lỗi khi cuộn trang: ${error.message}`, isError: true };
-            }
-        }
-    };
-
-    const browser_navigate = {
-        schema: {
-            name: 'browser_navigate',
-            description: 'Đi tới một URL cụ thể trên Kaiz Browser. Dành riêng cho trình duyệt web tích hợp bên trong SillyTavern.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    url: { type: 'string', description: 'Địa chỉ URL cần đi tới (VD: https://youtube.com)' }
-                },
-                required: ['url']
-            }
-        },
-        execute: async (args, context) => {
-            if (!args.url)
-                return { content: 'Lỗi: Thiếu url.', isError: true };
-            try {
-                const data = await BrowserWindowUI.executeAgentCommand('NAVIGATE', { url: args.url });
-                return { content: `Thành công: ${data.message}. Gợi ý: Gọi browser_read_page để đọc nội dung trang web mới tải.` };
             }
             catch (error) {
                 return { content: `Lỗi: ${error.message}`, isError: true };
-            }
-        }
-    };
-
-    const browser_go_back = {
-        schema: {
-            name: 'browser_go_back',
-            description: 'Nhấn nút Quay lại (Back) trên Kaiz Browser để trở về trang web trước đó. Dành riêng cho trình duyệt tích hợp.',
-            parameters: {
-                type: 'object',
-                properties: {}
-            }
-        },
-        execute: async (args, context) => {
-            try {
-                const data = await BrowserWindowUI.executeAgentCommand('GO_BACK');
-                return { content: `Thành công: ${data.message}. Gợi ý: Gọi browser_read_page để đọc nội dung.` };
-            }
-            catch (error) {
-                return { content: `Lỗi: ${error.message}`, isError: true };
-            }
-        }
-    };
-
-    const browser_press_key = {
-        schema: {
-            name: 'browser_press_key',
-            description: 'Bấm một phím (VD: Enter) trên một phần tử đang chọn. Dùng để submit form tìm kiếm sau khi đã gọi browser_type_text. Dành riêng cho Kaiz Browser.',
-            parameters: {
-                type: 'object',
-                properties: {
-                    elementId: { type: 'number', description: 'ID của ô input/phần tử đang thao tác.' },
-                    key: { type: 'string', description: 'Tên phím cần bấm (Mặc định: Enter)' }
-                },
-                required: ['elementId']
-            }
-        },
-        execute: async (args, context) => {
-            if (!args.elementId)
-                return { content: 'Lỗi: Thiếu elementId.', isError: true };
-            const key = args.key || 'Enter';
-            try {
-                const data = await BrowserWindowUI.executeAgentCommand('PRESS_KEY', { elementId: args.elementId, key: key });
-                return { content: `Thành công: ${data.message}. Nếu phím Enter chuyển trang, hãy gọi browser_read_page để đọc trang mới.` };
-            }
-            catch (error) {
-                return { content: `Lỗi khi bấm phím: ${error.message}`, isError: true };
             }
         }
     };
@@ -4124,13 +4024,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         registry.registerTool(getTavernHelperScriptsTool);
         registry.registerTool(getTavernHelperScriptInfoTool);
         registry.registerTool(manageTavernHelperScriptTool);
-        registry.registerTool(browser_read_page);
-        registry.registerTool(browser_click_element);
-        registry.registerTool(browser_type_text);
-        registry.registerTool(browser_scroll);
-        registry.registerTool(browser_navigate);
-        registry.registerTool(browser_go_back);
-        registry.registerTool(browser_press_key);
+        registry.registerTool(browser_tools_manage);
     }
 
     /**
