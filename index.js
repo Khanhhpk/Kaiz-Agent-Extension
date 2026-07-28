@@ -50,7 +50,7 @@
             let schemas = this.toolRegistry.getAllSchemas();
             if (this.stateManager.currentWorkspace) {
                 const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
-                schemas = schemas.filter((s) => wsConfig[s.name] !== false);
+                schemas = schemas.filter((s) => wsConfig[s.name] === true);
             }
             else {
                 schemas = schemas.filter((s) => !disabledTools[s.name]);
@@ -7644,22 +7644,61 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     return;
                 $('#kaiz-ws-name').val(ws.name);
                 $('#kaiz-ws-prompt').val(ws.systemPrompt || '');
-                // Render tools list
-                const toolsList = $('#kaiz-ws-tools-list');
-                toolsList.empty();
-                const schemas = registry.getAllSchemas();
-                schemas.forEach(schema => {
-                    const isEnabled = ws.toolsConfig && ws.toolsConfig[schema.name] !== false; // Default true if not explicitly false, wait, earlier requirement says "độc lập với hệ thống on/off tools manager". So we can store boolean. Let's say if not present, it's true.
-                    const checkedStr = isEnabled ? 'checked' : '';
-                    toolsList.append(`
-                    <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:#ddd; cursor:pointer;">
-                        <input type="checkbox" class="kaiz-ws-tool-cb" data-tool="${escapeHtml$1(schema.name)}" ${checkedStr}>
-                        ${escapeHtml$1(schema.name)}
-                    </label>
-                `);
-                });
+                renderWsToolsUI(ws.toolsConfig || {});
                 $('#kaiz-workspace-settings-modal')[0].showModal();
             });
+            function renderWsToolsUI(toolsConfig) {
+                const toolsList = $('#kaiz-ws-tools-list');
+                toolsList.empty();
+                const allSchemas = registry.getAllSchemas();
+                const enabledTools = allSchemas.filter(s => toolsConfig[s.name] === true);
+                const availableTools = allSchemas.filter(s => toolsConfig[s.name] !== true);
+                // Render enabled tool chips
+                const chipsContainer = $('<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:32px;"></div>');
+                if (enabledTools.length === 0) {
+                    chipsContainer.append('<span style="color:#888; font-size:12px; align-self:center;">Chưa có tool nào. Thêm từ danh sách bên dưới.</span>');
+                }
+                enabledTools.forEach(schema => {
+                    const chip = $(`
+                    <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$1(schema.name)}" style="
+                        display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+                        background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
+                        border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
+                    ">
+                        ${escapeHtml$1(schema.name)}
+                        <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$1(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                    </span>
+                `);
+                    chipsContainer.append(chip);
+                });
+                // Dropdown thêm tool
+                const addRow = $('<div style="display:flex; gap:5px; margin-top:8px;"></div>');
+                const select = $(`<select class="text_pole" id="kaiz-ws-tool-add-select" style="flex:1; padding:4px;"><option value="">-- Chọn tool để thêm --</option></select>`);
+                availableTools.forEach(schema => {
+                    select.append(`<option value="${escapeHtml$1(schema.name)}">${escapeHtml$1(schema.name)}</option>`);
+                });
+                const addBtn = $('<button class="menu_button interactable" style="padding:4px 10px; height:auto;"><i class="fa-solid fa-plus"></i> Thêm</button>');
+                addRow.append(select, addBtn);
+                toolsList.append(chipsContainer, addRow);
+                // Add tool
+                addBtn.on('click', () => {
+                    const val = select.val();
+                    if (!val)
+                        return;
+                    toolsConfig[val] = true;
+                    renderWsToolsUI(toolsConfig);
+                });
+                // Remove tool chip
+                toolsList.on('click', '.kaiz-ws-tool-remove', function () {
+                    const toolName = $(this).attr('data-tool');
+                    if (toolName) {
+                        delete toolsConfig[toolName];
+                        renderWsToolsUI(toolsConfig);
+                    }
+                });
+                // Store toolsConfig reference on DOM for save
+                toolsList.data('toolsConfig', toolsConfig);
+            }
             $('#kaiz-workspace-settings-close').on('click', () => {
                 $('#kaiz-workspace-settings-modal')[0].close();
             });
@@ -7668,14 +7707,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     return;
                 const newName = String($('#kaiz-ws-name').val() || '').trim();
                 const newPrompt = String($('#kaiz-ws-prompt').val() || '');
-                const toolsConfig = {};
-                $('.kaiz-ws-tool-cb').each(function () {
-                    const toolName = $(this).attr('data-tool');
-                    const isChecked = $(this).is(':checked');
-                    if (toolName) {
-                        toolsConfig[toolName] = isChecked;
-                    }
-                });
+                // Lấy toolsConfig từ data đã được cập nhật bởi renderWsToolsUI
+                const toolsConfig = $('#kaiz-ws-tools-list').data('toolsConfig') || {};
                 if (newName) {
                     await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
                         name: newName,

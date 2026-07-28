@@ -78,7 +78,7 @@ export class AgentLoop {
 
         if (this.stateManager.currentWorkspace) {
             const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
-            schemas = schemas.filter((s) => wsConfig[s.name] !== false);
+            schemas = schemas.filter((s) => wsConfig[s.name] === true);
         } else {
             schemas = schemas.filter((s) => !disabledTools[s.name]);
         }
