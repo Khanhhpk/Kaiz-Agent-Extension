@@ -35,6 +35,10 @@ import { updateKaizExtensionTool } from './update_kaiz_extension';
 import { getTavernHelperScriptsTool } from './get_tavern_helper_scripts';
 import { getTavernHelperScriptInfoTool } from './get_tavern_helper_script_info';
 import { manageTavernHelperScriptTool } from './manage_tavern_helper_script';
+import { browser_read_page } from './browser_read_page';
+import { browser_click_element } from './browser_click_element';
+import { browser_type_text } from './browser_type_text';
+import { browser_scroll } from './browser_scroll';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -76,4 +80,8 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getTavernHelperScriptsTool);
     registry.registerTool(getTavernHelperScriptInfoTool);
     registry.registerTool(manageTavernHelperScriptTool);
+    registry.registerTool(browser_read_page);
+    registry.registerTool(browser_click_element);
+    registry.registerTool(browser_type_text);
+    registry.registerTool(browser_scroll);
 }

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Kaiz Browser Companion
 // @namespace    http://tampermonkey.net/
-// @version      3.0
-// @description  Hỗ trợ và tối ưu hóa Kaiz Browser trong SillyTavern. Hỗ trợ SPA, bắt URL, chống đá văng và trị Google.
+// @version      4.0
+// @description  Hỗ trợ Kaiz Browser. Computer Use Bridge cho Agent, SPA, bắt URL, chống đá văng và trị Google.
 // @author       Kaiz
 // @match        *://*/*
 // @grant        none
@@ -104,5 +104,123 @@
             }
         }
     }, true); // Dùng capture phase để chặn trước khi JS của web kịp chạy
+
+    // ==========================================
+    // TÍNH NĂNG 5: KAIZ AGENT COMPUTER USE BRIDGE
+    // ==========================================
+    window.kaizElementMap = new Map();
+    let nextElementId = 1;
+
+    const isElementVisible = (el) => {
+        const rect = el.getBoundingClientRect();
+        const style = window.getComputedStyle(el);
+        return rect.width > 0 && rect.height > 0 && 
+               style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0' &&
+               rect.top >= 0 && rect.left >= 0 &&
+               rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+               rect.right <= (window.innerWidth || document.documentElement.clientWidth);
+    };
+
+    window.addEventListener('message', (event) => {
+        if (event.source !== window.top) return;
+        if (!event.data || event.data.type !== 'KAIZ_AGENT_COMMAND') return;
+
+        const cmd = event.data.command;
+        const msgId = event.data.msgId;
+
+        const respond = (success, data, error) => {
+            window.top.postMessage({
+                type: 'KAIZ_AGENT_RESPONSE',
+                msgId: msgId,
+                success: success,
+                data: data,
+                error: error
+            }, '*');
+        };
+
+        try {
+            if (cmd === 'READ_PAGE') {
+                window.kaizElementMap.clear();
+                nextElementId = 1;
+                
+                const interactables = [];
+                // Chọn các phần tử tương tác
+                const elements = document.querySelectorAll('a, button, input, textarea, select, [role="button"], [onclick]');
+                
+                elements.forEach(el => {
+                    if (isElementVisible(el)) {
+                        const id = nextElementId++;
+                        window.kaizElementMap.set(id, el);
+                        
+                        let text = el.innerText || el.value || el.placeholder || el.getAttribute('aria-label') || el.getAttribute('title') || '';
+                        text = text.trim().substring(0, 100).replace(/\n/g, ' '); // Giới hạn độ dài, xóa xuống dòng
+                        
+                        let type = el.tagName.toLowerCase();
+                        if (type === 'input') type += `:${el.type}`;
+                        
+                        if (text || type === 'input:text' || type === 'input:password' || type === 'input:search' || type === 'textarea') {
+                            interactables.push(`[ID: ${id}] ${type} - ${text}`);
+                        }
+                    }
+                });
+
+                // Lấy nội dung text chính
+                let mainText = document.body.innerText;
+                // Giới hạn độ dài để không tràn token
+                if (mainText.length > 8000) {
+                    mainText = mainText.substring(0, 8000) + '... (trang quá dài, hãy cuộn xuống để xem thêm)';
+                }
+
+                respond(true, {
+                    url: location.href,
+                    title: document.title,
+                    interactables: interactables,
+                    mainText: mainText
+                });
+            }
+            else if (cmd === 'CLICK') {
+                const id = event.data.elementId;
+                const el = window.kaizElementMap.get(id);
+                if (el) {
+                    el.click();
+                    // Fallback focus nếu click không kích hoạt input
+                    if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) {
+                        el.focus();
+                    }
+                    respond(true, { message: `Clicked element [ID: ${id}]` });
+                } else {
+                    respond(false, null, `Element [ID: ${id}] not found or not in viewport.`);
+                }
+            }
+            else if (cmd === 'TYPE') {
+                const id = event.data.elementId;
+                const text = event.data.text;
+                const el = window.kaizElementMap.get(id);
+                if (el && ('value' in el)) {
+                    el.focus();
+                    el.value = text;
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                    el.dispatchEvent(new Event('change', { bubbles: true }));
+                    respond(true, { message: `Typed text into [ID: ${id}]` });
+                } else {
+                    respond(false, null, `Input element [ID: ${id}] not found or not editable.`);
+                }
+            }
+            else if (cmd === 'SCROLL') {
+                const dir = event.data.direction; // 'up' or 'down'
+                const amount = window.innerHeight * 0.8;
+                if (dir === 'up') {
+                    window.scrollBy(0, -amount);
+                } else {
+                    window.scrollBy(0, amount);
+                }
+                setTimeout(() => {
+                    respond(true, { message: `Scrolled ${dir}` });
+                }, 200); // Đợi scroll một chút để giao diện cập nhật
+            }
+        } catch (err) {
+            respond(false, null, err.message);
+        }
+    });
 
 })();

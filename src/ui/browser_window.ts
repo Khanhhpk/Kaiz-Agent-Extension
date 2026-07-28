@@ -21,6 +21,7 @@ export class BrowserWindowUI {
     
     private static tabs: BrowserTab[] = [];
     private static activeTabId: string | null = null;
+    private static agentCommandCallbacks = new Map<string, {resolve: Function, reject: Function, timer: any}>();
 
     public static init() {
         const $ = jQuery;
@@ -179,6 +180,17 @@ export class BrowserWindowUI {
                         activeTab.lastHistoryPushTime = now;
                     }
                 }
+            } else if (event.data && event.data.type === 'KAIZ_AGENT_RESPONSE') {
+                const cb = this.agentCommandCallbacks.get(event.data.msgId);
+                if (cb) {
+                    clearTimeout(cb.timer);
+                    this.agentCommandCallbacks.delete(event.data.msgId);
+                    if (event.data.success) {
+                        cb.resolve(event.data.data);
+                    } else {
+                        cb.reject(new Error(event.data.error || 'Unknown execution error'));
+                    }
+                }
             }
         });
         
@@ -303,6 +315,41 @@ export class BrowserWindowUI {
         }
         
         this.saveToGlobalHistory(url, url);
+    }
+
+    /**
+     * Executes a command on the active tab's iframe via Tampermonkey
+     */
+    public static executeAgentCommand(command: string, args: any = {}): Promise<any> {
+        return new Promise((resolve, reject) => {
+            if (!this.activeTabId) {
+                return reject(new Error('No active browser tab.'));
+            }
+            const activeTab = this.getActiveTab();
+            if (!activeTab || !activeTab.iframe.contentWindow) {
+                return reject(new Error('Iframe is not ready.'));
+            }
+
+            const msgId = 'cmd_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            const payload = {
+                type: 'KAIZ_AGENT_COMMAND',
+                command: command,
+                msgId: msgId,
+                ...args
+            };
+
+            const timer = setTimeout(() => {
+                if (this.agentCommandCallbacks.has(msgId)) {
+                    this.agentCommandCallbacks.delete(msgId);
+                    reject(new Error(`Command ${command} timed out after 10s. Vui lòng cài đặt script Tampermonkey v4.0 mới nhất.`));
+                }
+            }, 10000);
+
+            this.agentCommandCallbacks.set(msgId, { resolve, reject, timer });
+            
+            // Gửi lệnh xuống iframe
+            activeTab.iframe.contentWindow.postMessage(payload, '*');
+        });
     }
 
     private static saveToGlobalHistory(url: string, title: string) {
