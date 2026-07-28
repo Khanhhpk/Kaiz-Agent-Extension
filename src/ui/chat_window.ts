@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import { AgentLoop } from '../core/loop';
 import { StateManager } from '../core/state';
+import { ToolRegistry } from '../core/tool_registry';
 import { BackupModal } from './backup_modal';
 
 declare const jQuery: any;
@@ -17,7 +18,7 @@ declare const SillyTavern: any;
 export class ChatWindowUI {
     private static currentAttachments: import('../core/db').ChatAttachment[] = [];
 
-    public static init(loop: AgentLoop, stateManager: StateManager) {
+    public static init(loop: AgentLoop, stateManager: StateManager, registry: ToolRegistry) {
         const $ = jQuery;
         const btn = $('#kaiz-floating-btn');
         const win = $('#kaiz-chat-window');
@@ -384,6 +385,111 @@ export class ChatWindowUI {
         const chatTitle = $('#kaiz-chat-title');
 
         let isSidebarOpen = false;
+
+        // --- Workspace UI Logic ---
+        const wsSelect = $('#kaiz-workspace-select');
+        const wsSettingsBtn = $('#kaiz-workspace-settings-btn');
+        const wsAddBtn = $('#kaiz-workspace-add-btn');
+
+        stateManager.onWorkspacesListUpdated = (workspaces) => {
+            wsSelect.empty();
+            wsSelect.append('<option value="default">Default</option>');
+            for (const ws of workspaces) {
+                wsSelect.append(`<option value="${ws.id}">${escapeHtml(ws.name)}</option>`);
+            }
+            if (stateManager.currentWorkspaceId) {
+                wsSelect.val(stateManager.currentWorkspaceId.toString());
+            } else {
+                wsSelect.val('default');
+            }
+        };
+
+        stateManager.onWorkspaceSwitched = (ws) => {
+            if (ws) {
+                wsSelect.val(ws.id!.toString());
+                wsSettingsBtn.show();
+            } else {
+                wsSelect.val('default');
+                wsSettingsBtn.hide();
+            }
+        };
+
+        wsSelect.on('change', () => {
+            const val = wsSelect.val();
+            if (val === 'default') {
+                stateManager.switchWorkspace(null);
+            } else {
+                stateManager.switchWorkspace(parseInt(val as string, 10));
+            }
+        });
+
+        wsAddBtn.on('click', async () => {
+            const name = prompt('Nhập tên Workspace mới:');
+            if (name && name.trim()) {
+                await stateManager.createWorkspace(name.trim());
+            }
+        });
+
+        wsSettingsBtn.on('click', () => {
+            const ws = stateManager.currentWorkspace;
+            if (!ws) return;
+            $('#kaiz-ws-name').val(ws.name);
+            $('#kaiz-ws-prompt').val(ws.systemPrompt || '');
+            
+            // Render tools list
+            const toolsList = $('#kaiz-ws-tools-list');
+            toolsList.empty();
+            const schemas = registry.getAllSchemas();
+            schemas.forEach(schema => {
+                const isEnabled = ws.toolsConfig && ws.toolsConfig[schema.name] !== false; // Default true if not explicitly false, wait, earlier requirement says "độc lập với hệ thống on/off tools manager". So we can store boolean. Let's say if not present, it's true.
+                const checkedStr = isEnabled ? 'checked' : '';
+                toolsList.append(`
+                    <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:#ddd; cursor:pointer;">
+                        <input type="checkbox" class="kaiz-ws-tool-cb" data-tool="${escapeHtml(schema.name)}" ${checkedStr}>
+                        ${escapeHtml(schema.name)}
+                    </label>
+                `);
+            });
+
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).showModal();
+        });
+
+        $('#kaiz-workspace-settings-close').on('click', () => {
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+        });
+
+        $('#kaiz-ws-save-btn').on('click', async () => {
+            if (!stateManager.currentWorkspaceId) return;
+            const newName = String($('#kaiz-ws-name').val() || '').trim();
+            const newPrompt = String($('#kaiz-ws-prompt').val() || '');
+            
+            const toolsConfig: Record<string, boolean> = {};
+            $('.kaiz-ws-tool-cb').each(function(this: any) {
+                const toolName = $(this).attr('data-tool');
+                const isChecked = $(this).is(':checked');
+                if (toolName) {
+                    toolsConfig[toolName] = isChecked;
+                }
+            });
+
+            if (newName) {
+                await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
+                    name: newName,
+                    systemPrompt: newPrompt,
+                    toolsConfig: toolsConfig
+                });
+            }
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+        });
+
+        $('#kaiz-ws-delete-btn').on('click', async () => {
+            if (!stateManager.currentWorkspaceId) return;
+            if (confirm('Xóa Workspace này? (Các đoạn chat bên trong vẫn sẽ còn trong DB nhưng sẽ mồ côi hoặc không hiển thị, bạn có chắc không?)')) {
+                await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
+                ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+            }
+        });
+        // --------------------------
 
         // Toggle cửa sổ
         btn.on('click', (e: any) => {

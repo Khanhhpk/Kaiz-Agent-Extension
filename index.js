@@ -47,7 +47,14 @@
         generateSystemPrompt(maxSteps) {
             const ctx = window.SillyTavern.getContext();
             const disabledTools = ctx.extensionSettings?.kaiz_agent?.disabledTools || {};
-            const schemas = this.toolRegistry.getAllSchemas().filter((s) => !disabledTools[s.name]);
+            let schemas = this.toolRegistry.getAllSchemas();
+            if (this.stateManager.currentWorkspace) {
+                const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
+                schemas = schemas.filter((s) => wsConfig[s.name] !== false);
+            }
+            else {
+                schemas = schemas.filter((s) => !disabledTools[s.name]);
+            }
             let prompt = `Bạn là Kaiz Agent, một trợ lý AI được xây dựng để hoạt động bên trong môi trường SillyTavern.
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
 (LƯU Ý QUAN TRỌNG: SỐ MAX AGENT FLOW / AGENT LOOP HIỆN TẠI LÀ: ${maxSteps}. Hãy phân bổ kế hoạch thực thi công việc sao cho hợp lý trong giới hạn số vòng lặp này.)
@@ -139,6 +146,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 { role: 'system', content: layer2_workspace_permissions },
                 { role: 'system', content: cachedSystemPrompt },
             ];
+            if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
+                msgs.push({ role: 'system', content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}` });
+            }
             const ctx = window.SillyTavern.getContext();
             if (ctx.extensionSettings?.kaiz_agent) {
                 const persona = ctx.extensionSettings.kaiz_agent.persona;
@@ -5755,16 +5765,28 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 
     class KaizDB {
         dbName = 'KaizAgentDB';
-        dbVersion = 2;
+        dbVersion = 3;
         db = null;
         async init() {
             return new Promise((resolve, reject) => {
                 const request = indexedDB.open(this.dbName, this.dbVersion);
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
+                    if (!db.objectStoreNames.contains('workspaces')) {
+                        const wsStore = db.createObjectStore('workspaces', { keyPath: 'id', autoIncrement: true });
+                        wsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                    }
                     if (!db.objectStoreNames.contains('chats')) {
                         const chatStore = db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
                         chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                        chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                    }
+                    else if (event.oldVersion < 3) {
+                        const txn = event.target.transaction;
+                        const chatStore = txn.objectStore('chats');
+                        if (!chatStore.indexNames.contains('workspaceId')) {
+                            chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                        }
                     }
                     if (!db.objectStoreNames.contains('messages')) {
                         const msgStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
@@ -5787,15 +5809,83 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 };
             });
         }
+        // --- WORKSPACES ---
+        async createWorkspace(name) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readwrite');
+                const store = transaction.objectStore('workspaces');
+                const now = Date.now();
+                const ws = { name, systemPrompt: '', toolsConfig: {}, createdAt: now, updatedAt: now };
+                const request = store.add(ws);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+        async updateWorkspace(id, data) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readwrite');
+                const store = transaction.objectStore('workspaces');
+                const getReq = store.get(id);
+                getReq.onsuccess = () => {
+                    const ws = getReq.result;
+                    if (!ws)
+                        return reject(new Error('Workspace not found'));
+                    Object.assign(ws, data);
+                    ws.updatedAt = Date.now();
+                    const putReq = store.put(ws);
+                    putReq.onsuccess = () => resolve();
+                    putReq.onerror = () => reject(putReq.error);
+                };
+                getReq.onerror = () => reject(getReq.error);
+            });
+        }
+        async getAllWorkspaces() {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readonly');
+                const store = transaction.objectStore('workspaces');
+                const index = store.index('updatedAt');
+                const workspaces = [];
+                const request = index.openCursor(null, 'prev');
+                request.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        workspaces.push(cursor.value);
+                        cursor.continue();
+                    }
+                    else {
+                        resolve(workspaces);
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+        async deleteWorkspace(id) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                // Note: Does not delete chats inside the workspace currently
+                const transaction = this.db.transaction(['workspaces'], 'readwrite');
+                const store = transaction.objectStore('workspaces');
+                const request = store.delete(id);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
         // --- CHATS ---
-        async createChat(name) {
+        async createChat(name, workspaceId = null) {
             return new Promise((resolve, reject) => {
                 if (!this.db)
                     return reject(new Error('DB not initialized'));
                 const transaction = this.db.transaction(['chats'], 'readwrite');
                 const store = transaction.objectStore('chats');
                 const now = Date.now();
-                const chat = { name, createdAt: now, updatedAt: now };
+                const chat = { name, workspaceId, createdAt: now, updatedAt: now };
                 const request = store.add(chat);
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
@@ -5840,7 +5930,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 getReq.onerror = () => reject(getReq.error);
             });
         }
-        async getAllChats() {
+        async getAllChats(workspaceId = null) {
             return new Promise((resolve, reject) => {
                 if (!this.db)
                     return reject(new Error('DB not initialized'));
@@ -5852,7 +5942,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 request.onsuccess = (e) => {
                     const cursor = e.target.result;
                     if (cursor) {
-                        chats.push(cursor.value);
+                        const chat = cursor.value;
+                        const cWorkspaceId = chat.workspaceId ?? null;
+                        if (cWorkspaceId === workspaceId) {
+                            chats.push(chat);
+                        }
                         cursor.continue();
                     }
                     else {
@@ -5974,17 +6068,27 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
     class StateManager {
         db;
         currentChatId = null;
+        currentWorkspaceId = null;
+        currentWorkspace = null;
         pendingCreateChatPromise = null;
-        // Callbacks cho UI
         onChatSwitched;
         onChatsListUpdated;
         onChatRenamed;
+        onWorkspacesListUpdated;
+        onWorkspaceSwitched;
         constructor() {
             this.db = new KaizDB();
         }
         async init() {
             await this.db.init();
-            const chats = await this.db.getAllChats();
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            this.currentWorkspaceId = null;
+            this.currentWorkspace = null;
+            if (this.onWorkspaceSwitched)
+                this.onWorkspaceSwitched(null);
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             // Mặc định luôn là New Chat khi refresh trang
             this.currentChatId = null;
             if (this.onChatsListUpdated)
@@ -5997,10 +6101,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             let name = firstMessage.trim().substring(0, 30);
             if (firstMessage.length > 30)
                 name += '...';
-            const id = await this.db.createChat(name);
+            const id = await this.db.createChat(name, this.currentWorkspaceId);
             this.currentChatId = id;
             // Refresh list
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
             if (this.onChatSwitched)
@@ -6010,7 +6114,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         async switchChat(id) {
             this.currentChatId = id;
             const messages = await this.db.getMessages(id);
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
             if (this.onChatSwitched)
@@ -6038,24 +6142,24 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             }
             await this.db.addMessage(chatId, role, content, attachments);
             // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
         }
         async loadChatList() {
-            return await this.db.getAllChats();
+            return await this.db.getAllChats(this.currentWorkspaceId);
         }
         async updateChatName(id, name) {
             await this.db.updateChatName(id, name);
             if (this.onChatRenamed)
                 this.onChatRenamed(id, name);
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
         }
         async deleteChat(id) {
             await this.db.deleteChat(id);
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.currentChatId === id) {
                 if (chats.length > 0) {
                     await this.switchChat(chats[0].id);
@@ -6068,6 +6172,58 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             }
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
+        }
+        // --- WORKSPACE METHODS ---
+        async createWorkspace(name) {
+            const id = await this.db.createWorkspace(name);
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            await this.switchWorkspace(id);
+            return id;
+        }
+        async switchWorkspace(id) {
+            this.currentWorkspaceId = id;
+            if (id === null) {
+                this.currentWorkspace = null;
+            }
+            else {
+                const workspaces = await this.db.getAllWorkspaces();
+                this.currentWorkspace = workspaces.find((ws) => ws.id === id) || null;
+                if (!this.currentWorkspace) {
+                    this.currentWorkspaceId = null;
+                }
+            }
+            if (this.onWorkspaceSwitched)
+                this.onWorkspaceSwitched(this.currentWorkspace);
+            // Chuyển sang chat trống
+            this.currentChatId = null;
+            if (this.onChatSwitched)
+                this.onChatSwitched(-1, []);
+            // Load danh sách chat của workspace mới
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
+            if (this.onChatsListUpdated)
+                this.onChatsListUpdated(chats);
+        }
+        async updateWorkspace(id, data) {
+            await this.db.updateWorkspace(id, data);
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            if (this.currentWorkspaceId === id) {
+                this.currentWorkspace = workspaces.find((ws) => ws.id === id) || null;
+                if (this.onWorkspaceSwitched)
+                    this.onWorkspaceSwitched(this.currentWorkspace);
+            }
+        }
+        async deleteWorkspace(id) {
+            await this.db.deleteWorkspace(id);
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            if (this.currentWorkspaceId === id) {
+                await this.switchWorkspace(null);
+            }
         }
     }
 
@@ -7102,7 +7258,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         .replace(/'/g, '&#039;');
     class ChatWindowUI {
         static currentAttachments = [];
-        static init(loop, stateManager) {
+        static init(loop, stateManager, registry) {
             const $ = jQuery;
             const btn = $('#kaiz-floating-btn');
             const win = $('#kaiz-chat-window');
@@ -7440,6 +7596,104 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const chatList = $('#kaiz-chat-list');
             const chatTitle = $('#kaiz-chat-title');
             let isSidebarOpen = false;
+            // --- Workspace UI Logic ---
+            const wsSelect = $('#kaiz-workspace-select');
+            const wsSettingsBtn = $('#kaiz-workspace-settings-btn');
+            const wsAddBtn = $('#kaiz-workspace-add-btn');
+            stateManager.onWorkspacesListUpdated = (workspaces) => {
+                wsSelect.empty();
+                wsSelect.append('<option value="default">Default</option>');
+                for (const ws of workspaces) {
+                    wsSelect.append(`<option value="${ws.id}">${escapeHtml$1(ws.name)}</option>`);
+                }
+                if (stateManager.currentWorkspaceId) {
+                    wsSelect.val(stateManager.currentWorkspaceId.toString());
+                }
+                else {
+                    wsSelect.val('default');
+                }
+            };
+            stateManager.onWorkspaceSwitched = (ws) => {
+                if (ws) {
+                    wsSelect.val(ws.id.toString());
+                    wsSettingsBtn.show();
+                }
+                else {
+                    wsSelect.val('default');
+                    wsSettingsBtn.hide();
+                }
+            };
+            wsSelect.on('change', () => {
+                const val = wsSelect.val();
+                if (val === 'default') {
+                    stateManager.switchWorkspace(null);
+                }
+                else {
+                    stateManager.switchWorkspace(parseInt(val, 10));
+                }
+            });
+            wsAddBtn.on('click', async () => {
+                const name = prompt('Nhập tên Workspace mới:');
+                if (name && name.trim()) {
+                    await stateManager.createWorkspace(name.trim());
+                }
+            });
+            wsSettingsBtn.on('click', () => {
+                const ws = stateManager.currentWorkspace;
+                if (!ws)
+                    return;
+                $('#kaiz-ws-name').val(ws.name);
+                $('#kaiz-ws-prompt').val(ws.systemPrompt || '');
+                // Render tools list
+                const toolsList = $('#kaiz-ws-tools-list');
+                toolsList.empty();
+                const schemas = registry.getAllSchemas();
+                schemas.forEach(schema => {
+                    const isEnabled = ws.toolsConfig && ws.toolsConfig[schema.name] !== false; // Default true if not explicitly false, wait, earlier requirement says "độc lập với hệ thống on/off tools manager". So we can store boolean. Let's say if not present, it's true.
+                    const checkedStr = isEnabled ? 'checked' : '';
+                    toolsList.append(`
+                    <label style="display:flex; align-items:center; gap:5px; font-size:13px; color:#ddd; cursor:pointer;">
+                        <input type="checkbox" class="kaiz-ws-tool-cb" data-tool="${escapeHtml$1(schema.name)}" ${checkedStr}>
+                        ${escapeHtml$1(schema.name)}
+                    </label>
+                `);
+                });
+                $('#kaiz-workspace-settings-modal')[0].showModal();
+            });
+            $('#kaiz-workspace-settings-close').on('click', () => {
+                $('#kaiz-workspace-settings-modal')[0].close();
+            });
+            $('#kaiz-ws-save-btn').on('click', async () => {
+                if (!stateManager.currentWorkspaceId)
+                    return;
+                const newName = String($('#kaiz-ws-name').val() || '').trim();
+                const newPrompt = String($('#kaiz-ws-prompt').val() || '');
+                const toolsConfig = {};
+                $('.kaiz-ws-tool-cb').each(function () {
+                    const toolName = $(this).attr('data-tool');
+                    const isChecked = $(this).is(':checked');
+                    if (toolName) {
+                        toolsConfig[toolName] = isChecked;
+                    }
+                });
+                if (newName) {
+                    await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
+                        name: newName,
+                        systemPrompt: newPrompt,
+                        toolsConfig: toolsConfig
+                    });
+                }
+                $('#kaiz-workspace-settings-modal')[0].close();
+            });
+            $('#kaiz-ws-delete-btn').on('click', async () => {
+                if (!stateManager.currentWorkspaceId)
+                    return;
+                if (confirm('Xóa Workspace này? (Các đoạn chat bên trong vẫn sẽ còn trong DB nhưng sẽ mồ côi hoặc không hiển thị, bạn có chắc không?)')) {
+                    await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
+                    $('#kaiz-workspace-settings-modal')[0].close();
+                }
+            });
+            // --------------------------
             // Toggle cửa sổ
             btn.on('click', (e) => {
                 if (isDraggingBtn) {
@@ -8229,7 +8483,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const stateManager = new StateManager();
                 const loop = new AgentLoop(adapter, registry, stateManager);
                 // Gắn kết UI trước để đăng ký callback
-                ChatWindowUI.init(loop, stateManager);
+                ChatWindowUI.init(loop, stateManager, registry);
                 ToolCheckerUI.init(registry, adapter);
                 BrowserWindowUI.init();
                 // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)

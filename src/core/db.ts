@@ -1,5 +1,15 @@
+export interface Workspace {
+    id?: number;
+    name: string;
+    systemPrompt: string;
+    toolsConfig: Record<string, boolean>;
+    createdAt: number;
+    updatedAt: number;
+}
+
 export interface ChatSession {
     id?: number;
+    workspaceId?: number | null;
     name: string;
     createdAt: number;
     updatedAt: number;
@@ -30,7 +40,7 @@ export interface BackupEntry {
 
 export class KaizDB {
     private dbName = 'KaizAgentDB';
-    private dbVersion = 2;
+    private dbVersion = 3;
     private db: IDBDatabase | null = null;
 
     public async init(): Promise<void> {
@@ -40,9 +50,21 @@ export class KaizDB {
             request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
                 const db = (event.target as IDBOpenDBRequest).result;
 
+                if (!db.objectStoreNames.contains('workspaces')) {
+                    const wsStore = db.createObjectStore('workspaces', { keyPath: 'id', autoIncrement: true });
+                    wsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                }
+
                 if (!db.objectStoreNames.contains('chats')) {
                     const chatStore = db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
                     chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                    chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                } else if (event.oldVersion < 3) {
+                    const txn = (event.target as IDBOpenDBRequest).transaction;
+                    const chatStore = txn!.objectStore('chats');
+                    if (!chatStore.indexNames.contains('workspaceId')) {
+                        chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                    }
                 }
 
                 if (!db.objectStoreNames.contains('messages')) {
@@ -70,15 +92,85 @@ export class KaizDB {
         });
     }
 
+    // --- WORKSPACES ---
+
+    public async createWorkspace(name: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readwrite');
+            const store = transaction.objectStore('workspaces');
+            const now = Date.now();
+            const ws: Workspace = { name, systemPrompt: '', toolsConfig: {}, createdAt: now, updatedAt: now };
+
+            const request = store.add(ws);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async updateWorkspace(id: number, data: Partial<Workspace>): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readwrite');
+            const store = transaction.objectStore('workspaces');
+
+            const getReq = store.get(id);
+            getReq.onsuccess = () => {
+                const ws = getReq.result as Workspace;
+                if (!ws) return reject(new Error('Workspace not found'));
+                Object.assign(ws, data);
+                ws.updatedAt = Date.now();
+                const putReq = store.put(ws);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
+            };
+            getReq.onerror = () => reject(getReq.error);
+        });
+    }
+
+    public async getAllWorkspaces(): Promise<Workspace[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readonly');
+            const store = transaction.objectStore('workspaces');
+            const index = store.index('updatedAt');
+
+            const workspaces: Workspace[] = [];
+            const request = index.openCursor(null, 'prev');
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    workspaces.push(cursor.value as Workspace);
+                    cursor.continue();
+                } else {
+                    resolve(workspaces);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteWorkspace(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            // Note: Does not delete chats inside the workspace currently
+            const transaction = this.db.transaction(['workspaces'], 'readwrite');
+            const store = transaction.objectStore('workspaces');
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
     // --- CHATS ---
 
-    public async createChat(name: string): Promise<number> {
+    public async createChat(name: string, workspaceId: number | null = null): Promise<number> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['chats'], 'readwrite');
             const store = transaction.objectStore('chats');
             const now = Date.now();
-            const chat: ChatSession = { name, createdAt: now, updatedAt: now };
+            const chat: ChatSession = { name, workspaceId, createdAt: now, updatedAt: now };
 
             const request = store.add(chat);
             request.onsuccess = () => resolve(request.result as number);
@@ -125,7 +217,7 @@ export class KaizDB {
         });
     }
 
-    public async getAllChats(): Promise<ChatSession[]> {
+    public async getAllChats(workspaceId: number | null = null): Promise<ChatSession[]> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['chats'], 'readonly');
@@ -137,7 +229,11 @@ export class KaizDB {
             request.onsuccess = (e) => {
                 const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
                 if (cursor) {
-                    chats.push(cursor.value as ChatSession);
+                    const chat = cursor.value as ChatSession;
+                    const cWorkspaceId = chat.workspaceId ?? null;
+                    if (cWorkspaceId === workspaceId) {
+                        chats.push(chat);
+                    }
                     cursor.continue();
                 } else {
                     resolve(chats);

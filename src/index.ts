@@ -124,7 +124,7 @@ jQuery(async () => {
             const loop = new AgentLoop(adapter, registry, stateManager);
 
             // Gắn kết UI trước để đăng ký callback
-            ChatWindowUI.init(loop, stateManager);
+            ChatWindowUI.init(loop, stateManager, registry);
             ToolCheckerUI.init(registry, adapter);
             BrowserWindowUI.init();
 

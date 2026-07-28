@@ -74,7 +74,14 @@ export class AgentLoop {
     private generateSystemPrompt(maxSteps: number): string {
         const ctx = (window as any).SillyTavern.getContext();
         const disabledTools = ctx.extensionSettings?.kaiz_agent?.disabledTools || {};
-        const schemas = this.toolRegistry.getAllSchemas().filter((s) => !disabledTools[s.name]);
+        let schemas = this.toolRegistry.getAllSchemas();
+
+        if (this.stateManager.currentWorkspace) {
+            const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
+            schemas = schemas.filter((s) => wsConfig[s.name] !== false);
+        } else {
+            schemas = schemas.filter((s) => !disabledTools[s.name]);
+        }
 
         let prompt = `Bạn là Kaiz Agent, một trợ lý AI được xây dựng để hoạt động bên trong môi trường SillyTavern.
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
@@ -177,6 +184,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             { role: 'system', content: layer2_workspace_permissions },
             { role: 'system', content: cachedSystemPrompt },
         ];
+
+        if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
+            msgs.push({ role: 'system', content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}` });
+        }
 
         const ctx = (window as any).SillyTavern.getContext();
         if (ctx.extensionSettings?.kaiz_agent) {
