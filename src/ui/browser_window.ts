@@ -12,8 +12,8 @@ export class BrowserWindowUI {
     public static init() {
         const $ = jQuery;
         
-        // Tìm element chính xác để tránh dính cache DOM cũ nếu bị reload
-        this.$modal = $('.kaiz-browser-modal').last();
+        // Cập nhật: bây giờ nó là một phần của chat window, không phải modal riêng
+        this.$modal = $('#kaiz-browser-container').last();
         this.$address = this.$modal.find('.kaiz-browser-address');
 
         // Khởi tạo thẻ iframe động vì SillyTavern DOMPurify sẽ xóa thẻ <iframe> tĩnh trong file HTML
@@ -26,11 +26,13 @@ export class BrowserWindowUI {
             container.append(iframe);
         }
 
-        // Nút mở trình duyệt từ header chat
+        // Nút mở trình duyệt từ header chat (toggle split-screen)
         $('#kaiz-chat-browser-btn').on('click', () => {
-            const dialog = this.$modal[0] as HTMLDialogElement;
-            if (dialog && !dialog.open) {
-                dialog.showModal();
+            const $chatWindow = $('#kaiz-chat-window');
+            $chatWindow.toggleClass('kaiz-browser-mode');
+            
+            // Nếu vừa bật mode browser, thì load trang mặc định nếu đang trống
+            if ($chatWindow.hasClass('kaiz-browser-mode')) {
                 const iframe = this.$modal.find('iframe')[0] as HTMLIFrameElement;
                 if (iframe && iframe.src.includes('about:blank')) {
                     this.goToUrl('https://google.com');
@@ -40,10 +42,7 @@ export class BrowserWindowUI {
 
         // Đóng trình duyệt
         this.$modal.find('#kaiz-browser-close').on('click', () => {
-            const dialog = this.$modal[0] as HTMLDialogElement;
-            if (dialog && dialog.open) {
-                dialog.close();
-            }
+            $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
         });
 
         // Điều hướng

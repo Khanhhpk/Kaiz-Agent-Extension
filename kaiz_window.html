@@ -5,7 +5,31 @@
 
 <!-- Khung chat -->
 <dialog id="kaiz-chat-window" class="kaiz-chat-window">
-    <div class="kaiz-chat-header" id="kaiz-chat-header">
+    <div id="kaiz-browser-container" class="kaiz-browser-container" style="display: none; flex-direction: column; flex: 1; min-width: 0; overflow: hidden; position: relative; border-right: 1px solid rgba(255,255,255,0.1);">
+        <div class="kaiz-browser-header" style="height: 50px; flex-shrink: 0; z-index: 10;">
+            <div class="kaiz-browser-nav">
+                <i class="fa-solid fa-arrow-left interactable" id="kaiz-browser-back" title="Back"></i>
+                <i class="fa-solid fa-arrow-right interactable" id="kaiz-browser-forward" title="Forward"></i>
+                <i class="fa-solid fa-rotate-right interactable" id="kaiz-browser-reload" title="Reload"></i>
+            </div>
+            
+            <div class="kaiz-browser-address-container">
+                <input type="text" id="kaiz-browser-address" class="kaiz-browser-address text_pole" placeholder="Nhập URL (vd: google.com) và ấn Enter" />
+                <i class="fa-solid fa-share-nodes interactable" id="kaiz-browser-share" title="Share link to Kaiz"></i>
+            </div>
+
+            <div class="kaiz-browser-actions">
+                <i class="fa-solid fa-arrow-right-to-bracket interactable" id="kaiz-browser-go" title="Go"></i>
+                <i class="fa-solid fa-xmark interactable" id="kaiz-browser-close" title="Đóng"></i>
+            </div>
+        </div>
+        
+        <div class="kaiz-browser-content" id="kaiz-browser-iframe-container" style="flex: 1; min-height: 0; width: 100%; background-color: #ffffff; position: relative;">
+            <!-- Iframe sẽ được tạo bằng JS để tránh bị SillyTavern filter -->
+        </div>
+    </div>
+    <div id="kaiz-chat-container" class="kaiz-chat-container" style="display: flex; flex-direction: column; flex: 1; min-width: 0; position: relative; height: 100%;">
+        <div class="kaiz-chat-header" id="kaiz-chat-header">
         <div class="kaiz-header-title">
             <i
                 class="fa-solid fa-bars interactable"
@@ -124,6 +148,7 @@
             </button>
         </div>
     </div>
+    </div>
 </dialog>
 
 <!-- Persona & Memory Modal -->
@@ -220,32 +245,3 @@
     </div>
 </dialog>
 
-<!-- Browser Modal -->
-<dialog
-    id="kaiz-browser-modal"
-    class="kaiz-modal kaiz-browser-modal"
->
-    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden;">
-        <div class="kaiz-browser-header" style="height: 50px; flex-shrink: 0; z-index: 10;">
-            <div class="kaiz-browser-nav">
-                <i class="fa-solid fa-arrow-left interactable" id="kaiz-browser-back" title="Back"></i>
-                <i class="fa-solid fa-arrow-right interactable" id="kaiz-browser-forward" title="Forward"></i>
-                <i class="fa-solid fa-rotate-right interactable" id="kaiz-browser-reload" title="Reload"></i>
-            </div>
-            
-            <div class="kaiz-browser-address-container">
-                <input type="text" id="kaiz-browser-address" class="kaiz-browser-address text_pole" placeholder="Nhập URL (vd: google.com) và ấn Enter" />
-                <i class="fa-solid fa-share-nodes interactable" id="kaiz-browser-share" title="Share link to Kaiz"></i>
-            </div>
-
-            <div class="kaiz-browser-actions">
-                <i class="fa-solid fa-arrow-right-to-bracket interactable" id="kaiz-browser-go" title="Go"></i>
-                <i class="fa-solid fa-xmark interactable" id="kaiz-browser-close" title="Đóng"></i>
-            </div>
-        </div>
-        
-        <div class="kaiz-browser-content" id="kaiz-browser-iframe-container" style="flex: 1; min-height: 0; width: 100%; background-color: #ffffff; position: relative;">
-            <!-- Iframe sẽ được tạo bằng JS để tránh bị SillyTavern filter -->
-        </div>
-    </div>
-</dialog>

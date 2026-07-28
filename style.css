@@ -107,6 +107,46 @@
     margin: 0 !important;
 }
 
+/* Giao diện Split-Screen (Trình duyệt + Chat) */
+.kaiz-chat-window.kaiz-browser-mode {
+    width: 100vw !important;
+    height: 100vh !important;
+    max-width: none !important;
+    max-height: none !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    border-radius: 0 !important;
+    transform: none !important;
+    margin: 0 !important;
+    flex-direction: row;
+    background: rgba(20, 25, 35, 1); /* Nền đậm hơn khi mở full */
+}
+
+.kaiz-chat-window.kaiz-browser-mode #kaiz-browser-container {
+    display: flex !important; /* Ghi đè inline style none */
+}
+
+.kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
+    width: 400px;
+    flex: none;
+    border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@media (max-width: 900px) {
+    /* Màn hình nhỏ thì ưu tiên browser hoặc xếp chồng dọc */
+    .kaiz-chat-window.kaiz-browser-mode {
+        flex-direction: column;
+    }
+    .kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
+        width: 100%;
+        height: 35vh; /* Chat chiếm 35% bên dưới */
+        border-left: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+}
+
 /* Header */
 .kaiz-chat-header {
     padding: 16px 20px;
@@ -735,22 +775,10 @@
     color: #ddd;
 }
 
-/* Browser Modal */
-.kaiz-browser-modal {
-    width: 85vw;
-    height: 85vh;
-    max-width: 1400px;
+/* Browser Panel */
+.kaiz-browser-container {
+    /* Style for the browser container when inside split screen */
     background: rgba(20, 25, 35, 0.95);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    color: #ddd;
-    padding: 0;
-    backdrop-filter: blur(10px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-    overflow: hidden;
-}
-.kaiz-browser-modal:not([open]) {
-    display: none !important;
 }
 .kaiz-browser-header {
     display: flex;

@@ -7404,8 +7404,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         static lastHistoryPushTime = 0;
         static init() {
             const $ = jQuery;
-            // Tìm element chính xác để tránh dính cache DOM cũ nếu bị reload
-            this.$modal = $('.kaiz-browser-modal').last();
+            // Cập nhật: bây giờ nó là một phần của chat window, không phải modal riêng
+            this.$modal = $('#kaiz-browser-container').last();
             this.$address = this.$modal.find('.kaiz-browser-address');
             // Khởi tạo thẻ iframe động vì SillyTavern DOMPurify sẽ xóa thẻ <iframe> tĩnh trong file HTML
             const container = this.$modal.find('#kaiz-browser-iframe-container');
@@ -7416,11 +7416,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 iframe.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: block; z-index: 5;';
                 container.append(iframe);
             }
-            // Nút mở trình duyệt từ header chat
+            // Nút mở trình duyệt từ header chat (toggle split-screen)
             $('#kaiz-chat-browser-btn').on('click', () => {
-                const dialog = this.$modal[0];
-                if (dialog && !dialog.open) {
-                    dialog.showModal();
+                const $chatWindow = $('#kaiz-chat-window');
+                $chatWindow.toggleClass('kaiz-browser-mode');
+                // Nếu vừa bật mode browser, thì load trang mặc định nếu đang trống
+                if ($chatWindow.hasClass('kaiz-browser-mode')) {
                     const iframe = this.$modal.find('iframe')[0];
                     if (iframe && iframe.src.includes('about:blank')) {
                         this.goToUrl('https://google.com');
@@ -7429,10 +7430,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             });
             // Đóng trình duyệt
             this.$modal.find('#kaiz-browser-close').on('click', () => {
-                const dialog = this.$modal[0];
-                if (dialog && dialog.open) {
-                    dialog.close();
-                }
+                $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
             });
             // Điều hướng
             const go = () => {
