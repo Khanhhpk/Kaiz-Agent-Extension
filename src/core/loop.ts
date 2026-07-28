@@ -31,6 +31,7 @@ const SOFT_ABORT_MSG =
 export class AgentLoop {
     private _aborted = false;
     private _forceAborted = false;
+    private _isRunning = false;
     private _forceAbortReject: ((reason: any) => void) | null = null;
     private _safeModeReject: ((reason: any) => void) | null = null;
     private _currentAbortController: AbortController | null = null;
@@ -68,7 +69,7 @@ export class AgentLoop {
     }
 
     public get isRunning(): boolean {
-        return !this._aborted;
+        return this._isRunning;
     }
 
     private generateSystemPrompt(maxSteps: number): string {
@@ -298,9 +299,11 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         let reachedFinal = false;
         this._aborted = false;
         this._forceAborted = false;
+        this._isRunning = true;
 
-        while (step < maxSteps) {
-            // Kiểm tra cờ abort đầu mỗi vòng lặp
+        try {
+            while (step < maxSteps) {
+                // Kiểm tra cờ abort đầu mỗi vòng lặp
             if (this._aborted) {
                 if (this._forceAborted) {
                     await onEvent({ type: 'error', text: FORCE_ABORT_MSG });
@@ -550,6 +553,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
 
         if (step >= maxSteps && !reachedFinal) {
             await onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
+        }
+        } finally {
+            this._isRunning = false;
         }
     }
 }
