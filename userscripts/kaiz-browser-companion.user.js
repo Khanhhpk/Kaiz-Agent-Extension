@@ -1,4 +1,3 @@
-/* global window, document, location, history, MutationObserver, URLSearchParams, Event, KeyboardEvent, setTimeout */
 // ==UserScript==
 // @name         Kaiz Browser Companion
 // @namespace    http://tampermonkey.net/
@@ -280,4 +279,26 @@
             respond(false, null, err.message);
         }
     });
+
+    // ==========================================
+    // TÍNH NĂNG 6: NHẬN LỆNH DARK MODE TỪ BROWSER
+    // ==========================================
+    window.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'KAIZ_TOGGLE_DARK_MODE') {
+            let darkStyle = document.getElementById('kaiz-dark-mode-style');
+            if (darkStyle) {
+                darkStyle.remove();
+            } else {
+                darkStyle = document.createElement('style');
+                darkStyle.id = 'kaiz-dark-mode-style';
+                // Đảo ngược màu trang nhưng đảo ngược lại ảnh, video để giữ nguyên màu gốc
+                darkStyle.textContent = `
+                    html { filter: invert(0.9) hue-rotate(180deg) brightness(0.9) !important; background: white !important; }
+                    img, video, iframe, canvas, picture, svg { filter: invert(1) hue-rotate(180deg) !important; }
+                `;
+                document.documentElement.appendChild(darkStyle);
+            }
+        }
+    });
+
 })();

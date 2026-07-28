@@ -9,6 +9,7 @@
         stateManager;
         _aborted = false;
         _forceAborted = false;
+        _isRunning = false;
         _forceAbortReject = null;
         _safeModeReject = null;
         _currentAbortController = null;
@@ -42,12 +43,19 @@
             }
         }
         get isRunning() {
-            return !this._aborted;
+            return this._isRunning;
         }
         generateSystemPrompt(maxSteps) {
             const ctx = window.SillyTavern.getContext();
             const disabledTools = ctx.extensionSettings?.kaiz_agent?.disabledTools || {};
-            const schemas = this.toolRegistry.getAllSchemas().filter((s) => !disabledTools[s.name]);
+            let schemas = this.toolRegistry.getAllSchemas();
+            if (this.stateManager.currentWorkspace) {
+                const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
+                schemas = schemas.filter((s) => wsConfig[s.name] === true);
+            }
+            else {
+                schemas = schemas.filter((s) => !disabledTools[s.name]);
+            }
             let prompt = `Bạn là Kaiz Agent, một trợ lý AI được xây dựng để hoạt động bên trong môi trường SillyTavern.
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
 (LƯU Ý QUAN TRỌNG: SỐ MAX AGENT FLOW / AGENT LOOP HIỆN TẠI LÀ: ${maxSteps}. Hãy phân bổ kế hoạch thực thi công việc sao cho hợp lý trong giới hạn số vòng lặp này.)
@@ -139,6 +147,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 { role: 'system', content: layer2_workspace_permissions },
                 { role: 'system', content: cachedSystemPrompt },
             ];
+            if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
+                msgs.push({
+                    role: 'system',
+                    content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}`,
+                });
+            }
             const ctx = window.SillyTavern.getContext();
             if (ctx.extensionSettings?.kaiz_agent) {
                 const persona = ctx.extensionSettings.kaiz_agent.persona;
@@ -233,229 +247,235 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             let reachedFinal = false;
             this._aborted = false;
             this._forceAborted = false;
-            while (step < maxSteps) {
-                // Kiểm tra cờ abort đầu mỗi vòng lặp
-                if (this._aborted) {
-                    if (this._forceAborted) {
-                        await onEvent({ type: 'error', text: FORCE_ABORT_MSG });
-                        break;
-                    }
-                    await onEvent({ type: 'error', text: SOFT_ABORT_MSG });
-                    break;
-                }
-                step++;
-                await onEvent({ type: 'step_start' });
-                try {
-                    const messages = this.buildMessages(internalHistory, maxSteps, step, lastToolError, cachedSystemPrompt);
-                    let currentText = '';
-                    const extSettings = SillyTavern?.getContext?.()?.extensionSettings?.['kaiz_agent'] || {};
-                    const maxRetries = extSettings.maxRetries ?? 3;
-                    const retryDelay = extSettings.retryDelay || 3000;
-                    const rawKeywords = extSettings.retryKeywords || '';
-                    const retryKeywords = rawKeywords
-                        .split(',')
-                        .map((k) => k.trim().toLowerCase())
-                        .filter((k) => k);
-                    let retryCount = 0;
-                    let response = null;
-                    while (retryCount <= maxRetries) {
-                        try {
-                            this._currentAbortController = new AbortController();
-                            response = await Promise.race([
-                                this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
-                                    if (this._forceAborted)
-                                        return;
-                                    currentText = text;
-                                    await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                                }, this._currentAbortController.signal),
-                                new Promise((_, reject) => {
-                                    this._forceAbortReject = reject;
-                                }),
-                            ]);
-                            this._forceAbortReject = null;
-                            this._currentAbortController = null;
+            this._isRunning = true;
+            try {
+                while (step < maxSteps) {
+                    // Kiểm tra cờ abort đầu mỗi vòng lặp
+                    if (this._aborted) {
+                        if (this._forceAborted) {
+                            await onEvent({ type: 'error', text: FORCE_ABORT_MSG });
                             break;
                         }
-                        catch (e) {
-                            this._forceAbortReject = null;
-                            this._currentAbortController = null;
-                            const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
-                            if (isForceAbort) {
-                                throw e;
+                        await onEvent({ type: 'error', text: SOFT_ABORT_MSG });
+                        break;
+                    }
+                    step++;
+                    await onEvent({ type: 'step_start' });
+                    try {
+                        const messages = this.buildMessages(internalHistory, maxSteps, step, lastToolError, cachedSystemPrompt);
+                        let currentText = '';
+                        const extSettings = SillyTavern?.getContext?.()?.extensionSettings?.['kaiz_agent'] || {};
+                        const maxRetries = extSettings.maxRetries ?? 3;
+                        const retryDelay = extSettings.retryDelay || 3000;
+                        const rawKeywords = extSettings.retryKeywords || '';
+                        const retryKeywords = rawKeywords
+                            .split(',')
+                            .map((k) => k.trim().toLowerCase())
+                            .filter((k) => k);
+                        let retryCount = 0;
+                        let response = null;
+                        while (retryCount <= maxRetries) {
+                            try {
+                                this._currentAbortController = new AbortController();
+                                response = await Promise.race([
+                                    this.adapter.generateCompletion(messages, 1500, true, async (text, reasoning) => {
+                                        if (this._forceAborted)
+                                            return;
+                                        currentText = text;
+                                        await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+                                    }, this._currentAbortController.signal),
+                                    new Promise((_, reject) => {
+                                        this._forceAbortReject = reject;
+                                    }),
+                                ]);
+                                this._forceAbortReject = null;
+                                this._currentAbortController = null;
+                                break;
                             }
-                            const msgStr = (e.message || String(e)).toLowerCase();
-                            const shouldRetry = retryKeywords.length > 0 && retryKeywords.some((k) => msgStr.includes(k));
-                            if (shouldRetry && retryCount < maxRetries) {
-                                retryCount++;
-                                const displayMsg = `Lỗi: ${e.message || String(e)}. Thử lại sau ${retryDelay / 1000}s... (${retryCount}/${maxRetries})`;
-                                await onEvent({ type: 'retry', text: displayMsg });
-                                if (this._aborted)
-                                    throw e; // Don't sleep if already aborted
-                                try {
-                                    await Promise.race([
-                                        new Promise((r) => {
-                                            const checkInterval = setInterval(() => {
-                                                if (this._aborted || this._forceAborted) {
+                            catch (e) {
+                                this._forceAbortReject = null;
+                                this._currentAbortController = null;
+                                const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
+                                if (isForceAbort) {
+                                    throw e;
+                                }
+                                const msgStr = (e.message || String(e)).toLowerCase();
+                                const shouldRetry = retryKeywords.length > 0 && retryKeywords.some((k) => msgStr.includes(k));
+                                if (shouldRetry && retryCount < maxRetries) {
+                                    retryCount++;
+                                    const displayMsg = `Lỗi: ${e.message || String(e)}. Thử lại sau ${retryDelay / 1000}s... (${retryCount}/${maxRetries})`;
+                                    await onEvent({ type: 'retry', text: displayMsg });
+                                    if (this._aborted)
+                                        throw e; // Don't sleep if already aborted
+                                    try {
+                                        await Promise.race([
+                                            new Promise((r) => {
+                                                const checkInterval = setInterval(() => {
+                                                    if (this._aborted || this._forceAborted) {
+                                                        clearInterval(checkInterval);
+                                                        r();
+                                                    }
+                                                }, 100);
+                                                setTimeout(() => {
                                                     clearInterval(checkInterval);
                                                     r();
-                                                }
-                                            }, 100);
-                                            setTimeout(() => {
-                                                clearInterval(checkInterval);
-                                                r();
-                                            }, retryDelay);
+                                                }, retryDelay);
+                                            }),
+                                            new Promise((_, reject) => {
+                                                this._forceAbortReject = reject;
+                                            }),
+                                        ]);
+                                    }
+                                    catch (sleepErr) {
+                                        if (sleepErr.message === 'FORCE_ABORT') {
+                                            throw sleepErr;
+                                        }
+                                        throw e;
+                                    }
+                                    finally {
+                                        this._forceAbortReject = null;
+                                    }
+                                    if (this._aborted)
+                                        throw e; // Don't continue if aborted during sleep
+                                    continue;
+                                }
+                                else {
+                                    throw e;
+                                }
+                            }
+                        }
+                        await onEvent({ type: 'think_end', data: response.reasoning });
+                        const text = response.text;
+                        internalHistory.push({ role: 'assistant', content: text });
+                        await onEvent({
+                            type: 'debug',
+                            data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text },
+                        });
+                        const toolCalls = this.parseToolCalls(text);
+                        if (toolCalls.length === 0) {
+                            reachedFinal = true;
+                            await onEvent({ type: 'step_end', text: text, isFinal: true });
+                            break;
+                        }
+                        await onEvent({ type: 'step_end', text: text, isFinal: false });
+                        // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
+                        let resultsFormatted = '';
+                        let hasError = false;
+                        let isTerminalFound = false;
+                        for (let i = 0; i < toolCalls.length; i++) {
+                            if (this._forceAborted)
+                                throw new Error('FORCE_ABORT');
+                            const call = toolCalls[i];
+                            // --- SAFE MODE CHECK ---
+                            const ctx = window.SillyTavern.getContext();
+                            const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                            const safeMode = extSettings.safeMode;
+                            const safeModeBlacklist = extSettings.safeModeBlacklist || {};
+                            if (safeMode && safeModeBlacklist[call.name]) {
+                                let confirmResult = false;
+                                try {
+                                    confirmResult = await Promise.race([
+                                        new Promise((resolve) => {
+                                            onEvent({
+                                                type: 'tool_confirm',
+                                                data: { call, resolve },
+                                            });
+                                        }),
+                                        new Promise((_, reject) => {
+                                            this._safeModeReject = reject;
+                                        }),
+                                    ]);
+                                    this._safeModeReject = null;
+                                }
+                                catch (e) {
+                                    this._safeModeReject = null;
+                                    if (e.message === 'FORCE_ABORT')
+                                        throw e;
+                                    console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
+                                    const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
+                                    await onEvent({ type: 'error', text: msg });
+                                    break;
+                                }
+                                if (!confirmResult) {
+                                    const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                    await onEvent({ type: 'error', text: msg });
+                                    throw new Error('SAFE_MODE_REJECTED');
+                                }
+                            }
+                            // --- END SAFE MODE CHECK ---
+                            await onEvent({ type: 'tool_call', data: call });
+                            let result;
+                            if (call.parseError) {
+                                // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
+                                result = { content: call.parseError, isError: true };
+                            }
+                            else {
+                                try {
+                                    this._currentAbortController = new AbortController();
+                                    result = await Promise.race([
+                                        this.toolRegistry.executeTool(call.name, call.args, {
+                                            adapter: this.adapter,
+                                            stateManager: this.stateManager,
+                                            abortSignal: this._currentAbortController.signal,
                                         }),
                                         new Promise((_, reject) => {
                                             this._forceAbortReject = reject;
                                         }),
                                     ]);
                                 }
-                                catch (sleepErr) {
-                                    if (sleepErr.message === 'FORCE_ABORT') {
-                                        throw sleepErr;
-                                    }
-                                    throw e;
-                                }
                                 finally {
                                     this._forceAbortReject = null;
+                                    this._currentAbortController = null;
                                 }
-                                if (this._aborted)
-                                    throw e; // Don't continue if aborted during sleep
-                                continue;
                             }
-                            else {
-                                throw e;
+                            if (this._forceAborted)
+                                throw new Error('FORCE_ABORT');
+                            let isToolError = false;
+                            if (result.isError) {
+                                hasError = true;
+                                isToolError = true;
                             }
-                        }
-                    }
-                    await onEvent({ type: 'think_end', data: response.reasoning });
-                    const text = response.text;
-                    internalHistory.push({ role: 'assistant', content: text });
-                    await onEvent({
-                        type: 'debug',
-                        data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text },
-                    });
-                    const toolCalls = this.parseToolCalls(text);
-                    if (toolCalls.length === 0) {
-                        reachedFinal = true;
-                        await onEvent({ type: 'step_end', text: text, isFinal: true });
-                        break;
-                    }
-                    await onEvent({ type: 'step_end', text: text, isFinal: false });
-                    // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
-                    let resultsFormatted = '';
-                    let hasError = false;
-                    let isTerminalFound = false;
-                    for (let i = 0; i < toolCalls.length; i++) {
-                        if (this._forceAborted)
-                            throw new Error('FORCE_ABORT');
-                        const call = toolCalls[i];
-                        // --- SAFE MODE CHECK ---
-                        const ctx = window.SillyTavern.getContext();
-                        const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
-                        const safeMode = extSettings.safeMode;
-                        const safeModeBlacklist = extSettings.safeModeBlacklist || {};
-                        if (safeMode && safeModeBlacklist[call.name]) {
-                            let confirmResult = false;
-                            try {
-                                confirmResult = await Promise.race([
-                                    new Promise((resolve) => {
-                                        onEvent({
-                                            type: 'tool_confirm',
-                                            data: { call, resolve },
-                                        });
-                                    }),
-                                    new Promise((_, reject) => {
-                                        this._safeModeReject = reject;
-                                    }),
-                                ]);
-                                this._safeModeReject = null;
-                            }
-                            catch (e) {
-                                this._safeModeReject = null;
-                                if (e.message === 'FORCE_ABORT')
-                                    throw e;
-                                console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
-                                const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
-                                await onEvent({ type: 'error', text: msg });
+                            const statusText = isToolError ? '❌ LỖI (ERROR)' : '✅ THÀNH CÔNG (SUCCESS)';
+                            resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
+                            if (result.isTerminal) {
+                                isTerminalFound = true;
                                 break;
                             }
-                            if (!confirmResult) {
-                                const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
-                                await onEvent({ type: 'error', text: msg });
-                                throw new Error('SAFE_MODE_REJECTED');
-                            }
                         }
-                        // --- END SAFE MODE CHECK ---
-                        await onEvent({ type: 'tool_call', data: call });
-                        let result;
-                        if (call.parseError) {
-                            // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
-                            result = { content: call.parseError, isError: true };
-                        }
-                        else {
-                            try {
-                                this._currentAbortController = new AbortController();
-                                result = await Promise.race([
-                                    this.toolRegistry.executeTool(call.name, call.args, {
-                                        adapter: this.adapter,
-                                        stateManager: this.stateManager,
-                                        abortSignal: this._currentAbortController.signal,
-                                    }),
-                                    new Promise((_, reject) => {
-                                        this._forceAbortReject = reject;
-                                    }),
-                                ]);
-                            }
-                            finally {
-                                this._forceAbortReject = null;
-                                this._currentAbortController = null;
-                            }
-                        }
-                        if (this._forceAborted)
-                            throw new Error('FORCE_ABORT');
-                        let isToolError = false;
-                        if (result.isError) {
-                            hasError = true;
-                            isToolError = true;
-                        }
-                        const statusText = isToolError ? '❌ LỖI (ERROR)' : '✅ THÀNH CÔNG (SUCCESS)';
-                        resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
-                        if (result.isTerminal) {
-                            isTerminalFound = true;
+                        resultsFormatted = resultsFormatted.trim();
+                        const dbRawResult = `[Tool Result - ${hasError ? 'CÓ LỖI/ERROR' : 'THÀNH CÔNG'}]\n${resultsFormatted}`;
+                        lastToolError = hasError;
+                        await onEvent({
+                            type: 'tool_result',
+                            data: { name: 'Multiple Tools', result: resultsFormatted },
+                            text: dbRawResult,
+                        });
+                        internalHistory.push({ role: 'user', content: dbRawResult });
+                        if (isTerminalFound) {
+                            reachedFinal = true;
+                            this.abort();
                             break;
                         }
                     }
-                    resultsFormatted = resultsFormatted.trim();
-                    const dbRawResult = `[Tool Result - ${hasError ? 'CÓ LỖI/ERROR' : 'THÀNH CÔNG'}]\n${resultsFormatted}`;
-                    lastToolError = hasError;
-                    await onEvent({
-                        type: 'tool_result',
-                        data: { name: 'Multiple Tools', result: resultsFormatted },
-                        text: dbRawResult,
-                    });
-                    internalHistory.push({ role: 'user', content: dbRawResult });
-                    if (isTerminalFound) {
-                        reachedFinal = true;
-                        this.abort();
+                    catch (e) {
+                        this._forceAbortReject = null;
+                        this._currentAbortController = null;
+                        if (e.message === 'SAFE_MODE_REJECTED') {
+                            break;
+                        }
+                        const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
+                        const errorMsg = isForceAbort ? FORCE_ABORT_MSG : e.message || String(e);
+                        console.error('[AgentLoop] Error during completion:', e);
+                        await onEvent({ type: 'error', text: errorMsg });
                         break;
                     }
                 }
-                catch (e) {
-                    this._forceAbortReject = null;
-                    this._currentAbortController = null;
-                    if (e.message === 'SAFE_MODE_REJECTED') {
-                        break;
-                    }
-                    const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
-                    const errorMsg = isForceAbort ? FORCE_ABORT_MSG : e.message || String(e);
-                    console.error('[AgentLoop] Error during completion:', e);
-                    await onEvent({ type: 'error', text: errorMsg });
-                    break;
+                if (step >= maxSteps && !reachedFinal) {
+                    await onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
                 }
             }
-            if (step >= maxSteps && !reachedFinal) {
-                await onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
+            finally {
+                this._isRunning = false;
             }
         }
     }
@@ -1400,7 +1420,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const renameAgentChatTool = {
         schema: {
             name: 'rename_agent_chat',
-            description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. Operates within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {
@@ -1433,7 +1453,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const openNewAgentChatTool = {
         schema: {
             name: 'open_new_agent_chat',
-            description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1461,7 +1481,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const listAgentChatsTool = {
         schema: {
             name: 'list_agent_chats',
-            description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At) WITHIN the currently active Workspace. If in Default mode, lists all global chats. Use list_agent_workspaces first to understand the workspace structure. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1479,7 +1499,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     .map((c) => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`)
                     .join('\n');
                 return {
-                    content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}`,
+                    content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'} | Active Workspace: ${stateManager.currentWorkspaceId ? `ID ${stateManager.currentWorkspaceId} ("${stateManager.currentWorkspace?.name}")` : 'Default (global)'}`,
                 };
             }
             catch (e) {
@@ -1490,7 +1510,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const deleteAgentChatTool = {
         schema: {
             name: 'delete_agent_chat',
-            description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. Only deletes chats within the currently active Workspace scope. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {
@@ -3605,14 +3625,43 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     go();
                 }
             });
+            // Nút Reload
             this.$modal.find('#kaiz-browser-reload').on('click', () => {
-                const activeTab = this.getActiveTab();
-                if (activeTab && activeTab.iframe.src && !activeTab.iframe.src.includes('about:blank')) {
-                    const current = activeTab.iframe.src;
-                    activeTab.iframe.src = 'about:blank';
-                    setTimeout(() => {
-                        activeTab.iframe.src = current;
-                    }, 50);
+                if (this.activeTabId) {
+                    const tab = this.tabs.find((t) => t.id === this.activeTabId);
+                    if (tab && tab.iframe) {
+                        try {
+                            tab.iframe.contentWindow?.location.reload();
+                        }
+                        catch (e) {
+                            // eslint-disable-next-line no-self-assign
+                            tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
+                        }
+                    }
+                }
+            });
+            // Nút Dark Mode
+            this.$modal.find('#kaiz-browser-darkmode').on('click', function () {
+                const $btn = $(this);
+                if (BrowserWindowUI['activeTabId']) {
+                    const tab = BrowserWindowUI['tabs'].find((t) => t.id === BrowserWindowUI['activeTabId']);
+                    if (tab && tab.iframe) {
+                        if (tab.isDarkMode) {
+                            tab.isDarkMode = false;
+                            $btn.css('color', '');
+                        }
+                        else {
+                            tab.isDarkMode = true;
+                            $btn.css('color', '#f1c40f'); // Highlight button
+                        }
+                        try {
+                            tab.iframe.style.filter = ''; // Xóa hack CSS cũ
+                            tab.iframe.contentWindow?.postMessage({ type: 'KAIZ_TOGGLE_DARK_MODE' }, '*');
+                        }
+                        catch (e) {
+                            // Bỏ qua lỗi CORS
+                        }
+                    }
                 }
             });
             // Nút trang chủ
@@ -3734,7 +3783,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             iframe.src = url;
             iframe.setAttribute('sandbox', 'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads');
             iframe.style.cssText =
-                'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: none; z-index: 5;';
+                'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: transparent; display: none; z-index: 5; color-scheme: light dark;';
             this.$modal.find('#kaiz-browser-iframe-container').append(iframe);
             const newTab = {
                 id,
@@ -4096,6 +4145,106 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         },
     };
 
+    const listWorkspacesTool = {
+        schema: {
+            name: 'list_agent_workspaces',
+            description: 'List all existing Kaiz Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
+            parameters: { type: 'object', properties: {} },
+        },
+        execute: async (_args, context) => {
+            try {
+                const stateManager = context?.stateManager;
+                if (!stateManager)
+                    return { content: 'Error: StateManager not available.', isError: true };
+                const workspaces = await stateManager.db.getAllWorkspaces();
+                const currentId = stateManager.currentWorkspaceId;
+                if (workspaces.length === 0) {
+                    return {
+                        content: `No workspaces found.\nCurrent context: Default (global chat, all tools follow global settings).`,
+                    };
+                }
+                const lines = workspaces.map((ws) => {
+                    const enabledCount = Object.values(ws.toolsConfig || {}).filter(Boolean).length;
+                    const hasPrompt = ws.systemPrompt && ws.systemPrompt.trim() ? 'Yes' : 'No';
+                    const active = ws.id === currentId ? ' [ACTIVE]' : '';
+                    return `ID: ${ws.id} | Name: "${ws.name}" | Tools: ${enabledCount} | Custom Prompt: ${hasPrompt}${active}`;
+                });
+                const activeLabel = currentId
+                    ? `Workspace ID ${currentId} ("${stateManager.currentWorkspace?.name}")`
+                    : 'Default (global)';
+                return {
+                    content: `Found ${workspaces.length} workspace(s):\n${lines.join('\n')}\n\nCurrently active: ${activeLabel}`,
+                };
+            }
+            catch (e) {
+                return { content: `Error listing workspaces: ${e.message}`, isError: true };
+            }
+        },
+    };
+    const switchWorkspaceTool = {
+        schema: {
+            name: 'switch_agent_workspace',
+            description: 'Switch the current active Kaiz Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    workspaceId: {
+                        type: 'number',
+                        description: 'The ID of the workspace to switch to. Pass null or omit to switch back to Default (global) mode.',
+                    },
+                },
+            },
+        },
+        execute: async (args, context) => {
+            try {
+                const stateManager = context?.stateManager;
+                if (!stateManager)
+                    return { content: 'Error: StateManager not available.', isError: true };
+                const id = args.workspaceId ?? null;
+                await stateManager.switchWorkspace(id);
+                if (id === null) {
+                    return { content: 'Switched to Default (global) mode. A new blank chat is now active.' };
+                }
+                return {
+                    content: `Switched to Workspace ID ${id} ("${stateManager.currentWorkspace?.name || 'Unknown'}"). A new blank chat is now active.`,
+                };
+            }
+            catch (e) {
+                return { content: `Error switching workspace: ${e.message}`, isError: true };
+            }
+        },
+    };
+    const createWorkspaceTool = {
+        schema: {
+            name: 'create_agent_workspace',
+            description: 'Create a new Kaiz Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'The name for the new workspace.' },
+                },
+                required: ['name'],
+            },
+        },
+        execute: async (args, context) => {
+            try {
+                const stateManager = context?.stateManager;
+                if (!stateManager)
+                    return { content: 'Error: StateManager not available.', isError: true };
+                const name = String(args.name || '').trim();
+                if (!name)
+                    return { content: 'Error: Workspace name cannot be empty.', isError: true };
+                const id = await stateManager.createWorkspace(name);
+                return {
+                    content: `Successfully created Workspace "${name}" (ID: ${id}). Now switched into it. Tools and custom prompt can be configured via the Settings icon in the sidebar.`,
+                };
+            }
+            catch (e) {
+                return { content: `Error creating workspace: ${e.message}`, isError: true };
+            }
+        },
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -4136,6 +4285,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         registry.registerTool(getTavernHelperScriptInfoTool);
         registry.registerTool(manageTavernHelperScriptTool);
         registry.registerTool(browser_tools_manage);
+        registry.registerTool(listWorkspacesTool);
+        registry.registerTool(switchWorkspaceTool);
+        registry.registerTool(createWorkspaceTool);
     }
 
     /**
@@ -5727,16 +5879,28 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 
     class KaizDB {
         dbName = 'KaizAgentDB';
-        dbVersion = 2;
+        dbVersion = 3;
         db = null;
         async init() {
             return new Promise((resolve, reject) => {
                 const request = indexedDB.open(this.dbName, this.dbVersion);
                 request.onupgradeneeded = (event) => {
                     const db = event.target.result;
+                    if (!db.objectStoreNames.contains('workspaces')) {
+                        const wsStore = db.createObjectStore('workspaces', { keyPath: 'id', autoIncrement: true });
+                        wsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                    }
                     if (!db.objectStoreNames.contains('chats')) {
                         const chatStore = db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
                         chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                        chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                    }
+                    else if (event.oldVersion < 3) {
+                        const txn = event.target.transaction;
+                        const chatStore = txn.objectStore('chats');
+                        if (!chatStore.indexNames.contains('workspaceId')) {
+                            chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                        }
                     }
                     if (!db.objectStoreNames.contains('messages')) {
                         const msgStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
@@ -5749,8 +5913,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                         backupStore.createIndex('timestamp', 'timestamp', { unique: false });
                     }
                 };
-                request.onsuccess = (event) => {
+                request.onsuccess = async (event) => {
                     this.db = event.target.result;
+                    await this.ensureSystemWorkspaces();
                     resolve();
                 };
                 request.onerror = (event) => {
@@ -5759,15 +5924,198 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 };
             });
         }
+        async ensureSystemWorkspaces() {
+            const workspaces = await this.getAllWorkspaces();
+            const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
+            if (!roleplayWs) {
+                await this.createSystemWorkspace('roleplay', 'Roleplay & Story', `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`, ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input']);
+            }
+            const modderWs = workspaces.find((w) => w.systemId === 'modder');
+            if (!modderWs) {
+                await this.createSystemWorkspace('modder', 'Modding & Editor', `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`, [
+                    'get_char_info',
+                    'list_characters',
+                    'edit_character_card',
+                    'get_lorebook_info',
+                    'manage_lorebook_entry',
+                    'manage_worldbook',
+                    'get_regex_list',
+                    'get_regex_info',
+                    'manage_regex',
+                    'get_tavern_helper_scripts',
+                    'get_tavern_helper_script_info',
+                    'manage_tavern_helper_script',
+                    'get_user_persona',
+                    'edit_user_persona',
+                    'manage_chat_text',
+                    'manage_backup',
+                ]);
+            }
+        }
+        async createSystemWorkspace(systemId, name, systemPrompt, toolNames) {
+            const toolsConfig = {};
+            toolNames.forEach((t) => (toolsConfig[t] = true));
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readwrite');
+                const store = transaction.objectStore('workspaces');
+                const now = Date.now();
+                const ws = {
+                    systemId,
+                    name,
+                    systemPrompt,
+                    toolsConfig,
+                    createdAt: now,
+                    updatedAt: now,
+                };
+                const request = store.add(ws);
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject(request.error);
+            });
+        }
+        // --- WORKSPACES ---
+        async createWorkspace(name) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readwrite');
+                const store = transaction.objectStore('workspaces');
+                const now = Date.now();
+                const ws = { name, systemPrompt: '', toolsConfig: {}, createdAt: now, updatedAt: now };
+                const request = store.add(ws);
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+        async updateWorkspace(id, data) {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readwrite');
+                const store = transaction.objectStore('workspaces');
+                const getReq = store.get(id);
+                getReq.onsuccess = () => {
+                    const ws = getReq.result;
+                    if (!ws)
+                        return reject(new Error('Workspace not found'));
+                    Object.assign(ws, data);
+                    ws.updatedAt = Date.now();
+                    const putReq = store.put(ws);
+                    putReq.onsuccess = () => resolve();
+                    putReq.onerror = () => reject(putReq.error);
+                };
+                getReq.onerror = () => reject(getReq.error);
+            });
+        }
+        async getAllWorkspaces() {
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readonly');
+                const store = transaction.objectStore('workspaces');
+                const index = store.index('updatedAt');
+                const workspaces = [];
+                const request = index.openCursor(null, 'prev');
+                request.onsuccess = (e) => {
+                    const cursor = e.target.result;
+                    if (cursor) {
+                        workspaces.push(cursor.value);
+                        cursor.continue();
+                    }
+                    else {
+                        resolve(workspaces);
+                    }
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+        async deleteWorkspace(id) {
+            if (!this.db)
+                throw new Error('DB not initialized');
+            // Check if it's a system workspace
+            const workspaces = await this.getAllWorkspaces();
+            const ws = workspaces.find((w) => w.id === id);
+            if (ws && ws.systemId) {
+                throw new Error('Cannot delete a system workspace');
+            }
+            // Bước 1: Lấy danh sách chat trong workspace này
+            const chatsToDelete = await this.getAllChats(id);
+            // Bước 2: Xóa từng chat (và messages đi kèm)
+            for (const chat of chatsToDelete) {
+                if (chat.id) {
+                    await this.deleteChat(chat.id).catch(console.error);
+                }
+            }
+            // Bước 3: Xóa bản ghi workspace trong db
+            return new Promise((resolve, reject) => {
+                if (!this.db)
+                    return reject(new Error('DB not initialized'));
+                const transaction = this.db.transaction(['workspaces'], 'readwrite');
+                const store = transaction.objectStore('workspaces');
+                const req = store.delete(id);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        }
+        async resetSystemWorkspace(id) {
+            const workspaces = await this.getAllWorkspaces();
+            const ws = workspaces.find((w) => w.id === id);
+            if (!ws || !ws.systemId)
+                return;
+            let defaultName = '';
+            let defaultPrompt = '';
+            let defaultTools = [];
+            if (ws.systemId === 'roleplay') {
+                defaultName = 'Roleplay & Story';
+                defaultPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
+                defaultTools = [
+                    'get_char_info',
+                    'get_chat_history',
+                    'get_lorebook_info',
+                    'get_user_persona',
+                    'manage_user_input',
+                ];
+            }
+            else if (ws.systemId === 'modder') {
+                defaultName = 'Modding & Editor';
+                defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
+                defaultTools = [
+                    'get_char_info',
+                    'list_characters',
+                    'edit_character_card',
+                    'get_lorebook_info',
+                    'manage_lorebook_entry',
+                    'manage_worldbook',
+                    'get_regex_list',
+                    'get_regex_info',
+                    'manage_regex',
+                    'get_tavern_helper_scripts',
+                    'get_tavern_helper_script_info',
+                    'manage_tavern_helper_script',
+                    'get_user_persona',
+                    'edit_user_persona',
+                    'manage_chat_text',
+                    'manage_backup',
+                ];
+            }
+            const toolsConfig = {};
+            defaultTools.forEach((t) => (toolsConfig[t] = true));
+            return this.updateWorkspace(id, {
+                name: defaultName,
+                systemPrompt: defaultPrompt,
+                toolsConfig,
+            });
+        }
         // --- CHATS ---
-        async createChat(name) {
+        async createChat(name, workspaceId = null) {
             return new Promise((resolve, reject) => {
                 if (!this.db)
                     return reject(new Error('DB not initialized'));
                 const transaction = this.db.transaction(['chats'], 'readwrite');
                 const store = transaction.objectStore('chats');
                 const now = Date.now();
-                const chat = { name, createdAt: now, updatedAt: now };
+                const chat = { name, workspaceId, createdAt: now, updatedAt: now };
                 const request = store.add(chat);
                 request.onsuccess = () => resolve(request.result);
                 request.onerror = () => reject(request.error);
@@ -5812,7 +6160,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 getReq.onerror = () => reject(getReq.error);
             });
         }
-        async getAllChats() {
+        async getAllChats(workspaceId = null) {
             return new Promise((resolve, reject) => {
                 if (!this.db)
                     return reject(new Error('DB not initialized'));
@@ -5824,7 +6172,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 request.onsuccess = (e) => {
                     const cursor = e.target.result;
                     if (cursor) {
-                        chats.push(cursor.value);
+                        const chat = cursor.value;
+                        const cWorkspaceId = chat.workspaceId ?? null;
+                        if (cWorkspaceId === workspaceId) {
+                            chats.push(chat);
+                        }
                         cursor.continue();
                     }
                     else {
@@ -5946,17 +6298,27 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
     class StateManager {
         db;
         currentChatId = null;
+        currentWorkspaceId = null;
+        currentWorkspace = null;
         pendingCreateChatPromise = null;
-        // Callbacks cho UI
         onChatSwitched;
         onChatsListUpdated;
         onChatRenamed;
+        onWorkspacesListUpdated;
+        onWorkspaceSwitched;
         constructor() {
             this.db = new KaizDB();
         }
         async init() {
             await this.db.init();
-            const chats = await this.db.getAllChats();
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            this.currentWorkspaceId = null;
+            this.currentWorkspace = null;
+            if (this.onWorkspaceSwitched)
+                this.onWorkspaceSwitched(null);
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             // Mặc định luôn là New Chat khi refresh trang
             this.currentChatId = null;
             if (this.onChatsListUpdated)
@@ -5969,10 +6331,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             let name = firstMessage.trim().substring(0, 30);
             if (firstMessage.length > 30)
                 name += '...';
-            const id = await this.db.createChat(name);
+            const id = await this.db.createChat(name, this.currentWorkspaceId);
             this.currentChatId = id;
             // Refresh list
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
             if (this.onChatSwitched)
@@ -5982,7 +6344,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         async switchChat(id) {
             this.currentChatId = id;
             const messages = await this.db.getMessages(id);
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
             if (this.onChatSwitched)
@@ -6010,24 +6372,24 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             }
             await this.db.addMessage(chatId, role, content, attachments);
             // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
         }
         async loadChatList() {
-            return await this.db.getAllChats();
+            return await this.db.getAllChats(this.currentWorkspaceId);
         }
         async updateChatName(id, name) {
             await this.db.updateChatName(id, name);
             if (this.onChatRenamed)
                 this.onChatRenamed(id, name);
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
         }
         async deleteChat(id) {
             await this.db.deleteChat(id);
-            const chats = await this.db.getAllChats();
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
             if (this.currentChatId === id) {
                 if (chats.length > 0) {
                     await this.switchChat(chats[0].id);
@@ -6040,6 +6402,58 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             }
             if (this.onChatsListUpdated)
                 this.onChatsListUpdated(chats);
+        }
+        // --- WORKSPACE METHODS ---
+        async createWorkspace(name) {
+            const id = await this.db.createWorkspace(name);
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            await this.switchWorkspace(id);
+            return id;
+        }
+        async switchWorkspace(id) {
+            this.currentWorkspaceId = id;
+            if (id === null) {
+                this.currentWorkspace = null;
+            }
+            else {
+                const workspaces = await this.db.getAllWorkspaces();
+                this.currentWorkspace = workspaces.find((ws) => ws.id === id) || null;
+                if (!this.currentWorkspace) {
+                    this.currentWorkspaceId = null;
+                }
+            }
+            if (this.onWorkspaceSwitched)
+                this.onWorkspaceSwitched(this.currentWorkspace);
+            // Chuyển sang chat trống
+            this.currentChatId = null;
+            if (this.onChatSwitched)
+                this.onChatSwitched(-1, []);
+            // Load danh sách chat của workspace mới
+            const chats = await this.db.getAllChats(this.currentWorkspaceId);
+            if (this.onChatsListUpdated)
+                this.onChatsListUpdated(chats);
+        }
+        async updateWorkspace(id, data) {
+            await this.db.updateWorkspace(id, data);
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            if (this.currentWorkspaceId === id) {
+                this.currentWorkspace = workspaces.find((ws) => ws.id === id) || null;
+                if (this.onWorkspaceSwitched)
+                    this.onWorkspaceSwitched(this.currentWorkspace);
+            }
+        }
+        async deleteWorkspace(id) {
+            await this.db.deleteWorkspace(id);
+            const workspaces = await this.db.getAllWorkspaces();
+            if (this.onWorkspacesListUpdated)
+                this.onWorkspacesListUpdated(workspaces);
+            if (this.currentWorkspaceId === id) {
+                await this.switchWorkspace(null);
+            }
         }
     }
 
@@ -6704,10 +7118,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                     }
                     else {
                         if (!scriptDetected) {
-                            $xframeCheck.html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test').css('color', '#e67e22');
+                            $xframeCheck
+                                .html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test')
+                                .css('color', '#e67e22');
                         }
                         else {
-                            $xframeCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)').css('color', '#e74c3c');
+                            $xframeCheck
+                                .html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)')
+                                .css('color', '#e74c3c');
                         }
                     }
                 }, 2000);
@@ -7074,7 +7492,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         .replace(/'/g, '&#039;');
     class ChatWindowUI {
         static currentAttachments = [];
-        static init(loop, stateManager) {
+        static init(loop, stateManager, registry) {
             const $ = jQuery;
             const btn = $('#kaiz-floating-btn');
             const win = $('#kaiz-chat-window');
@@ -7412,6 +7830,210 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const chatList = $('#kaiz-chat-list');
             const chatTitle = $('#kaiz-chat-title');
             let isSidebarOpen = false;
+            // --- Workspace UI Logic ---
+            const wsSelect = $('#kaiz-workspace-select');
+            const wsSettingsBtn = $('#kaiz-workspace-settings-btn');
+            const wsAddBtn = $('#kaiz-workspace-add-btn');
+            stateManager.onWorkspacesListUpdated = (workspaces) => {
+                wsSelect.empty();
+                wsSelect.append('<option value="default">Default</option>');
+                for (const ws of workspaces) {
+                    wsSelect.append(`<option value="${ws.id}">${escapeHtml$1(ws.name)}</option>`);
+                }
+                if (stateManager.currentWorkspaceId) {
+                    wsSelect.val(stateManager.currentWorkspaceId.toString());
+                }
+                else {
+                    wsSelect.val('default');
+                }
+            };
+            stateManager.onWorkspaceSwitched = (ws) => {
+                if (ws) {
+                    wsSelect.val(ws.id.toString());
+                    wsSettingsBtn.show();
+                }
+                else {
+                    wsSelect.val('default');
+                    wsSettingsBtn.hide();
+                }
+            };
+            wsSelect.on('change', () => {
+                if (loop.isRunning) {
+                    wsSelect.val(stateManager.currentWorkspaceId ? stateManager.currentWorkspaceId.toString() : 'default');
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Kaiz Agent');
+                    return;
+                }
+                const val = wsSelect.val();
+                if (val === 'default') {
+                    stateManager.switchWorkspace(null);
+                }
+                else {
+                    stateManager.switchWorkspace(parseInt(val, 10));
+                }
+            });
+            wsAddBtn.on('click', async () => {
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Kaiz Agent');
+                    return;
+                }
+                const name = prompt('Nhập tên Workspace mới:');
+                if (name && name.trim()) {
+                    await stateManager.createWorkspace(name.trim());
+                }
+            });
+            wsSettingsBtn.on('click', () => {
+                const ws = stateManager.currentWorkspace;
+                if (!ws)
+                    return;
+                $('#kaiz-ws-name').val(ws.name);
+                $('#kaiz-ws-prompt').val(ws.systemPrompt || '');
+                const delBtn = $('#kaiz-ws-delete-btn');
+                if (ws.systemId) {
+                    delBtn.html('<i class="fa-solid fa-rotate-left"></i> Khôi phục mặc định');
+                    delBtn.css({ color: '#f39c12', borderColor: 'rgba(243, 156, 18, 0.3)' });
+                }
+                else {
+                    delBtn.html('<i class="fa-solid fa-trash"></i> Xóa Workspace');
+                    delBtn.css({ color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' });
+                }
+                renderWsToolsUI(ws.toolsConfig || {});
+                $('#kaiz-workspace-settings-modal')[0].showModal();
+            });
+            function renderWsToolsUI(toolsConfig) {
+                const toolsList = $('#kaiz-ws-tools-list');
+                toolsList.empty();
+                const allSchemas = registry.getAllSchemas();
+                // --- Chips (tools đang được bật) ---
+                const chipsContainer = $('<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>');
+                // --- Ô search ---
+                const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`);
+                // --- Result list (luôn hiện, mặc định = tất cả) ---
+                const resultList = $(`<div style="max-height:140px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`);
+                toolsList.append(chipsContainer, searchInput, resultList);
+                toolsList.data('toolsConfig', toolsConfig);
+                function refreshChips() {
+                    chipsContainer.empty();
+                    const enabled = allSchemas.filter((s) => toolsConfig[s.name] === true);
+                    if (enabled.length === 0) {
+                        chipsContainer.append('<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>');
+                        return;
+                    }
+                    enabled.forEach((schema) => {
+                        const chip = $(`
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$1(schema.name)}" style="
+                            display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+                            background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
+                            border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
+                        ">
+                            ${escapeHtml$1(schema.name)}
+                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$1(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                        </span>
+                    `);
+                        chipsContainer.append(chip);
+                    });
+                }
+                function refreshResults(query) {
+                    resultList.empty();
+                    const available = allSchemas.filter((s) => toolsConfig[s.name] !== true);
+                    const q = query.trim().toLowerCase();
+                    const matches = q
+                        ? available.filter((s) => s.name.toLowerCase().includes(q) ||
+                            (s.description && s.description.toLowerCase().includes(q)))
+                        : available;
+                    if (matches.length === 0) {
+                        resultList.append('<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>');
+                        return;
+                    }
+                    matches.forEach((schema) => {
+                        const item = $(`
+                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$1(schema.name)}" style="
+                            padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
+                            border-bottom:1px solid rgba(255,255,255,0.04);
+                        ">
+                            <span style="color:#fff; font-weight:500;">${escapeHtml$1(schema.name)}</span>
+                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$1(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
+                        </div>
+                    `);
+                        item.on('mouseenter', function () {
+                            $(this).css('background', 'rgba(255,255,255,0.07)');
+                        });
+                        item.on('mouseleave', function () {
+                            $(this).css('background', '');
+                        });
+                        item.on('click', () => {
+                            toolsConfig[schema.name] = true;
+                            toolsList.data('toolsConfig', toolsConfig);
+                            refreshChips();
+                            // Giữ nguyên filter hiện tại, chỉ refresh results
+                            refreshResults(String(searchInput.val() || ''));
+                        });
+                        resultList.append(item);
+                    });
+                }
+                // Chip remove — dùng event delegation trên chipsContainer
+                chipsContainer.on('click', '.kaiz-ws-tool-remove', function () {
+                    const toolName = $(this).attr('data-tool');
+                    if (toolName) {
+                        delete toolsConfig[toolName];
+                        toolsList.data('toolsConfig', toolsConfig);
+                        refreshChips();
+                        refreshResults(String(searchInput.val() || ''));
+                    }
+                });
+                searchInput.on('input', function () {
+                    refreshResults(String($(this).val() || ''));
+                });
+                // Render lần đầu
+                refreshChips();
+                refreshResults('');
+            }
+            $('#kaiz-workspace-settings-close').on('click', () => {
+                $('#kaiz-workspace-settings-modal')[0].close();
+            });
+            $('#kaiz-ws-save-btn').on('click', async () => {
+                if (!stateManager.currentWorkspaceId)
+                    return;
+                const newName = String($('#kaiz-ws-name').val() || '').trim();
+                const newPrompt = String($('#kaiz-ws-prompt').val() || '');
+                // Lấy toolsConfig từ data đã được cập nhật bởi renderWsToolsUI
+                const toolsConfig = $('#kaiz-ws-tools-list').data('toolsConfig') || {};
+                if (newName) {
+                    await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
+                        name: newName,
+                        systemPrompt: newPrompt,
+                        toolsConfig: toolsConfig,
+                    });
+                }
+                $('#kaiz-workspace-settings-modal')[0].close();
+            });
+            $('#kaiz-ws-delete-btn').on('click', async () => {
+                if (!stateManager.currentWorkspaceId)
+                    return;
+                const ws = stateManager.currentWorkspace;
+                if (!ws)
+                    return;
+                const wsName = ws.name || 'này';
+                if (ws.systemId) {
+                    if (confirm(`Khôi phục Workspace "${wsName}" về trạng thái mặc định gốc?\n\nTên, Prompt và Danh sách Tools sẽ bị reset. (Lịch sử chat VẪN ĐƯỢC GIỮ NGUYÊN).`)) {
+                        await stateManager.db.resetSystemWorkspace(stateManager.currentWorkspaceId);
+                        const workspaces = await stateManager.db.getAllWorkspaces();
+                        if (stateManager.onWorkspacesListUpdated)
+                            stateManager.onWorkspacesListUpdated(workspaces);
+                        stateManager.currentWorkspace =
+                            workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
+                        if (stateManager.onWorkspaceSwitched)
+                            stateManager.onWorkspaceSwitched(stateManager.currentWorkspace);
+                        $('#kaiz-workspace-settings-modal')[0].close();
+                    }
+                }
+                else {
+                    if (confirm(`Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`)) {
+                        await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
+                        $('#kaiz-workspace-settings-modal')[0].close();
+                    }
+                }
+            });
+            // --------------------------
             // Toggle cửa sổ
             btn.on('click', (e) => {
                 if (isDraggingBtn) {
@@ -7484,6 +8106,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             menuBtn.on('click', toggleSidebar);
             // New Chat
             newChatBtn.on('click', async () => {
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Kaiz Agent');
+                    return;
+                }
                 history.empty();
                 // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
                 stateManager.currentChatId = null;
@@ -7497,6 +8123,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             chatList.on('click', '.kaiz-chat-item', function (e) {
                 if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit'))
                     return; // Bỏ qua nếu click nút xóa hoặc sửa
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Kaiz Agent');
+                    return;
+                }
                 const id = parseInt($(this).attr('data-id') || '0', 10);
                 if (id) {
                     stateManager.switchChat(id);
@@ -7506,6 +8136,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             });
             chatList.on('click', '.kaiz-chat-delete', async function (e) {
                 e.stopPropagation();
+                if (loop.isRunning) {
+                    toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Kaiz Agent');
+                    return;
+                }
                 const id = parseInt($(this).attr('data-id') || '0', 10);
                 if (id) {
                     if (confirm('Delete this chat?')) {
@@ -8201,7 +8835,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const stateManager = new StateManager();
                 const loop = new AgentLoop(adapter, registry, stateManager);
                 // Gắn kết UI trước để đăng ký callback
-                ChatWindowUI.init(loop, stateManager);
+                ChatWindowUI.init(loop, stateManager, registry);
                 ToolCheckerUI.init(registry, adapter);
                 BrowserWindowUI.init();
                 // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)

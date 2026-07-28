@@ -31,6 +31,7 @@ const SOFT_ABORT_MSG =
 export class AgentLoop {
     private _aborted = false;
     private _forceAborted = false;
+    private _isRunning = false;
     private _forceAbortReject: ((reason: any) => void) | null = null;
     private _safeModeReject: ((reason: any) => void) | null = null;
     private _currentAbortController: AbortController | null = null;
@@ -68,13 +69,20 @@ export class AgentLoop {
     }
 
     public get isRunning(): boolean {
-        return !this._aborted;
+        return this._isRunning;
     }
 
     private generateSystemPrompt(maxSteps: number): string {
         const ctx = (window as any).SillyTavern.getContext();
         const disabledTools = ctx.extensionSettings?.kaiz_agent?.disabledTools || {};
-        const schemas = this.toolRegistry.getAllSchemas().filter((s) => !disabledTools[s.name]);
+        let schemas = this.toolRegistry.getAllSchemas();
+
+        if (this.stateManager.currentWorkspace) {
+            const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
+            schemas = schemas.filter((s) => wsConfig[s.name] === true);
+        } else {
+            schemas = schemas.filter((s) => !disabledTools[s.name]);
+        }
 
         let prompt = `Bạn là Kaiz Agent, một trợ lý AI được xây dựng để hoạt động bên trong môi trường SillyTavern.
 Bạn có thể giúp người dùng bằng cách trả lời câu hỏi, trò chuyện, hoặc sử dụng các công cụ (tools) để tương tác với SillyTavern.
@@ -177,6 +185,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             { role: 'system', content: layer2_workspace_permissions },
             { role: 'system', content: cachedSystemPrompt },
         ];
+
+        if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
+            msgs.push({
+                role: 'system',
+                content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}`,
+            });
+        }
 
         const ctx = (window as any).SillyTavern.getContext();
         if (ctx.extensionSettings?.kaiz_agent) {
@@ -284,258 +299,269 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         let reachedFinal = false;
         this._aborted = false;
         this._forceAborted = false;
+        this._isRunning = true;
 
-        while (step < maxSteps) {
-            // Kiểm tra cờ abort đầu mỗi vòng lặp
-            if (this._aborted) {
-                if (this._forceAborted) {
-                    await onEvent({ type: 'error', text: FORCE_ABORT_MSG });
-                    break;
-                }
-                await onEvent({ type: 'error', text: SOFT_ABORT_MSG });
-                break;
-            }
-            step++;
-            await onEvent({ type: 'step_start' });
-
-            try {
-                const messages = this.buildMessages(internalHistory, maxSteps, step, lastToolError, cachedSystemPrompt);
-
-                let currentText = '';
-
-                const extSettings = SillyTavern?.getContext?.()?.extensionSettings?.['kaiz_agent'] || {};
-                const maxRetries = extSettings.maxRetries ?? 3;
-                const retryDelay = extSettings.retryDelay || 3000;
-                const rawKeywords = extSettings.retryKeywords || '';
-                const retryKeywords = rawKeywords
-                    .split(',')
-                    .map((k: string) => k.trim().toLowerCase())
-                    .filter((k: string) => k);
-
-                let retryCount = 0;
-                let response: any = null;
-
-                while (retryCount <= maxRetries) {
-                    try {
-                        this._currentAbortController = new AbortController();
-                        response = await Promise.race([
-                            this.adapter.generateCompletion(
-                                messages,
-                                1500,
-                                true,
-                                async (text, reasoning) => {
-                                    if (this._forceAborted) return;
-                                    currentText = text;
-                                    await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
-                                },
-                                this._currentAbortController.signal,
-                            ),
-                            new Promise<never>((_, reject) => {
-                                this._forceAbortReject = reject;
-                            }),
-                        ]);
-                        this._forceAbortReject = null;
-                        this._currentAbortController = null;
+        try {
+            while (step < maxSteps) {
+                // Kiểm tra cờ abort đầu mỗi vòng lặp
+                if (this._aborted) {
+                    if (this._forceAborted) {
+                        await onEvent({ type: 'error', text: FORCE_ABORT_MSG });
                         break;
-                    } catch (e: any) {
-                        this._forceAbortReject = null;
-                        this._currentAbortController = null;
-
-                        const isForceAbort =
-                            e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
-                        if (isForceAbort) {
-                            throw e;
-                        }
-
-                        const msgStr = (e.message || String(e)).toLowerCase();
-                        const shouldRetry =
-                            retryKeywords.length > 0 && retryKeywords.some((k: string) => msgStr.includes(k));
-
-                        if (shouldRetry && retryCount < maxRetries) {
-                            retryCount++;
-                            const displayMsg = `Lỗi: ${e.message || String(e)}. Thử lại sau ${retryDelay / 1000}s... (${retryCount}/${maxRetries})`;
-                            await onEvent({ type: 'retry', text: displayMsg });
-
-                            if (this._aborted) throw e; // Don't sleep if already aborted
-
-                            try {
-                                await Promise.race([
-                                    new Promise<void>((r) => {
-                                        const checkInterval = setInterval(() => {
-                                            if (this._aborted || this._forceAborted) {
-                                                clearInterval(checkInterval);
-                                                r();
-                                            }
-                                        }, 100);
-                                        setTimeout(() => {
-                                            clearInterval(checkInterval);
-                                            r();
-                                        }, retryDelay);
-                                    }),
-                                    new Promise<never>((_, reject) => {
-                                        this._forceAbortReject = reject;
-                                    }),
-                                ]);
-                            } catch (sleepErr: any) {
-                                if (sleepErr.message === 'FORCE_ABORT') {
-                                    throw sleepErr;
-                                }
-                                throw e;
-                            } finally {
-                                this._forceAbortReject = null;
-                            }
-
-                            if (this._aborted) throw e; // Don't continue if aborted during sleep
-                            continue;
-                        } else {
-                            throw e;
-                        }
                     }
-                }
-
-                await onEvent({ type: 'think_end', data: response.reasoning });
-
-                const text = response.text;
-
-                internalHistory.push({ role: 'assistant', content: text });
-
-                await onEvent({
-                    type: 'debug',
-                    data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text },
-                });
-
-                const toolCalls = this.parseToolCalls(text);
-
-                if (toolCalls.length === 0) {
-                    reachedFinal = true;
-                    await onEvent({ type: 'step_end', text: text, isFinal: true });
+                    await onEvent({ type: 'error', text: SOFT_ABORT_MSG });
                     break;
                 }
+                step++;
+                await onEvent({ type: 'step_start' });
 
-                await onEvent({ type: 'step_end', text: text, isFinal: false });
+                try {
+                    const messages = this.buildMessages(
+                        internalHistory,
+                        maxSteps,
+                        step,
+                        lastToolError,
+                        cachedSystemPrompt,
+                    );
 
-                // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
-                let resultsFormatted = '';
-                let hasError = false;
-                let isTerminalFound = false;
+                    let currentText = '';
 
-                for (let i = 0; i < toolCalls.length; i++) {
-                    if (this._forceAborted) throw new Error('FORCE_ABORT');
-                    const call = toolCalls[i];
+                    const extSettings = SillyTavern?.getContext?.()?.extensionSettings?.['kaiz_agent'] || {};
+                    const maxRetries = extSettings.maxRetries ?? 3;
+                    const retryDelay = extSettings.retryDelay || 3000;
+                    const rawKeywords = extSettings.retryKeywords || '';
+                    const retryKeywords = rawKeywords
+                        .split(',')
+                        .map((k: string) => k.trim().toLowerCase())
+                        .filter((k: string) => k);
 
-                    // --- SAFE MODE CHECK ---
-                    const ctx = (window as any).SillyTavern.getContext();
-                    const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
-                    const safeMode = extSettings.safeMode;
-                    const safeModeBlacklist = extSettings.safeModeBlacklist || {};
+                    let retryCount = 0;
+                    let response: any = null;
 
-                    if (safeMode && safeModeBlacklist[call.name]) {
-                        let confirmResult = false;
-                        try {
-                            confirmResult = await Promise.race([
-                                new Promise<boolean>((resolve) => {
-                                    onEvent({
-                                        type: 'tool_confirm',
-                                        data: { call, resolve },
-                                    });
-                                }),
-                                new Promise<boolean>((_, reject) => {
-                                    this._safeModeReject = reject;
-                                }),
-                            ]);
-                            this._safeModeReject = null;
-                        } catch (e: any) {
-                            this._safeModeReject = null;
-                            if (e.message === 'FORCE_ABORT') throw e;
-                            console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
-                            const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
-                            await onEvent({ type: 'error', text: msg });
-                            break;
-                        }
-
-                        if (!confirmResult) {
-                            const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
-                            await onEvent({ type: 'error', text: msg });
-                            throw new Error('SAFE_MODE_REJECTED');
-                        }
-                    }
-                    // --- END SAFE MODE CHECK ---
-
-                    await onEvent({ type: 'tool_call', data: call });
-
-                    let result;
-                    if (call.parseError) {
-                        // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
-                        result = { content: call.parseError, isError: true };
-                    } else {
+                    while (retryCount <= maxRetries) {
                         try {
                             this._currentAbortController = new AbortController();
-                            result = await Promise.race([
-                                this.toolRegistry.executeTool(call.name, call.args, {
-                                    adapter: this.adapter,
-                                    stateManager: this.stateManager,
-                                    abortSignal: this._currentAbortController.signal,
-                                }),
-                                new Promise<any>((_, reject) => {
+                            response = await Promise.race([
+                                this.adapter.generateCompletion(
+                                    messages,
+                                    1500,
+                                    true,
+                                    async (text, reasoning) => {
+                                        if (this._forceAborted) return;
+                                        currentText = text;
+                                        await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+                                    },
+                                    this._currentAbortController.signal,
+                                ),
+                                new Promise<never>((_, reject) => {
                                     this._forceAbortReject = reject;
                                 }),
                             ]);
-                        } finally {
                             this._forceAbortReject = null;
                             this._currentAbortController = null;
+                            break;
+                        } catch (e: any) {
+                            this._forceAbortReject = null;
+                            this._currentAbortController = null;
+
+                            const isForceAbort =
+                                e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
+                            if (isForceAbort) {
+                                throw e;
+                            }
+
+                            const msgStr = (e.message || String(e)).toLowerCase();
+                            const shouldRetry =
+                                retryKeywords.length > 0 && retryKeywords.some((k: string) => msgStr.includes(k));
+
+                            if (shouldRetry && retryCount < maxRetries) {
+                                retryCount++;
+                                const displayMsg = `Lỗi: ${e.message || String(e)}. Thử lại sau ${retryDelay / 1000}s... (${retryCount}/${maxRetries})`;
+                                await onEvent({ type: 'retry', text: displayMsg });
+
+                                if (this._aborted) throw e; // Don't sleep if already aborted
+
+                                try {
+                                    await Promise.race([
+                                        new Promise<void>((r) => {
+                                            const checkInterval = setInterval(() => {
+                                                if (this._aborted || this._forceAborted) {
+                                                    clearInterval(checkInterval);
+                                                    r();
+                                                }
+                                            }, 100);
+                                            setTimeout(() => {
+                                                clearInterval(checkInterval);
+                                                r();
+                                            }, retryDelay);
+                                        }),
+                                        new Promise<never>((_, reject) => {
+                                            this._forceAbortReject = reject;
+                                        }),
+                                    ]);
+                                } catch (sleepErr: any) {
+                                    if (sleepErr.message === 'FORCE_ABORT') {
+                                        throw sleepErr;
+                                    }
+                                    throw e;
+                                } finally {
+                                    this._forceAbortReject = null;
+                                }
+
+                                if (this._aborted) throw e; // Don't continue if aborted during sleep
+                                continue;
+                            } else {
+                                throw e;
+                            }
                         }
                     }
-                    if (this._forceAborted) throw new Error('FORCE_ABORT');
-                    let isToolError = false;
-                    if (result.isError) {
-                        hasError = true;
-                        isToolError = true;
-                    }
 
-                    const statusText = isToolError ? '❌ LỖI (ERROR)' : '✅ THÀNH CÔNG (SUCCESS)';
-                    resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
+                    await onEvent({ type: 'think_end', data: response.reasoning });
 
-                    if (result.isTerminal) {
-                        isTerminalFound = true;
+                    const text = response.text;
+
+                    internalHistory.push({ role: 'assistant', content: text });
+
+                    await onEvent({
+                        type: 'debug',
+                        data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text },
+                    });
+
+                    const toolCalls = this.parseToolCalls(text);
+
+                    if (toolCalls.length === 0) {
+                        reachedFinal = true;
+                        await onEvent({ type: 'step_end', text: text, isFinal: true });
                         break;
                     }
-                }
 
-                resultsFormatted = resultsFormatted.trim();
+                    await onEvent({ type: 'step_end', text: text, isFinal: false });
 
-                const dbRawResult = `[Tool Result - ${hasError ? 'CÓ LỖI/ERROR' : 'THÀNH CÔNG'}]\n${resultsFormatted}`;
+                    // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
+                    let resultsFormatted = '';
+                    let hasError = false;
+                    let isTerminalFound = false;
 
-                lastToolError = hasError;
+                    for (let i = 0; i < toolCalls.length; i++) {
+                        if (this._forceAborted) throw new Error('FORCE_ABORT');
+                        const call = toolCalls[i];
 
-                await onEvent({
-                    type: 'tool_result',
-                    data: { name: 'Multiple Tools', result: resultsFormatted },
-                    text: dbRawResult,
-                });
+                        // --- SAFE MODE CHECK ---
+                        const ctx = (window as any).SillyTavern.getContext();
+                        const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                        const safeMode = extSettings.safeMode;
+                        const safeModeBlacklist = extSettings.safeModeBlacklist || {};
 
-                internalHistory.push({ role: 'user', content: dbRawResult });
+                        if (safeMode && safeModeBlacklist[call.name]) {
+                            let confirmResult = false;
+                            try {
+                                confirmResult = await Promise.race([
+                                    new Promise<boolean>((resolve) => {
+                                        onEvent({
+                                            type: 'tool_confirm',
+                                            data: { call, resolve },
+                                        });
+                                    }),
+                                    new Promise<boolean>((_, reject) => {
+                                        this._safeModeReject = reject;
+                                    }),
+                                ]);
+                                this._safeModeReject = null;
+                            } catch (e: any) {
+                                this._safeModeReject = null;
+                                if (e.message === 'FORCE_ABORT') throw e;
+                                console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
+                                const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
+                                await onEvent({ type: 'error', text: msg });
+                                break;
+                            }
 
-                if (isTerminalFound) {
-                    reachedFinal = true;
-                    this.abort();
+                            if (!confirmResult) {
+                                const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                await onEvent({ type: 'error', text: msg });
+                                throw new Error('SAFE_MODE_REJECTED');
+                            }
+                        }
+                        // --- END SAFE MODE CHECK ---
+
+                        await onEvent({ type: 'tool_call', data: call });
+
+                        let result;
+                        if (call.parseError) {
+                            // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
+                            result = { content: call.parseError, isError: true };
+                        } else {
+                            try {
+                                this._currentAbortController = new AbortController();
+                                result = await Promise.race([
+                                    this.toolRegistry.executeTool(call.name, call.args, {
+                                        adapter: this.adapter,
+                                        stateManager: this.stateManager,
+                                        abortSignal: this._currentAbortController.signal,
+                                    }),
+                                    new Promise<any>((_, reject) => {
+                                        this._forceAbortReject = reject;
+                                    }),
+                                ]);
+                            } finally {
+                                this._forceAbortReject = null;
+                                this._currentAbortController = null;
+                            }
+                        }
+                        if (this._forceAborted) throw new Error('FORCE_ABORT');
+                        let isToolError = false;
+                        if (result.isError) {
+                            hasError = true;
+                            isToolError = true;
+                        }
+
+                        const statusText = isToolError ? '❌ LỖI (ERROR)' : '✅ THÀNH CÔNG (SUCCESS)';
+                        resultsFormatted += `[Tool ${i + 1}/${toolCalls.length}: ${call.name} - ${statusText}]\nRESULT:\n${result.content}\n\n`;
+
+                        if (result.isTerminal) {
+                            isTerminalFound = true;
+                            break;
+                        }
+                    }
+
+                    resultsFormatted = resultsFormatted.trim();
+
+                    const dbRawResult = `[Tool Result - ${hasError ? 'CÓ LỖI/ERROR' : 'THÀNH CÔNG'}]\n${resultsFormatted}`;
+
+                    lastToolError = hasError;
+
+                    await onEvent({
+                        type: 'tool_result',
+                        data: { name: 'Multiple Tools', result: resultsFormatted },
+                        text: dbRawResult,
+                    });
+
+                    internalHistory.push({ role: 'user', content: dbRawResult });
+
+                    if (isTerminalFound) {
+                        reachedFinal = true;
+                        this.abort();
+                        break;
+                    }
+                } catch (e: any) {
+                    this._forceAbortReject = null;
+                    this._currentAbortController = null;
+                    if (e.message === 'SAFE_MODE_REJECTED') {
+                        break;
+                    }
+                    const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
+                    const errorMsg = isForceAbort ? FORCE_ABORT_MSG : e.message || String(e);
+                    console.error('[AgentLoop] Error during completion:', e);
+                    await onEvent({ type: 'error', text: errorMsg });
                     break;
                 }
-            } catch (e: any) {
-                this._forceAbortReject = null;
-                this._currentAbortController = null;
-                if (e.message === 'SAFE_MODE_REJECTED') {
-                    break;
-                }
-                const isForceAbort = e.message === 'FORCE_ABORT' || e.name === 'AbortError' || this._forceAborted;
-                const errorMsg = isForceAbort ? FORCE_ABORT_MSG : e.message || String(e);
-                console.error('[AgentLoop] Error during completion:', e);
-                await onEvent({ type: 'error', text: errorMsg });
-                break;
             }
-        }
 
-        if (step >= maxSteps && !reachedFinal) {
-            await onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
+            if (step >= maxSteps && !reachedFinal) {
+                await onEvent({ type: 'error', text: 'Max steps reached without a final answer.' });
+            }
+        } finally {
+            this._isRunning = false;
         }
     }
 }

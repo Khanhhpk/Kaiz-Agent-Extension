@@ -733,9 +733,13 @@ export class SettingsUI {
                     $xframeCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
                 } else {
                     if (!scriptDetected) {
-                        $xframeCheck.html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test').css('color', '#e67e22');
+                        $xframeCheck
+                            .html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test')
+                            .css('color', '#e67e22');
                     } else {
-                        $xframeCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)').css('color', '#e74c3c');
+                        $xframeCheck
+                            .html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)')
+                            .css('color', '#e74c3c');
                     }
                 }
             }, 2000);

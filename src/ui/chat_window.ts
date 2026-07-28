@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import { AgentLoop } from '../core/loop';
 import { StateManager } from '../core/state';
+import { ToolRegistry } from '../core/tool_registry';
 import { BackupModal } from './backup_modal';
 
 declare const jQuery: any;
@@ -13,11 +14,12 @@ const escapeHtml = (s: string): string =>
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 declare const SillyTavern: any;
+declare const toastr: any;
 
 export class ChatWindowUI {
     private static currentAttachments: import('../core/db').ChatAttachment[] = [];
 
-    public static init(loop: AgentLoop, stateManager: StateManager) {
+    public static init(loop: AgentLoop, stateManager: StateManager, registry: ToolRegistry) {
         const $ = jQuery;
         const btn = $('#kaiz-floating-btn');
         const win = $('#kaiz-chat-window');
@@ -385,6 +387,248 @@ export class ChatWindowUI {
 
         let isSidebarOpen = false;
 
+        // --- Workspace UI Logic ---
+        const wsSelect = $('#kaiz-workspace-select');
+        const wsSettingsBtn = $('#kaiz-workspace-settings-btn');
+        const wsAddBtn = $('#kaiz-workspace-add-btn');
+
+        stateManager.onWorkspacesListUpdated = (workspaces) => {
+            wsSelect.empty();
+            wsSelect.append('<option value="default">Default</option>');
+            for (const ws of workspaces) {
+                wsSelect.append(`<option value="${ws.id}">${escapeHtml(ws.name)}</option>`);
+            }
+            if (stateManager.currentWorkspaceId) {
+                wsSelect.val(stateManager.currentWorkspaceId.toString());
+            } else {
+                wsSelect.val('default');
+            }
+        };
+
+        stateManager.onWorkspaceSwitched = (ws) => {
+            if (ws) {
+                wsSelect.val(ws.id!.toString());
+                wsSettingsBtn.show();
+            } else {
+                wsSelect.val('default');
+                wsSettingsBtn.hide();
+            }
+        };
+
+        wsSelect.on('change', () => {
+            if (loop.isRunning) {
+                wsSelect.val(stateManager.currentWorkspaceId ? stateManager.currentWorkspaceId.toString() : 'default');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Kaiz Agent');
+                return;
+            }
+            const val = wsSelect.val();
+            if (val === 'default') {
+                stateManager.switchWorkspace(null);
+            } else {
+                stateManager.switchWorkspace(parseInt(val as string, 10));
+            }
+        });
+
+        wsAddBtn.on('click', async () => {
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Kaiz Agent');
+                return;
+            }
+            const name = prompt('Nhập tên Workspace mới:');
+            if (name && name.trim()) {
+                await stateManager.createWorkspace(name.trim());
+            }
+        });
+
+        wsSettingsBtn.on('click', () => {
+            const ws = stateManager.currentWorkspace;
+            if (!ws) return;
+            $('#kaiz-ws-name').val(ws.name);
+            $('#kaiz-ws-prompt').val(ws.systemPrompt || '');
+
+            const delBtn = $('#kaiz-ws-delete-btn');
+            if (ws.systemId) {
+                delBtn.html('<i class="fa-solid fa-rotate-left"></i> Khôi phục mặc định');
+                delBtn.css({ color: '#f39c12', borderColor: 'rgba(243, 156, 18, 0.3)' });
+            } else {
+                delBtn.html('<i class="fa-solid fa-trash"></i> Xóa Workspace');
+                delBtn.css({ color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' });
+            }
+
+            renderWsToolsUI(ws.toolsConfig || {});
+
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).showModal();
+        });
+
+        function renderWsToolsUI(toolsConfig: Record<string, boolean>) {
+            const toolsList = $('#kaiz-ws-tools-list');
+            toolsList.empty();
+
+            const allSchemas = registry.getAllSchemas();
+
+            // --- Chips (tools đang được bật) ---
+            const chipsContainer = $(
+                '<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>',
+            );
+
+            // --- Ô search ---
+            const searchInput = $(
+                `<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`,
+            );
+
+            // --- Result list (luôn hiện, mặc định = tất cả) ---
+            const resultList = $(
+                `<div style="max-height:140px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`,
+            );
+
+            toolsList.append(chipsContainer, searchInput, resultList);
+            toolsList.data('toolsConfig', toolsConfig);
+
+            function refreshChips() {
+                chipsContainer.empty();
+                const enabled = allSchemas.filter((s) => toolsConfig[s.name] === true);
+                if (enabled.length === 0) {
+                    chipsContainer.append(
+                        '<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>',
+                    );
+                    return;
+                }
+                enabled.forEach((schema) => {
+                    const chip = $(`
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml(schema.name)}" style="
+                            display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+                            background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
+                            border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
+                        ">
+                            ${escapeHtml(schema.name)}
+                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                        </span>
+                    `);
+                    chipsContainer.append(chip);
+                });
+            }
+
+            function refreshResults(query: string) {
+                resultList.empty();
+                const available = allSchemas.filter((s) => toolsConfig[s.name] !== true);
+                const q = query.trim().toLowerCase();
+                const matches = q
+                    ? available.filter(
+                          (s) =>
+                              s.name.toLowerCase().includes(q) ||
+                              (s.description && s.description.toLowerCase().includes(q)),
+                      )
+                    : available;
+
+                if (matches.length === 0) {
+                    resultList.append(
+                        '<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>',
+                    );
+                    return;
+                }
+                matches.forEach((schema) => {
+                    const item = $(`
+                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml(schema.name)}" style="
+                            padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
+                            border-bottom:1px solid rgba(255,255,255,0.04);
+                        ">
+                            <span style="color:#fff; font-weight:500;">${escapeHtml(schema.name)}</span>
+                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
+                        </div>
+                    `);
+                    item.on('mouseenter', function (this: any) {
+                        $(this).css('background', 'rgba(255,255,255,0.07)');
+                    });
+                    item.on('mouseleave', function (this: any) {
+                        $(this).css('background', '');
+                    });
+                    item.on('click', () => {
+                        toolsConfig[schema.name] = true;
+                        toolsList.data('toolsConfig', toolsConfig);
+                        refreshChips();
+                        // Giữ nguyên filter hiện tại, chỉ refresh results
+                        refreshResults(String(searchInput.val() || ''));
+                    });
+                    resultList.append(item);
+                });
+            }
+
+            // Chip remove — dùng event delegation trên chipsContainer
+            chipsContainer.on('click', '.kaiz-ws-tool-remove', function (this: any) {
+                const toolName = $(this).attr('data-tool');
+                if (toolName) {
+                    delete toolsConfig[toolName];
+                    toolsList.data('toolsConfig', toolsConfig);
+                    refreshChips();
+                    refreshResults(String(searchInput.val() || ''));
+                }
+            });
+
+            searchInput.on('input', function (this: any) {
+                refreshResults(String($(this).val() || ''));
+            });
+
+            // Render lần đầu
+            refreshChips();
+            refreshResults('');
+        }
+
+        $('#kaiz-workspace-settings-close').on('click', () => {
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+        });
+
+        $('#kaiz-ws-save-btn').on('click', async () => {
+            if (!stateManager.currentWorkspaceId) return;
+            const newName = String($('#kaiz-ws-name').val() || '').trim();
+            const newPrompt = String($('#kaiz-ws-prompt').val() || '');
+
+            // Lấy toolsConfig từ data đã được cập nhật bởi renderWsToolsUI
+            const toolsConfig: Record<string, boolean> = $('#kaiz-ws-tools-list').data('toolsConfig') || {};
+
+            if (newName) {
+                await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
+                    name: newName,
+                    systemPrompt: newPrompt,
+                    toolsConfig: toolsConfig,
+                });
+            }
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+        });
+
+        $('#kaiz-ws-delete-btn').on('click', async () => {
+            if (!stateManager.currentWorkspaceId) return;
+            const ws = stateManager.currentWorkspace;
+            if (!ws) return;
+            const wsName = ws.name || 'này';
+
+            if (ws.systemId) {
+                if (
+                    confirm(
+                        `Khôi phục Workspace "${wsName}" về trạng thái mặc định gốc?\n\nTên, Prompt và Danh sách Tools sẽ bị reset. (Lịch sử chat VẪN ĐƯỢC GIỮ NGUYÊN).`,
+                    )
+                ) {
+                    await stateManager.db.resetSystemWorkspace(stateManager.currentWorkspaceId);
+                    const workspaces = await stateManager.db.getAllWorkspaces();
+                    if (stateManager.onWorkspacesListUpdated) stateManager.onWorkspacesListUpdated(workspaces);
+                    stateManager.currentWorkspace =
+                        workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
+                    if (stateManager.onWorkspaceSwitched)
+                        stateManager.onWorkspaceSwitched(stateManager.currentWorkspace);
+                    ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+                }
+            } else {
+                if (
+                    confirm(
+                        `Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`,
+                    )
+                ) {
+                    await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
+                    ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+                }
+            }
+        });
+        // --------------------------
+
         // Toggle cửa sổ
         btn.on('click', (e: any) => {
             if (isDraggingBtn) {
@@ -459,6 +703,10 @@ export class ChatWindowUI {
 
         // New Chat
         newChatBtn.on('click', async () => {
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Kaiz Agent');
+                return;
+            }
             history.empty();
             // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
             stateManager.currentChatId = null;
@@ -473,6 +721,10 @@ export class ChatWindowUI {
         // Cài đặt Event Delegation cho danh sách chat (chỉ gán 1 lần duy nhất)
         chatList.on('click', '.kaiz-chat-item', function (this: HTMLElement, e: any) {
             if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Kaiz Agent');
+                return;
+            }
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 stateManager.switchChat(id);
@@ -483,6 +735,10 @@ export class ChatWindowUI {
 
         chatList.on('click', '.kaiz-chat-delete', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Kaiz Agent');
+                return;
+            }
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 if (confirm('Delete this chat?')) {

@@ -7,6 +7,7 @@ interface BrowserTab {
     historyIndex: number;
     lastHistoryPushTime: number;
     title: string;
+    isDarkMode?: boolean;
 }
 
 interface WebHistoryItem {
@@ -21,7 +22,10 @@ export class BrowserWindowUI {
 
     private static tabs: BrowserTab[] = [];
     private static activeTabId: string | null = null;
-    private static agentCommandCallbacks = new Map<string, { resolve: Function; reject: Function; timer: any }>();
+    private static agentCommandCallbacks = new Map<
+        string,
+        { resolve: (value: any) => void; reject: (reason?: any) => void; timer: any }
+    >();
 
     public static destroyAll() {
         this.tabs.forEach((tab) => {
@@ -59,8 +63,6 @@ export class BrowserWindowUI {
             $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
         });
 
-
-
         // Điều hướng
         const go = () => {
             let url = this.$address.val().trim();
@@ -83,14 +85,41 @@ export class BrowserWindowUI {
             }
         });
 
+        // Nút Reload
         this.$modal.find('#kaiz-browser-reload').on('click', () => {
-            const activeTab = this.getActiveTab();
-            if (activeTab && activeTab.iframe.src && !activeTab.iframe.src.includes('about:blank')) {
-                const current = activeTab.iframe.src;
-                activeTab.iframe.src = 'about:blank';
-                setTimeout(() => {
-                    activeTab.iframe.src = current;
-                }, 50);
+            if (this.activeTabId) {
+                const tab = this.tabs.find((t) => t.id === this.activeTabId);
+                if (tab && tab.iframe) {
+                    try {
+                        tab.iframe.contentWindow?.location.reload();
+                    } catch (e) {
+                        // eslint-disable-next-line no-self-assign
+                        tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
+                    }
+                }
+            }
+        });
+
+        // Nút Dark Mode
+        this.$modal.find('#kaiz-browser-darkmode').on('click', function (this: HTMLElement) {
+            const $btn = $(this);
+            if (BrowserWindowUI['activeTabId']) {
+                const tab = BrowserWindowUI['tabs'].find((t: any) => t.id === BrowserWindowUI['activeTabId']);
+                if (tab && tab.iframe) {
+                    if (tab.isDarkMode) {
+                        tab.isDarkMode = false;
+                        $btn.css('color', '');
+                    } else {
+                        tab.isDarkMode = true;
+                        $btn.css('color', '#f1c40f'); // Highlight button
+                    }
+                    try {
+                        tab.iframe.style.filter = ''; // Xóa hack CSS cũ
+                        tab.iframe.contentWindow?.postMessage({ type: 'KAIZ_TOGGLE_DARK_MODE' }, '*');
+                    } catch (e) {
+                        // Bỏ qua lỗi CORS
+                    }
+                }
             }
         });
 
@@ -226,7 +255,7 @@ export class BrowserWindowUI {
             'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads',
         );
         iframe.style.cssText =
-            'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: none; z-index: 5;';
+            'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: transparent; display: none; z-index: 5; color-scheme: light dark;';
 
         this.$modal.find('#kaiz-browser-iframe-container').append(iframe);
 
