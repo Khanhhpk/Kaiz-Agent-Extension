@@ -1,4 +1,3 @@
-/* global window, document, location, history, MutationObserver, URLSearchParams, Event, KeyboardEvent, setTimeout */
 // ==UserScript==
 // @name         Kaiz Browser Companion
 // @namespace    http://tampermonkey.net/
