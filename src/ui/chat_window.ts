@@ -315,7 +315,9 @@ export class ChatWindowUI {
                     try {
                         const parsed = JSON.parse(savedPos);
                         el.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
-                    } catch (e) {}
+                    } catch {
+                        // ignore error
+                    }
                 }
 
                 el.draggable({

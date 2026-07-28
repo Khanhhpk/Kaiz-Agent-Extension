@@ -7251,7 +7251,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             const parsed = JSON.parse(savedPos);
                             el.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
                         }
-                        catch (e) { }
+                        catch {
+                            // ignore error
+                        }
                     }
                     el.draggable({
                         containment: 'window',
@@ -7925,6 +7927,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             </dialog>`;
                 $('body').append(modalHtml);
             }
+            // @ts-ignore
             $('#kaiz-checker-modal');
             const closeBtn = $('#kaiz-checker-close');
             const runBtn = $('#kaiz-checker-run');
