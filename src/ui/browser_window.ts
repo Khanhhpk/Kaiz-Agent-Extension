@@ -22,7 +22,10 @@ export class BrowserWindowUI {
 
     private static tabs: BrowserTab[] = [];
     private static activeTabId: string | null = null;
-    private static agentCommandCallbacks = new Map<string, { resolve: Function; reject: Function; timer: any }>();
+    private static agentCommandCallbacks = new Map<
+        string,
+        { resolve: (value: any) => void; reject: (reason?: any) => void; timer: any }
+    >();
 
     public static destroyAll() {
         this.tabs.forEach((tab) => {
@@ -60,8 +63,6 @@ export class BrowserWindowUI {
             $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
         });
 
-
-
         // Điều hướng
         const go = () => {
             let url = this.$address.val().trim();
@@ -92,6 +93,7 @@ export class BrowserWindowUI {
                     try {
                         tab.iframe.contentWindow?.location.reload();
                     } catch (e) {
+                        // eslint-disable-next-line no-self-assign
                         tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
                     }
                 }
@@ -99,7 +101,7 @@ export class BrowserWindowUI {
         });
 
         // Nút Dark Mode
-        this.$modal.find('#kaiz-browser-darkmode').on('click', function(this: HTMLElement) {
+        this.$modal.find('#kaiz-browser-darkmode').on('click', function (this: HTMLElement) {
             const $btn = $(this);
             if (BrowserWindowUI['activeTabId']) {
                 const tab = BrowserWindowUI['tabs'].find((t: any) => t.id === BrowserWindowUI['activeTabId']);

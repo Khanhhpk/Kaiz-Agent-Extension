@@ -147,7 +147,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 { role: 'system', content: cachedSystemPrompt },
             ];
             if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
-                msgs.push({ role: 'system', content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}` });
+                msgs.push({
+                    role: 'system',
+                    content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}`,
+                });
             }
             const ctx = window.SillyTavern.getContext();
             if (ctx.extensionSettings?.kaiz_agent) {
@@ -3624,6 +3627,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             tab.iframe.contentWindow?.location.reload();
                         }
                         catch (e) {
+                            // eslint-disable-next-line no-self-assign
                             tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
                         }
                     }
@@ -4148,7 +4152,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 const workspaces = await stateManager.db.getAllWorkspaces();
                 const currentId = stateManager.currentWorkspaceId;
                 if (workspaces.length === 0) {
-                    return { content: `No workspaces found.\nCurrent context: Default (global chat, all tools follow global settings).` };
+                    return {
+                        content: `No workspaces found.\nCurrent context: Default (global chat, all tools follow global settings).`,
+                    };
                 }
                 const lines = workspaces.map((ws) => {
                     const enabledCount = Object.values(ws.toolsConfig || {}).filter(Boolean).length;
@@ -4159,7 +4165,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 const activeLabel = currentId
                     ? `Workspace ID ${currentId} ("${stateManager.currentWorkspace?.name}")`
                     : 'Default (global)';
-                return { content: `Found ${workspaces.length} workspace(s):\n${lines.join('\n')}\n\nCurrently active: ${activeLabel}` };
+                return {
+                    content: `Found ${workspaces.length} workspace(s):\n${lines.join('\n')}\n\nCurrently active: ${activeLabel}`,
+                };
             }
             catch (e) {
                 return { content: `Error listing workspaces: ${e.message}`, isError: true };
@@ -4190,7 +4198,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 if (id === null) {
                     return { content: 'Switched to Default (global) mode. A new blank chat is now active.' };
                 }
-                return { content: `Switched to Workspace ID ${id} ("${stateManager.currentWorkspace?.name || 'Unknown'}"). A new blank chat is now active.` };
+                return {
+                    content: `Switched to Workspace ID ${id} ("${stateManager.currentWorkspace?.name || 'Unknown'}"). A new blank chat is now active.`,
+                };
             }
             catch (e) {
                 return { content: `Error switching workspace: ${e.message}`, isError: true };
@@ -4218,7 +4228,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 if (!name)
                     return { content: 'Error: Workspace name cannot be empty.', isError: true };
                 const id = await stateManager.createWorkspace(name);
-                return { content: `Successfully created Workspace "${name}" (ID: ${id}). Now switched into it. Tools and custom prompt can be configured via the Settings icon in the sidebar.` };
+                return {
+                    content: `Successfully created Workspace "${name}" (ID: ${id}). Now switched into it. Tools and custom prompt can be configured via the Settings icon in the sidebar.`,
+                };
             }
             catch (e) {
                 return { content: `Error creating workspace: ${e.message}`, isError: true };
@@ -5961,18 +5973,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             });
         }
         async deleteWorkspace(id) {
-            return new Promise(async (resolve, reject) => {
-                if (!this.db)
-                    return reject(new Error('DB not initialized'));
-                // Bước 1: Lấy danh sách chat trong workspace này
-                const chatsToDelete = await this.getAllChats(id);
-                // Bước 2: Xóa từng chat (và messages đi kèm)
-                for (const chat of chatsToDelete) {
-                    if (chat.id) {
-                        await this.deleteChat(chat.id).catch(console.error);
-                    }
+            if (!this.db)
+                throw new Error('DB not initialized');
+            // Bước 1: Lấy danh sách chat trong workspace này
+            const chatsToDelete = await this.getAllChats(id);
+            // Bước 2: Xóa từng chat (và messages đi kèm)
+            for (const chat of chatsToDelete) {
+                if (chat.id) {
+                    await this.deleteChat(chat.id).catch(console.error);
                 }
-                // Bước 3: Xóa workspace
+            }
+            // Bước 3: Xóa workspace
+            return new Promise((resolve, reject) => {
                 const transaction = this.db.transaction(['workspaces'], 'readwrite');
                 const store = transaction.objectStore('workspaces');
                 const request = store.delete(id);
@@ -6991,10 +7003,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                     }
                     else {
                         if (!scriptDetected) {
-                            $xframeCheck.html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test').css('color', '#e67e22');
+                            $xframeCheck
+                                .html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test')
+                                .css('color', '#e67e22');
                         }
                         else {
-                            $xframeCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)').css('color', '#e74c3c');
+                            $xframeCheck
+                                .html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)')
+                                .css('color', '#e74c3c');
                         }
                     }
                 }, 2000);
@@ -7764,12 +7780,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 toolsList.data('toolsConfig', toolsConfig);
                 function refreshChips() {
                     chipsContainer.empty();
-                    const enabled = allSchemas.filter(s => toolsConfig[s.name] === true);
+                    const enabled = allSchemas.filter((s) => toolsConfig[s.name] === true);
                     if (enabled.length === 0) {
                         chipsContainer.append('<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>');
                         return;
                     }
-                    enabled.forEach(schema => {
+                    enabled.forEach((schema) => {
                         const chip = $(`
                         <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$1(schema.name)}" style="
                             display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
@@ -7785,16 +7801,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
                 function refreshResults(query) {
                     resultList.empty();
-                    const available = allSchemas.filter(s => toolsConfig[s.name] !== true);
+                    const available = allSchemas.filter((s) => toolsConfig[s.name] !== true);
                     const q = query.trim().toLowerCase();
                     const matches = q
-                        ? available.filter(s => s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q)))
+                        ? available.filter((s) => s.name.toLowerCase().includes(q) ||
+                            (s.description && s.description.toLowerCase().includes(q)))
                         : available;
                     if (matches.length === 0) {
                         resultList.append('<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>');
                         return;
                     }
-                    matches.forEach(schema => {
+                    matches.forEach((schema) => {
                         const item = $(`
                         <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$1(schema.name)}" style="
                             padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
@@ -7804,8 +7821,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$1(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
                         </div>
                     `);
-                        item.on('mouseenter', function () { $(this).css('background', 'rgba(255,255,255,0.07)'); });
-                        item.on('mouseleave', function () { $(this).css('background', ''); });
+                        item.on('mouseenter', function () {
+                            $(this).css('background', 'rgba(255,255,255,0.07)');
+                        });
+                        item.on('mouseleave', function () {
+                            $(this).css('background', '');
+                        });
                         item.on('click', () => {
                             toolsConfig[schema.name] = true;
                             toolsList.data('toolsConfig', toolsConfig);
@@ -7847,7 +7868,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
                         name: newName,
                         systemPrompt: newPrompt,
-                        toolsConfig: toolsConfig
+                        toolsConfig: toolsConfig,
                     });
                 }
                 $('#kaiz-workspace-settings-modal')[0].close();

@@ -128,7 +128,7 @@ export class StateManager {
 
     public async switchWorkspace(id: number | null): Promise<void> {
         this.currentWorkspaceId = id;
-        
+
         if (id === null) {
             this.currentWorkspace = null;
         } else {

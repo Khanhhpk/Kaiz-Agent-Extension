@@ -448,25 +448,33 @@ export class ChatWindowUI {
             const allSchemas = registry.getAllSchemas();
 
             // --- Chips (tools đang được bật) ---
-            const chipsContainer = $('<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>');
+            const chipsContainer = $(
+                '<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>',
+            );
 
             // --- Ô search ---
-            const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`);
+            const searchInput = $(
+                `<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`,
+            );
 
             // --- Result list (luôn hiện, mặc định = tất cả) ---
-            const resultList = $(`<div style="max-height:140px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`);
+            const resultList = $(
+                `<div style="max-height:140px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`,
+            );
 
             toolsList.append(chipsContainer, searchInput, resultList);
             toolsList.data('toolsConfig', toolsConfig);
 
             function refreshChips() {
                 chipsContainer.empty();
-                const enabled = allSchemas.filter(s => toolsConfig[s.name] === true);
+                const enabled = allSchemas.filter((s) => toolsConfig[s.name] === true);
                 if (enabled.length === 0) {
-                    chipsContainer.append('<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>');
+                    chipsContainer.append(
+                        '<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>',
+                    );
                     return;
                 }
-                enabled.forEach(schema => {
+                enabled.forEach((schema) => {
                     const chip = $(`
                         <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml(schema.name)}" style="
                             display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
@@ -483,17 +491,23 @@ export class ChatWindowUI {
 
             function refreshResults(query: string) {
                 resultList.empty();
-                const available = allSchemas.filter(s => toolsConfig[s.name] !== true);
+                const available = allSchemas.filter((s) => toolsConfig[s.name] !== true);
                 const q = query.trim().toLowerCase();
                 const matches = q
-                    ? available.filter(s => s.name.toLowerCase().includes(q) || (s.description && s.description.toLowerCase().includes(q)))
+                    ? available.filter(
+                          (s) =>
+                              s.name.toLowerCase().includes(q) ||
+                              (s.description && s.description.toLowerCase().includes(q)),
+                      )
                     : available;
 
                 if (matches.length === 0) {
-                    resultList.append('<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>');
+                    resultList.append(
+                        '<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>',
+                    );
                     return;
                 }
-                matches.forEach(schema => {
+                matches.forEach((schema) => {
                     const item = $(`
                         <div class="kaiz-ws-tool-result" data-tool="${escapeHtml(schema.name)}" style="
                             padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
@@ -503,8 +517,12 @@ export class ChatWindowUI {
                             ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
                         </div>
                     `);
-                    item.on('mouseenter', function(this: any) { $(this).css('background', 'rgba(255,255,255,0.07)'); });
-                    item.on('mouseleave', function(this: any) { $(this).css('background', ''); });
+                    item.on('mouseenter', function (this: any) {
+                        $(this).css('background', 'rgba(255,255,255,0.07)');
+                    });
+                    item.on('mouseleave', function (this: any) {
+                        $(this).css('background', '');
+                    });
                     item.on('click', () => {
                         toolsConfig[schema.name] = true;
                         toolsList.data('toolsConfig', toolsConfig);
@@ -517,7 +535,7 @@ export class ChatWindowUI {
             }
 
             // Chip remove — dùng event delegation trên chipsContainer
-            chipsContainer.on('click', '.kaiz-ws-tool-remove', function(this: any) {
+            chipsContainer.on('click', '.kaiz-ws-tool-remove', function (this: any) {
                 const toolName = $(this).attr('data-tool');
                 if (toolName) {
                     delete toolsConfig[toolName];
@@ -527,7 +545,7 @@ export class ChatWindowUI {
                 }
             });
 
-            searchInput.on('input', function(this: any) {
+            searchInput.on('input', function (this: any) {
                 refreshResults(String($(this).val() || ''));
             });
 
@@ -552,7 +570,7 @@ export class ChatWindowUI {
                 await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
                     name: newName,
                     systemPrompt: newPrompt,
-                    toolsConfig: toolsConfig
+                    toolsConfig: toolsConfig,
                 });
             }
             ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
@@ -561,7 +579,11 @@ export class ChatWindowUI {
         $('#kaiz-ws-delete-btn').on('click', async () => {
             if (!stateManager.currentWorkspaceId) return;
             const wsName = stateManager.currentWorkspace?.name || 'này';
-            if (confirm(`Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`)) {
+            if (
+                confirm(
+                    `Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`,
+                )
+            ) {
                 await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
                 ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
             }

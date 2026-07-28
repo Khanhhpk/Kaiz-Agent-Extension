@@ -186,7 +186,10 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         ];
 
         if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
-            msgs.push({ role: 'system', content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}` });
+            msgs.push({
+                role: 'system',
+                content: `[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}`,
+            });
         }
 
         const ctx = (window as any).SillyTavern.getContext();
