@@ -154,7 +154,6 @@ export class BrowserWindowUI {
 
                 if (this.$address.val() !== newUrl) {
                     this.$address.val(newUrl);
-                    this.$address.css('background-color', ''); 
                     
                     const now = Date.now();
                     
@@ -295,7 +294,6 @@ export class BrowserWindowUI {
 
     private static navigate(tab: BrowserTab, url: string, forceReload: boolean) {
         this.$address.val(url);
-        this.$address.css('background-color', '#eef2ff'); 
         
         if (forceReload) {
             tab.iframe.src = 'about:blank';

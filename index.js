@@ -7517,7 +7517,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     this.saveToGlobalHistory(newUrl, activeTab.title);
                     if (this.$address.val() !== newUrl) {
                         this.$address.val(newUrl);
-                        this.$address.css('background-color', '');
                         const now = Date.now();
                         // Thuật toán nhận dạng Back / Forward từ web bên trong iframe
                         if (activeTab.historyIndex > 0 && activeTab.historyStack[activeTab.historyIndex - 1] === newUrl) {
@@ -7640,7 +7639,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         }
         static navigate(tab, url, forceReload) {
             this.$address.val(url);
-            this.$address.css('background-color', '#eef2ff');
             if (forceReload) {
                 tab.iframe.src = 'about:blank';
                 setTimeout(() => { tab.iframe.src = url; }, 50);
