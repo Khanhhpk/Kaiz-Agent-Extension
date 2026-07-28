@@ -7,6 +7,7 @@ interface BrowserTab {
     historyIndex: number;
     lastHistoryPushTime: number;
     title: string;
+    isDarkMode?: boolean;
 }
 
 interface WebHistoryItem {
