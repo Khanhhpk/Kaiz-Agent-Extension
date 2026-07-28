@@ -4,7 +4,14 @@ import { BrowserWindowUI } from '../../ui/browser_window';
 export const browser_tools_manage: ITool = {
     schema: {
         name: 'browser_tools_manage',
-        description: 'Quản lý và điều khiển Kaiz Browser (Trình duyệt web tích hợp trong SillyTavern). Gộp chung các chức năng duyệt web. KHÔNG dùng cho trình duyệt bên ngoài.',
+        description: `Quản lý và điều khiển Kaiz Browser (Trình duyệt web tích hợp trong SillyTavern). KHÔNG dùng cho trình duyệt bên ngoài. 
+Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
+1. Luôn dùng action='read' trước để đọc nội dung trang và lấy danh sách 'elementId' (ID của các nút bấm, ô nhập liệu).
+2. Dùng action='type' (cần elementId + text) để điền vào ô form.
+3. Nếu form không có nút Submit rõ ràng, dùng action='press_key' (cần elementId + key='Enter') để nhấn Enter gửi form.
+4. Dùng action='click' (cần elementId) để bấm nút hoặc link.
+5. Dùng action='navigate' (cần url) để truy cập thẳng một địa chỉ web mới.
+6. Sau khi trang chuyển hướng (do click, navigate, go_back, hoặc press_key), trang web thay đổi nên các ID cũ sẽ mất hiệu lực. BẠN PHẢI GỌI LẠI action='read' để lấy danh sách ID mới trước khi thao tác tiếp.`,
         parameters: {
             type: 'object',
             properties: {
