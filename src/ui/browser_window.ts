@@ -253,7 +253,7 @@ export class BrowserWindowUI {
             'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads',
         );
         iframe.style.cssText =
-            'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: #ffffff; display: none; z-index: 5;';
+            'position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; background-color: transparent; display: none; z-index: 5; color-scheme: light dark;';
 
         this.$modal.find('#kaiz-browser-iframe-container').append(iframe);
 
