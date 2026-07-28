@@ -5,7 +5,7 @@ export const renameAgentChatTool: ITool = {
     schema: {
         name: 'rename_agent_chat',
         description:
-            "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. Operates within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: 'object',
             properties: {
@@ -41,7 +41,7 @@ export const openNewAgentChatTool: ITool = {
     schema: {
         name: 'open_new_agent_chat',
         description:
-            "Closes the current internal Kaiz agent chat and opens a new blank internal chat session. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            "Closes the current internal Kaiz agent chat and opens a new blank internal chat session within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: 'object',
             properties: {},
@@ -70,7 +70,7 @@ export const listAgentChatsTool: ITool = {
     schema: {
         name: 'list_agent_chats',
         description:
-            "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At) WITHIN the currently active Workspace. If in Default mode, lists all global chats. Use list_agent_workspaces first to understand the workspace structure. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: 'object',
             properties: {},
@@ -88,7 +88,7 @@ export const listAgentChatsTool: ITool = {
                 .map((c) => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`)
                 .join('\n');
             return {
-                content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}`,
+                content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'} | Active Workspace: ${stateManager.currentWorkspaceId ? `ID ${stateManager.currentWorkspaceId} ("${stateManager.currentWorkspace?.name}")` : 'Default (global)'}`,
             };
         } catch (e: any) {
             return { content: `Error listing chats: ${e.message}`, isError: true };
@@ -100,7 +100,7 @@ export const deleteAgentChatTool: ITool = {
     schema: {
         name: 'delete_agent_chat',
         description:
-            "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. Only deletes chats within the currently active Workspace scope. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
         parameters: {
             type: 'object',
             properties: {

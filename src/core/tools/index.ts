@@ -36,6 +36,7 @@ import { getTavernHelperScriptsTool } from './get_tavern_helper_scripts';
 import { getTavernHelperScriptInfoTool } from './get_tavern_helper_script_info';
 import { manageTavernHelperScriptTool } from './manage_tavern_helper_script';
 import { browser_tools_manage } from './browser_tools_manage';
+import { listWorkspacesTool, switchWorkspaceTool, createWorkspaceTool } from './workspace_manager';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -78,4 +79,7 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getTavernHelperScriptInfoTool);
     registry.registerTool(manageTavernHelperScriptTool);
     registry.registerTool(browser_tools_manage);
+    registry.registerTool(listWorkspacesTool);
+    registry.registerTool(switchWorkspaceTool);
+    registry.registerTool(createWorkspaceTool);
 }
