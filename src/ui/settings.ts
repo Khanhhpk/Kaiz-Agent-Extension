@@ -655,9 +655,9 @@ export class SettingsUI {
         $('#kaiz-enable-browser').on('change', function (this: HTMLInputElement) {
             settings.enableBrowser = !!this.checked;
             ctx.saveSettingsDebounced();
-            
+
             const $browserBtn = $('#kaiz-chat-browser-btn');
-            
+
             if (settings.enableBrowser) {
                 $browserBtn.show();
                 delete settings.disabledTools['browser_tools_manage'];
@@ -673,11 +673,11 @@ export class SettingsUI {
             const $results = $('#kaiz-browser-check-results');
             const $corsCheck = $('#kaiz-check-cors');
             const $scriptCheck = $('#kaiz-check-script');
-            
+
             $results.slideDown();
             $corsCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
             $scriptCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
-            
+
             try {
                 const res = await fetch('https://www.google.com');
                 if (res.ok) {
@@ -688,24 +688,24 @@ export class SettingsUI {
             } catch (e) {
                 $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
             }
-            
+
             let scriptDetected = false;
             const checkIframe = document.createElement('iframe');
             checkIframe.src = 'about:blank';
             checkIframe.style.display = 'none';
             document.body.appendChild(checkIframe);
-            
+
             const onMessage = (e: any) => {
                 if (e.data && e.data.type === 'KAIZ_IFRAME_URL') {
                     scriptDetected = true;
                 }
             };
             window.addEventListener('message', onMessage);
-            
+
             setTimeout(() => {
                 window.removeEventListener('message', onMessage);
                 document.body.removeChild(checkIframe);
-                
+
                 if (scriptDetected) {
                     $scriptCheck.html('<i class="fa-solid fa-check"></i> Installed').css('color', '#2ecc71');
                 } else {
