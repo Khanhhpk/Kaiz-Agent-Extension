@@ -3554,6 +3554,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         static tabs = [];
         static activeTabId = null;
         static agentCommandCallbacks = new Map();
+        static destroyAll() {
+            this.tabs.forEach((tab) => {
+                tab.iframe.src = 'about:blank';
+                tab.iframe.remove();
+            });
+            this.tabs = [];
+            this.activeTabId = null;
+            this.updateTabUI();
+        }
         static init() {
             const $ = jQuery;
             this.$modal = $('#kaiz-browser-container').last();
@@ -6630,6 +6639,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                     $browserBtn.hide();
                     settings.disabledTools['browser_tools_manage'] = true;
                     $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
+                    BrowserWindowUI.destroyAll(); // Clear iframe to free memory
                 }
                 renderTools();
             });

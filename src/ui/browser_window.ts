@@ -23,6 +23,16 @@ export class BrowserWindowUI {
     private static activeTabId: string | null = null;
     private static agentCommandCallbacks = new Map<string, { resolve: Function; reject: Function; timer: any }>();
 
+    public static destroyAll() {
+        this.tabs.forEach((tab) => {
+            tab.iframe.src = 'about:blank';
+            tab.iframe.remove();
+        });
+        this.tabs = [];
+        this.activeTabId = null;
+        this.updateTabUI();
+    }
+
     public static init() {
         const $ = jQuery;
 
@@ -45,15 +55,7 @@ export class BrowserWindowUI {
             $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
         });
 
-    public static destroyAll() {
-        this.tabs.forEach((tab) => {
-            tab.iframe.src = 'about:blank';
-            tab.iframe.remove();
-        });
-        this.tabs = [];
-        this.activeTabId = null;
-        this.updateTabUI();
-    }
+
 
         // Điều hướng
         const go = () => {
