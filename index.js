@@ -7638,6 +7638,19 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             this.navigate(tab, url, true);
         }
         static navigate(tab, url, forceReload) {
+            // --- BYPASS X-FRAME-OPTIONS CHO CÁC TRANG PHỔ BIẾN ---
+            // Chuyển Youtube watch thành Youtube embed
+            if (url.includes('youtube.com/watch?v=')) {
+                try {
+                    const urlObj = new URL(url);
+                    const videoId = urlObj.searchParams.get('v');
+                    if (videoId) {
+                        url = `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+                    }
+                }
+                catch (e) { }
+            }
+            // -----------------------------------------------------
             this.$address.val(url);
             if (forceReload) {
                 tab.iframe.src = 'about:blank';
