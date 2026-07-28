@@ -148,9 +148,9 @@
 }
 
 .kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
-    width: var(--kaiz-chat-width, 400px);
-    height: 100%;
-    flex: none;
+    width: var(--kaiz-chat-width, 400px) !important;
+    height: 100% !important;
+    flex: none !important;
 }
 
 @media (max-width: 900px) {
@@ -160,14 +160,14 @@
     }
     
     .kaiz-chat-window.kaiz-browser-mode .kaiz-split-resizer {
-        width: 100%;
-        height: 6px;
+        width: 100% !important;
+        height: 6px !important;
         cursor: row-resize;
     }
 
     .kaiz-chat-window.kaiz-browser-mode #kaiz-chat-container {
-        width: 100%;
-        height: var(--kaiz-chat-height, 35vh); /* Chat chiếm 35% bên dưới */
+        width: 100% !important;
+        height: var(--kaiz-chat-height, 35vh) !important; /* Chat chiếm 35% bên dưới */
     }
 }
 

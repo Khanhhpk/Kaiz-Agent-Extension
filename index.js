@@ -7564,8 +7564,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 isDragging = true;
                 isVertical = window.innerWidth <= 900;
                 $resizer.addClass('active');
-                // Vô hiệu hóa pointer-events để di chuột qua iframe mượt hơn
-                $('#kaiz-browser-iframe').css('pointer-events', 'none');
+                // Vô hiệu hóa pointer-events để di chuột qua browser mượt hơn
+                $('#kaiz-browser-container').css('pointer-events', 'none');
                 $('body').css('user-select', 'none');
                 e.preventDefault();
             });
@@ -7599,7 +7599,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 if (isDragging) {
                     isDragging = false;
                     $resizer.removeClass('active');
-                    $('#kaiz-browser-iframe').css('pointer-events', 'auto');
+                    $('#kaiz-browser-container').css('pointer-events', 'auto');
                     $('body').css('user-select', '');
                 }
             });
