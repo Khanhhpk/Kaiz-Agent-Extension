@@ -7401,6 +7401,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
         // Hệ thống lịch sử tự quản lý
         static historyStack = [];
         static historyIndex = -1;
+        static lastHistoryPushTime = 0;
         static init() {
             const $ = jQuery;
             // Tìm element chính xác để tránh dính cache DOM cũ nếu bị reload
@@ -7518,14 +7519,22 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     // Nếu URL nhận được khác với URL hiện tại trên thanh địa chỉ
                     if (this.$address.val() !== newUrl) {
                         this.$address.val(newUrl);
-                        // Cập nhật lại lịch sử
-                        if (this.historyStack[this.historyIndex] !== newUrl) {
+                        const now = Date.now();
+                        // Nếu thời gian thay đổi URL quá nhanh (dưới 1.5s), khả năng cao là link rác do redirect xen giữa
+                        // Ta sẽ ghi đè lịch sử hiện tại thay vì đẩy (push) lịch sử mới
+                        if (now - this.lastHistoryPushTime < 1500 && this.historyIndex >= 0) {
+                            this.historyStack[this.historyIndex] = newUrl;
+                            this.lastHistoryPushTime = now; // Gia hạn thêm thời gian debounce
+                        }
+                        // Ngược lại, cập nhật lịch sử tạo điểm neo mới
+                        else if (this.historyStack[this.historyIndex] !== newUrl) {
                             // Xóa tương lai nếu đang ở quá khứ
                             if (this.historyIndex < this.historyStack.length - 1) {
                                 this.historyStack = this.historyStack.slice(0, this.historyIndex + 1);
                             }
                             this.historyStack.push(newUrl);
                             this.historyIndex++;
+                            this.lastHistoryPushTime = now;
                         }
                     }
                 }
@@ -7546,6 +7555,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             if (this.historyStack[this.historyIndex] !== url) {
                 this.historyStack.push(url);
                 this.historyIndex++;
+                this.lastHistoryPushTime = Date.now();
             }
             this.navigate(url, true);
         }
