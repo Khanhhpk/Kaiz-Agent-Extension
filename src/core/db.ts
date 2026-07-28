@@ -151,9 +151,20 @@ export class KaizDB {
     }
 
     public async deleteWorkspace(id: number): Promise<void> {
-        return new Promise((resolve, reject) => {
+        return new Promise(async (resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
-            // Note: Does not delete chats inside the workspace currently
+
+            // Bước 1: Lấy danh sách chat trong workspace này
+            const chatsToDelete = await this.getAllChats(id);
+
+            // Bước 2: Xóa từng chat (và messages đi kèm)
+            for (const chat of chatsToDelete) {
+                if (chat.id) {
+                    await this.deleteChat(chat.id).catch(console.error);
+                }
+            }
+
+            // Bước 3: Xóa workspace
             const transaction = this.db.transaction(['workspaces'], 'readwrite');
             const store = transaction.objectStore('workspaces');
             const request = store.delete(id);

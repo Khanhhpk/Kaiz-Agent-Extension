@@ -5866,10 +5866,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             });
         }
         async deleteWorkspace(id) {
-            return new Promise((resolve, reject) => {
+            return new Promise(async (resolve, reject) => {
                 if (!this.db)
                     return reject(new Error('DB not initialized'));
-                // Note: Does not delete chats inside the workspace currently
+                // Bước 1: Lấy danh sách chat trong workspace này
+                const chatsToDelete = await this.getAllChats(id);
+                // Bước 2: Xóa từng chat (và messages đi kèm)
+                for (const chat of chatsToDelete) {
+                    if (chat.id) {
+                        await this.deleteChat(chat.id).catch(console.error);
+                    }
+                }
+                // Bước 3: Xóa workspace
                 const transaction = this.db.transaction(['workspaces'], 'readwrite');
                 const store = transaction.objectStore('workspaces');
                 const request = store.delete(id);
@@ -7671,23 +7679,48 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 `);
                     chipsContainer.append(chip);
                 });
-                // Dropdown thêm tool
-                const addRow = $('<div style="display:flex; gap:5px; margin-top:8px;"></div>');
-                const select = $(`<select class="text_pole" id="kaiz-ws-tool-add-select" style="flex:1; padding:4px;"><option value="">-- Chọn tool để thêm --</option></select>`);
-                availableTools.forEach(schema => {
-                    select.append(`<option value="${escapeHtml$1(schema.name)}">${escapeHtml$1(schema.name)}</option>`);
-                });
-                const addBtn = $('<button class="menu_button interactable" style="padding:4px 10px; height:auto;"><i class="fa-solid fa-plus"></i> Thêm</button>');
-                addRow.append(select, addBtn);
-                toolsList.append(chipsContainer, addRow);
-                // Add tool
-                addBtn.on('click', () => {
-                    const val = select.val();
-                    if (!val)
+                // Ô search + danh sách kết quả có thể thêm
+                const addRow = $('<div style="display:flex; flex-direction:column; gap:5px; margin-top:8px;"></div>');
+                const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px;">`);
+                const resultList = $(`<div style="max-height:120px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2); display:none;"></div>`);
+                addRow.append(searchInput, resultList);
+                function renderSearchResults(query) {
+                    resultList.empty();
+                    const q = query.trim().toLowerCase();
+                    if (!q) {
+                        resultList.hide();
                         return;
-                    toolsConfig[val] = true;
-                    renderWsToolsUI(toolsConfig);
+                    }
+                    const matches = availableTools.filter(s => s.name.toLowerCase().includes(q) ||
+                        (s.description && s.description.toLowerCase().includes(q)));
+                    if (matches.length === 0) {
+                        resultList.show().append('<div style="padding:8px; color:#888; font-size:12px;">Không tìm thấy tool nào.</div>');
+                        return;
+                    }
+                    resultList.show();
+                    matches.forEach(schema => {
+                        const item = $(`
+                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$1(schema.name)}" style="
+                            padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
+                            border-bottom:1px solid rgba(255,255,255,0.05);
+                        ">
+                            <span style="color:#fff; font-weight:500;">${escapeHtml$1(schema.name)}</span>
+                            ${schema.description ? `<span style="color:#888; font-size:11px; margin-left:6px;">${escapeHtml$1(schema.description.substring(0, 60))}${schema.description.length > 60 ? '...' : ''}</span>` : ''}
+                        </div>
+                    `);
+                        item.on('mouseenter', function () { $(this).css('background', 'rgba(255,255,255,0.07)'); });
+                        item.on('mouseleave', function () { $(this).css('background', ''); });
+                        item.on('click', () => {
+                            toolsConfig[schema.name] = true;
+                            renderWsToolsUI(toolsConfig);
+                        });
+                        resultList.append(item);
+                    });
+                }
+                searchInput.on('input', function () {
+                    renderSearchResults(String($(this).val() || ''));
                 });
+                toolsList.append(chipsContainer, addRow);
                 // Remove tool chip
                 toolsList.on('click', '.kaiz-ws-tool-remove', function () {
                     const toolName = $(this).attr('data-tool');
