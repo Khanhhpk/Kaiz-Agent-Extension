@@ -1,4 +1,4 @@
-﻿import { ITool } from '../tool_registry';
+import { ITool } from '../tool_registry';
 import { StateManager } from '../state';
 
 export const listWorkspacesTool: ITool = {
@@ -17,23 +17,23 @@ export const listWorkspacesTool: ITool = {
             const currentId = stateManager.currentWorkspaceId;
 
             if (workspaces.length === 0) {
-                return { content: No workspaces found.\nCurrent context: Default (global chat, all tools follow global settings). };
+                return { content: `No workspaces found.\nCurrent context: Default (global chat, all tools follow global settings).` };
             }
 
             const lines = workspaces.map((ws) => {
                 const enabledCount = Object.values(ws.toolsConfig || {}).filter(Boolean).length;
                 const hasPrompt = ws.systemPrompt && ws.systemPrompt.trim() ? 'Yes' : 'No';
                 const active = ws.id === currentId ? ' [ACTIVE]' : '';
-                return ID:  | Name: "" | Tools:  | Custom Prompt: ;
+                return `ID: ${ws.id} | Name: "${ws.name}" | Tools: ${enabledCount} | Custom Prompt: ${hasPrompt}${active}`;
             });
 
             const activeLabel = currentId
-                ? Workspace ID  ("")
+                ? `Workspace ID ${currentId} ("${stateManager.currentWorkspace?.name}")`
                 : 'Default (global)';
 
-            return { content: Found  workspace(s):\n\n\nCurrently active:  };
+            return { content: `Found ${workspaces.length} workspace(s):\n${lines.join('\n')}\n\nCurrently active: ${activeLabel}` };
         } catch (e: any) {
-            return { content: Error listing workspaces: , isError: true };
+            return { content: `Error listing workspaces: ${e.message}`, isError: true };
         }
     },
 };
@@ -64,9 +64,9 @@ export const switchWorkspaceTool: ITool = {
             if (id === null) {
                 return { content: 'Switched to Default (global) mode. A new blank chat is now active.' };
             }
-            return { content: Switched to Workspace ID  (""). A new blank chat is now active. };
+            return { content: `Switched to Workspace ID ${id} ("${stateManager.currentWorkspace?.name || 'Unknown'}"). A new blank chat is now active.` };
         } catch (e: any) {
-            return { content: Error switching workspace: , isError: true };
+            return { content: `Error switching workspace: ${e.message}`, isError: true };
         }
     },
 };
@@ -93,9 +93,9 @@ export const createWorkspaceTool: ITool = {
             if (!name) return { content: 'Error: Workspace name cannot be empty.', isError: true };
 
             const id = await stateManager.createWorkspace(name);
-            return { content: Successfully created Workspace "" (ID: ). Now switched into it. Tools and custom prompt can be configured via the Settings icon in the sidebar. };
+            return { content: `Successfully created Workspace "${name}" (ID: ${id}). Now switched into it. Tools and custom prompt can be configured via the Settings icon in the sidebar.` };
         } catch (e: any) {
-            return { content: Error creating workspace: , isError: true };
+            return { content: `Error creating workspace: ${e.message}`, isError: true };
         }
     },
 };

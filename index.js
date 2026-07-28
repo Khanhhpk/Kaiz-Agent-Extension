@@ -1410,7 +1410,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const renameAgentChatTool = {
         schema: {
             name: 'rename_agent_chat',
-            description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. Operates within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {
@@ -1443,7 +1443,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const openNewAgentChatTool = {
         schema: {
             name: 'open_new_agent_chat',
-            description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1471,7 +1471,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const listAgentChatsTool = {
         schema: {
             name: 'list_agent_chats',
-            description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At) WITHIN the currently active Workspace. If in Default mode, lists all global chats. Use list_agent_workspaces first to understand the workspace structure. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1489,7 +1489,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     .map((c) => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`)
                     .join('\n');
                 return {
-                    content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}`,
+                    content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'} | Active Workspace: ${stateManager.currentWorkspaceId ? `ID ${stateManager.currentWorkspaceId} ("${stateManager.currentWorkspace?.name}")` : 'Default (global)'}`,
                 };
             }
             catch (e) {
@@ -1500,7 +1500,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const deleteAgentChatTool = {
         schema: {
             name: 'delete_agent_chat',
-            description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. Only deletes chats within the currently active Workspace scope. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {
@@ -4134,6 +4134,98 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         },
     };
 
+    const listWorkspacesTool = {
+        schema: {
+            name: 'list_agent_workspaces',
+            description: 'List all existing Kaiz Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
+            parameters: { type: 'object', properties: {} },
+        },
+        execute: async (_args, context) => {
+            try {
+                const stateManager = context?.stateManager;
+                if (!stateManager)
+                    return { content: 'Error: StateManager not available.', isError: true };
+                const workspaces = await stateManager.db.getAllWorkspaces();
+                const currentId = stateManager.currentWorkspaceId;
+                if (workspaces.length === 0) {
+                    return { content: `No workspaces found.\nCurrent context: Default (global chat, all tools follow global settings).` };
+                }
+                const lines = workspaces.map((ws) => {
+                    const enabledCount = Object.values(ws.toolsConfig || {}).filter(Boolean).length;
+                    const hasPrompt = ws.systemPrompt && ws.systemPrompt.trim() ? 'Yes' : 'No';
+                    const active = ws.id === currentId ? ' [ACTIVE]' : '';
+                    return `ID: ${ws.id} | Name: "${ws.name}" | Tools: ${enabledCount} | Custom Prompt: ${hasPrompt}${active}`;
+                });
+                const activeLabel = currentId
+                    ? `Workspace ID ${currentId} ("${stateManager.currentWorkspace?.name}")`
+                    : 'Default (global)';
+                return { content: `Found ${workspaces.length} workspace(s):\n${lines.join('\n')}\n\nCurrently active: ${activeLabel}` };
+            }
+            catch (e) {
+                return { content: `Error listing workspaces: ${e.message}`, isError: true };
+            }
+        },
+    };
+    const switchWorkspaceTool = {
+        schema: {
+            name: 'switch_agent_workspace',
+            description: 'Switch the current active Kaiz Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    workspaceId: {
+                        type: 'number',
+                        description: 'The ID of the workspace to switch to. Pass null or omit to switch back to Default (global) mode.',
+                    },
+                },
+            },
+        },
+        execute: async (args, context) => {
+            try {
+                const stateManager = context?.stateManager;
+                if (!stateManager)
+                    return { content: 'Error: StateManager not available.', isError: true };
+                const id = args.workspaceId ?? null;
+                await stateManager.switchWorkspace(id);
+                if (id === null) {
+                    return { content: 'Switched to Default (global) mode. A new blank chat is now active.' };
+                }
+                return { content: `Switched to Workspace ID ${id} ("${stateManager.currentWorkspace?.name || 'Unknown'}"). A new blank chat is now active.` };
+            }
+            catch (e) {
+                return { content: `Error switching workspace: ${e.message}`, isError: true };
+            }
+        },
+    };
+    const createWorkspaceTool = {
+        schema: {
+            name: 'create_agent_workspace',
+            description: 'Create a new Kaiz Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
+            parameters: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', description: 'The name for the new workspace.' },
+                },
+                required: ['name'],
+            },
+        },
+        execute: async (args, context) => {
+            try {
+                const stateManager = context?.stateManager;
+                if (!stateManager)
+                    return { content: 'Error: StateManager not available.', isError: true };
+                const name = String(args.name || '').trim();
+                if (!name)
+                    return { content: 'Error: Workspace name cannot be empty.', isError: true };
+                const id = await stateManager.createWorkspace(name);
+                return { content: `Successfully created Workspace "${name}" (ID: ${id}). Now switched into it. Tools and custom prompt can be configured via the Settings icon in the sidebar.` };
+            }
+            catch (e) {
+                return { content: `Error creating workspace: ${e.message}`, isError: true };
+            }
+        },
+    };
+
     /**
      * Đăng ký tất cả các tools mặc định vào Registry
      */
@@ -4174,6 +4266,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         registry.registerTool(getTavernHelperScriptInfoTool);
         registry.registerTool(manageTavernHelperScriptTool);
         registry.registerTool(browser_tools_manage);
+        registry.registerTool(listWorkspacesTool);
+        registry.registerTool(switchWorkspaceTool);
+        registry.registerTool(createWorkspaceTool);
     }
 
     /**
