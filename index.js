@@ -3023,9 +3023,9 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         },
     };
 
-    const updateKaizExtensionTool = {
+    const updateAgentExtensionTool = {
         schema: {
-            name: 'update_kaiz_extension',
+            name: 'update_agent_extension',
             description: 'Kiểm tra thông báo update của Agent Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
             parameters: {
                 type: 'object',
@@ -3151,7 +3151,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
             catch (e) {
                 return {
-                    content: `Lỗi khi chạy công cụ update_kaiz_extension: ${e.message}`,
+                    content: `Lỗi khi chạy công cụ update_agent_extension: ${e.message}`,
                     isError: true,
                 };
             }
@@ -4282,7 +4282,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         registry.registerTool(getRegexListTool);
         registry.registerTool(getRegexInfoTool);
         registry.registerTool(manageRegexTool);
-        registry.registerTool(updateKaizExtensionTool);
+        registry.registerTool(updateAgentExtensionTool);
         registry.registerTool(getTavernHelperScriptsTool);
         registry.registerTool(getTavernHelperScriptInfoTool);
         registry.registerTool(manageTavernHelperScriptTool);
