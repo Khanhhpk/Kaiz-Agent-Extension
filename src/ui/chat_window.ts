@@ -901,7 +901,7 @@ export class ChatWindowUI {
 
                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 if (restContent) {
-                    const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent;
+                    const parsedMarkdown = marked.parse(restContent);
                     html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                 }
             } else if (!isFinal) {
@@ -1078,7 +1078,8 @@ export class ChatWindowUI {
                     return;
                 }
                 const event = lastStreamEvent;
-                let fullText = continueMode ? currentStepResponse + (event.text || '') : event.text || '';
+                // event.text already includes the old text from loop.ts if continueMode && step === 1
+                let fullText = event.text || '';
                 let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                 if (event.reasoning && !event.text) {
                     htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
