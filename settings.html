@@ -255,18 +255,32 @@
 
                         <div
                             id="kaiz-browser-check-results"
-                        <div id="kaiz-browser-check-results" style="display: none; font-size: 12px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px; border: 1px solid rgba(255,255,255,0.1);">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            style="
+                                display: none;
+                                font-size: 12px;
+                                padding: 8px;
+                                background: rgba(0, 0, 0, 0.2);
+                                border-radius: 5px;
+                                border: 1px solid rgba(255, 255, 255, 0.1);
+                            "
+                        >
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px">
                                 <span>1. CORS Bypass:</span>
-                                <span id="kaiz-check-cors" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
+                                <span id="kaiz-check-cors" style="color: #f1c40f"
+                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
+                                >
                             </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px">
                                 <span>2. X-Frame Bypass:</span>
-                                <span id="kaiz-check-xframe" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
+                                <span id="kaiz-check-xframe" style="color: #f1c40f"
+                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
+                                >
                             </div>
-                            <div style="display: flex; justify-content: space-between;">
+                            <div style="display: flex; justify-content: space-between">
                                 <span>3. Companion Script:</span>
-                                <span id="kaiz-check-script" style="color: #f1c40f;"><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span>
+                                <span id="kaiz-check-script" style="color: #f1c40f"
+                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
+                                >
                             </div>
                         </div>
                     </div>
@@ -274,20 +288,27 @@
 
                 <!-- Core Prompt Settings -->
                 <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title" style="display: flex; justify-content: space-between; align-items: center;">
+                    <div
+                        class="scp-settings-flat-title"
+                        style="display: flex; justify-content: space-between; align-items: center"
+                    >
                         <span><i class="fa-solid fa-brain"></i> Core Prompt Settings</span>
-                        <div id="kaiz-reset-core-prompts" class="menu_button" style="padding: 4px 8px; font-size: 12px; margin: 0;">
+                        <div
+                            id="kaiz-reset-core-prompts"
+                            class="menu_button"
+                            style="padding: 4px 8px; font-size: 12px; margin: 0"
+                        >
                             <i class="fa-solid fa-rotate-left"></i> Reset
                         </div>
                     </div>
-                    
+
                     <label style="font-size: 11px; color: #888; display: block; margin-top: 8px; margin-bottom: 4px"
                         >Core Identity & Permissions</label
                     >
                     <textarea
                         id="kaiz-core-identity"
                         class="text_pole"
-                        style="width: 100%; height: 100px; resize: vertical; margin-bottom: 8px;"
+                        style="width: 100%; height: 100px; resize: vertical; margin-bottom: 8px"
                         placeholder="[Kaiz Agent Core Active]..."
                     ></textarea>
 
@@ -297,7 +318,7 @@
                     <textarea
                         id="kaiz-core-behavior"
                         class="text_pole"
-                        style="width: 100%; height: 150px; resize: vertical; margin-bottom: 8px;"
+                        style="width: 100%; height: 150px; resize: vertical; margin-bottom: 8px"
                         placeholder="<nofear>..."
                     ></textarea>
 
@@ -307,7 +328,7 @@
                     <textarea
                         id="kaiz-core-prefill"
                         class="text_pole"
-                        style="width: 100%; height: 80px; resize: vertical; margin-bottom: 8px;"
+                        style="width: 100%; height: 80px; resize: vertical; margin-bottom: 8px"
                         placeholder="<agent_cot>..."
                     ></textarea>
                 </div>
