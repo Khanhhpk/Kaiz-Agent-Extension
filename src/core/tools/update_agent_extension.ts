@@ -1,11 +1,11 @@
 import { ITool, ToolResult } from '../tool_registry';
 import { SillyTavernAdapter } from '../../adapters/st_adapter';
 
-export const updateKaizExtensionTool: ITool = {
+export const updateAgentExtensionTool: ITool = {
     schema: {
-        name: 'update_kaiz_extension',
+        name: 'update_agent_extension',
         description:
-            'Kiểm tra thông báo update của Kaiz-Agent-Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+            'Kiểm tra thông báo update của Agent Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
         parameters: {
             type: 'object',
             properties: {},
@@ -131,7 +131,7 @@ export const updateKaizExtensionTool: ITool = {
             };
         } catch (e: any) {
             return {
-                content: `Lỗi khi chạy công cụ update_kaiz_extension: ${e.message}`,
+                content: `Lỗi khi chạy công cụ update_agent_extension: ${e.message}`,
                 isError: true,
             };
         }

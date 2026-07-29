@@ -4,6 +4,7 @@ declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
 import { BrowserWindowUI } from './browser_window';
+import { DEFAULT_CORE_IDENTITY, DEFAULT_CORE_BEHAVIOR, DEFAULT_CORE_PREFILL } from '../core/defaults';
 
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -64,6 +65,34 @@ export class SettingsUI {
             if (id === 'kaiz-custom-key') settings.customKey = this.value;
             if (id === 'kaiz-custom-model-text') settings.customModel = this.value;
             ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-core-identity').val(settings.coreIdentity || DEFAULT_CORE_IDENTITY);
+        $('#kaiz-core-behavior').val(settings.coreBehavior || DEFAULT_CORE_BEHAVIOR);
+        $('#kaiz-core-prefill').val(settings.corePrefill || DEFAULT_CORE_PREFILL);
+
+        $('#kaiz-core-identity, #kaiz-core-behavior, #kaiz-core-prefill').on(
+            'input',
+            function (this: HTMLTextAreaElement) {
+                const id = this.id;
+                if (id === 'kaiz-core-identity') settings.coreIdentity = this.value;
+                if (id === 'kaiz-core-behavior') settings.coreBehavior = this.value;
+                if (id === 'kaiz-core-prefill') settings.corePrefill = this.value;
+                ctx.saveSettingsDebounced();
+            },
+        );
+
+        $('#kaiz-reset-core-prompts').on('click', () => {
+            if (confirm('Khôi phục Core Prompts về mặc định?')) {
+                $('#kaiz-core-identity').val(DEFAULT_CORE_IDENTITY);
+                $('#kaiz-core-behavior').val(DEFAULT_CORE_BEHAVIOR);
+                $('#kaiz-core-prefill').val(DEFAULT_CORE_PREFILL);
+                settings.coreIdentity = DEFAULT_CORE_IDENTITY;
+                settings.coreBehavior = DEFAULT_CORE_BEHAVIOR;
+                settings.corePrefill = DEFAULT_CORE_PREFILL;
+                ctx.saveSettingsDebounced();
+                toastr.success('Đã khôi phục Core Prompts');
+            }
         });
 
         $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);

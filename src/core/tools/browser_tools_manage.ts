@@ -4,7 +4,7 @@ import { BrowserWindowUI } from '../../ui/browser_window';
 export const browser_tools_manage: ITool = {
     schema: {
         name: 'browser_tools_manage',
-        description: `Quản lý và điều khiển Kaiz Browser (Trình duyệt web tích hợp trong SillyTavern). KHÔNG dùng cho trình duyệt bên ngoài. 
+        description: `Quản lý và điều khiển Agent Browser (Trình duyệt web tích hợp trong SillyTavern). KHÔNG dùng cho trình duyệt bên ngoài. 
 Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 1. Luôn dùng action='read' trước để đọc nội dung trang và lấy danh sách 'elementId' (ID của các nút bấm, ô nhập liệu).
 2. Dùng action='type' (cần elementId + text) để điền vào ô form.
