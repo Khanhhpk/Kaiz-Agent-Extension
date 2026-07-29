@@ -901,7 +901,7 @@ export class ChatWindowUI {
 
                 html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 if (restContent) {
-                    const parsedMarkdown = marked.parse(restContent);
+                    const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent;
                     html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                 }
             } else if (!isFinal) {
