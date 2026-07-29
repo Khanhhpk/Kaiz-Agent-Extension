@@ -221,10 +221,21 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             msgs.push({ role: 'system', content: feedbackBase });
         }
 
-        for (const msg of internalHistory) {
+        for (let i = 0; i < internalHistory.length; i++) {
+            const msg = internalHistory[i];
             let content = msg.content;
             if (msg.role === 'assistant' || msg.role === 'agent') {
                 content = this.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+            }
+
+            const isLastMessage = i === internalHistory.length - 1;
+            if (continueMode && step === 1 && isLastMessage && (msg.role === 'assistant' || msg.role === 'agent')) {
+                // If it's the last message and we want to continue it, we convert it into a user prompt directive
+                msgs.push({
+                    role: 'user',
+                    content: `SYSTEM DIRECTIVE: The assistant's last message was cut off due to length limits. Please continue the last message exactly from where it left off. DO NOT repeat what was already written. DO NOT use <agent_cot> tags, just output the exact continuation of the text. Content: "${content}"`,
+                });
+                continue;
             }
 
             const apiRole = msg.role === 'agent' ? 'assistant' : msg.role;
@@ -253,12 +264,6 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         if (!(continueMode && step === 1)) {
             const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
             msgs.push({ role: 'assistant', content: prefill });
-        } else if (continueMode && step === 1) {
-            msgs.push({
-                role: 'system',
-                content:
-                    "SYSTEM DIRECTIVE: The assistant's last message was cut off due to length limits. Please continue the last message exactly from where it left off. DO NOT repeat what was already written. DO NOT use <agent_cot> tags, just output the exact continuation of the text.",
-            });
         }
 
         return msgs;
@@ -319,7 +324,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     break;
                 }
                 step++;
-                await onEvent({ type: 'step_start' });
+                await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
 
                 try {
                     const messages = this.buildMessages(
