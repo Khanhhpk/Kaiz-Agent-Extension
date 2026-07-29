@@ -4,7 +4,7 @@ export const manageAgentMemory: ITool = {
     schema: {
         name: 'manage_agent_memory',
         description:
-            'Công cụ giúp Kaiz Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
+            'Công cụ giúp Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
         parameters: {
             type: 'object',
             properties: {

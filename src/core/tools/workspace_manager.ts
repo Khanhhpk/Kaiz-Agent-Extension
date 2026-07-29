@@ -5,7 +5,7 @@ export const listWorkspacesTool: ITool = {
     schema: {
         name: 'list_agent_workspaces',
         description:
-            'List all existing Kaiz Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
+            'List all existing Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
         parameters: { type: 'object', properties: {} },
     },
     execute: async (_args: any, context?: any) => {
@@ -46,7 +46,7 @@ export const switchWorkspaceTool: ITool = {
     schema: {
         name: 'switch_agent_workspace',
         description:
-            'Switch the current active Kaiz Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
+            'Switch the current active Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
         parameters: {
             type: 'object',
             properties: {
@@ -82,7 +82,7 @@ export const createWorkspaceTool: ITool = {
     schema: {
         name: 'create_agent_workspace',
         description:
-            'Create a new Kaiz Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
+            'Create a new Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
         parameters: {
             type: 'object',
             properties: {

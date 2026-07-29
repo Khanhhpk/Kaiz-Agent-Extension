@@ -5,7 +5,7 @@ export const updateKaizExtensionTool: ITool = {
     schema: {
         name: 'update_kaiz_extension',
         description:
-            'Kiểm tra thông báo update của Kaiz-Agent-Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+            'Kiểm tra thông báo update của Agent Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
         parameters: {
             type: 'object',
             properties: {},

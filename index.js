@@ -787,7 +787,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     isError: true,
                 };
             }
-            context.adapter.sendSystemMessage(`[Kaiz Agent]: ${message}`);
+            context.adapter.sendSystemMessage(`[Agent]: ${message}`);
             return {
                 content: 'System message sent successfully.',
             };
@@ -867,7 +867,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const manageBackupTool = {
         schema: {
             name: 'manage_backup',
-            description: 'Tạo bản sao lưu (backup) an toàn cho thẻ nhân vật, chat, hoặc worldbook hiện tại vào cơ sở dữ liệu IndexedDB của Kaiz Agent. LUÔN LUÔN gọi công cụ này trước khi sử dụng các công cụ thay đổi dữ liệu nguy hiểm như edit_character_card hoặc xoá tin nhắn.',
+            description: 'Tạo bản sao lưu (backup) an toàn cho thẻ nhân vật, chat, hoặc worldbook hiện tại vào cơ sở dữ liệu IndexedDB của Agent. LUÔN LUÔN gọi công cụ này trước khi sử dụng các công cụ thay đổi dữ liệu nguy hiểm như edit_character_card hoặc xoá tin nhắn.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -1422,7 +1422,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const renameAgentChatTool = {
         schema: {
             name: 'rename_agent_chat',
-            description: "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. Operates within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Rename a specific INTERNAL agent chat session by ID, or the current active internal chat if no ID is provided. Operates within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {
@@ -1455,7 +1455,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const openNewAgentChatTool = {
         schema: {
             name: 'open_new_agent_chat',
-            description: "Closes the current internal Kaiz agent chat and opens a new blank internal chat session within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Closes the current internal agent chat and opens a new blank internal chat session within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1483,7 +1483,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const listAgentChatsTool = {
         schema: {
             name: 'list_agent_chats',
-            description: "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At) WITHIN the currently active Workspace. If in Default mode, lists all global chats. Use list_agent_workspaces first to understand the workspace structure. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "List all existing internal agent chat sessions (ID, Name, Created At, Updated At) WITHIN the currently active Workspace. If in Default mode, lists all global chats. Use list_agent_workspaces first to understand the workspace structure. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {},
@@ -1512,7 +1512,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const deleteAgentChatTool = {
         schema: {
             name: 'delete_agent_chat',
-            description: "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. Only deletes chats within the currently active Workspace scope. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            description: "Delete a specific internal agent chat by ID, or the current active internal chat if no ID is provided. Only deletes chats within the currently active Workspace scope. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
             parameters: {
                 type: 'object',
                 properties: {
@@ -2563,7 +2563,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const manageAgentMemory = {
         schema: {
             name: 'manage_agent_memory',
-            description: 'Công cụ giúp Kaiz Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
+            description: 'Công cụ giúp Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -3026,7 +3026,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const updateKaizExtensionTool = {
         schema: {
             name: 'update_kaiz_extension',
-            description: 'Kiểm tra thông báo update của Kaiz-Agent-Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+            description: 'Kiểm tra thông báo update của Agent Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
             parameters: {
                 type: 'object',
                 properties: {},
@@ -4040,7 +4040,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
     const browser_tools_manage = {
         schema: {
             name: 'browser_tools_manage',
-            description: `Quản lý và điều khiển Kaiz Browser (Trình duyệt web tích hợp trong SillyTavern). KHÔNG dùng cho trình duyệt bên ngoài. 
+            description: `Quản lý và điều khiển Agent Browser (Trình duyệt web tích hợp trong SillyTavern). KHÔNG dùng cho trình duyệt bên ngoài. 
 Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 1. Luôn dùng action='read' trước để đọc nội dung trang và lấy danh sách 'elementId' (ID của các nút bấm, ô nhập liệu).
 2. Dùng action='type' (cần elementId + text) để điền vào ô form.
@@ -4150,7 +4150,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
     const listWorkspacesTool = {
         schema: {
             name: 'list_agent_workspaces',
-            description: 'List all existing Kaiz Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
+            description: 'List all existing Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
             parameters: { type: 'object', properties: {} },
         },
         execute: async (_args, context) => {
@@ -4186,7 +4186,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
     const switchWorkspaceTool = {
         schema: {
             name: 'switch_agent_workspace',
-            description: 'Switch the current active Kaiz Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
+            description: 'Switch the current active Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -4219,7 +4219,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
     const createWorkspaceTool = {
         schema: {
             name: 'create_agent_workspace',
-            description: 'Create a new Kaiz Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
+            description: 'Create a new Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
             parameters: {
                 type: 'object',
                 properties: {

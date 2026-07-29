@@ -38,7 +38,7 @@ export const sendSystemMessageTool: ITool = {
             };
         }
 
-        context.adapter.sendSystemMessage(`[Kaiz Agent]: ${message}`);
+        context.adapter.sendSystemMessage(`[Agent]: ${message}`);
 
         return {
             content: 'System message sent successfully.',
