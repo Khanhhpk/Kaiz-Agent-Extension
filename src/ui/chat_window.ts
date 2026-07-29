@@ -877,7 +877,7 @@ export class ChatWindowUI {
 
                 restContent = parseToolCallsToHtml(restContent, !isFinal);
 
-                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 if (restContent) {
                     const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent;
                     html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
@@ -885,7 +885,7 @@ export class ChatWindowUI {
             } else if (!isFinal) {
                 // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
                 const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
                 // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
                 const parsedContent = parseToolCallsToHtml(html.trim(), false);
@@ -952,7 +952,7 @@ export class ChatWindowUI {
         stateManager.onChatSwitched = (chatId, messages) => {
             history.empty();
             if (messages.length === 0 && chatId === -1) {
-                chatTitle.text('Kaiz Agent');
+                chatTitle.text('Agent');
                 addWelcomeMessage();
             } else if (messages.length === 0) {
                 addWelcomeMessage();
@@ -992,7 +992,7 @@ export class ChatWindowUI {
             const welcomeHtml = `
             <div class="kaiz-msg kaiz-msg-agent">
                 <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
-                <div class="kaiz-msg-content">Xin chào! Tôi là <b>Kaiz Agent</b>. Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
+                <div class="kaiz-msg-content">Xin chào! Tôi là <b>Agent</b>. Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
             history.append(welcomeHtml);
         };
