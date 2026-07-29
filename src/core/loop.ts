@@ -168,6 +168,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         step: number,
         hasError: boolean,
         cachedSystemPrompt: string,
+        continueMode: boolean = false,
     ): Message[] {
         const ctx = (window as any).SillyTavern.getContext();
         const settings = ctx.extensionSettings?.kaiz_agent || {};
@@ -249,13 +250,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
         }
 
-        const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
-        msgs.push({ role: 'assistant', content: prefill });
+        if (!(continueMode && step === 1)) {
+            const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
+            msgs.push({ role: 'assistant', content: prefill });
+        }
 
         return msgs;
     }
 
-    public async run(history: any[], maxSteps: number, onEvent: (event: AgentEvent) => void | Promise<void>) {
+    public async run(
+        history: any[],
+        maxSteps: number,
+        onEvent: (event: AgentEvent) => void | Promise<void>,
+        continueMode: boolean = false,
+    ) {
         console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
 
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
@@ -314,6 +322,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         step,
                         lastToolError,
                         cachedSystemPrompt,
+                        continueMode,
                     );
 
                     let currentText = '';
@@ -341,7 +350,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                     async (text, reasoning) => {
                                         if (this._forceAborted) return;
                                         currentText = text;
-                                        await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+
+                                        let combinedText = currentText;
+                                        if (continueMode && step === 1) {
+                                            const lastMsg = internalHistory[internalHistory.length - 1];
+                                            if (lastMsg && (lastMsg.role === 'assistant' || lastMsg.role === 'agent')) {
+                                                combinedText = lastMsg.content + currentText;
+                                            }
+                                        }
+                                        await onEvent({ type: 'stream_chunk', text: combinedText, reasoning });
                                     },
                                     this._currentAbortController.signal,
                                 ),
@@ -411,23 +428,44 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     await onEvent({ type: 'think_end', data: response.reasoning });
 
                     const text = response.text;
+                    let fullText = text;
 
-                    internalHistory.push({ role: 'assistant', content: text });
+                    if (continueMode && step === 1) {
+                        const lastMsg = internalHistory[internalHistory.length - 1];
+                        if (lastMsg && (lastMsg.role === 'assistant' || lastMsg.role === 'agent')) {
+                            lastMsg.content += text;
+                            fullText = lastMsg.content;
+                        } else {
+                            internalHistory.push({ role: 'assistant', content: text });
+                        }
+                    } else {
+                        internalHistory.push({ role: 'assistant', content: text });
+                    }
 
                     await onEvent({
                         type: 'debug',
-                        data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text },
+                        data: { messages: JSON.parse(JSON.stringify(messages)), responseText: fullText },
                     });
 
-                    const toolCalls = this.parseToolCalls(text);
+                    const toolCalls = this.parseToolCalls(fullText);
 
                     if (toolCalls.length === 0) {
                         reachedFinal = true;
-                        await onEvent({ type: 'step_end', text: text, isFinal: true });
+                        await onEvent({
+                            type: 'step_end',
+                            text: fullText,
+                            isFinal: true,
+                            data: { isContinue: continueMode && step === 1 },
+                        });
                         break;
                     }
 
-                    await onEvent({ type: 'step_end', text: text, isFinal: false });
+                    await onEvent({
+                        type: 'step_end',
+                        text: fullText,
+                        isFinal: false,
+                        data: { isContinue: continueMode && step === 1 },
+                    });
 
                     // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
                     let resultsFormatted = '';

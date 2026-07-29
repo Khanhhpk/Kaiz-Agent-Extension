@@ -277,8 +277,30 @@ export class ChatWindowUI {
         });
         // ------------------------------------
 
+        const continueBtn = $('#kaiz-chat-continue');
         const sendBtn = $('#kaiz-chat-send');
         const history = $('#kaiz-chat-history');
+
+        const updateContinueBtnVisibility = () => {
+            if (loop.isRunning) {
+                continueBtn.hide();
+                return;
+            }
+            if (stateManager.currentChatId) {
+                stateManager.db
+                    .getMessages(stateManager.currentChatId)
+                    .then((msgs) => {
+                        if (msgs.length > 0 && msgs[msgs.length - 1].role === 'agent') {
+                            continueBtn.show();
+                        } else {
+                            continueBtn.hide();
+                        }
+                    })
+                    .catch(() => continueBtn.hide());
+            } else {
+                continueBtn.hide();
+            }
+        };
 
         // --- Drag Logic ---
         const ensureInBounds = (el: any) => {
@@ -1028,35 +1050,11 @@ export class ChatWindowUI {
             }
             return msgId;
         };
-
-        // Xử lý gửi tin nhắn UI
-        const sendMessage = async () => {
-            if (sendBtn.prop('disabled')) return;
-            const text = String(input.val()).trim();
-            const attachmentsToSend = [...ChatWindowUI.currentAttachments];
-
-            if (!text && attachmentsToSend.length === 0) return;
-
-            sendBtn.prop('disabled', true);
-            input.val('');
-            ChatWindowUI.currentAttachments = [];
-            renderAttachmentsPreview();
-
-            // Lưu vào DB trước
-            await stateManager.addMessage('user', text, attachmentsToSend);
-            // In ra UI
-            const formattedUI = formatUserMessage(text, attachmentsToSend);
-            addMessageToDOM('user', formattedUI);
-
-            // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
-            if (chatTitle.text() === 'New Chat') {
-                const titleText = text || 'File đính kèm';
-                chatTitle.text(titleText.substring(0, 30) + (titleText.length > 30 ? '...' : ''));
-            }
-
+        const startAgent = async (continueMode: boolean = false) => {
             sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
             sendBtn.prop('disabled', false); // Bật lại ngay để cho phép click Stop
             sendBtn.addClass('kaiz-stop-mode');
+            updateContinueBtnVisibility();
 
             const ctx = (window as any).SillyTavern.getContext();
             const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
@@ -1096,50 +1094,67 @@ export class ChatWindowUI {
                 });
             };
 
-            await loop.run(historyMsgs, maxLoops, async (event) => {
-                const btnIcon = $('#kaiz-floating-btn i');
-                const btnFloat = $('#kaiz-floating-btn');
+            await loop.run(
+                historyMsgs,
+                maxLoops,
+                async (event) => {
+                    const btnIcon = $('#kaiz-floating-btn i');
+                    const btnFloat = $('#kaiz-floating-btn');
 
-                if (event.type === 'step_start') {
-                    btnIcon.addClass('kaiz-icon-spin');
-                    btnFloat.removeClass('kaiz-btn-blink');
-                    agentMsgId = addMessageToDOM(
-                        'agent',
-                        '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>',
-                    );
-                    agentContentBox = $(`#${agentMsgId}`);
-                    currentStepResponse = '';
-                } else if (event.type === 'stream_chunk') {
-                    if (!agentContentBox) return;
-                    lastStreamEvent = event;
-                    if (!streamUpdatePending) {
-                        streamUpdatePending = true;
-                        requestAnimationFrame(flushStreamUpdate);
-                    }
-                } else if (event.type === 'step_end') {
-                    lastStreamEvent = null;
-                    streamUpdatePending = false;
-                    if (!agentContentBox) return;
-                    agentContentBox.html(formatMessage(event.text || '', true));
-                    // Gọi render biểu đồ Mermaid
-                    renderMermaid();
+                    if (event.type === 'step_start') {
+                        btnIcon.addClass('kaiz-icon-spin');
+                        btnFloat.removeClass('kaiz-btn-blink');
+                        if (event.data?.isContinue) {
+                            const agentMsgs = history.find('.kaiz-msg-agent .kaiz-msg-content');
+                            agentContentBox = agentMsgs.last();
+                            currentStepResponse =
+                                historyMsgs.length > 0 ? historyMsgs[historyMsgs.length - 1].content : '';
+                        } else {
+                            agentMsgId = addMessageToDOM(
+                                'agent',
+                                '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>',
+                            );
+                            agentContentBox = $(`#${agentMsgId}`);
+                            currentStepResponse = '';
+                        }
+                    } else if (event.type === 'stream_chunk') {
+                        if (!agentContentBox) return;
+                        lastStreamEvent = event;
+                        if (!streamUpdatePending) {
+                            streamUpdatePending = true;
+                            requestAnimationFrame(flushStreamUpdate);
+                        }
+                    } else if (event.type === 'step_end') {
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
+                        if (!agentContentBox) return;
+                        agentContentBox.html(formatMessage(event.text || '', true));
+                        // Gọi render biểu đồ Mermaid
+                        renderMermaid();
 
-                    currentStepResponse = event.text || '';
-                    await stateManager.addMessage('agent', currentStepResponse);
-                    agentContentBox = null;
-                } else if (event.type === 'tool_result') {
-                    const formatted = formatUserMessage(event.text || '');
-                    addMessageToDOM('user', formatted);
-                    await stateManager.addMessage('user', event.text || '');
-                } else if (event.type === 'tool_confirm') {
-                    btnIcon.removeClass('kaiz-icon-spin');
-                    btnFloat.addClass('kaiz-btn-blink');
+                        currentStepResponse = event.text || '';
+                        if (event.data?.isContinue) {
+                            const lastMsg = historyMsgs[historyMsgs.length - 1];
+                            if (lastMsg && lastMsg.id) {
+                                await stateManager.updateMessage(lastMsg.id, currentStepResponse);
+                            }
+                        } else {
+                            await stateManager.addMessage('agent', currentStepResponse);
+                        }
+                        agentContentBox = null;
+                    } else if (event.type === 'tool_result') {
+                        const formatted = formatUserMessage(event.text || '');
+                        addMessageToDOM('user', formatted);
+                        await stateManager.addMessage('user', event.text || '');
+                    } else if (event.type === 'tool_confirm') {
+                        btnIcon.removeClass('kaiz-icon-spin');
+                        btnFloat.addClass('kaiz-btn-blink');
 
-                    const call = event.data.call;
-                    const resolveFn = event.data.resolve;
+                        const call = event.data.call;
+                        const resolveFn = event.data.resolve;
 
-                    const confirmId = Date.now() + Math.floor(Math.random() * 1000);
-                    const html = `
+                        const confirmId = Date.now() + Math.floor(Math.random() * 1000);
+                        const html = `
                         <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
                             <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
                             <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
@@ -1150,65 +1165,66 @@ export class ChatWindowUI {
                         </div>
                     `;
 
-                    const domId = addMessageToDOM('agent', html);
+                        const domId = addMessageToDOM('agent', html);
 
-                    $(`#kaiz-allow-${confirmId}`).on('click', () => {
-                        if (!loop.isRunning) return;
-                        $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                        $(`#${domId}`).html(
-                            `<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml(call.name)}</div>`,
-                        );
-                        btnIcon.addClass('kaiz-icon-spin');
-                        btnFloat.removeClass('kaiz-btn-blink');
-                        resolveFn(true);
-                    });
+                        $(`#kaiz-allow-${confirmId}`).on('click', () => {
+                            if (!loop.isRunning) return;
+                            $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
+                            $(`#${domId}`).html(
+                                `<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml(call.name)}</div>`,
+                            );
+                            btnIcon.addClass('kaiz-icon-spin');
+                            btnFloat.removeClass('kaiz-btn-blink');
+                            resolveFn(true);
+                        });
 
-                    $(`#kaiz-deny-${confirmId}`).on('click', () => {
-                        if (!loop.isRunning) return;
-                        $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                        $(`#${domId}`).html(
-                            `<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml(call.name)}</div>`,
-                        );
-                        btnIcon.removeClass('kaiz-icon-spin');
-                        btnFloat.removeClass('kaiz-btn-blink');
-                        resolveFn(false);
-                    });
-                } else if (event.type === 'retry') {
-                    lastStreamEvent = null;
-                    streamUpdatePending = false;
-                    if (agentContentBox) {
-                        agentContentBox.html(
-                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
-                        );
-                    } else {
-                        agentMsgId = addMessageToDOM(
-                            'agent',
-                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
-                        );
-                        agentContentBox = $(`#${agentMsgId}`);
+                        $(`#kaiz-deny-${confirmId}`).on('click', () => {
+                            if (!loop.isRunning) return;
+                            $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
+                            $(`#${domId}`).html(
+                                `<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml(call.name)}</div>`,
+                            );
+                            btnIcon.removeClass('kaiz-icon-spin');
+                            btnFloat.removeClass('kaiz-btn-blink');
+                            resolveFn(false);
+                        });
+                    } else if (event.type === 'retry') {
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
+                        if (agentContentBox) {
+                            agentContentBox.append(
+                                `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                        } else {
+                            agentMsgId = addMessageToDOM(
+                                'agent',
+                                `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                            agentContentBox = $(`#${agentMsgId}`);
+                        }
+                    } else if (event.type === 'error') {
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
+
+                        if (agentContentBox) {
+                            agentContentBox.append(
+                                `<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                            agentContentBox = null;
+                        } else {
+                            addMessageToDOM(
+                                'agent',
+                                `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                        }
+                        await stateManager.addMessage('agent', `[Error] ${event.text}`);
+                    } else if (event.type === 'debug') {
+                        lastLogSent = JSON.stringify(event.data.messages, null, 2);
+                        lastLogRecv = event.data.responseText;
                     }
-                } else if (event.type === 'error') {
-                    // Ng\u1eaft stream render ngay l\u1eadp t\u1ee9c \u0111\u1ec3 kh\u00f4ng b\u1ecb \u0111\u00e8 l\u00ean th\u00f4ng b\u00e1o l\u1ed7i
-                    lastStreamEvent = null;
-                    streamUpdatePending = false;
-
-                    if (agentContentBox) {
-                        agentContentBox.append(
-                            `<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
-                        );
-                        agentContentBox = null; // Ng\u0103n b\u1ea5t k\u1ef3 callback n\u00e0o c\u00f2n s\u00f3t ghi \u0111\u00e8
-                    } else {
-                        addMessageToDOM(
-                            'agent',
-                            `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
-                        );
-                    }
-                    await stateManager.addMessage('agent', `[Error] ${event.text}`);
-                } else if (event.type === 'debug') {
-                    lastLogSent = JSON.stringify(event.data.messages, null, 2);
-                    lastLogRecv = event.data.responseText;
-                }
-            });
+                },
+                continueMode,
+            );
 
             // Dọn dẹp tất cả các hộp thoại safe mode bị treo (do abort hoặc lỗi)
             $('.kaiz-safe-mode-pending').each(function (this: any) {
@@ -1227,7 +1243,49 @@ export class ChatWindowUI {
             sendBtn.removeClass('kaiz-stop-mode');
             sendBtn.prop('disabled', false);
             input.focus();
+            updateContinueBtnVisibility();
         };
+
+        // Xử lý gửi tin nhắn UI
+        const sendMessage = async () => {
+            if (sendBtn.prop('disabled')) return;
+            const text = String(input.val()).trim();
+            const attachmentsToSend = [...ChatWindowUI.currentAttachments];
+
+            if (!text && attachmentsToSend.length === 0) return;
+
+            sendBtn.prop('disabled', true);
+            input.val('');
+            ChatWindowUI.currentAttachments = [];
+            renderAttachmentsPreview();
+
+            // Lưu vào DB trước
+            await stateManager.addMessage('user', text, attachmentsToSend);
+            // In ra UI
+            const formattedUI = formatUserMessage(text, attachmentsToSend);
+            addMessageToDOM('user', formattedUI);
+
+            // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
+            if (chatTitle.text() === 'New Chat') {
+                const titleText = text || 'File đính kèm';
+                chatTitle.text(titleText.substring(0, 30) + (titleText.length > 30 ? '...' : ''));
+            }
+
+            startAgent(false);
+        };
+
+        continueBtn.on('click', async () => {
+            if (loop.isRunning) return;
+            const historyMsgs = stateManager.currentChatId
+                ? await stateManager.db.getMessages(stateManager.currentChatId)
+                : [];
+            if (historyMsgs.length === 0 || historyMsgs[historyMsgs.length - 1].role !== 'agent') {
+                // @ts-ignore
+                toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Kaiz Agent');
+                return;
+            }
+            startAgent(true);
+        });
 
         let forceAbortTimer: any = null;
 
