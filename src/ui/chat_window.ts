@@ -992,7 +992,7 @@ export class ChatWindowUI {
             const welcomeHtml = `
             <div class="kaiz-msg kaiz-msg-agent">
                 <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
-                <div class="kaiz-msg-content">Xin chào! Tôi là <b>Agent</b>. Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
+                <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
             history.append(welcomeHtml);
         };
