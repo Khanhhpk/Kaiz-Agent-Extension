@@ -1078,7 +1078,8 @@ export class ChatWindowUI {
                     return;
                 }
                 const event = lastStreamEvent;
-                let htmlToRender = event.text ? formatMessage(event.text, false) : '';
+                let fullText = continueMode ? currentStepResponse + (event.text || '') : event.text || '';
+                let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                 if (event.reasoning && !event.text) {
                     htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
                 }

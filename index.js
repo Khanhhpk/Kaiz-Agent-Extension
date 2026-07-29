@@ -217,6 +217,12 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                 const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
                 msgs.push({ role: 'assistant', content: prefill });
             }
+            else if (continueMode && step === 1) {
+                msgs.push({
+                    role: 'system',
+                    content: "SYSTEM DIRECTIVE: The assistant's last message was cut off due to length limits. Please continue the last message exactly from where it left off. DO NOT repeat what was already written. DO NOT use <agent_cot> tags, just output the exact continuation of the text.",
+                });
+            }
             return msgs;
         }
         async run(history, maxSteps, onEvent, continueMode = false) {
@@ -8521,7 +8527,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         return;
                     }
                     const event = lastStreamEvent;
-                    let htmlToRender = event.text ? formatMessage(event.text, false) : '';
+                    let fullText = continueMode ? currentStepResponse + (event.text || '') : event.text || '';
+                    let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                     if (event.reasoning && !event.text) {
                         htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
                     }
