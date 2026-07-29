@@ -82,6 +82,19 @@ export class SettingsUI {
             },
         );
 
+        $('#kaiz-reset-core-prompts').on('click', () => {
+            if (confirm('Khôi phục Core Prompts về mặc định?')) {
+                $('#kaiz-core-identity').val(DEFAULT_CORE_IDENTITY);
+                $('#kaiz-core-behavior').val(DEFAULT_CORE_BEHAVIOR);
+                $('#kaiz-core-prefill').val(DEFAULT_CORE_PREFILL);
+                settings.coreIdentity = DEFAULT_CORE_IDENTITY;
+                settings.coreBehavior = DEFAULT_CORE_BEHAVIOR;
+                settings.corePrefill = DEFAULT_CORE_PREFILL;
+                ctx.saveSettingsDebounced();
+                toastr.success('Đã khôi phục Core Prompts');
+            }
+        });
+
         $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);
         $('#kaiz-max-loops').on('input', function (this: HTMLInputElement) {
             settings.maxAgentLoops = parseInt(this.value, 10) || 5;
