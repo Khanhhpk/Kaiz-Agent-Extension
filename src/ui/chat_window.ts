@@ -286,17 +286,9 @@ export class ChatWindowUI {
                 continueBtn.hide();
                 return;
             }
-            if (stateManager.currentChatId) {
-                stateManager.db
-                    .getMessages(stateManager.currentChatId)
-                    .then((msgs) => {
-                        if (msgs.length > 0 && msgs[msgs.length - 1].role === 'agent') {
-                            continueBtn.show();
-                        } else {
-                            continueBtn.hide();
-                        }
-                    })
-                    .catch(() => continueBtn.hide());
+            const lastMsgRow = history.find('.kaiz-msg').last();
+            if (lastMsgRow.length > 0 && lastMsgRow.hasClass('kaiz-msg-agent')) {
+                continueBtn.show();
             } else {
                 continueBtn.hide();
             }
@@ -1008,6 +1000,7 @@ export class ChatWindowUI {
                 history.append(htmlBuffer);
                 history.scrollTop(history[0].scrollHeight);
             }
+            updateContinueBtnVisibility();
         };
 
         const addWelcomeMessage = () => {
@@ -1048,6 +1041,7 @@ export class ChatWindowUI {
             if (animate) {
                 history.scrollTop(history[0].scrollHeight);
             }
+            updateContinueBtnVisibility();
             return msgId;
         };
         const startAgent = async (continueMode: boolean = false) => {

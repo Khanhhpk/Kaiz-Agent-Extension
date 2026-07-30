@@ -7824,18 +7824,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     continueBtn.hide();
                     return;
                 }
-                if (stateManager.currentChatId) {
-                    stateManager.db
-                        .getMessages(stateManager.currentChatId)
-                        .then((msgs) => {
-                        if (msgs.length > 0 && msgs[msgs.length - 1].role === 'agent') {
-                            continueBtn.show();
-                        }
-                        else {
-                            continueBtn.hide();
-                        }
-                    })
-                        .catch(() => continueBtn.hide());
+                const lastMsgRow = history.find('.kaiz-msg').last();
+                if (lastMsgRow.length > 0 && lastMsgRow.hasClass('kaiz-msg-agent')) {
+                    continueBtn.show();
                 }
                 else {
                     continueBtn.hide();
@@ -8468,6 +8459,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     history.append(htmlBuffer);
                     history.scrollTop(history[0].scrollHeight);
                 }
+                updateContinueBtnVisibility();
             };
             const addWelcomeMessage = () => {
                 const welcomeHtml = `
@@ -8503,6 +8495,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 if (animate) {
                     history.scrollTop(history[0].scrollHeight);
                 }
+                updateContinueBtnVisibility();
                 return msgId;
             };
             const startAgent = async (continueMode = false) => {
