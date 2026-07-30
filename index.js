@@ -77,6 +77,20 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         get isRunning() {
             return this._isRunning;
         }
+        async getBaseTokens(maxSteps) {
+            const ctx = window.SillyTavern.getContext();
+            const settings = ctx.extensionSettings?.kaiz_agent || {};
+            const layer1_identity = settings.coreIdentity || DEFAULT_CORE_IDENTITY;
+            const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
+            const fullText = layer1_identity + '\n' + cachedSystemPrompt;
+            if (typeof window.getTokenCountAsync === 'function') {
+                return await window.getTokenCountAsync(fullText);
+            }
+            else if (typeof window.getTokenCount === 'function') {
+                return window.getTokenCount(fullText);
+            }
+            return Math.ceil(fullText.split(/\s+/).length * 1.3);
+        }
         generateSystemPrompt(maxSteps) {
             const ctx = window.SillyTavern.getContext();
             const settings = ctx.extensionSettings?.kaiz_agent || {};
@@ -8490,6 +8504,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     else {
                         count = Math.ceil(fullText.split(/\s+/).length * 1.3);
                     }
+                    const ctx = window.SillyTavern.getContext();
+                    const settings = ctx.extensionSettings?.kaiz_agent || {};
+                    const maxLoops = settings.maxAgentLoops || 5;
+                    const baseTokens = await loop.getBaseTokens(maxLoops);
+                    count += baseTokens;
                     counterSpan.text(count.toLocaleString());
                     counterContainer.css('display', 'inline-block');
                 }

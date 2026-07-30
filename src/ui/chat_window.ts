@@ -987,6 +987,12 @@ export class ChatWindowUI {
                     count = Math.ceil(fullText.split(/\s+/).length * 1.3);
                 }
 
+                const ctx = (window as any).SillyTavern.getContext();
+                const settings = ctx.extensionSettings?.kaiz_agent || {};
+                const maxLoops = settings.maxAgentLoops || 5;
+                const baseTokens = await loop.getBaseTokens(maxLoops);
+                count += baseTokens;
+
                 counterSpan.text(count.toLocaleString());
                 counterContainer.css('display', 'inline-block');
             } catch (e) {

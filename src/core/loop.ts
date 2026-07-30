@@ -78,6 +78,20 @@ export class AgentLoop {
         return this._isRunning;
     }
 
+    public async getBaseTokens(maxSteps: number): Promise<number> {
+        const ctx = (window as any).SillyTavern.getContext();
+        const settings = ctx.extensionSettings?.kaiz_agent || {};
+        const layer1_identity = settings.coreIdentity || DEFAULT_CORE_IDENTITY;
+        const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
+        const fullText = layer1_identity + '\n' + cachedSystemPrompt;
+        if (typeof (window as any).getTokenCountAsync === 'function') {
+            return await (window as any).getTokenCountAsync(fullText);
+        } else if (typeof (window as any).getTokenCount === 'function') {
+            return (window as any).getTokenCount(fullText);
+        }
+        return Math.ceil(fullText.split(/\s+/).length * 1.3);
+    }
+
     private generateSystemPrompt(maxSteps: number): string {
         const ctx = (window as any).SillyTavern.getContext();
         const settings = ctx.extensionSettings?.kaiz_agent || {};
