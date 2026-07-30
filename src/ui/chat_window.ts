@@ -401,7 +401,6 @@ export class ChatWindowUI {
         const sidebar = $('#kaiz-chat-sidebar');
         const newChatBtn = $('#kaiz-new-chat-btn');
         const chatList = $('#kaiz-chat-list');
-        const chatTitle = $('#kaiz-chat-title');
 
         let isSidebarOpen = false;
 

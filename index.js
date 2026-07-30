@@ -8012,7 +8012,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const sidebar = $('#kaiz-chat-sidebar');
             const newChatBtn = $('#kaiz-new-chat-btn');
             const chatList = $('#kaiz-chat-list');
-            $('#kaiz-chat-title');
             let isSidebarOpen = false;
             // --- Workspace UI Logic ---
             const wsSelect = $('#kaiz-workspace-select');
