@@ -8528,7 +8528,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         return;
                     }
                     const event = lastStreamEvent;
-                    let fullText = continueMode ? currentStepResponse + (event.text || '') : event.text || '';
+                    // event.text already includes the old text from loop.ts if continueMode && step === 1
+                    let fullText = event.text || '';
                     let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                     if (event.reasoning && !event.text) {
                         htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
