@@ -83,7 +83,34 @@ export class AgentLoop {
         const settings = ctx.extensionSettings?.kaiz_agent || {};
         const layer1_identity = settings.coreIdentity || DEFAULT_CORE_IDENTITY;
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
-        const fullText = layer1_identity + '\n' + cachedSystemPrompt;
+        
+        let fullText = layer1_identity + '\n' + cachedSystemPrompt;
+
+        if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
+            fullText += `\n[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}`;
+        }
+
+        if (settings) {
+            const persona = settings.persona;
+            const memories = settings.memories;
+
+            if (persona) {
+                fullText += `\n[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
+            }
+
+            if (memories && memories.length > 0) {
+                fullText += `\n[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
+                memories.forEach((mem: any, idx: number) => {
+                    if (typeof mem === 'string') {
+                        fullText += `${idx + 1}. [Untracked] ${mem}\n`;
+                    } else if (mem && mem.key && mem.content) {
+                        fullText += `${idx + 1}. [${mem.key}] ${mem.content}\n`;
+                    }
+                });
+                fullText += `</agent_memory>\n`;
+            }
+        }
+
         if (typeof (window as any).getTokenCountAsync === 'function') {
             return await (window as any).getTokenCountAsync(fullText);
         } else if (typeof (window as any).getTokenCount === 'function') {
