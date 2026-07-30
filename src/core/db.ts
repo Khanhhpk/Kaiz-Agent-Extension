@@ -439,6 +439,27 @@ export class KaizDB {
         });
     }
 
+    public async updateMessageText(id: number, content: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['messages'], 'readwrite');
+            const store = transaction.objectStore('messages');
+
+            const request = store.get(id);
+            request.onsuccess = () => {
+                const msg = request.result;
+                if (!msg) {
+                    return reject(new Error('Message not found'));
+                }
+                msg.content = content;
+                const updateReq = store.put(msg);
+                updateReq.onsuccess = () => resolve();
+                updateReq.onerror = () => reject(updateReq.error);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
     public async getMessages(chatId: number): Promise<ChatMessage[]> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));

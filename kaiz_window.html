@@ -123,135 +123,148 @@
             </div>
         </div>
 
-        <!-- Sidebar Chat List -->
         <div
-            id="kaiz-chat-sidebar"
-            class="kaiz-chat-sidebar kaiz-hidden-sidebar"
-            style="
-                display: none;
-                position: absolute;
-                top: 54px;
-                left: 0;
-                width: 200px;
-                bottom: 0;
-                background: rgba(20, 25, 35, 0.95);
-                border-right: 1px solid rgba(255, 255, 255, 0.1);
-                z-index: 10002;
-                flex-direction: column;
-            "
+            id="kaiz-chat-body-wrapper"
+            style="position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0"
         >
-            <!-- Workspace Selector -->
+            <!-- Sidebar Chat List -->
             <div
-                style="
-                    padding: 10px;
-                    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-                    display: flex;
-                    flex-direction: column;
-                    gap: 5px;
-                "
-            >
-                <div style="font-size: 0.8em; color: #aaa; font-weight: bold">WORKSPACE</div>
-                <div style="display: flex; gap: 5px; align-items: center">
-                    <select
-                        id="kaiz-workspace-select"
-                        class="text_pole"
-                        style="flex: 1; padding: 5px; border-radius: 4px; min-width: 0"
-                    >
-                        <option value="default">Default</option>
-                    </select>
-                    <button
-                        id="kaiz-workspace-settings-btn"
-                        class="menu_button interactable"
-                        style="padding: 5px 8px; display: none"
-                        title="Cài đặt Workspace"
-                    >
-                        <i class="fa-solid fa-gear"></i>
-                    </button>
-                    <button
-                        id="kaiz-workspace-add-btn"
-                        class="menu_button interactable"
-                        style="padding: 5px 8px"
-                        title="Tạo Workspace mới"
-                    >
-                        <i class="fa-solid fa-plus"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div style="padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1)">
-                <button id="kaiz-new-chat-btn" class="menu_button interactable" style="width: 100%">
-                    <i class="fa-solid fa-plus"></i> New Chat
-                </button>
-            </div>
-            <div
-                id="kaiz-chat-list"
-                style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px"
-            >
-                <!-- Danh sách chat -->
-            </div>
-        </div>
-
-        <div id="kaiz-chat-history" class="kaiz-chat-history">
-            <!-- Tin nhắn sẽ được nhúng vào đây -->
-        </div>
-
-        <div class="kaiz-chat-input-area" style="position: relative">
-            <!-- Attachment Preview Area -->
-            <div id="kaiz-attachments-preview" style="display: flex; gap: 8px; flex-wrap: wrap"></div>
-            <input type="file" id="kaiz-file-upload" accept="image/*,.txt,.md" multiple style="display: none" />
-
-            <!-- Quick Prompts Menu -->
-            <div
-                id="kaiz-quick-prompt-menu"
-                class="kaiz-quick-prompt-menu"
+                id="kaiz-chat-sidebar"
+                class="kaiz-chat-sidebar kaiz-hidden-sidebar"
                 style="
                     display: none;
                     position: absolute;
-                    bottom: 100%;
-                    left: 16px;
-                    margin-bottom: 10px;
+                    top: 0;
+                    left: 0;
+                    width: 200px;
+                    bottom: 0;
                     background: rgba(20, 25, 35, 0.95);
-                    backdrop-filter: blur(10px);
-                    border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 8px;
-                    width: 250px;
-                    max-height: 200px;
-                    overflow-y: auto;
-                    z-index: 10003;
-                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-                    display: flex;
+                    border-right: 1px solid rgba(255, 255, 255, 0.1);
+                    z-index: 10002;
                     flex-direction: column;
                 "
             >
-                <!-- Menu items will be injected here -->
+                <!-- Workspace Selector -->
+                <div
+                    style="
+                        padding: 10px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                        display: flex;
+                        flex-direction: column;
+                        gap: 5px;
+                    "
+                >
+                    <div style="font-size: 0.8em; color: #aaa; font-weight: bold">WORKSPACE</div>
+                    <div style="display: flex; gap: 5px; align-items: center">
+                        <select
+                            id="kaiz-workspace-select"
+                            class="text_pole"
+                            style="flex: 1; padding: 5px; border-radius: 4px; min-width: 0"
+                        >
+                            <option value="default">Default</option>
+                        </select>
+                        <button
+                            id="kaiz-workspace-settings-btn"
+                            class="menu_button interactable"
+                            style="padding: 5px 8px; display: none"
+                            title="Cài đặt Workspace"
+                        >
+                            <i class="fa-solid fa-gear"></i>
+                        </button>
+                        <button
+                            id="kaiz-workspace-add-btn"
+                            class="menu_button interactable"
+                            style="padding: 5px 8px"
+                            title="Tạo Workspace mới"
+                        >
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div style="padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1)">
+                    <button id="kaiz-new-chat-btn" class="menu_button interactable" style="width: 100%">
+                        <i class="fa-solid fa-plus"></i> New Chat
+                    </button>
+                </div>
+                <div
+                    id="kaiz-chat-list"
+                    style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px"
+                >
+                    <!-- Danh sách chat -->
+                </div>
             </div>
 
-            <div style="display: flex; align-items: flex-end; gap: 8px; width: 100%">
-                <button
-                    id="kaiz-quick-prompt-btn"
-                    class="kaiz-chat-send"
-                    style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-                    title="Quick Prompts"
+            <div id="kaiz-chat-history" class="kaiz-chat-history">
+                <!-- Tin nhắn sẽ được nhúng vào đây -->
+            </div>
+
+            <div class="kaiz-chat-input-area" style="position: relative">
+                <!-- Attachment Preview Area -->
+                <div id="kaiz-attachments-preview" style="display: flex; gap: 8px; flex-wrap: wrap"></div>
+                <input type="file" id="kaiz-file-upload" accept="image/*,.txt,.md" multiple style="display: none" />
+
+                <!-- Quick Prompts Menu -->
+                <div
+                    id="kaiz-quick-prompt-menu"
+                    class="kaiz-quick-prompt-menu"
+                    style="
+                        display: none;
+                        position: absolute;
+                        bottom: 100%;
+                        left: 16px;
+                        margin-bottom: 10px;
+                        background: rgba(20, 25, 35, 0.95);
+                        backdrop-filter: blur(10px);
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 8px;
+                        width: 250px;
+                        max-height: 200px;
+                        overflow-y: auto;
+                        z-index: 10003;
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+                        display: flex;
+                        flex-direction: column;
+                    "
                 >
-                    <i class="fa-solid fa-fan"></i>
-                </button>
-                <button
-                    id="kaiz-attach-btn"
-                    class="kaiz-chat-send"
-                    style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-                    title="Đính kèm file (Ảnh, TXT, MD)"
-                >
-                    <i class="fa-solid fa-paperclip"></i>
-                </button>
-                <textarea
-                    id="kaiz-chat-input"
-                    class="kaiz-chat-input"
-                    placeholder="Nhập yêu cầu hoặc Paste/Kéo thả file..."
-                    rows="1"
-                ></textarea>
-                <button id="kaiz-chat-send" class="kaiz-chat-send">
-                    <i class="fa-solid fa-paper-plane"></i>
-                </button>
+                    <!-- Menu items will be injected here -->
+                </div>
+
+                <div style="display: flex; align-items: flex-end; gap: 8px; width: 100%">
+                    <button
+                        id="kaiz-quick-prompt-btn"
+                        class="kaiz-chat-send"
+                        style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
+                        title="Quick Prompts"
+                    >
+                        <i class="fa-solid fa-fan"></i>
+                    </button>
+                    <button
+                        id="kaiz-attach-btn"
+                        class="kaiz-chat-send"
+                        style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
+                        title="Đính kèm file (Ảnh, TXT, MD)"
+                    >
+                        <i class="fa-solid fa-paperclip"></i>
+                    </button>
+                    <textarea
+                        id="kaiz-chat-input"
+                        class="kaiz-chat-input"
+                        placeholder="Nhập yêu cầu hoặc Paste/Kéo thả file..."
+                        rows="1"
+                    ></textarea>
+                    <button
+                        id="kaiz-chat-continue"
+                        class="kaiz-chat-send"
+                        style="display: none"
+                        title="Tiếp tục (Continue)"
+                    >
+                        <i class="fa-solid fa-forward-step"></i>
+                    </button>
+                    <button id="kaiz-chat-send" class="kaiz-chat-send">
+                        <i class="fa-solid fa-paper-plane"></i>
+                    </button>
+                </div>
             </div>
         </div>
     </div>

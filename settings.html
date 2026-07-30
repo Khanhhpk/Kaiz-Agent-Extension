@@ -6,8 +6,10 @@
         </div>
         <div class="inline-drawer-content" style="padding-top: 10px">
             <div class="flex-container flexFlowColumn gap-1">
-                <div class="scp-settings-flat-section">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-plug"></i> LLM Connection</div>
+                <details class="scp-settings-flat-section" open>
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-plug"></i> LLM Connection
+                    </summary>
 
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-use-custom-endpoint" type="checkbox" />
@@ -65,30 +67,34 @@
                             placeholder="e.g. gemini-1.5-pro"
                         />
                     </div>
-                </div>
+                </details>
                 <!-- UI Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-desktop"></i> UI Settings</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-desktop"></i> UI Settings
+                    </summary>
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-phone-mode" type="checkbox" />
                         <span>Enable Phone Mode (Full screen chat)</span>
                     </label>
-                </div>
+                </details>
 
                 <!-- Agent Flow Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-arrows-spin"></i> Agent Flow</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-arrows-spin"></i> Agent Flow
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
                         >Max Agent Loops (Auto Tool Execution)</label
                     >
                     <input id="kaiz-max-loops" type="number" class="text_pole" min="1" max="20" placeholder="5" />
-                </div>
+                </details>
 
                 <!-- Auto Retry System -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title">
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
                         <i class="fa-solid fa-rotate-right"></i> Auto Retry System
-                    </div>
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
                         >Error Keywords (comma separated)</label
                     >
@@ -128,11 +134,13 @@
                             />
                         </div>
                     </div>
-                </div>
+                </details>
 
                 <!-- Safe Mode Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-shield-halved"></i> Safe Mode</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-shield-halved"></i> Safe Mode
+                    </summary>
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-safe-mode" type="checkbox" />
                         <span>Enable Safe Mode</span>
@@ -185,11 +193,13 @@
                             <!-- Danh sách Tool render ở đây -->
                         </div>
                     </div>
-                </div>
+                </details>
 
                 <!-- Browser Setup Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-brands fa-chrome"></i> Browser Setup</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-brands fa-chrome"></i> Browser Setup
+                    </summary>
 
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-enable-browser" type="checkbox" />
@@ -284,62 +294,140 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </details>
 
                 <!-- Core Prompt Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div
-                        class="scp-settings-flat-title"
-                        style="display: flex; justify-content: space-between; align-items: center"
-                    >
-                        <span><i class="fa-solid fa-brain"></i> Core Prompt Settings</span>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
                         <div
-                            id="kaiz-reset-core-prompts"
-                            class="menu_button"
-                            style="padding: 4px 8px; font-size: 12px; margin: 0"
+                            style="
+                                display: inline-flex;
+                                width: 95%;
+                                justify-content: space-between;
+                                align-items: center;
+                            "
                         >
-                            <i class="fa-solid fa-rotate-left"></i> Reset
+                            <span><i class="fa-solid fa-brain"></i> Core Prompt Settings</span>
+                            <div
+                                id="kaiz-reset-core-prompts"
+                                class="menu_button"
+                                style="padding: 4px 8px; font-size: 12px; margin: 0"
+                            >
+                                <i class="fa-solid fa-rotate-left"></i> Reset
+                            </div>
                         </div>
-                    </div>
+                    </summary>
 
-                    <label style="font-size: 11px; color: #888; display: block; margin-top: 8px; margin-bottom: 4px"
-                        >Core Identity & Permissions</label
-                    >
-                    <textarea
-                        id="kaiz-core-identity"
-                        class="text_pole"
-                        style="width: 100%; height: 100px; resize: vertical; margin-bottom: 8px"
-                        placeholder="[Agent Core Active]..."
-                    ></textarea>
+                    <details>
+                        <summary
+                            style="
+                                font-size: 13px;
+                                color: #ddd;
+                                cursor: pointer;
+                                margin-top: 8px;
+                                margin-bottom: 4px;
+                                user-select: none;
+                                font-weight: bold;
+                            "
+                        >
+                            Core Identity & Permissions
+                        </summary>
+                        <textarea
+                            id="kaiz-core-identity"
+                            class="text_pole"
+                            style="width: 100%; height: 100px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
+                            placeholder="[Agent Core Active]..."
+                        ></textarea>
+                    </details>
 
-                    <label style="font-size: 11px; color: #888; display: block; margin-top: 8px; margin-bottom: 4px"
-                        >Behavior & Anti-Truncation Rules (No-Fear)</label
-                    >
-                    <textarea
-                        id="kaiz-core-behavior"
-                        class="text_pole"
-                        style="width: 100%; height: 150px; resize: vertical; margin-bottom: 8px"
-                        placeholder="<nofear>..."
-                    ></textarea>
+                    <details>
+                        <summary
+                            style="
+                                font-size: 13px;
+                                color: #ddd;
+                                cursor: pointer;
+                                margin-top: 8px;
+                                margin-bottom: 4px;
+                                user-select: none;
+                                font-weight: bold;
+                            "
+                        >
+                            Behavior & Anti-Truncation Rules (No-Fear)
+                        </summary>
+                        <textarea
+                            id="kaiz-core-behavior"
+                            class="text_pole"
+                            style="width: 100%; height: 150px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
+                            placeholder="<nofear>..."
+                        ></textarea>
+                    </details>
 
-                    <label style="font-size: 11px; color: #888; display: block; margin-top: 8px; margin-bottom: 4px"
-                        >Prefill String</label
-                    >
-                    <textarea
-                        id="kaiz-core-prefill"
-                        class="text_pole"
-                        style="width: 100%; height: 80px; resize: vertical; margin-bottom: 8px"
-                        placeholder="<agent_cot>..."
-                    ></textarea>
-                </div>
+                    <details>
+                        <summary
+                            style="
+                                font-size: 13px;
+                                color: #ddd;
+                                cursor: pointer;
+                                margin-top: 8px;
+                                margin-bottom: 4px;
+                                user-select: none;
+                                font-weight: bold;
+                            "
+                        >
+                            CoT / Reasoning Guidelines
+                        </summary>
+                        <textarea
+                            id="kaiz-core-cot-prompt"
+                            class="text_pole"
+                            style="width: 100%; height: 150px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
+                            placeholder="HƯỚNG DẪN SỬ DỤNG CÔNG CỤ..."
+                        ></textarea>
+                    </details>
+
+                    <details>
+                        <summary
+                            style="
+                                font-size: 13px;
+                                color: #ddd;
+                                cursor: pointer;
+                                margin-top: 8px;
+                                margin-bottom: 4px;
+                                user-select: none;
+                                font-weight: bold;
+                            "
+                        >
+                            Prefill String
+                        </summary>
+                        <textarea
+                            id="kaiz-core-prefill"
+                            class="text_pole"
+                            style="width: 100%; height: 80px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
+                            placeholder="<agent_cot>..."
+                        ></textarea>
+                    </details>
+                </details>
 
                 <!-- Quick Prompts Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-bolt"></i> Quick Prompts</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-bolt"></i> Quick Prompts
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px"
                         >Quản lý danh sách các lệnh nhanh (Quick Prompts).</label
                     >
-                    <div id="kaiz-quick-prompts-list" style="display: flex; flex-direction: column; gap: 10px">
+                    <div
+                        id="kaiz-quick-prompts-list"
+                        style="
+                            display: flex;
+                            flex-direction: column;
+                            gap: 10px;
+                            max-height: 250px;
+                            overflow-y: auto;
+                            padding: 5px;
+                            border: 1px solid rgba(255, 255, 255, 0.1);
+                            border-radius: 4px;
+                        "
+                    >
                         <!-- List of quick prompts will be injected here -->
                     </div>
                     <div style="margin-top: 10px">
@@ -347,13 +435,13 @@
                             <i class="fa-solid fa-plus"></i> New Quick Prompt
                         </button>
                     </div>
-                </div>
+                </details>
 
                 <!-- Nút Tool Check -->
-                <div style="margin-top: 15px">
-                    <div class="scp-settings-flat-title">
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
                         <i class="fa-solid fa-screwdriver-wrench"></i> Tools Manager
-                    </div>
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
                         >Search and toggle tools</label
                     >
@@ -379,7 +467,7 @@
                     >
                         <!-- Danh sách Tool render ở đây -->
                     </div>
-                </div>
+                </details>
 
                 <div style="margin-top: 15px; margin-bottom: 10px">
                     <button id="kaiz-checker-btn" class="menu_button interactable">

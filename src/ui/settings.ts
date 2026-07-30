@@ -4,7 +4,12 @@ declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
 import { BrowserWindowUI } from './browser_window';
-import { DEFAULT_CORE_IDENTITY, DEFAULT_CORE_BEHAVIOR, DEFAULT_CORE_PREFILL } from '../core/defaults';
+import {
+    DEFAULT_CORE_IDENTITY,
+    DEFAULT_CORE_BEHAVIOR,
+    DEFAULT_CORE_PREFILL,
+    DEFAULT_CORE_COT_PROMPT,
+} from '../core/defaults';
 
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -70,14 +75,16 @@ export class SettingsUI {
         $('#kaiz-core-identity').val(settings.coreIdentity || DEFAULT_CORE_IDENTITY);
         $('#kaiz-core-behavior').val(settings.coreBehavior || DEFAULT_CORE_BEHAVIOR);
         $('#kaiz-core-prefill').val(settings.corePrefill || DEFAULT_CORE_PREFILL);
+        $('#kaiz-core-cot-prompt').val(settings.coreCotPrompt || DEFAULT_CORE_COT_PROMPT);
 
-        $('#kaiz-core-identity, #kaiz-core-behavior, #kaiz-core-prefill').on(
+        $('#kaiz-core-identity, #kaiz-core-behavior, #kaiz-core-prefill, #kaiz-core-cot-prompt').on(
             'input',
             function (this: HTMLTextAreaElement) {
                 const id = this.id;
                 if (id === 'kaiz-core-identity') settings.coreIdentity = this.value;
                 if (id === 'kaiz-core-behavior') settings.coreBehavior = this.value;
                 if (id === 'kaiz-core-prefill') settings.corePrefill = this.value;
+                if (id === 'kaiz-core-cot-prompt') settings.coreCotPrompt = this.value;
                 ctx.saveSettingsDebounced();
             },
         );
@@ -87,9 +94,11 @@ export class SettingsUI {
                 $('#kaiz-core-identity').val(DEFAULT_CORE_IDENTITY);
                 $('#kaiz-core-behavior').val(DEFAULT_CORE_BEHAVIOR);
                 $('#kaiz-core-prefill').val(DEFAULT_CORE_PREFILL);
+                $('#kaiz-core-cot-prompt').val(DEFAULT_CORE_COT_PROMPT);
                 settings.coreIdentity = DEFAULT_CORE_IDENTITY;
                 settings.coreBehavior = DEFAULT_CORE_BEHAVIOR;
                 settings.corePrefill = DEFAULT_CORE_PREFILL;
+                settings.coreCotPrompt = DEFAULT_CORE_COT_PROMPT;
                 ctx.saveSettingsDebounced();
                 toastr.success('Đã khôi phục Core Prompts');
             }

@@ -89,6 +89,10 @@ export class StateManager {
         if (this.onChatsListUpdated) this.onChatsListUpdated(chats);
     }
 
+    public async updateMessage(messageId: number, newContent: string): Promise<void> {
+        await this.db.updateMessageText(messageId, newContent);
+    }
+
     public async loadChatList(): Promise<ChatSession[]> {
         return await this.db.getAllChats(this.currentWorkspaceId);
     }

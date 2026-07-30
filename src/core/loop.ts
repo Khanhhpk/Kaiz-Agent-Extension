@@ -1,7 +1,12 @@
 import { SillyTavernAdapter, Message } from '../adapters/st_adapter';
 import { ToolRegistry } from './tool_registry';
 import { StateManager } from './state';
-import { DEFAULT_CORE_IDENTITY, DEFAULT_CORE_BEHAVIOR, DEFAULT_CORE_PREFILL } from './defaults';
+import {
+    DEFAULT_CORE_IDENTITY,
+    DEFAULT_CORE_BEHAVIOR,
+    DEFAULT_CORE_PREFILL,
+    DEFAULT_CORE_COT_PROMPT,
+} from './defaults';
 
 declare const SillyTavern: any;
 
@@ -101,27 +106,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
 `;
         });
 
-        prompt += `
-HƯỚNG DẪN SỬ DỤNG CÔNG CỤ & SUY LUẬN (CoT):
-Trước khi thực hiện bất kỳ hành động nào hoặc trả lời người dùng, bạn BẮT BUỘC phải mở thẻ <agent_cot> để suy luận theo các bước:
-1. [PHÂN TÍCH YÊU CẦU]: Người dùng đang muốn gì?
-2. [TÌNH TRẠNG HIỆN TẠI]: Bạn cần thông tin gì từ lịch sử chat hoặc nhân vật không?
-3. [PHƯƠNG ÁN HÀNH ĐỘNG]: Bạn sẽ dùng công cụ gì (nếu có) hoặc trả lời thế nào?
-
-Ví dụ:
-<agent_cot>
-[PHÂN TÍCH YÊU CẦU]: Người dùng muốn xóa tin nhắn.
-[TÌNH TRẠNG HIỆN TẠI]: Đang ở trong chat, có thể dùng công cụ.
-[PHƯƠNG ÁN HÀNH ĐỘNG]: Gọi công cụ delete_last_message.
-</agent_cot>
-
-Để sử dụng một công cụ, bạn BẮT BUỘC phải dùng đúng định dạng XML như sau.
-<tool_call name="tên_công_cụ">
-{"param1": "giá_trị"}
-</tool_call>
-
-Nếu bạn dùng công cụ, KHÔNG được đưa ra câu trả lời cuối cùng ngay lập tức. Hãy đợi hệ thống trả về kết quả qua thẻ <tool_result> rồi mới được trả lời.
-Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường như một trợ lý (sau khi đã đóng thẻ </agent_cot>).`;
+        prompt += `\n${settings.coreCotPrompt || DEFAULT_CORE_COT_PROMPT}`;
 
         return prompt;
     }
@@ -168,6 +153,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         step: number,
         hasError: boolean,
         cachedSystemPrompt: string,
+        continueMode: boolean = false,
     ): Message[] {
         const ctx = (window as any).SillyTavern.getContext();
         const settings = ctx.extensionSettings?.kaiz_agent || {};
@@ -220,7 +206,8 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             msgs.push({ role: 'system', content: feedbackBase });
         }
 
-        for (const msg of internalHistory) {
+        for (let i = 0; i < internalHistory.length; i++) {
+            const msg = internalHistory[i];
             let content = msg.content;
             if (msg.role === 'assistant' || msg.role === 'agent') {
                 content = this.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
@@ -249,13 +236,49 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             }
         }
 
-        const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
-        msgs.push({ role: 'assistant', content: prefill });
+        if (!(continueMode && step === 1)) {
+            const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
+            msgs.push({ role: 'assistant', content: prefill });
+        } else {
+            let isCutOffInsideCot = false;
+            if (internalHistory.length > 0) {
+                const lastMsg = internalHistory[internalHistory.length - 1];
+                if ((lastMsg.role === 'agent' || lastMsg.role === 'assistant') && lastMsg.content) {
+                    const openIndex = lastMsg.content.lastIndexOf('<agent_cot>');
+                    const closeIndex = lastMsg.content.lastIndexOf('</agent_cot>');
+                    if (openIndex > closeIndex) {
+                        isCutOffInsideCot = true;
+                    } else if (openIndex === -1 && closeIndex === -1) {
+                        // Prefill starts with <agent_cot>, so if no close tag exists, we are still inside it
+                        isCutOffInsideCot = true;
+                    }
+                }
+            }
+
+            if (isCutOffInsideCot) {
+                msgs.push({
+                    role: 'user',
+                    content:
+                        "SYSTEM DIRECTIVE: The assistant's last message was cut off in the middle of <agent_cot>. Please continue exactly from where it left off. You MUST output </agent_cot> when you finish your thought to close the tag, then output your answer. DO NOT repeat what was already written.",
+                });
+            } else {
+                msgs.push({
+                    role: 'user',
+                    content:
+                        "SYSTEM DIRECTIVE: The assistant's last message was cut off due to length limits. Please continue the last message exactly from where it left off. DO NOT repeat what was already written. DO NOT use <agent_cot> tags. Start immediately with the next word.",
+                });
+            }
+        }
 
         return msgs;
     }
 
-    public async run(history: any[], maxSteps: number, onEvent: (event: AgentEvent) => void | Promise<void>) {
+    public async run(
+        history: any[],
+        maxSteps: number,
+        onEvent: (event: AgentEvent) => void | Promise<void>,
+        continueMode: boolean = false,
+    ) {
         console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
 
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
@@ -305,7 +328,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     break;
                 }
                 step++;
-                await onEvent({ type: 'step_start' });
+                await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
 
                 try {
                     const messages = this.buildMessages(
@@ -314,6 +337,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                         step,
                         lastToolError,
                         cachedSystemPrompt,
+                        continueMode,
                     );
 
                     let currentText = '';
@@ -341,7 +365,15 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                                     async (text, reasoning) => {
                                         if (this._forceAborted) return;
                                         currentText = text;
-                                        await onEvent({ type: 'stream_chunk', text: currentText, reasoning });
+
+                                        let combinedText = currentText;
+                                        if (continueMode && step === 1) {
+                                            const lastMsg = internalHistory[internalHistory.length - 1];
+                                            if (lastMsg && (lastMsg.role === 'assistant' || lastMsg.role === 'agent')) {
+                                                combinedText = lastMsg.content + currentText;
+                                            }
+                                        }
+                                        await onEvent({ type: 'stream_chunk', text: combinedText, reasoning });
                                     },
                                     this._currentAbortController.signal,
                                 ),
@@ -411,23 +443,44 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                     await onEvent({ type: 'think_end', data: response.reasoning });
 
                     const text = response.text;
+                    let fullText = text;
 
-                    internalHistory.push({ role: 'assistant', content: text });
+                    if (continueMode && step === 1) {
+                        const lastMsg = internalHistory[internalHistory.length - 1];
+                        if (lastMsg && (lastMsg.role === 'assistant' || lastMsg.role === 'agent')) {
+                            lastMsg.content += text;
+                            fullText = lastMsg.content;
+                        } else {
+                            internalHistory.push({ role: 'assistant', content: text });
+                        }
+                    } else {
+                        internalHistory.push({ role: 'assistant', content: text });
+                    }
 
                     await onEvent({
                         type: 'debug',
-                        data: { messages: JSON.parse(JSON.stringify(messages)), responseText: text },
+                        data: { messages: JSON.parse(JSON.stringify(messages)), responseText: fullText },
                     });
 
-                    const toolCalls = this.parseToolCalls(text);
+                    const toolCalls = this.parseToolCalls(fullText);
 
                     if (toolCalls.length === 0) {
                         reachedFinal = true;
-                        await onEvent({ type: 'step_end', text: text, isFinal: true });
+                        await onEvent({
+                            type: 'step_end',
+                            text: fullText,
+                            isFinal: true,
+                            data: { isContinue: continueMode && step === 1 },
+                        });
                         break;
                     }
 
-                    await onEvent({ type: 'step_end', text: text, isFinal: false });
+                    await onEvent({
+                        type: 'step_end',
+                        text: fullText,
+                        isFinal: false,
+                        data: { isContinue: continueMode && step === 1 },
+                    });
 
                     // Cơ chế Autonomous Agency: Thực thi toàn bộ các tool được gọi trong 1 lượt (tuần tự)
                     let resultsFormatted = '';

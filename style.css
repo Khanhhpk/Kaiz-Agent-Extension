@@ -972,3 +972,8 @@
     font-size: 11px;
     white-space: nowrap;
 }
+
+/* Add margin inside settings details to prevent misclicks on mobile */
+.kaiz-agent-settings details.scp-settings-flat-section > summary + * {
+    margin-top: 15px !important;
+}
