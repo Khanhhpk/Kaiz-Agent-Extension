@@ -8462,6 +8462,41 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
                 return finalHtml;
             };
+            // Hàm tiện ích đếm token
+            const refreshTokens = async () => {
+                try {
+                    const counterSpan = $('#kaiz-chat-token-val');
+                    const counterContainer = $('#kaiz-chat-token-counter');
+                    if (!stateManager.currentChatId || stateManager.currentChatId === -1) {
+                        counterContainer.hide();
+                        return;
+                    }
+                    const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                    let fullText = '';
+                    msgs.forEach((m) => {
+                        fullText += (m.content || '') + ' ';
+                    });
+                    if (!fullText.trim()) {
+                        counterContainer.hide();
+                        return;
+                    }
+                    let count = 0;
+                    if (typeof window.getTokenCountAsync === 'function') {
+                        count = await window.getTokenCountAsync(fullText);
+                    }
+                    else if (typeof window.getTokenCount === 'function') {
+                        count = window.getTokenCount(fullText);
+                    }
+                    else {
+                        count = Math.ceil(fullText.split(/\s+/).length * 1.3);
+                    }
+                    counterSpan.text(count.toLocaleString());
+                    counterContainer.css('display', 'inline-block');
+                }
+                catch (e) {
+                    console.warn('Kaiz Agent: Failed to refresh tokens', e);
+                }
+            };
             // Lắng nghe StateManager
             stateManager.onChatsListUpdated = (chats) => {
                 renderChatList(chats);
@@ -8505,6 +8540,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     history.scrollTop(history[0].scrollHeight);
                 }
                 updateContinueBtnVisibility();
+                refreshTokens();
             };
             const addWelcomeMessage = () => {
                 const welcomeHtml = `
@@ -8628,12 +8664,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         else {
                             await stateManager.addMessage('agent', currentStepResponse);
                         }
+                        refreshTokens();
                         agentContentBox = null;
                     }
                     else if (event.type === 'tool_result') {
                         const formatted = formatUserMessage(event.text || '');
                         addMessageToDOM('user', formatted);
                         await stateManager.addMessage('user', event.text || '');
+                        refreshTokens();
                     }
                     else if (event.type === 'tool_confirm') {
                         btnIcon.removeClass('kaiz-icon-spin');
@@ -8728,6 +8766,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 renderAttachmentsPreview();
                 // Lưu vào DB trước
                 await stateManager.addMessage('user', text, attachmentsToSend);
+                refreshTokens();
                 // In ra UI
                 const formattedUI = formatUserMessage(text, attachmentsToSend);
                 addMessageToDOM('user', formattedUI);
