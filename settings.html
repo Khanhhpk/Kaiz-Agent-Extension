@@ -6,8 +6,10 @@
         </div>
         <div class="inline-drawer-content" style="padding-top: 10px">
             <div class="flex-container flexFlowColumn gap-1">
-                <div class="scp-settings-flat-section">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-plug"></i> LLM Connection</div>
+                <details class="scp-settings-flat-section" open>
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-plug"></i> LLM Connection
+                    </summary>
 
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-use-custom-endpoint" type="checkbox" />
@@ -65,30 +67,34 @@
                             placeholder="e.g. gemini-1.5-pro"
                         />
                     </div>
-                </div>
+                </details>
                 <!-- UI Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-desktop"></i> UI Settings</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-desktop"></i> UI Settings
+                    </summary>
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-phone-mode" type="checkbox" />
                         <span>Enable Phone Mode (Full screen chat)</span>
                     </label>
-                </div>
+                </details>
 
                 <!-- Agent Flow Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-arrows-spin"></i> Agent Flow</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-arrows-spin"></i> Agent Flow
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
                         >Max Agent Loops (Auto Tool Execution)</label
                     >
                     <input id="kaiz-max-loops" type="number" class="text_pole" min="1" max="20" placeholder="5" />
-                </div>
+                </details>
 
                 <!-- Auto Retry System -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title">
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
                         <i class="fa-solid fa-rotate-right"></i> Auto Retry System
-                    </div>
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
                         >Error Keywords (comma separated)</label
                     >
@@ -128,11 +134,13 @@
                             />
                         </div>
                     </div>
-                </div>
+                </details>
 
                 <!-- Safe Mode Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-shield-halved"></i> Safe Mode</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-shield-halved"></i> Safe Mode
+                    </summary>
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-safe-mode" type="checkbox" />
                         <span>Enable Safe Mode</span>
@@ -185,11 +193,13 @@
                             <!-- Danh sách Tool render ở đây -->
                         </div>
                     </div>
-                </div>
+                </details>
 
                 <!-- Browser Setup Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-brands fa-chrome"></i> Browser Setup</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-brands fa-chrome"></i> Browser Setup
+                    </summary>
 
                     <label class="checkbox_label" style="margin-bottom: 8px">
                         <input id="kaiz-enable-browser" type="checkbox" />
@@ -284,13 +294,19 @@
                             </div>
                         </div>
                     </div>
-                </div>
+                </details>
 
                 <!-- Core Prompt Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary
                         class="scp-settings-flat-title"
-                        style="display: flex; justify-content: space-between; align-items: center"
+                        style="
+                            display: flex;
+                            justify-content: space-between;
+                            align-items: center;
+                            cursor: pointer;
+                            user-select: none;
+                        "
                     >
                         <span><i class="fa-solid fa-brain"></i> Core Prompt Settings</span>
                         <div
@@ -300,7 +316,7 @@
                         >
                             <i class="fa-solid fa-rotate-left"></i> Reset
                         </div>
-                    </div>
+                    </summary>
 
                     <details>
                         <summary
@@ -389,15 +405,29 @@
                             placeholder="<agent_cot>..."
                         ></textarea>
                     </details>
-                </div>
+                </details>
 
                 <!-- Quick Prompts Settings -->
-                <div class="scp-settings-flat-section" style="margin-top: 15px">
-                    <div class="scp-settings-flat-title"><i class="fa-solid fa-bolt"></i> Quick Prompts</div>
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-bolt"></i> Quick Prompts
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px"
                         >Quản lý danh sách các lệnh nhanh (Quick Prompts).</label
                     >
-                    <div id="kaiz-quick-prompts-list" style="display: flex; flex-direction: column; gap: 10px">
+                    <div
+                        id="kaiz-quick-prompts-list"
+                        style="
+                            display: flex;
+                            flex-direction: column;
+                            gap: 10px;
+                            max-height: 250px;
+                            overflow-y: auto;
+                            padding: 5px;
+                            border: 1px solid rgba(255, 255, 255, 0.1);
+                            border-radius: 4px;
+                        "
+                    >
                         <!-- List of quick prompts will be injected here -->
                     </div>
                     <div style="margin-top: 10px">
@@ -405,13 +435,13 @@
                             <i class="fa-solid fa-plus"></i> New Quick Prompt
                         </button>
                     </div>
-                </div>
+                </details>
 
                 <!-- Nút Tool Check -->
-                <div style="margin-top: 15px">
-                    <div class="scp-settings-flat-title">
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
                         <i class="fa-solid fa-screwdriver-wrench"></i> Tools Manager
-                    </div>
+                    </summary>
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
                         >Search and toggle tools</label
                     >
@@ -437,7 +467,7 @@
                     >
                         <!-- Danh sách Tool render ở đây -->
                     </div>
-                </div>
+                </details>
 
                 <div style="margin-top: 15px; margin-bottom: 10px">
                     <button id="kaiz-checker-btn" class="menu_button interactable">
