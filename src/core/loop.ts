@@ -258,10 +258,13 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             let isCutOffInsideCot = false;
             if (internalHistory.length > 0) {
                 const lastMsg = internalHistory[internalHistory.length - 1];
-                if (lastMsg.role === 'agent' && lastMsg.content) {
+                if ((lastMsg.role === 'agent' || lastMsg.role === 'assistant') && lastMsg.content) {
                     const openIndex = lastMsg.content.lastIndexOf('<agent_cot>');
                     const closeIndex = lastMsg.content.lastIndexOf('</agent_cot>');
                     if (openIndex > closeIndex) {
+                        isCutOffInsideCot = true;
+                    } else if (openIndex === -1 && closeIndex === -1) {
+                        // Prefill starts with <agent_cot>, so if no close tag exists, we are still inside it
                         isCutOffInsideCot = true;
                     }
                 }
