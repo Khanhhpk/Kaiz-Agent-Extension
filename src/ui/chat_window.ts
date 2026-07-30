@@ -1007,7 +1007,7 @@ export class ChatWindowUI {
             renderChatList(chats);
         };
 
-        stateManager.onChatRenamed = (id, newName) => {
+        stateManager.onChatRenamed = (_id, _newName) => {
             // Do nothing
         };
 

@@ -8544,7 +8544,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             stateManager.onChatsListUpdated = (chats) => {
                 renderChatList(chats);
             };
-            stateManager.onChatRenamed = (id, newName) => {
+            stateManager.onChatRenamed = (_id, _newName) => {
                 // Do nothing
             };
             stateManager.onChatSwitched = (chatId, messages) => {
