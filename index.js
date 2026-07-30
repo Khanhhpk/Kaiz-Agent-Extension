@@ -102,7 +102,7 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
                             fullText += `${idx + 1}. [${mem.key}] ${mem.content}\n`;
                         }
                     });
-                    fullText += `</agent_memory>\n`;
+                    fullText += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
                 }
             }
             if (typeof window.getTokenCountAsync === 'function') {
@@ -8510,7 +8510,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
                     let fullText = '';
                     msgs.forEach((m) => {
-                        fullText += (m.content || '') + ' ';
+                        let content = m.content || '';
+                        if (m.role === 'agent' || m.role === 'assistant') {
+                            content = loop.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+                        }
+                        fullText += content + ' ';
                     });
                     if (!fullText.trim()) {
                         counterContainer.hide();

@@ -970,7 +970,11 @@ export class ChatWindowUI {
                 const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
                 let fullText = '';
                 msgs.forEach((m: any) => {
-                    fullText += (m.content || '') + ' ';
+                    let content = m.content || '';
+                    if (m.role === 'agent' || m.role === 'assistant') {
+                        content = loop.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+                    }
+                    fullText += content + ' ';
                 });
 
                 if (!fullText.trim()) {

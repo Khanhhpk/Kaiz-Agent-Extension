@@ -107,7 +107,7 @@ export class AgentLoop {
                         fullText += `${idx + 1}. [${mem.key}] ${mem.content}\n`;
                     }
                 });
-                fullText += `</agent_memory>\n`;
+                fullText += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
             }
         }
 
@@ -180,7 +180,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
         return tools;
     }
 
-    private stripCotAndPrefill(text: string): string {
+    public stripCotAndPrefill(text: string): string {
         if (!text) return '';
         return String(text)
             .replace(/^(?:[\s\S]*?<agent_cot>)?[\s\S]*?<\/agent_cot>\s*/gi, '')
