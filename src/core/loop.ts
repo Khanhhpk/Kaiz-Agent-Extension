@@ -83,7 +83,7 @@ export class AgentLoop {
         const settings = ctx.extensionSettings?.kaiz_agent || {};
         const layer1_identity = settings.coreIdentity || DEFAULT_CORE_IDENTITY;
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
-        
+
         let fullText = layer1_identity + '\n' + cachedSystemPrompt;
 
         if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
