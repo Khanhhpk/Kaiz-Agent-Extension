@@ -255,11 +255,31 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
             const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
             msgs.push({ role: 'assistant', content: prefill });
         } else {
-            msgs.push({
-                role: 'user',
-                content:
-                    "SYSTEM DIRECTIVE: The assistant's last message was cut off due to length limits. Please continue the last message exactly from where it left off. DO NOT repeat what was already written. DO NOT use <agent_cot> tags. Start immediately with the next word.",
-            });
+            let isCutOffInsideCot = false;
+            if (internalHistory.length > 0) {
+                const lastMsg = internalHistory[internalHistory.length - 1];
+                if (lastMsg.role === 'agent' && lastMsg.content) {
+                    const openIndex = lastMsg.content.lastIndexOf('<agent_cot>');
+                    const closeIndex = lastMsg.content.lastIndexOf('</agent_cot>');
+                    if (openIndex > closeIndex) {
+                        isCutOffInsideCot = true;
+                    }
+                }
+            }
+
+            if (isCutOffInsideCot) {
+                msgs.push({
+                    role: 'user',
+                    content:
+                        "SYSTEM DIRECTIVE: The assistant's last message was cut off in the middle of <agent_cot>. Please continue exactly from where it left off. You MUST output </agent_cot> when you finish your thought to close the tag, then output your answer. DO NOT repeat what was already written.",
+                });
+            } else {
+                msgs.push({
+                    role: 'user',
+                    content:
+                        "SYSTEM DIRECTIVE: The assistant's last message was cut off due to length limits. Please continue the last message exactly from where it left off. DO NOT repeat what was already written. DO NOT use <agent_cot> tags. Start immediately with the next word.",
+                });
+            }
         }
 
         return msgs;
