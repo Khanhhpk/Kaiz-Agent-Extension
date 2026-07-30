@@ -7825,7 +7825,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     return;
                 }
                 const lastMsgRow = history.find('.kaiz-msg').last();
-                if (lastMsgRow.length > 0 && lastMsgRow.hasClass('kaiz-msg-agent')) {
+                if (lastMsgRow.length > 0 && lastMsgRow.hasClass('kaiz-msg-agent') && !lastMsgRow.hasClass('kaiz-msg-welcome')) {
                     continueBtn.show();
                 }
                 else {
@@ -8463,7 +8463,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             };
             const addWelcomeMessage = () => {
                 const welcomeHtml = `
-            <div class="kaiz-msg kaiz-msg-agent">
+            <div class="kaiz-msg kaiz-msg-agent kaiz-msg-welcome">
                 <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
                 <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
