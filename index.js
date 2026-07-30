@@ -8468,6 +8468,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
                 history.append(welcomeHtml);
+                updateContinueBtnVisibility();
             };
             // Hàm tiện ích thêm tin nhắn DOM (không save DB)
             const addMessageToDOM = (role, htmlContent, animate = true) => {

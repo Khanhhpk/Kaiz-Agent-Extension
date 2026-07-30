@@ -1010,6 +1010,7 @@ export class ChatWindowUI {
                 <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
             history.append(welcomeHtml);
+            updateContinueBtnVisibility();
         };
 
         // Hàm tiện ích thêm tin nhắn DOM (không save DB)
