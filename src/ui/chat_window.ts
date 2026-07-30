@@ -287,7 +287,11 @@ export class ChatWindowUI {
                 return;
             }
             const lastMsgRow = history.find('.kaiz-msg').last();
-            if (lastMsgRow.length > 0 && lastMsgRow.hasClass('kaiz-msg-agent') && !lastMsgRow.hasClass('kaiz-msg-welcome')) {
+            if (
+                lastMsgRow.length > 0 &&
+                lastMsgRow.hasClass('kaiz-msg-agent') &&
+                !lastMsgRow.hasClass('kaiz-msg-welcome')
+            ) {
                 continueBtn.show();
             } else {
                 continueBtn.hide();
@@ -1074,7 +1078,7 @@ export class ChatWindowUI {
                 }
                 const event = lastStreamEvent;
                 // event.text already includes the old text from loop.ts if continueMode && step === 1
-                let fullText = event.text || '';
+                const fullText = event.text || '';
                 let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                 if (event.reasoning && !event.text) {
                     htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
@@ -1277,7 +1281,7 @@ export class ChatWindowUI {
                 ? await stateManager.db.getMessages(stateManager.currentChatId)
                 : [];
             if (historyMsgs.length === 0 || historyMsgs[historyMsgs.length - 1].role !== 'agent') {
-                // @ts-ignore
+                // @ts-expect-error toastr is loaded globally
                 toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Kaiz Agent');
                 return;
             }
