@@ -77,6 +77,42 @@ Nếu bạn KHÔNG cần dùng công cụ, hãy cứ trả lời bình thường
         get isRunning() {
             return this._isRunning;
         }
+        async getBaseTokens(maxSteps) {
+            const ctx = window.SillyTavern.getContext();
+            const settings = ctx.extensionSettings?.kaiz_agent || {};
+            const layer1_identity = settings.coreIdentity || DEFAULT_CORE_IDENTITY;
+            const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
+            let fullText = layer1_identity + '\n' + cachedSystemPrompt;
+            if (this.stateManager.currentWorkspace && this.stateManager.currentWorkspace.systemPrompt) {
+                fullText += `\n[WORKSPACE CUSTOM PROMPT]\n${this.stateManager.currentWorkspace.systemPrompt}`;
+            }
+            if (settings) {
+                const persona = settings.persona;
+                const memories = settings.memories;
+                if (persona) {
+                    fullText += `\n[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
+                }
+                if (memories && memories.length > 0) {
+                    fullText += `\n[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
+                    memories.forEach((mem, idx) => {
+                        if (typeof mem === 'string') {
+                            fullText += `${idx + 1}. [Untracked] ${mem}\n`;
+                        }
+                        else if (mem && mem.key && mem.content) {
+                            fullText += `${idx + 1}. [${mem.key}] ${mem.content}\n`;
+                        }
+                    });
+                    fullText += `</agent_memory>\nHãy ưu tiên tuân thủ các ghi nhớ này khi xử lý tác vụ.\n`;
+                }
+            }
+            if (typeof window.getTokenCountAsync === 'function') {
+                return await window.getTokenCountAsync(fullText);
+            }
+            else if (typeof window.getTokenCount === 'function') {
+                return window.getTokenCount(fullText);
+            }
+            return Math.ceil(fullText.split(/\s+/).length * 1.3);
+        }
         generateSystemPrompt(maxSteps) {
             const ctx = window.SillyTavern.getContext();
             const settings = ctx.extensionSettings?.kaiz_agent || {};
@@ -1190,14 +1226,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
     const getLorebookInfoTool = {
         schema: {
             name: 'get_lorebook_info',
-            description: 'Công cụ ĐỌC dữ liệu Sổ tay thế giới (Lorebook / World Info). Gồm 7 chế độ (mode): \n1. "summary": Lấy MỤC LỤC TÓM TẮT (UID, Tên, Keys) của các sách đang bật. ĐẶC BIỆT: Nếu truyền thêm "book_name", sẽ lấy mục lục của riêng cuốn sách đó (cho dù nó đang tắt). LUÔN ƯU TIÊN dùng chế độ này đầu tiên để khảo sát.\n2. "by_uid": Đọc CHI TIẾT nội dung của 1 entry khi đã biết UID.\n3. "by_name": Đọc CHI TIẾT toàn bộ 1 cuốn sách (cho dù nó đang tắt).\n4. "search": Tìm kiếm entry theo từ khóa.\n5. "simulate": Kiểm tra xem câu thoại nào kích hoạt entry nào.\n6. "char_full": Đọc sách gắn cứng theo thẻ nhân vật.\n7. "all_full": Đọc toàn bộ sách đang bật (Rất tốn token, chỉ dùng khi cần thiết).',
+            description: 'Công cụ ĐỌC dữ liệu Sổ tay thế giới (Lorebook / World Info). Gồm 7 chế độ (mode): \n1. "summary": Lấy MỤC LỤC TÓM TẮT (UID, Tên, Keys) của các sách đang bật. ĐẶC BIỆT: Nếu truyền thêm "book_name", sẽ lấy mục lục của riêng cuốn sách đó (cho dù nó đang tắt). LUÔN ƯU TIÊN dùng chế độ này đầu tiên để khảo sát.\n2. "by_uid": Đọc CHI TIẾT nội dung của 1 entry khi đã biết UID.\n3. "by_name": Đọc CHI TIẾT toàn bộ 1 cuốn sách (cho dù nó đang tắt).\n4. "search": Tìm kiếm entry theo từ khóa.\n5. "simulate": Kiểm tra xem câu thoại nào kích hoạt entry nào.\n6. "char_full": Đọc sách gắn cứng theo thẻ nhân vật (Rất tốn token, chỉ dùng khi cần thiết).\n7. "all_full": Đọc toàn bộ sách đang bật (Rất tốn token, chỉ dùng khi cần thiết).',
             parameters: {
                 type: 'object',
                 properties: {
                     mode: {
                         type: 'string',
                         enum: ['summary', 'all_full', 'char_full', 'by_name', 'search', 'by_uid', 'simulate'],
-                        description: 'Chế độ lấy dữ liệu. LƯU Ý: Chế độ "all_full" tốn rất nhiều token, CHỈ NÊN DÙNG khi đã thử các cách khác (search, simulate, by_uid) mà vẫn không tìm thấy thông tin người dùng cần.',
+                        description: 'Chế độ lấy dữ liệu. LƯU Ý: Chế độ "char_full" và "all_full" tốn rất nhiều token, CHỈ NÊN DÙNG khi đã thử các cách khác (summary, search, simulate, by_uid) mà vẫn không tìm thấy thông tin người dùng cần.',
                     },
                     book_name: {
                         type: 'string',
@@ -7976,7 +8012,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             const sidebar = $('#kaiz-chat-sidebar');
             const newChatBtn = $('#kaiz-new-chat-btn');
             const chatList = $('#kaiz-chat-list');
-            const chatTitle = $('#kaiz-chat-title');
+            $('#kaiz-chat-title');
             let isSidebarOpen = false;
             // --- Workspace UI Logic ---
             const wsSelect = $('#kaiz-workspace-select');
@@ -8261,7 +8297,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 history.empty();
                 // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
                 stateManager.currentChatId = null;
-                chatTitle.text('New Chat');
                 addWelcomeMessage();
                 // Xóa background selected ở chat list
                 $('.kaiz-chat-item').css('background', 'transparent');
@@ -8278,7 +8313,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 const id = parseInt($(this).attr('data-id') || '0', 10);
                 if (id) {
                     stateManager.switchChat(id);
-                    chatTitle.text($(this).find('span').text());
                     toggleSidebar();
                 }
             });
@@ -8462,19 +8496,60 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 }
                 return finalHtml;
             };
+            // Hàm tiện ích đếm token
+            const refreshTokens = async () => {
+                try {
+                    const counterSpan = $('#kaiz-chat-token-val');
+                    const counterContainer = $('#kaiz-chat-token-counter');
+                    if (!stateManager.currentChatId || stateManager.currentChatId === -1) {
+                        counterContainer.hide();
+                        return;
+                    }
+                    const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                    let fullText = '';
+                    msgs.forEach((m) => {
+                        let content = m.content || '';
+                        if (m.role === 'agent' || m.role === 'assistant') {
+                            content = loop.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+                        }
+                        fullText += content + ' ';
+                    });
+                    if (!fullText.trim()) {
+                        counterContainer.hide();
+                        return;
+                    }
+                    let count = 0;
+                    if (typeof window.getTokenCountAsync === 'function') {
+                        count = await window.getTokenCountAsync(fullText);
+                    }
+                    else if (typeof window.getTokenCount === 'function') {
+                        count = window.getTokenCount(fullText);
+                    }
+                    else {
+                        count = Math.ceil(fullText.split(/\s+/).length * 1.3);
+                    }
+                    const ctx = window.SillyTavern.getContext();
+                    const settings = ctx.extensionSettings?.kaiz_agent || {};
+                    const maxLoops = settings.maxAgentLoops || 5;
+                    const baseTokens = await loop.getBaseTokens(maxLoops);
+                    count += baseTokens;
+                    counterSpan.text(count.toLocaleString());
+                    counterContainer.css('display', 'inline-block');
+                }
+                catch (e) {
+                    console.warn('Kaiz Agent: Failed to refresh tokens', e);
+                }
+            };
             // Lắng nghe StateManager
             stateManager.onChatsListUpdated = (chats) => {
                 renderChatList(chats);
             };
-            stateManager.onChatRenamed = (id, newName) => {
-                if (id === stateManager.currentChatId) {
-                    chatTitle.text(newName);
-                }
+            stateManager.onChatRenamed = (_id, _newName) => {
+                // Do nothing
             };
             stateManager.onChatSwitched = (chatId, messages) => {
                 history.empty();
                 if (messages.length === 0 && chatId === -1) {
-                    chatTitle.text('Agent');
                     addWelcomeMessage();
                 }
                 else if (messages.length === 0) {
@@ -8505,6 +8580,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     history.scrollTop(history[0].scrollHeight);
                 }
                 updateContinueBtnVisibility();
+                refreshTokens();
             };
             const addWelcomeMessage = () => {
                 const welcomeHtml = `
@@ -8628,12 +8704,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         else {
                             await stateManager.addMessage('agent', currentStepResponse);
                         }
+                        refreshTokens();
                         agentContentBox = null;
                     }
                     else if (event.type === 'tool_result') {
                         const formatted = formatUserMessage(event.text || '');
                         addMessageToDOM('user', formatted);
                         await stateManager.addMessage('user', event.text || '');
+                        refreshTokens();
                     }
                     else if (event.type === 'tool_confirm') {
                         btnIcon.removeClass('kaiz-icon-spin');
@@ -8728,14 +8806,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 renderAttachmentsPreview();
                 // Lưu vào DB trước
                 await stateManager.addMessage('user', text, attachmentsToSend);
+                refreshTokens();
                 // In ra UI
                 const formattedUI = formatUserMessage(text, attachmentsToSend);
                 addMessageToDOM('user', formattedUI);
-                // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
-                if (chatTitle.text() === 'New Chat') {
-                    const titleText = text || 'File đính kèm';
-                    chatTitle.text(titleText.substring(0, 30) + (titleText.length > 30 ? '...' : ''));
-                }
+                // Title updates are removed
                 startAgent(false);
             };
             continueBtn.on('click', async () => {

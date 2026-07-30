@@ -728,7 +728,6 @@ export class ChatWindowUI {
             history.empty();
             // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
             stateManager.currentChatId = null;
-            chatTitle.text('New Chat');
             addWelcomeMessage();
 
             // Xóa background selected ở chat list
@@ -746,7 +745,6 @@ export class ChatWindowUI {
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 stateManager.switchChat(id);
-                chatTitle.text($(this).find('span').text());
                 toggleSidebar();
             }
         });
@@ -956,21 +954,66 @@ export class ChatWindowUI {
             return finalHtml;
         };
 
+        // Hàm tiện ích đếm token
+        const refreshTokens = async () => {
+            try {
+                const counterSpan = $('#kaiz-chat-token-val');
+                const counterContainer = $('#kaiz-chat-token-counter');
+
+                if (!stateManager.currentChatId || stateManager.currentChatId === -1) {
+                    counterContainer.hide();
+                    return;
+                }
+
+                const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                let fullText = '';
+                msgs.forEach((m: any) => {
+                    let content = m.content || '';
+                    if (m.role === 'agent' || m.role === 'assistant') {
+                        content = loop.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+                    }
+                    fullText += content + ' ';
+                });
+
+                if (!fullText.trim()) {
+                    counterContainer.hide();
+                    return;
+                }
+
+                let count = 0;
+                if (typeof (window as any).getTokenCountAsync === 'function') {
+                    count = await (window as any).getTokenCountAsync(fullText);
+                } else if (typeof (window as any).getTokenCount === 'function') {
+                    count = (window as any).getTokenCount(fullText);
+                } else {
+                    count = Math.ceil(fullText.split(/\s+/).length * 1.3);
+                }
+
+                const ctx = (window as any).SillyTavern.getContext();
+                const settings = ctx.extensionSettings?.kaiz_agent || {};
+                const maxLoops = settings.maxAgentLoops || 5;
+                const baseTokens = await loop.getBaseTokens(maxLoops);
+                count += baseTokens;
+
+                counterSpan.text(count.toLocaleString());
+                counterContainer.css('display', 'inline-block');
+            } catch (e) {
+                console.warn('Kaiz Agent: Failed to refresh tokens', e);
+            }
+        };
+
         // Lắng nghe StateManager
         stateManager.onChatsListUpdated = (chats) => {
             renderChatList(chats);
         };
 
-        stateManager.onChatRenamed = (id, newName) => {
-            if (id === stateManager.currentChatId) {
-                chatTitle.text(newName);
-            }
+        stateManager.onChatRenamed = (_id, _newName) => {
+            // Do nothing
         };
 
         stateManager.onChatSwitched = (chatId, messages) => {
             history.empty();
             if (messages.length === 0 && chatId === -1) {
-                chatTitle.text('Agent');
                 addWelcomeMessage();
             } else if (messages.length === 0) {
                 addWelcomeMessage();
@@ -1005,6 +1048,7 @@ export class ChatWindowUI {
                 history.scrollTop(history[0].scrollHeight);
             }
             updateContinueBtnVisibility();
+            refreshTokens();
         };
 
         const addWelcomeMessage = () => {
@@ -1142,11 +1186,13 @@ export class ChatWindowUI {
                         } else {
                             await stateManager.addMessage('agent', currentStepResponse);
                         }
+                        refreshTokens();
                         agentContentBox = null;
                     } else if (event.type === 'tool_result') {
                         const formatted = formatUserMessage(event.text || '');
                         addMessageToDOM('user', formatted);
                         await stateManager.addMessage('user', event.text || '');
+                        refreshTokens();
                     } else if (event.type === 'tool_confirm') {
                         btnIcon.removeClass('kaiz-icon-spin');
                         btnFloat.addClass('kaiz-btn-blink');
@@ -1262,15 +1308,12 @@ export class ChatWindowUI {
 
             // Lưu vào DB trước
             await stateManager.addMessage('user', text, attachmentsToSend);
+            refreshTokens();
             // In ra UI
             const formattedUI = formatUserMessage(text, attachmentsToSend);
             addMessageToDOM('user', formattedUI);
 
-            // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
-            if (chatTitle.text() === 'New Chat') {
-                const titleText = text || 'File đính kèm';
-                chatTitle.text(titleText.substring(0, 30) + (titleText.length > 30 ? '...' : ''));
-            }
+            // Title updates are removed
 
             startAgent(false);
         };
