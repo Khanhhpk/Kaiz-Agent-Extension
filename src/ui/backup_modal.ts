@@ -24,11 +24,11 @@ export class BackupModal {
                             <h2 style="margin: 0; font-size: 1.2rem;"><i class="fa-solid fa-save"></i> Backup Manager</h2>
                             <div class="kaiz-modal-close" style="cursor: pointer; font-size: 1.2rem;"><i class="fa-solid fa-xmark"></i></div>
                         </div>
-                        <div class="kaiz-backup-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;">
+                        <div class="kaiz-backup-header">
                             <h3 style="margin: 0; font-size: 1.2em;">Backup Manager</h3>
                             <div id="kaiz-backup-storage-info" style="font-size: 0.85em; color: #aaa;">Calculating storage...</div>
                         </div>
-                        <div class="kaiz-backup-tabs" style="display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid var(--SmartThemeBorderColor);">
+                        <div class="kaiz-backup-tabs">
                             <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">All</div>
                             <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Characters</div>
                             <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Chats</div>
@@ -58,6 +58,16 @@ export class BackupModal {
                             margin-bottom: 15px; padding-bottom: 10px;
                             border-bottom: 1px solid var(--SmartThemeBorderColor);
                         }
+                        .kaiz-backup-header {
+                            display: flex; justify-content: space-between; align-items: center; 
+                            border-bottom: 1px solid #444; padding-bottom: 10px; margin-bottom: 15px;
+                            flex-wrap: wrap; gap: 5px;
+                        }
+                        .kaiz-backup-tabs {
+                            display: flex; gap: 10px; margin-bottom: 15px; 
+                            border-bottom: 1px solid var(--SmartThemeBorderColor);
+                            flex-wrap: wrap;
+                        }
                         .kaiz-tab {
                             opacity: 0.6; transition: opacity 0.2s;
                         }
@@ -68,14 +78,19 @@ export class BackupModal {
                         .kaiz-backup-item {
                             display: flex; justify-content: space-between; align-items: center;
                             padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
+                            background: rgba(0,0,0,0.2); border-radius: 5px; margin-bottom: 8px;
+                            flex-wrap: wrap; gap: 10px;
                         }
                         .kaiz-backup-item:hover {
                             background: rgba(255,255,255,0.05);
                         }
-                        .kaiz-backup-info { flex: 1; }
-                        .kaiz-backup-title { font-weight: bold; font-size: 1.1em; }
+                        .kaiz-backup-info { flex: 1; min-width: 0; }
+                        .kaiz-backup-title { 
+                            font-weight: bold; font-size: 1.1em; 
+                            word-break: break-word; overflow-wrap: anywhere;
+                        }
                         .kaiz-backup-meta { font-size: 0.85em; opacity: 0.7; margin-top: 4px; }
-                        .kaiz-backup-actions { display: flex; gap: 8px; }
+                        .kaiz-backup-actions { display: flex; gap: 8px; flex-shrink: 0; }
                     </style>
                 `);
             }
@@ -159,15 +174,15 @@ export class BackupModal {
                         b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
 
                     html += `
-                        <div class="kaiz-backup-item" style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px; margin-bottom: 8px;">
-                            <div style="display: flex; align-items: center; gap: 10px;">
-                                <i class="fa-solid ${icon}" style="font-size: 1.2em; color: #888;"></i>
-                                <div>
-                                    <div style="font-weight: bold;">${this.escapeHtml(b.name)}</div>
-                                    <div style="font-size: 0.8em; color: #888;">${date} - ${sizeKb} KB</div>
+                        <div class="kaiz-backup-item">
+                            <div class="kaiz-backup-info" style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid ${icon}" style="font-size: 1.2em; color: #888; flex-shrink: 0;"></i>
+                                <div style="min-width: 0;">
+                                    <div class="kaiz-backup-title">${this.escapeHtml(b.name)}</div>
+                                    <div class="kaiz-backup-meta">${date} - ${sizeKb} KB</div>
                                 </div>
                             </div>
-                            <div style="display: flex; gap: 5px;">
+                            <div class="kaiz-backup-actions">
                                 <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Download"><i class="fa-solid fa-download"></i></button>
                                 <button class="kaiz-backup-delete kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #c0392b; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Delete"><i class="fa-solid fa-trash"></i></button>
                             </div>
