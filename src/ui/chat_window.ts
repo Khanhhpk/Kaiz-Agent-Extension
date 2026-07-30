@@ -1281,7 +1281,6 @@ export class ChatWindowUI {
                 ? await stateManager.db.getMessages(stateManager.currentChatId)
                 : [];
             if (historyMsgs.length === 0 || historyMsgs[historyMsgs.length - 1].role !== 'agent') {
-                // @ts-expect-error toastr is loaded globally
                 toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Kaiz Agent');
                 return;
             }
