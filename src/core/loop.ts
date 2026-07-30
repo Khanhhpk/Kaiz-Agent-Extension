@@ -1,7 +1,12 @@
 import { SillyTavernAdapter, Message } from '../adapters/st_adapter';
 import { ToolRegistry } from './tool_registry';
 import { StateManager } from './state';
-import { DEFAULT_CORE_IDENTITY, DEFAULT_CORE_BEHAVIOR, DEFAULT_CORE_PREFILL, DEFAULT_CORE_COT_PROMPT } from './defaults';
+import {
+    DEFAULT_CORE_IDENTITY,
+    DEFAULT_CORE_BEHAVIOR,
+    DEFAULT_CORE_PREFILL,
+    DEFAULT_CORE_COT_PROMPT,
+} from './defaults';
 
 declare const SillyTavern: any;
 

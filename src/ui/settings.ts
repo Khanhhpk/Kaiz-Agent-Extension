@@ -4,7 +4,12 @@ declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
 import { BrowserWindowUI } from './browser_window';
-import { DEFAULT_CORE_IDENTITY, DEFAULT_CORE_BEHAVIOR, DEFAULT_CORE_PREFILL, DEFAULT_CORE_COT_PROMPT } from '../core/defaults';
+import {
+    DEFAULT_CORE_IDENTITY,
+    DEFAULT_CORE_BEHAVIOR,
+    DEFAULT_CORE_PREFILL,
+    DEFAULT_CORE_COT_PROMPT,
+} from '../core/defaults';
 
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
