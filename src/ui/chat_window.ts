@@ -728,7 +728,6 @@ export class ChatWindowUI {
             history.empty();
             // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
             stateManager.currentChatId = null;
-            chatTitle.text('New Chat');
             addWelcomeMessage();
 
             // Xóa background selected ở chat list
@@ -746,7 +745,6 @@ export class ChatWindowUI {
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 stateManager.switchChat(id);
-                chatTitle.text($(this).find('span').text());
                 toggleSidebar();
             }
         });
@@ -1010,15 +1008,12 @@ export class ChatWindowUI {
         };
 
         stateManager.onChatRenamed = (id, newName) => {
-            if (id === stateManager.currentChatId) {
-                chatTitle.text(newName);
-            }
+            // Do nothing
         };
 
         stateManager.onChatSwitched = (chatId, messages) => {
             history.empty();
             if (messages.length === 0 && chatId === -1) {
-                chatTitle.text('Agent');
                 addWelcomeMessage();
             } else if (messages.length === 0) {
                 addWelcomeMessage();
@@ -1318,11 +1313,7 @@ export class ChatWindowUI {
             const formattedUI = formatUserMessage(text, attachmentsToSend);
             addMessageToDOM('user', formattedUI);
 
-            // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
-            if (chatTitle.text() === 'New Chat') {
-                const titleText = text || 'File đính kèm';
-                chatTitle.text(titleText.substring(0, 30) + (titleText.length > 30 ? '...' : ''));
-            }
+            // Title updates are removed
 
             startAgent(false);
         };
