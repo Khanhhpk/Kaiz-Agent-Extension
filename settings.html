@@ -90,6 +90,39 @@
                     <input id="kaiz-max-loops" type="number" class="text_pole" min="1" max="20" placeholder="5" />
                 </details>
 
+                <!-- Token Management Section -->
+                <details class="scp-settings-flat-section" style="margin-top: 15px">
+                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
+                        <i class="fa-solid fa-scissors"></i> Token Management
+                    </summary>
+                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px">
+                        Tự động cắt bớt lịch sử cũ khi vượt mức Token (0 hoặc không tick ô nào = Tắt).
+                    </label>
+                    <div class="flex-container flexFlowRow alignItemCenter gap-1" style="margin-bottom: 10px;">
+                        <input
+                            id="kaiz-token-safe-limit"
+                            type="number"
+                            class="text_pole"
+                            placeholder="Ví dụ: 600000"
+                            style="width: 150px;"
+                        />
+                        <span style="font-size: 12px; color: #aaa;">Tokens</span>
+                    </div>
+                    
+                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block">Ưu tiên cắt bớt (từ cũ nhất):</label>
+                    <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #ccc;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="kaiz-trim-agent" /> Cắt bớt tin nhắn của Agent
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="kaiz-trim-user" /> Cắt bớt tin nhắn của User
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                            <input type="checkbox" id="kaiz-trim-tool" /> Cắt bớt kết quả trả về của Tools
+                        </label>
+                    </div>
+                </details>
+
                 <!-- Auto Retry System -->
                 <details class="scp-settings-flat-section" style="margin-top: 15px">
                     <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">

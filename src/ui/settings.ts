@@ -628,6 +628,43 @@ export class SettingsUI {
         document.addEventListener('kaiz_memory_updated', renderMemories);
         // --- END PERSONA & MEMORY LOGIC ---
 
+        // --- TOKEN MANAGEMENT LOGIC ---
+        if (typeof settings.tokenSafeLimit !== 'number') settings.tokenSafeLimit = 600000;
+        if (typeof settings.trimAgent !== 'boolean') settings.trimAgent = false;
+        if (typeof settings.trimUser !== 'boolean') settings.trimUser = false;
+        if (typeof settings.trimTool !== 'boolean') settings.trimTool = false;
+
+        const $tokenLimitInput = $('#kaiz-token-safe-limit');
+        const $trimAgent = $('#kaiz-trim-agent');
+        const $trimUser = $('#kaiz-trim-user');
+        const $trimTool = $('#kaiz-trim-tool');
+
+        $tokenLimitInput.val(settings.tokenSafeLimit);
+        $trimAgent.prop('checked', settings.trimAgent);
+        $trimUser.prop('checked', settings.trimUser);
+        $trimTool.prop('checked', settings.trimTool);
+
+        $tokenLimitInput.on('input', function (this: HTMLInputElement) {
+            settings.tokenSafeLimit = parseInt(this.value, 10) || 0;
+            ctx.saveSettingsDebounced();
+        });
+
+        $trimAgent.on('change', function (this: HTMLInputElement) {
+            settings.trimAgent = !!this.checked;
+            ctx.saveSettingsDebounced();
+        });
+
+        $trimUser.on('change', function (this: HTMLInputElement) {
+            settings.trimUser = !!this.checked;
+            ctx.saveSettingsDebounced();
+        });
+
+        $trimTool.on('change', function (this: HTMLInputElement) {
+            settings.trimTool = !!this.checked;
+            ctx.saveSettingsDebounced();
+        });
+        // --- END TOKEN MANAGEMENT LOGIC ---
+
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
 
