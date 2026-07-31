@@ -1636,14 +1636,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
    const renameAgentChatTool = {
        schema: {
            name: 'rename_agent_chat',
-           description: "Rename a specific INTERNAL agent chat session by ID, or the current active internal chat if no ID is provided. Operates within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+           description: 'Đổi tên một phiên chat NỘI BỘ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Hoạt động trong phạm vi Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
            parameters: {
                type: 'object',
                properties: {
-                   newName: { type: 'string', description: 'The new name for the chat.' },
+                   newName: { type: 'string', description: 'Tên mới cho đoạn chat.' },
                    chatId: {
                        type: 'number',
-                       description: 'Optional. The ID of the chat to rename. If not provided, renames the current chat.',
+                       description: 'Tùy chọn. ID của đoạn chat cần đổi tên. Nếu không cung cấp, sẽ đổi tên đoạn chat hiện tại.',
                    },
                },
                required: ['newName'],
@@ -1669,7 +1669,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
    const openNewAgentChatTool = {
        schema: {
            name: 'open_new_agent_chat',
-           description: "Closes the current internal agent chat and opens a new blank internal chat session within the currently active Workspace (or Default if no workspace is active). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+           description: 'Đóng phiên chat nội bộ hiện tại của agent và mở một phiên chat nội bộ trống mới trong Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
            parameters: {
                type: 'object',
                properties: {},
@@ -1697,7 +1697,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
    const listAgentChatsTool = {
        schema: {
            name: 'list_agent_chats',
-           description: "List all existing internal agent chat sessions (ID, Name, Created At, Updated At) WITHIN the currently active Workspace. If in Default mode, lists all global chats. Use list_agent_workspaces first to understand the workspace structure. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+           description: 'Liệt kê tất cả các phiên chat nội bộ của agent (ID, Tên, Ngày tạo, Ngày cập nhật) TRONG PHẠM VI Workspace đang kích hoạt. Nếu ở chế độ Default, sẽ liệt kê toàn bộ các đoạn chat global. Sử dụng list_agent_workspaces trước để hiểu cấu trúc workspace. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
            parameters: {
                type: 'object',
                properties: {},
@@ -1726,13 +1726,13 @@ CÁC CÔNG CỤ HIỆN CÓ:
    const deleteAgentChatTool = {
        schema: {
            name: 'delete_agent_chat',
-           description: "Delete a specific internal agent chat by ID, or the current active internal chat if no ID is provided. Only deletes chats within the currently active Workspace scope. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+           description: 'Xóa một đoạn chat nội bộ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Chỉ xóa các đoạn chat nằm trong phạm vi Workspace đang kích hoạt. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
            parameters: {
                type: 'object',
                properties: {
                    chatId: {
                        type: 'number',
-                       description: 'Optional. The ID of the chat to delete. If not provided, deletes the current chat.',
+                       description: 'Tùy chọn. ID của đoạn chat cần xóa. Nếu không cung cấp, sẽ xóa đoạn chat hiện tại.',
                    },
                },
            },
@@ -4364,7 +4364,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
    const listWorkspacesTool = {
        schema: {
            name: 'list_agent_workspaces',
-           description: 'List all existing Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
+           description: 'Liệt kê tất cả các Agent Workspace hiện có (ID, Tên, số công cụ được bật, có prompt tùy chỉnh không). Cũng hiển thị workspace nào đang được kích hoạt. Sử dụng công cụ này để hiểu cấu trúc workspace trước khi chuyển đổi hoặc quản lý.',
            parameters: { type: 'object', properties: {} },
        },
        execute: async (_args, context) => {
@@ -4400,13 +4400,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
    const switchWorkspaceTool = {
        schema: {
            name: 'switch_agent_workspace',
-           description: 'Switch the current active Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
+           description: 'Chuyển đổi Agent Workspace đang kích hoạt theo ID, hoặc chuyển về chế độ Default (global) bằng cách truyền workspaceId là null. Việc chuyển đổi workspace sẽ reset đoạn chat hiện tại thành một đoạn chat trống mới.',
            parameters: {
                type: 'object',
                properties: {
                    workspaceId: {
                        type: 'number',
-                       description: 'The ID of the workspace to switch to. Pass null or omit to switch back to Default (global) mode.',
+                       description: 'ID của workspace muốn chuyển đến. Truyền null hoặc bỏ qua để chuyển về chế độ Default (global).',
                    },
                },
            },
@@ -4433,11 +4433,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
    const createWorkspaceTool = {
        schema: {
            name: 'create_agent_workspace',
-           description: 'Create a new Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
+           description: 'Tạo một Agent Workspace mới với tên được cung cấp. Sau khi tạo, agent sẽ tự động chuyển vào workspace mới. Workspace mới khởi đầu sẽ không có công cụ nào được bật và không có prompt tùy chỉnh.',
            parameters: {
                type: 'object',
                properties: {
-                   name: { type: 'string', description: 'The name for the new workspace.' },
+                   name: { type: 'string', description: 'Tên cho workspace mới.' },
                },
                required: ['name'],
            },

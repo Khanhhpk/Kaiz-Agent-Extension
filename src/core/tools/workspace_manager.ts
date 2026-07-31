@@ -5,7 +5,7 @@ export const listWorkspacesTool: ITool = {
     schema: {
         name: 'list_agent_workspaces',
         description:
-            'List all existing Agent Workspaces (ID, Name, enabled tools count, has custom prompt). Also shows which workspace is currently active. Use this to understand the workspace structure before switching or managing.',
+            'Liệt kê tất cả các Agent Workspace hiện có (ID, Tên, số công cụ được bật, có prompt tùy chỉnh không). Cũng hiển thị workspace nào đang được kích hoạt. Sử dụng công cụ này để hiểu cấu trúc workspace trước khi chuyển đổi hoặc quản lý.',
         parameters: { type: 'object', properties: {} },
     },
     execute: async (_args: any, context?: any) => {
@@ -46,14 +46,14 @@ export const switchWorkspaceTool: ITool = {
     schema: {
         name: 'switch_agent_workspace',
         description:
-            'Switch the current active Agent Workspace by ID, or switch to Default (global) mode by passing workspaceId as null. Switching workspace resets the active chat to a new blank chat.',
+            'Chuyển đổi Agent Workspace đang kích hoạt theo ID, hoặc chuyển về chế độ Default (global) bằng cách truyền workspaceId là null. Việc chuyển đổi workspace sẽ reset đoạn chat hiện tại thành một đoạn chat trống mới.',
         parameters: {
             type: 'object',
             properties: {
                 workspaceId: {
                     type: 'number',
                     description:
-                        'The ID of the workspace to switch to. Pass null or omit to switch back to Default (global) mode.',
+                        'ID của workspace muốn chuyển đến. Truyền null hoặc bỏ qua để chuyển về chế độ Default (global).',
                 },
             },
         },
@@ -82,11 +82,11 @@ export const createWorkspaceTool: ITool = {
     schema: {
         name: 'create_agent_workspace',
         description:
-            'Create a new Agent Workspace with a given name. After creation, the agent automatically switches into the new workspace. The workspace starts with no tools and no custom prompt.',
+            'Tạo một Agent Workspace mới với tên được cung cấp. Sau khi tạo, agent sẽ tự động chuyển vào workspace mới. Workspace mới khởi đầu sẽ không có công cụ nào được bật và không có prompt tùy chỉnh.',
         parameters: {
             type: 'object',
             properties: {
-                name: { type: 'string', description: 'The name for the new workspace.' },
+                name: { type: 'string', description: 'Tên cho workspace mới.' },
             },
             required: ['name'],
         },
