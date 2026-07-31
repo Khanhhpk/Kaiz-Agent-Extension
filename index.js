@@ -6127,6 +6127,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             const modderWs = workspaces.find((w) => w.systemId === 'modder');
             if (!modderWs) {
                 await this.createSystemWorkspace('modder', 'Modding & Editor', `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`, [
+                    'get_chat_history',
                     'get_char_info',
                     'list_characters',
                     'edit_character_card',
@@ -6275,6 +6276,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 defaultName = 'Modding & Editor';
                 defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
                 defaultTools = [
+                    'get_chat_history',
                     'get_char_info',
                     'list_characters',
                     'edit_character_card',
