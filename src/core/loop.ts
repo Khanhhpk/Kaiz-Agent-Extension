@@ -188,6 +188,100 @@ CÁC CÔNG CỤ HIỆN CÓ:
             .trim();
     }
 
+    public async applyTokenSafeLimit(internalHistory: any[]): Promise<any[]> {
+        const ctx = (window as any).SillyTavern.getContext();
+        const settings = ctx.extensionSettings?.kaiz_agent || {};
+
+        const limit = settings.tokenSafeLimit || 0;
+        if (limit <= 0) return internalHistory;
+
+        const trimAgent = !!settings.trimAgent;
+        const trimUser = !!settings.trimUser;
+        const trimTool = !!settings.trimTool;
+
+        if (!trimAgent && !trimUser && !trimTool) return internalHistory;
+
+        const maxLoops = settings.maxAgentLoops || 5;
+        const baseTokens = await this.getBaseTokens(maxLoops);
+
+        const currentHistory = [...internalHistory];
+
+        while (currentHistory.length > 0) {
+            let fullText = '';
+            for (const m of currentHistory) {
+                let content = m.content || '';
+                if (m.role === 'agent' || m.role === 'assistant') {
+                    content = this.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+                }
+                fullText += content + ' ';
+            }
+
+            let historyTokens;
+            if (typeof (window as any).getTokenCountAsync === 'function') {
+                historyTokens = await (window as any).getTokenCountAsync(fullText);
+            } else if (typeof (window as any).getTokenCount === 'function') {
+                historyTokens = (window as any).getTokenCount(fullText);
+            } else {
+                historyTokens = Math.ceil(fullText.split(/\s+/).length * 1.3);
+            }
+
+            if (baseTokens + historyTokens <= limit) {
+                break;
+            }
+
+            // Find the oldest message that matches our trim conditions
+            let dropped = false;
+            for (let i = 0; i < currentHistory.length; i++) {
+                const m = currentHistory[i];
+                let isToolResult = false;
+                let isUserMsg = false;
+                let isAgentMsg = false;
+
+                if (m.role === 'user') {
+                    if (typeof m.content === 'string' && m.content.startsWith('[Tool Result -')) {
+                        isToolResult = true;
+                    } else {
+                        isUserMsg = true;
+                    }
+                } else if (m.role === 'agent' || m.role === 'assistant') {
+                    isAgentMsg = true;
+                }
+
+                if ((isAgentMsg && trimAgent) || (isUserMsg && trimUser) || (isToolResult && trimTool)) {
+                    if (
+                        typeof m.content === 'string' &&
+                        m.content.includes('đã bị lược bỏ do giới hạn Context Limit')
+                    ) {
+                        // Already a placeholder, completely remove it to save even more space if needed
+                        currentHistory.splice(i, 1);
+                    } else {
+                        // Replace with a placeholder
+                        let replacement = '';
+                        if (isToolResult) {
+                            replacement =
+                                '[Tool Result - Đã bị lược bỏ do giới hạn Context Limit. Nếu cần thiết, bạn có thể gọi lại Tool để lấy thông tin.]';
+                        } else if (isAgentMsg) {
+                            replacement = '[Tin nhắn của Agent đã bị lược bỏ do giới hạn Context Limit]';
+                        } else if (isUserMsg) {
+                            replacement = '[Tin nhắn của User đã bị lược bỏ do giới hạn Context Limit]';
+                        }
+                        currentHistory[i] = {
+                            ...m,
+                            content: replacement,
+                        };
+                    }
+                    dropped = true;
+                    break;
+                }
+            }
+
+            // If we couldn't drop anything (because no message matches the checkboxes), we must break to avoid infinite loop
+            if (!dropped) break;
+        }
+
+        return currentHistory;
+    }
+
     private buildMessages(
         internalHistory: any[],
         maxSteps: number,
@@ -372,8 +466,10 @@ CÁC CÔNG CỤ HIỆN CÓ:
                 await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
 
                 try {
+                    const truncatedHistory = await this.applyTokenSafeLimit(internalHistory);
+
                     const messages = this.buildMessages(
-                        internalHistory,
+                        truncatedHistory,
                         maxSteps,
                         step,
                         lastToolError,

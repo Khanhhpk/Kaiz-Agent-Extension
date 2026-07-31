@@ -965,8 +965,9 @@ export class ChatWindowUI {
                 }
 
                 const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                const truncatedMsgs = await loop.applyTokenSafeLimit(msgs);
                 let fullText = '';
-                msgs.forEach((m: any) => {
+                truncatedMsgs.forEach((m: any) => {
                     let content = m.content || '';
                     if (m.role === 'agent' || m.role === 'assistant') {
                         content = loop.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';

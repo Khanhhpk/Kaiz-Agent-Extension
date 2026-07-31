@@ -178,6 +178,94 @@ CÁC CÔNG CỤ HIỆN CÓ:
                 .replace(/<agent_cot>[\s\S]*?(?:<\/agent_cot>|$)/gi, '')
                 .trim();
         }
+        async applyTokenSafeLimit(internalHistory) {
+            const ctx = window.SillyTavern.getContext();
+            const settings = ctx.extensionSettings?.kaiz_agent || {};
+            const limit = settings.tokenSafeLimit || 0;
+            if (limit <= 0)
+                return internalHistory;
+            const trimAgent = !!settings.trimAgent;
+            const trimUser = !!settings.trimUser;
+            const trimTool = !!settings.trimTool;
+            if (!trimAgent && !trimUser && !trimTool)
+                return internalHistory;
+            const maxLoops = settings.maxAgentLoops || 5;
+            const baseTokens = await this.getBaseTokens(maxLoops);
+            const currentHistory = [...internalHistory];
+            while (currentHistory.length > 0) {
+                let fullText = '';
+                for (const m of currentHistory) {
+                    let content = m.content || '';
+                    if (m.role === 'agent' || m.role === 'assistant') {
+                        content = this.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+                    }
+                    fullText += content + ' ';
+                }
+                let historyTokens;
+                if (typeof window.getTokenCountAsync === 'function') {
+                    historyTokens = await window.getTokenCountAsync(fullText);
+                }
+                else if (typeof window.getTokenCount === 'function') {
+                    historyTokens = window.getTokenCount(fullText);
+                }
+                else {
+                    historyTokens = Math.ceil(fullText.split(/\s+/).length * 1.3);
+                }
+                if (baseTokens + historyTokens <= limit) {
+                    break;
+                }
+                // Find the oldest message that matches our trim conditions
+                let dropped = false;
+                for (let i = 0; i < currentHistory.length; i++) {
+                    const m = currentHistory[i];
+                    let isToolResult = false;
+                    let isUserMsg = false;
+                    let isAgentMsg = false;
+                    if (m.role === 'user') {
+                        if (typeof m.content === 'string' && m.content.startsWith('[Tool Result -')) {
+                            isToolResult = true;
+                        }
+                        else {
+                            isUserMsg = true;
+                        }
+                    }
+                    else if (m.role === 'agent' || m.role === 'assistant') {
+                        isAgentMsg = true;
+                    }
+                    if ((isAgentMsg && trimAgent) || (isUserMsg && trimUser) || (isToolResult && trimTool)) {
+                        if (typeof m.content === 'string' &&
+                            m.content.includes('đã bị lược bỏ do giới hạn Context Limit')) {
+                            // Already a placeholder, completely remove it to save even more space if needed
+                            currentHistory.splice(i, 1);
+                        }
+                        else {
+                            // Replace with a placeholder
+                            let replacement = '';
+                            if (isToolResult) {
+                                replacement =
+                                    '[Tool Result - Đã bị lược bỏ do giới hạn Context Limit. Nếu cần thiết, bạn có thể gọi lại Tool để lấy thông tin.]';
+                            }
+                            else if (isAgentMsg) {
+                                replacement = '[Tin nhắn của Agent đã bị lược bỏ do giới hạn Context Limit]';
+                            }
+                            else if (isUserMsg) {
+                                replacement = '[Tin nhắn của User đã bị lược bỏ do giới hạn Context Limit]';
+                            }
+                            currentHistory[i] = {
+                                ...m,
+                                content: replacement,
+                            };
+                        }
+                        dropped = true;
+                        break;
+                    }
+                }
+                // If we couldn't drop anything (because no message matches the checkboxes), we must break to avoid infinite loop
+                if (!dropped)
+                    break;
+            }
+            return currentHistory;
+        }
         buildMessages(internalHistory, maxSteps, step, hasError, cachedSystemPrompt, continueMode = false) {
             const ctx = window.SillyTavern.getContext();
             const settings = ctx.extensionSettings?.kaiz_agent || {};
@@ -332,7 +420,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
                     step++;
                     await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
                     try {
-                        const messages = this.buildMessages(internalHistory, maxSteps, step, lastToolError, cachedSystemPrompt, continueMode);
+                        const truncatedHistory = await this.applyTokenSafeLimit(internalHistory);
+                        const messages = this.buildMessages(truncatedHistory, maxSteps, step, lastToolError, cachedSystemPrompt, continueMode);
                         let currentText = '';
                         const extSettings = SillyTavern?.getContext?.()?.extensionSettings?.['kaiz_agent'] || {};
                         const maxRetries = extSettings.maxRetries ?? 3;
@@ -7148,6 +7237,40 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             document.removeEventListener('kaiz_memory_updated', renderMemories);
             document.addEventListener('kaiz_memory_updated', renderMemories);
             // --- END PERSONA & MEMORY LOGIC ---
+            // --- TOKEN MANAGEMENT LOGIC ---
+            if (typeof settings.tokenSafeLimit !== 'number')
+                settings.tokenSafeLimit = 600000;
+            if (typeof settings.trimAgent !== 'boolean')
+                settings.trimAgent = false;
+            if (typeof settings.trimUser !== 'boolean')
+                settings.trimUser = false;
+            if (typeof settings.trimTool !== 'boolean')
+                settings.trimTool = false;
+            const $tokenLimitInput = $('#kaiz-token-safe-limit');
+            const $trimAgent = $('#kaiz-trim-agent');
+            const $trimUser = $('#kaiz-trim-user');
+            const $trimTool = $('#kaiz-trim-tool');
+            $tokenLimitInput.val(settings.tokenSafeLimit);
+            $trimAgent.prop('checked', settings.trimAgent);
+            $trimUser.prop('checked', settings.trimUser);
+            $trimTool.prop('checked', settings.trimTool);
+            $tokenLimitInput.on('input', function () {
+                settings.tokenSafeLimit = parseInt(this.value, 10) || 0;
+                ctx.saveSettingsDebounced();
+            });
+            $trimAgent.on('change', function () {
+                settings.trimAgent = !!this.checked;
+                ctx.saveSettingsDebounced();
+            });
+            $trimUser.on('change', function () {
+                settings.trimUser = !!this.checked;
+                ctx.saveSettingsDebounced();
+            });
+            $trimTool.on('change', function () {
+                settings.trimTool = !!this.checked;
+                ctx.saveSettingsDebounced();
+            });
+            // --- END TOKEN MANAGEMENT LOGIC ---
             // --- TOOLS MANAGER LOGIC ---
             const $toolsList = $('#kaiz-tools-list');
             function renderTools(filterText = '') {
@@ -8505,8 +8628,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         return;
                     }
                     const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                    const truncatedMsgs = await loop.applyTokenSafeLimit(msgs);
                     let fullText = '';
-                    msgs.forEach((m) => {
+                    truncatedMsgs.forEach((m) => {
                         let content = m.content || '';
                         if (m.role === 'agent' || m.role === 'assistant') {
                             content = loop.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
