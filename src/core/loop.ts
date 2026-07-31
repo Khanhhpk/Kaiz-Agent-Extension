@@ -206,77 +206,84 @@ CÁC CÔNG CỤ HIỆN CÓ:
 
         const currentHistory = [...internalHistory];
 
-        while (currentHistory.length > 0) {
-            let fullText = '';
-            for (const m of currentHistory) {
-                let content = m.content || '';
-                if (m.role === 'agent' || m.role === 'assistant') {
-                    content = this.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
-                }
-                fullText += content + ' ';
+        let fullText = '';
+        for (const m of currentHistory) {
+            let content = m.content || '';
+            if (m.role === 'agent' || m.role === 'assistant') {
+                content = this.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
             }
+            fullText += content + ' ';
+        }
 
-            let historyTokens;
+        const getTokenCount = async (text: string): Promise<number> => {
             if (typeof (window as any).getTokenCountAsync === 'function') {
-                historyTokens = await (window as any).getTokenCountAsync(fullText);
+                return await (window as any).getTokenCountAsync(text);
             } else if (typeof (window as any).getTokenCount === 'function') {
-                historyTokens = (window as any).getTokenCount(fullText);
-            } else {
-                historyTokens = Math.ceil(fullText.split(/\s+/).length * 1.3);
+                return (window as any).getTokenCount(text);
             }
+            return Math.ceil(text.split(/\s+/).length * 1.3);
+        };
 
-            if (baseTokens + historyTokens <= limit) {
-                break;
-            }
+        const totalTokens = await getTokenCount(fullText);
+        let excessTokens = baseTokens + totalTokens - limit;
 
-            // Find the oldest message that matches our trim conditions
-            let dropped = false;
-            for (let i = 0; i < currentHistory.length; i++) {
-                const m = currentHistory[i];
-                let isToolResult = false;
-                let isUserMsg = false;
-                let isAgentMsg = false;
+        if (excessTokens <= 0) return currentHistory;
 
-                if (m.role === 'user') {
-                    if (typeof m.content === 'string' && m.content.startsWith('[Tool Result -')) {
-                        isToolResult = true;
-                    } else {
-                        isUserMsg = true;
-                    }
-                } else if (m.role === 'agent' || m.role === 'assistant') {
-                    isAgentMsg = true;
+        for (let i = 0; i < currentHistory.length; i++) {
+            if (excessTokens <= 0) break;
+
+            const m = currentHistory[i];
+            let isToolResult = false;
+            let isUserMsg = false;
+            let isAgentMsg = false;
+
+            if (m.role === 'user') {
+                if (typeof m.content === 'string' && m.content.startsWith('[Tool Result -')) {
+                    isToolResult = true;
+                } else {
+                    isUserMsg = true;
                 }
+            } else if (m.role === 'agent' || m.role === 'assistant') {
+                isAgentMsg = true;
+            }
 
-                if ((isAgentMsg && trimAgent) || (isUserMsg && trimUser) || (isToolResult && trimTool)) {
-                    if (
-                        typeof m.content === 'string' &&
-                        m.content.includes('đã bị lược bỏ do giới hạn Context Limit')
-                    ) {
-                        // Already a placeholder, completely remove it to save even more space if needed
-                        currentHistory.splice(i, 1);
-                    } else {
-                        // Replace with a placeholder
-                        let replacement = '';
-                        if (isToolResult) {
-                            replacement =
-                                '[Tool Result - Đã bị lược bỏ do giới hạn Context Limit. Nếu cần thiết, bạn có thể gọi lại Tool để lấy thông tin.]';
-                        } else if (isAgentMsg) {
-                            replacement = '[Tin nhắn của Agent đã bị lược bỏ do giới hạn Context Limit]';
-                        } else if (isUserMsg) {
-                            replacement = '[Tin nhắn của User đã bị lược bỏ do giới hạn Context Limit]';
-                        }
+            if ((isAgentMsg && trimAgent) || (isUserMsg && trimUser) || (isToolResult && trimTool)) {
+                let contentStr = m.content || '';
+                if (isAgentMsg) {
+                    contentStr = this.stripCotAndPrefill(contentStr) || '[Đã xử lý suy luận CoT]';
+                }
+                const msgTokens = await getTokenCount(contentStr);
+
+                if (typeof m.content === 'string' && m.content.includes('đã bị lược bỏ do giới hạn Context Limit')) {
+                    // Already a placeholder, completely remove it
+                    currentHistory.splice(i, 1);
+                    excessTokens -= msgTokens;
+                    i--; // adjust index since we removed an element
+                } else {
+                    // Replace with a placeholder
+                    let replacement = '';
+                    if (isToolResult) {
+                        replacement =
+                            '[Tool Result - Đã bị lược bỏ do giới hạn Context Limit. Nếu cần thiết, bạn có thể gọi lại Tool để lấy thông tin.]';
+                    } else if (isAgentMsg) {
+                        replacement = '[Tin nhắn của Agent đã bị lược bỏ do giới hạn Context Limit]';
+                    } else if (isUserMsg) {
+                        replacement = '[Tin nhắn của User đã bị lược bỏ do giới hạn Context Limit]';
+                    }
+
+                    const replacementTokens = await getTokenCount(replacement);
+                    const saving = msgTokens - replacementTokens;
+
+                    // Only replace if it actually saves tokens
+                    if (saving > 0) {
                         currentHistory[i] = {
                             ...m,
                             content: replacement,
                         };
+                        excessTokens -= saving;
                     }
-                    dropped = true;
-                    break;
                 }
             }
-
-            // If we couldn't drop anything (because no message matches the checkboxes), we must break to avoid infinite loop
-            if (!dropped) break;
         }
 
         return currentHistory;
