@@ -104,6 +104,7 @@ export class AutoTaskModal {
             const triggerText = isTurn ? `${task.triggerValue} lượt` : `${task.triggerValue} giây`;
             const icon = isTurn ? 'fa-message' : 'fa-clock';
             const runsText = task.maxRuns > 0 ? `${task.runCount || 0}/${task.maxRuns}` : `${task.runCount || 0}/∞`;
+            const statsText = `🤖 LLM Req: ${task.lastTurnRequests || 0} (Tổng: ${task.totalRequests || 0})`;
             
             const item = $(`
                 <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
@@ -114,7 +115,8 @@ export class AutoTaskModal {
                             <i class="fa-solid fa-bolt"></i> ${runsText}
                         </div>
                         <div style="font-size: 11px; color: #aaa;">
-                            <i class="fa-solid ${task.executionMode === 'persist' ? 'fa-database' : 'fa-leaf'}"></i> ${task.executionMode === 'persist' ? 'Persist' : 'Fresh'}
+                            <i class="fa-solid ${task.executionMode === 'persist' ? 'fa-database' : 'fa-leaf'}"></i> ${task.executionMode === 'persist' ? 'Persist' : 'Fresh'} &nbsp;|&nbsp; 
+                            ${statsText}
                         </div>
                     </div>
                     <div style="display: flex; gap: 6px; align-items: center;">

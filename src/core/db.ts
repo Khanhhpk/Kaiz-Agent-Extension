@@ -49,6 +49,8 @@ export interface AutoTask {
     runCount: number;
     executionMode: 'fresh' | 'persist';
     chatId?: number;
+    lastTurnRequests?: number;
+    totalRequests?: number;
     toolsConfig: Record<string, boolean>;
     enabled: boolean;
     createdAt: number;

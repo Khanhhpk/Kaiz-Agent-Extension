@@ -153,6 +153,8 @@ export class AutoTaskScheduler {
             if (task.executionMode === 'persist' && task.chatId) {
                 await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
             }
+            
+            let turnRequests = 0;
 
             await this.agentLoop.run(
                 historyForRun,
@@ -160,6 +162,7 @@ export class AutoTaskScheduler {
                 async (event: AgentEvent) => {
                     // Update Floating UI Icon & Request Logs
                     if (event.type === 'step_start') {
+                        turnRequests++;
                         (window as any).jQuery?.('#kaiz-floating-btn i').addClass('kaiz-icon-spin');
                         (window as any).jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
                     } else if (event.type === 'debug') {
@@ -192,7 +195,14 @@ export class AutoTaskScheduler {
 
             // Expiry logic
             task.runCount = (task.runCount || 0) + 1;
-            const updates: Partial<AutoTask> = { runCount: task.runCount };
+            task.lastTurnRequests = turnRequests;
+            task.totalRequests = (task.totalRequests || 0) + turnRequests;
+            
+            const updates: Partial<AutoTask> = { 
+                runCount: task.runCount,
+                lastTurnRequests: task.lastTurnRequests,
+                totalRequests: task.totalRequests
+            };
             
             if (task.maxRuns > 0 && task.runCount >= task.maxRuns) {
                 updates.enabled = false;

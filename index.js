@@ -9489,10 +9489,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                if (task.executionMode === 'persist' && task.chatId) {
                    await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
                }
+               let turnRequests = 0;
                await this.agentLoop.run(historyForRun, 15, // max steps
                async (event) => {
                    // Update Floating UI Icon & Request Logs
                    if (event.type === 'step_start') {
+                       turnRequests++;
                        window.jQuery?.('#kaiz-floating-btn i').addClass('kaiz-icon-spin');
                        window.jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
                    }
@@ -9521,7 +9523,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                // Final result isn't needed here anymore since we saved in stream
                // Expiry logic
                task.runCount = (task.runCount || 0) + 1;
-               const updates = { runCount: task.runCount };
+               task.lastTurnRequests = turnRequests;
+               task.totalRequests = (task.totalRequests || 0) + turnRequests;
+               const updates = {
+                   runCount: task.runCount,
+                   lastTurnRequests: task.lastTurnRequests,
+                   totalRequests: task.totalRequests
+               };
                if (task.maxRuns > 0 && task.runCount >= task.maxRuns) {
                    updates.enabled = false;
                    console.log(`[AutoTaskScheduler] Task ${task.id} has reached maxRuns (${task.maxRuns}). Disabling.`);
@@ -9621,6 +9629,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                const triggerText = isTurn ? `${task.triggerValue} lượt` : `${task.triggerValue} giây`;
                const icon = isTurn ? 'fa-message' : 'fa-clock';
                const runsText = task.maxRuns > 0 ? `${task.runCount || 0}/${task.maxRuns}` : `${task.runCount || 0}/∞`;
+               const statsText = `🤖 LLM Req: ${task.lastTurnRequests || 0} (Tổng: ${task.totalRequests || 0})`;
                const item = $(`
                 <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="flex: 1; min-width: 0; padding-right: 10px;">
@@ -9630,7 +9639,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             <i class="fa-solid fa-bolt"></i> ${runsText}
                         </div>
                         <div style="font-size: 11px; color: #aaa;">
-                            <i class="fa-solid ${task.executionMode === 'persist' ? 'fa-database' : 'fa-leaf'}"></i> ${task.executionMode === 'persist' ? 'Persist' : 'Fresh'}
+                            <i class="fa-solid ${task.executionMode === 'persist' ? 'fa-database' : 'fa-leaf'}"></i> ${task.executionMode === 'persist' ? 'Persist' : 'Fresh'} &nbsp;|&nbsp; 
+                            ${statsText}
                         </div>
                     </div>
                     <div style="display: flex; gap: 6px; align-items: center;">
