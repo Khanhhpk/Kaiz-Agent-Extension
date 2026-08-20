@@ -1,6 +1,7 @@
 import { AutoTask } from './db';
 import { AgentLoop, AgentEvent } from './loop';
 import { StateManager } from './state';
+import { ChatWindowUI } from '../ui/chat_window';
 
 export class AutoTaskScheduler {
     private tasks: AutoTask[] = [];
@@ -157,6 +158,19 @@ export class AutoTaskScheduler {
                 historyForRun,
                 15, // max steps
                 async (event: AgentEvent) => {
+                    // Update Floating UI Icon & Request Logs
+                    if (event.type === 'step_start') {
+                        (window as any).jQuery?.('#kaiz-floating-btn i').addClass('kaiz-icon-spin');
+                        (window as any).jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
+                    } else if (event.type === 'debug') {
+                        ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
+                        ChatWindowUI.lastLogRecv = event.data.responseText;
+                        
+                        // Update logs real-time if the modal happens to be open
+                        (window as any).jQuery?.('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
+                        (window as any).jQuery?.('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
+                    }
+
                     // Save to DB on the fly if persist
                     if (task.executionMode === 'persist' && task.chatId) {
                         if (event.type === 'step_end') {
@@ -169,6 +183,10 @@ export class AutoTaskScheduler {
                 false, // continueMode
                 task.toolsConfig // toolsConfigOverride
             );
+            
+            // Stop UI spinning
+            (window as any).jQuery?.('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+            (window as any).jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
 
             // Final result isn't needed here anymore since we saved in stream
 

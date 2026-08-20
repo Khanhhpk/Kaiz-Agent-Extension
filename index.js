@@ -8022,6 +8022,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        .replace(/'/g, '&#039;');
    class ChatWindowUI {
        static currentAttachments = [];
+       static lastLogSent = 'No data yet.';
+       static lastLogRecv = 'No data yet.';
        static init(loop, stateManager, registry) {
            const $ = jQuery;
            const btn = $('#kaiz-floating-btn');
@@ -8057,8 +8059,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 </dialog>
             `);
            }
-           let lastLogSent = 'No data yet.';
-           let lastLogRecv = 'No data yet.';
            $('#kaiz-log-close').on('click', () => {
                $('#kaiz-log-modal')[0].close();
            });
@@ -8077,8 +8077,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                backupModal.show();
            });
            logBtn.on('click', () => {
-               $('#kaiz-log-sent').text(lastLogSent);
-               $('#kaiz-log-recv').text(lastLogRecv);
+               $('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
+               $('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
                const dialog = $('#kaiz-log-modal')[0];
                if (!dialog.open) {
                    dialog.showModal();
@@ -9135,8 +9135,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                        await stateManager.addMessage('agent', `[Error] ${event.text}`);
                    }
                    else if (event.type === 'debug') {
-                       lastLogSent = JSON.stringify(event.data.messages, null, 2);
-                       lastLogRecv = event.data.responseText;
+                       ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
+                       ChatWindowUI.lastLogRecv = event.data.responseText;
                    }
                }, continueMode);
                // Dọn dẹp tất cả các hộp thoại safe mode bị treo (do abort hoặc lỗi)
@@ -9491,6 +9491,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                await this.agentLoop.run(historyForRun, 15, // max steps
                async (event) => {
+                   // Update Floating UI Icon & Request Logs
+                   if (event.type === 'step_start') {
+                       window.jQuery?.('#kaiz-floating-btn i').addClass('kaiz-icon-spin');
+                       window.jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
+                   }
+                   else if (event.type === 'debug') {
+                       ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
+                       ChatWindowUI.lastLogRecv = event.data.responseText;
+                       // Update logs real-time if the modal happens to be open
+                       window.jQuery?.('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
+                       window.jQuery?.('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
+                   }
                    // Save to DB on the fly if persist
                    if (task.executionMode === 'persist' && task.chatId) {
                        if (event.type === 'step_end') {
@@ -9503,6 +9515,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }, false, // continueMode
                task.toolsConfig // toolsConfigOverride
                );
+               // Stop UI spinning
+               window.jQuery?.('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+               window.jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
                // Final result isn't needed here anymore since we saved in stream
                // Expiry logic
                task.runCount = (task.runCount || 0) + 1;
