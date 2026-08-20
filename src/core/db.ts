@@ -56,9 +56,39 @@ export interface AutoTask {
     createdAt: number;
 }
 
+export interface UISnapshot {
+    id?: number;
+    snapshotId: string;
+    timestamp: number;
+    label: string;
+    type: 'css' | 'element' | 'theme';
+    cssData?: {
+        styleId: string;
+        previousContent: string | null;
+    };
+    elementData?: {
+        elementId: string;
+        previousOuterHTML: string | null;
+        parentSelector: string;
+        position: string;
+    };
+    themeData?: {
+        previousValues: Record<string, string>;
+    };
+    applied: boolean;
+}
+
+export interface ThemeReference {
+    id?: number;
+    name: string;
+    themeJson: string;
+    isDefault: boolean;
+    addedAt: number;
+}
+
 export class KaizDB {
     private dbName = 'KaizAgentDB';
-    private dbVersion = 4;
+    private dbVersion = 5;
     private db: IDBDatabase | null = null;
 
     public async init(): Promise<void> {
@@ -100,6 +130,19 @@ export class KaizDB {
                 // --- AUTO TASKS (DB v4) ---
                 if (!db.objectStoreNames.contains('autoTasks')) {
                     db.createObjectStore('autoTasks', { keyPath: 'id', autoIncrement: true });
+                }
+
+                // --- UI CUSTOMIZATION (DB v5) ---
+                if (!db.objectStoreNames.contains('kaiz_ui_snapshots')) {
+                    const snapStore = db.createObjectStore('kaiz_ui_snapshots', { keyPath: 'id', autoIncrement: true });
+                    snapStore.createIndex('snapshotId', 'snapshotId', { unique: true });
+                    snapStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    snapStore.createIndex('applied', 'applied', { unique: false });
+                }
+
+                if (!db.objectStoreNames.contains('kaiz_theme_library')) {
+                    const themeStore = db.createObjectStore('kaiz_theme_library', { keyPath: 'id', autoIncrement: true });
+                    themeStore.createIndex('name', 'name', { unique: false });
                 }
             };
 
@@ -627,6 +670,165 @@ export class KaizDB {
             const store = transaction.objectStore('autoTasks');
 
             const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- UI SNAPSHOTS ---
+
+    public async addSnapshot(snapshot: UISnapshot): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.add(snapshot);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllSnapshots(): Promise<UISnapshot[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+            const index = store.index('timestamp');
+
+            const snapshots: UISnapshot[] = [];
+            const request = index.openCursor(null, 'prev');
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    snapshots.push(cursor.value as UISnapshot);
+                    cursor.continue();
+                } else {
+                    resolve(snapshots);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getActiveSnapshots(): Promise<UISnapshot[]> {
+        const all = await this.getAllSnapshots();
+        return all.filter((s) => s.applied === true);
+    }
+
+    public async markSnapshotRolledBack(snapshotId: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+            const index = store.index('snapshotId');
+
+            const req = index.get(snapshotId);
+            req.onsuccess = () => {
+                const snap = req.result as UISnapshot;
+                if (!snap) return resolve();
+                snap.applied = false;
+                const putReq = store.put(snap);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    public async markAllSnapshotsRolledBack(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.openCursor();
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    const snap = cursor.value as UISnapshot;
+                    if (snap.applied) {
+                        snap.applied = false;
+                        cursor.update(snap);
+                    }
+                    cursor.continue();
+                }
+            };
+            request.onerror = () => reject(request.error);
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
+    public async deleteSnapshot(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async clearAllSnapshots(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- THEME LIBRARY ---
+
+    public async addThemeReference(theme: ThemeReference): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.add(theme);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllThemeReferences(): Promise<ThemeReference[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readonly');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result as ThemeReference[]);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteThemeReference(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async clearThemeLibrary(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.clear();
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
