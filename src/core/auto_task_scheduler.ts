@@ -131,27 +131,29 @@ export class AutoTaskScheduler {
         try {
             console.log(`[AutoTaskScheduler] Running AgentLoop for task ${task.id}`);
             let finalResult = '';
-            
+            // Save prompt before run if persist
+            if (task.executionMode === 'persist' && task.chatId) {
+                await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
+            }
+
             await this.agentLoop.run(
                 historyForRun,
-                15, // max steps (15 là hợp lý cho auto tasks)
+                15, // max steps
                 async (event: AgentEvent) => {
-                    // Collect final result or partial events if needed
-                    if (event.type === 'step_end' && (event as any).isFinal) {
-                        finalResult = (event as any).text || '';
+                    // Save to DB on the fly if persist
+                    if (task.executionMode === 'persist' && task.chatId) {
+                        if (event.type === 'step_end') {
+                            await this.stateManager.db.addMessage(task.chatId, 'agent', event.text || '');
+                        } else if (event.type === 'tool_result') {
+                            await this.stateManager.db.addMessage(task.chatId, 'user', event.text || '');
+                        }
                     }
                 },
                 false, // continueMode
                 task.toolsConfig // toolsConfigOverride
             );
 
-            // Save result if persist
-            if (task.executionMode === 'persist' && task.chatId) {
-                await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
-                if (finalResult) {
-                    await this.stateManager.db.addMessage(task.chatId, 'agent', finalResult);
-                }
-            }
+            // Final result isn't needed here anymore since we saved in stream
 
             // Expiry logic
             task.runCount = (task.runCount || 0) + 1;

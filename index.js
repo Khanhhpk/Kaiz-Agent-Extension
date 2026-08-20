@@ -9451,22 +9451,25 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            try {
                console.log(`[AutoTaskScheduler] Running AgentLoop for task ${task.id}`);
                let finalResult = '';
-               await this.agentLoop.run(historyForRun, 15, // max steps (15 là hợp lý cho auto tasks)
+               // Save prompt before run if persist
+               if (task.executionMode === 'persist' && task.chatId) {
+                   await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
+               }
+               await this.agentLoop.run(historyForRun, 15, // max steps
                async (event) => {
-                   // Collect final result or partial events if needed
-                   if (event.type === 'step_end' && event.isFinal) {
-                       finalResult = event.text || '';
+                   // Save to DB on the fly if persist
+                   if (task.executionMode === 'persist' && task.chatId) {
+                       if (event.type === 'step_end') {
+                           await this.stateManager.db.addMessage(task.chatId, 'agent', event.text || '');
+                       }
+                       else if (event.type === 'tool_result') {
+                           await this.stateManager.db.addMessage(task.chatId, 'user', event.text || '');
+                       }
                    }
                }, false, // continueMode
                task.toolsConfig // toolsConfigOverride
                );
-               // Save result if persist
-               if (task.executionMode === 'persist' && task.chatId) {
-                   await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
-                   if (finalResult) {
-                       await this.stateManager.db.addMessage(task.chatId, 'agent', finalResult);
-                   }
-               }
+               // Final result isn't needed here anymore since we saved in stream
                // Expiry logic
                task.runCount = (task.runCount || 0) + 1;
                const updates = { runCount: task.runCount };
@@ -9795,9 +9798,29 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    else {
                        textContent = String(msg.content);
                    }
-                   // Format content (simple markdown-like formatting for tools)
-                   let formatted = this.escapeHtml(textContent);
-                   formatted = formatted.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
+                   let formatted = '';
+                   const openIndex = textContent.indexOf('<agent_cot>');
+                   const closeIndex = textContent.indexOf('</agent_cot>');
+                   if (openIndex !== -1 && closeIndex !== -1 && closeIndex > openIndex) {
+                       const beforeCot = this.escapeHtml(textContent.substring(0, openIndex).trim());
+                       const cotContent = this.escapeHtml(textContent.substring(openIndex + '<agent_cot>'.length, closeIndex).trim());
+                       let restContent = this.escapeHtml(textContent.substring(closeIndex + '</agent_cot>'.length).trim());
+                       restContent = restContent.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
+                       if (beforeCot)
+                           formatted += `<div>${beforeCot}</div>`;
+                       formatted += `<details class="kaiz-cot-block" style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; margin-bottom: 8px; border-left: 3px solid #a29bfe;">
+                        <summary style="cursor: pointer; font-size: 12px; font-weight: bold; color: #a29bfe; user-select: none;">
+                            <i class="fa-solid fa-brain"></i> Agent Thoughts
+                        </summary>
+                        <div style="font-size: 12px; margin-top: 8px; color: #ccc;">${cotContent}</div>
+                    </details>`;
+                       if (restContent)
+                           formatted += `<div>${restContent}</div>`;
+                   }
+                   else {
+                       formatted = this.escapeHtml(textContent);
+                       formatted = formatted.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
+                   }
                    const msgHtml = `
                     <div style="margin-bottom: 10px; background: ${bg}; padding: 10px; border-radius: 8px;">
                         <div style="font-size: 11px; font-weight: bold; color: ${color}; margin-bottom: 5px;">${name}</div>
