@@ -67,6 +67,7 @@ export class AutoTaskModal {
         });
 
         $('#kaiz-auto-task-history-close').on('click', () => {
+            this.historyModal.style.display = 'none';
             this.historyModal.close();
         });
 
@@ -341,8 +342,17 @@ export class AutoTaskModal {
                 const color = isUser ? '#00c9ff' : '#a29bfe';
                 const name = isUser ? 'Prompt' : 'Agent';
                 
+                let textContent = '';
+                if (typeof msg.content === 'string') {
+                    textContent = msg.content;
+                } else if (Array.isArray(msg.content)) {
+                    textContent = (msg.content as any[]).map((p: any) => p.type === 'text' ? p.text : '[Image/Attachment]').join('\n');
+                } else {
+                    textContent = String(msg.content);
+                }
+                
                 // Format content (simple markdown-like formatting for tools)
-                let formatted = this.escapeHtml(msg.content);
+                let formatted = this.escapeHtml(textContent);
                 formatted = formatted.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
 
                 const msgHtml = `
@@ -355,6 +365,7 @@ export class AutoTaskModal {
             });
         }
 
+        this.historyModal.style.display = 'flex';
         this.historyModal.showModal();
         // Scroll to bottom
         setTimeout(() => {

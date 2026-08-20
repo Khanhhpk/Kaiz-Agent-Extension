@@ -9537,6 +9537,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                await this.saveTask();
            });
            $('#kaiz-auto-task-history-close').on('click', () => {
+               this.historyModal.style.display = 'none';
                this.historyModal.close();
            });
            $('#kaiz-auto-task-trigger-mode').on('change', function () {
@@ -9784,8 +9785,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    const bg = isUser ? 'rgba(0, 201, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)';
                    const color = isUser ? '#00c9ff' : '#a29bfe';
                    const name = isUser ? 'Prompt' : 'Agent';
+                   let textContent = '';
+                   if (typeof msg.content === 'string') {
+                       textContent = msg.content;
+                   }
+                   else if (Array.isArray(msg.content)) {
+                       textContent = msg.content.map((p) => p.type === 'text' ? p.text : '[Image/Attachment]').join('\n');
+                   }
+                   else {
+                       textContent = String(msg.content);
+                   }
                    // Format content (simple markdown-like formatting for tools)
-                   let formatted = this.escapeHtml(msg.content);
+                   let formatted = this.escapeHtml(textContent);
                    formatted = formatted.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
                    const msgHtml = `
                     <div style="margin-bottom: 10px; background: ${bg}; padding: 10px; border-radius: 8px;">
@@ -9796,6 +9807,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    this.historyContent.append(msgHtml);
                });
            }
+           this.historyModal.style.display = 'flex';
            this.historyModal.showModal();
            // Scroll to bottom
            setTimeout(() => {
