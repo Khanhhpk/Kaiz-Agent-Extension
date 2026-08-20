@@ -9782,11 +9782,44 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                this.historyContent.append('<div style="text-align: center; color: #aaa; margin-top: 20px;">Lịch sử trống.</div>');
            }
            else {
-               // Render plain text blocks just like ST/chat_window but simpler
+               const parseToolCallsToHtml = (contentToParse) => {
+                   const toolCalls = [];
+                   let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
+                       const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                       const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${this.escapeHtml(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
+                       toolCalls.push(toolHtml);
+                       return `__TOOL_CALL_${toolCalls.length - 1}__`;
+                   });
+                   for (let i = 0; i < toolCalls.length; i++) {
+                       result = result.replace(`__TOOL_CALL_${i}__`, toolCalls[i]);
+                   }
+                   return result;
+               };
+               const formatUserMessage = (text) => {
+                   const safeText = text || '';
+                   const escapedText = this.escapeHtml(safeText).replace(/\n/g, '<br>');
+                   let finalHtml = escapedText;
+                   if (safeText.startsWith('[Tool Result')) {
+                       let color = '#a1a1aa';
+                       let icon = 'fa-wrench';
+                       const firstLine = safeText.split('\n')[0];
+                       if (firstLine.includes('CÓ LỖI') || firstLine.includes('LỖI (ERROR)')) {
+                           color = '#ef4444';
+                           icon = 'fa-circle-xmark';
+                       }
+                       else if (firstLine.includes('THÀNH CÔNG')) {
+                           color = '#4ade80';
+                           icon = 'fa-circle-check';
+                       }
+                       finalHtml = `<details class="kaiz-system-result-block" style="border-left: 3px solid ${color};">
+<summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
+<div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
+</details>`;
+                   }
+                   return finalHtml;
+               };
                messages.forEach(msg => {
                    const isUser = msg.role === 'user';
-                   const bg = isUser ? 'rgba(0, 201, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)';
-                   const color = isUser ? '#00c9ff' : '#a29bfe';
                    const name = isUser ? 'Prompt' : 'Agent';
                    let textContent = '';
                    if (typeof msg.content === 'string') {
@@ -9799,28 +9832,41 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                        textContent = String(msg.content);
                    }
                    let formatted = '';
-                   const closeIndex = textContent.indexOf('</agent_cot>');
-                   if (closeIndex !== -1) {
-                       const cotContent = this.escapeHtml(textContent.substring(0, closeIndex).replace('<agent_cot>', '').trim());
-                       let restContent = this.escapeHtml(textContent.substring(closeIndex + '</agent_cot>'.length).trim());
-                       restContent = restContent.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
-                       formatted += `<details class="kaiz-cot-block" style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; margin-bottom: 8px; border-left: 3px solid #a29bfe;">
-                        <summary style="cursor: pointer; font-size: 12px; font-weight: bold; color: #a29bfe; user-select: none;">
-                            <i class="fa-solid fa-brain"></i> Agent Thoughts
-                        </summary>
-                        <div style="font-size: 12px; margin-top: 8px; color: #ccc;">${cotContent}</div>
-                    </details>`;
-                       if (restContent)
-                           formatted += `<div>${restContent}</div>`;
+                   if (isUser) {
+                       formatted = formatUserMessage(textContent);
                    }
                    else {
-                       formatted = this.escapeHtml(textContent);
-                       formatted = formatted.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
+                       const closeIndex = textContent.indexOf('</agent_cot>');
+                       if (closeIndex !== -1) {
+                           const cotContent = this.escapeHtml(textContent.substring(0, closeIndex).replace('<agent_cot>', '').trim());
+                           let restContent = textContent.substring(closeIndex + '</agent_cot>'.length).trim();
+                           restContent = parseToolCallsToHtml(restContent);
+                           formatted += `<details class="kaiz-cot-block">
+                            <summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary>
+                            <div class="kaiz-cot-content">${cotContent}</div>
+                        </details>`;
+                           if (restContent) {
+                               const parsedMarkdown = window.marked ? window.marked.parse(restContent) : restContent;
+                               formatted += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
+                           }
+                       }
+                       else {
+                           const parsedContent = parseToolCallsToHtml(textContent.trim());
+                           formatted = `<div class="kaiz-markdown-body">${window.marked ? window.marked.parse(parsedContent) : parsedContent}</div>`;
+                       }
                    }
+                   const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
+                   const avatar = isUser ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-yin-yang"></i>';
+                   const extraClass = isUser ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                    const msgHtml = `
-                    <div style="margin-bottom: 10px; background: ${bg}; padding: 10px; border-radius: 8px;">
-                        <div style="font-size: 11px; font-weight: bold; color: ${color}; margin-bottom: 5px;">${name}</div>
-                        <div style="font-size: 13px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${formatted}</div>
+                    <div class="kaiz-msg ${extraClass}" id="container-${msgId}" style="margin-bottom: 15px; background: transparent; padding: 0; border: none;">
+                        <div class="kaiz-msg-avatar">
+                            ${avatar}
+                        </div>
+                        <div class="kaiz-msg-content">
+                            <div class="kaiz-msg-sender">${name}</div>
+                            <div class="kaiz-msg-text" id="${msgId}">${formatted}</div>
+                        </div>
                     </div>
                 `;
                    this.historyContent.append(msgHtml);
