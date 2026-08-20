@@ -119,13 +119,16 @@ export class AgentLoop {
         return Math.ceil(fullText.split(/\s+/).length * 1.3);
     }
 
-    private generateSystemPrompt(maxSteps: number): string {
+    private generateSystemPrompt(maxSteps: number, toolsConfigOverride?: Record<string, boolean>): string {
         const ctx = (window as any).SillyTavern.getContext();
         const settings = ctx.extensionSettings?.kaiz_agent || {};
         const disabledTools = settings.disabledTools || {};
         let schemas = this.toolRegistry.getAllSchemas();
 
-        if (this.stateManager.currentWorkspace) {
+        if (toolsConfigOverride) {
+            // Auto Task mode: chỉ dùng danh sách tool mà user đã gán cho task
+            schemas = schemas.filter((s) => toolsConfigOverride[s.name] === true);
+        } else if (this.stateManager.currentWorkspace) {
             const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
             schemas = schemas.filter((s) => wsConfig[s.name] === true);
         } else {
@@ -430,10 +433,11 @@ CÁC CÔNG CỤ HIỆN CÓ:
         maxSteps: number,
         onEvent: (event: AgentEvent) => void | Promise<void>,
         continueMode: boolean = false,
+        toolsConfigOverride?: Record<string, boolean>,
     ) {
         console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
 
-        const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
+        const cachedSystemPrompt = this.generateSystemPrompt(maxSteps, toolsConfigOverride);
 
         const internalHistory = history.map((msg) => ({ ...msg }));
 

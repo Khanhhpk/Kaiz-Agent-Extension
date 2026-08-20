@@ -135,12 +135,16 @@ LƯU Ý VỀ CÔNG CỤ:
            }
            return Math.ceil(fullText.split(/\s+/).length * 1.3);
        }
-       generateSystemPrompt(maxSteps) {
+       generateSystemPrompt(maxSteps, toolsConfigOverride) {
            const ctx = window.SillyTavern.getContext();
            const settings = ctx.extensionSettings?.kaiz_agent || {};
            const disabledTools = settings.disabledTools || {};
            let schemas = this.toolRegistry.getAllSchemas();
-           if (this.stateManager.currentWorkspace) {
+           if (toolsConfigOverride) {
+               // Auto Task mode: chỉ dùng danh sách tool mà user đã gán cho task
+               schemas = schemas.filter((s) => toolsConfigOverride[s.name] === true);
+           }
+           else if (this.stateManager.currentWorkspace) {
                const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
                schemas = schemas.filter((s) => wsConfig[s.name] === true);
            }
@@ -407,9 +411,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
            }
            return msgs;
        }
-       async run(history, maxSteps, onEvent, continueMode = false) {
+       async run(history, maxSteps, onEvent, continueMode = false, toolsConfigOverride) {
            console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
-           const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
+           const cachedSystemPrompt = this.generateSystemPrompt(maxSteps, toolsConfigOverride);
            const internalHistory = history.map((msg) => ({ ...msg }));
            for (let i = internalHistory.length - 1; i >= 0; i--) {
                if (internalHistory[i].role === 'user') {
@@ -6224,7 +6228,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 
    class KaizDB {
        dbName = 'KaizAgentDB';
-       dbVersion = 3;
+       dbVersion = 4;
        db = null;
        async init() {
            return new Promise((resolve, reject) => {
@@ -6256,6 +6260,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
                        backupStore.createIndex('type', 'type', { unique: false });
                        backupStore.createIndex('timestamp', 'timestamp', { unique: false });
+                   }
+                   // --- AUTO TASKS (DB v4) ---
+                   if (!db.objectStoreNames.contains('autoTasks')) {
+                       db.createObjectStore('autoTasks', { keyPath: 'id', autoIncrement: true });
                    }
                };
                request.onsuccess = async (event) => {
@@ -6655,6 +6663,59 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    return reject(new Error('DB not initialized'));
                const transaction = this.db.transaction(['backups'], 'readwrite');
                const store = transaction.objectStore('backups');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- AUTO TASKS ---
+       async createAutoTask(task) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+               const store = transaction.objectStore('autoTasks');
+               const request = store.add(task);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getAllAutoTasks() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readonly');
+               const store = transaction.objectStore('autoTasks');
+               const request = store.getAll();
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async updateAutoTask(id, data) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+               const store = transaction.objectStore('autoTasks');
+               const getReq = store.get(id);
+               getReq.onsuccess = () => {
+                   const task = getReq.result;
+                   if (!task)
+                       return reject(new Error('AutoTask not found'));
+                   Object.assign(task, data);
+                   const putReq = store.put(task);
+                   putReq.onsuccess = () => resolve();
+                   putReq.onerror = () => reject(putReq.error);
+               };
+               getReq.onerror = () => reject(getReq.error);
+           });
+       }
+       async deleteAutoTask(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+               const store = transaction.objectStore('autoTasks');
                const request = store.delete(id);
                request.onsuccess = () => resolve();
                request.onerror = () => reject(request.error);
@@ -7631,13 +7692,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
     */
 
    function M(){return {async:false,breaks:false,extensions:null,gfm:true,hooks:null,pedantic:false,renderer:null,silent:false,tokenizer:null,walkTokens:null}}var T=M();function N(l){T=l;}var _={exec:()=>null};function E(l){let e=[];return t=>{let n=Math.max(0,Math.min(3,t-1)),s=e[n];return s||(s=l(n),e[n]=s),s}}function d(l,e=""){let t=typeof l=="string"?l:l.source,n={replace:(s,r)=>{let i=typeof r=="string"?r:r.source;return i=i.replace(m.caret,"$1"),t=t.replace(s,i),n},getRegex:()=>new RegExp(t,e)};return n}var Te=((l="")=>{try{return !!new RegExp("(?<=1)(?<!1)"+l)}catch{return  false}})(),m={codeRemoveIndent:/^(?: {1,4}| {0,3}\t)/gm,outputLinkReplace:/\\([\[\]])/g,indentCodeCompensation:/^(\s+)(?:```)/,beginningSpace:/^\s+/,endingHash:/#$/,startingSpaceChar:/^ /,endingSpaceChar:/ $/,nonSpaceChar:/[^ ]/,newLineCharGlobal:/\n/g,tabCharGlobal:/\t/g,multipleSpaceGlobal:/\s+/g,blankLine:/^[ \t]*$/,doubleBlankLine:/\n[ \t]*\n[ \t]*$/,blockquoteStart:/^ {0,3}>/,blockquoteSetextReplace:/\n {0,3}((?:=+|-+) *)(?=\n|$)/g,blockquoteSetextReplace2:/^ {0,3}>[ \t]?/gm,listReplaceNesting:/^ {1,4}(?=( {4})*[^ ])/g,listIsTask:/^\[[ xX]\] +\S/,listReplaceTask:/^\[[ xX]\] +/,listTaskCheckbox:/\[[ xX]\]/,anyLine:/\n.*\n/,hrefBrackets:/^<(.*)>$/,tableDelimiter:/[:|]/,tableAlignChars:/^\||\| *$/g,tableRowBlankLine:/\n[ \t]*$/,tableAlignRight:/^ *-+: *$/,tableAlignCenter:/^ *:-+: *$/,tableAlignLeft:/^ *:-+ *$/,startATag:/^<a /i,endATag:/^<\/a>/i,startPreScriptTag:/^<(pre|code|kbd|script)(\s|>)/i,endPreScriptTag:/^<\/(pre|code|kbd|script)(\s|>)/i,startAngleBracket:/^</,endAngleBracket:/>$/,pedanticHrefTitle:/^([^'"]*[^\s])\s+(['"])(.*)\2/,unicodeAlphaNumeric:/[\p{L}\p{N}]/u,escapeTest:/[&<>"']/,escapeReplace:/[&<>"']/g,escapeTestNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/,escapeReplaceNoEncode:/[<>"']|&(?!(#\d{1,7}|#[Xx][a-fA-F0-9]{1,6}|\w+);)/g,caret:/(^|[^\[])\^/g,percentDecode:/%25/g,findPipe:/\|/g,splitPipe:/ \|/,slashPipe:/\\\|/g,carriageReturn:/\r\n|\r/g,spaceLine:/^ +$/gm,notSpaceStart:/^\S*/,endingNewline:/\n$/,listItemRegex:l=>new RegExp(`^( {0,3}${l})((?:[	 ][^\\n]*)?(?:\\n|$))`),nextBulletRegex:E(l=>new RegExp(`^ {0,${l}}(?:[*+-]|\\d{1,9}[.)])((?:[ 	][^\\n]*)?(?:\\n|$))`)),hrRegex:E(l=>new RegExp(`^ {0,${l}}((?:- *){3,}|(?:_ *){3,}|(?:\\* *){3,})(?:\\n+|$)`)),fencesBeginRegex:E(l=>new RegExp(`^ {0,${l}}(?:\`\`\`|~~~)`)),headingBeginRegex:E(l=>new RegExp(`^ {0,${l}}#`)),htmlBeginRegex:E(l=>new RegExp(`^ {0,${l}}<(?:[a-z].*>|!--)`,"i")),blockquoteBeginRegex:E(l=>new RegExp(`^ {0,${l}}>`))},Oe=/^(?:[ \t]*(?:\n|$))+/,we=/^((?: {4}| {0,3}\t)[^\n]+(?:\n(?:[ \t]*(?:\n|$))*)?)+/,ye=/^ {0,3}(`{3,}(?=[^`\n]*(?:\n|$))|~{3,})([^\n]*)(?:\n|$)(?:|([\s\S]*?)(?:\n|$))(?: {0,3}\1[~`]* *(?=\n|$)|$)/,B=/^ {0,3}((?:-[\t ]*){3,}|(?:_[ \t]*){3,}|(?:\*[ \t]*){3,})(?:\n+|$)/,Pe=/^ {0,3}(#{1,6})(?=\s|$)(.*)(?:\n+|$)/,j=/ {0,3}(?:[*+-]|\d{1,9}[.)])/,oe=/^(?!bull |blockCode|fences|blockquote|heading|html|table)((?:.|\n(?!\s*?\n|bull |blockCode|fences|blockquote|heading|html|table))+?)\n {0,3}(=+|-+) *(?:\n+|$)/,ae=d(oe).replace(/bull/g,j).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/\|table/g,"").getRegex(),Se=d(oe).replace(/bull/g,j).replace(/blockCode/g,/(?: {4}| {0,3}\t)/).replace(/fences/g,/ {0,3}(?:`{3,}|~{3,})/).replace(/blockquote/g,/ {0,3}>/).replace(/heading/g,/ {0,3}#{1,6}/).replace(/html/g,/ {0,3}<[^\n>]+>\n/).replace(/table/g,/ {0,3}\|?(?:[:\- ]*\|)+[\:\- ]*\n/).getRegex(),F=/^([^\n]+(?:\n(?!hr|heading|lheading|blockquote|fences|list|html|table| +\n)[^\n]+)*)/,$e=/^[^\n]+/,U=/(?!\s*\])(?:\\[\s\S]|[^\[\]\\])+/,Le=d(/^ {0,3}\[(label)\]: *(?:\n[ \t]*)?([^<\s][^\s]*|<.*?>)(?:(?: +(?:\n[ \t]*)?| *\n[ \t]*)(title))? *(?:\n+|$)/).replace("label",U).replace("title",/(?:"(?:\\"?|[^"\\])*"|'[^'\n]*(?:\n[^'\n]+)*\n?'|\([^()]*\))/).getRegex(),_e=d(/^(bull)([ \t][^\n]*?)?(?:\n|$)/).replace(/bull/g,j).getRegex(),H="address|article|aside|base|basefont|blockquote|body|caption|center|col|colgroup|dd|details|dialog|dir|div|dl|dt|fieldset|figcaption|figure|footer|form|frame|frameset|h[1-6]|head|header|hr|html|iframe|legend|li|link|main|menu|menuitem|meta|nav|noframes|ol|optgroup|option|p|param|search|section|summary|table|tbody|td|tfoot|th|thead|title|tr|track|ul",K=/<!--(?:-?>|[\s\S]*?(?:-->|$))/,ze=d("^ {0,3}(?:<(script|pre|style|textarea)[\\s>][\\s\\S]*?(?:</\\1>[^\\n]*\\n+|$)|comment[^\\n]*(\\n+|$)|<\\?[\\s\\S]*?(?:\\?>[^\\n]*\\n+|$)|<![A-Z][\\s\\S]*?(?:>[^\\n]*\\n+|$)|<!\\[CDATA\\[[\\s\\S]*?(?:\\]\\]>[^\\n]*\\n+|$)|</?(tag)(?: +|\\n|/?>)[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|<(?!script|pre|style|textarea)([a-z][\\w-]*)(?:attribute)*? */?>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$)|</(?!script|pre|style|textarea)[a-z][\\w-]*\\s*>(?=[ \\t]*(?:\\n|$))[\\s\\S]*?(?:(?:\\n[ 	]*)+\\n|$))","i").replace("comment",K).replace("tag",H).replace("attribute",/ +[a-zA-Z:_][\w.:-]*(?: *= *"[^"\n]*"| *= *'[^'\n]*'| *= *[^\s"'=<>`]+)?/).getRegex(),le=l=>d(F).replace("hr",B).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("|table","").replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list",l).replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",H).getRegex(),Me=le(/ {0,3}(?:[*+-]|1[.)])[ \t]+[^ \t\n]/),Ee=le(/ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+[^ \t\n]/),Ie=d(/^( {0,3}> ?(paragraph|[^\n]*)(?:\n|$))+/).replace("paragraph",Ee).getRegex(),W={blockquote:Ie,code:we,def:Le,fences:ye,heading:Pe,hr:B,html:ze,lheading:ae,list:_e,newline:Oe,paragraph:Me,table:_,text:$e},se=d("^ *([^\\n ].*)\\n {0,3}((?:\\| *)?:?-+:? *(?:\\| *:?-+:? *)*(?:\\| *)?)(?:\\n((?:(?! *\\n|hr|heading|blockquote|code|fences|list|html).*(?:\\n|$))*)\\n*|$)").replace("hr",B).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("blockquote"," {0,3}>").replace("code","(?: {4}| {0,3}	)[^\\n]").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",H).getRegex(),Ae={...W,lheading:Se,table:se,paragraph:d(F).replace("hr",B).replace("heading"," {0,3}#{1,6}(?:\\s|$)").replace("|lheading","").replace("table",se).replace("blockquote"," {0,3}>").replace("fences"," {0,3}(?:`{3,}(?=[^`\\n]*\\n)|~{3,})[^\\n]*\\n").replace("list"," {0,3}(?:[*+-]|1[.)])[ \\t]+[^ \\t\\n]").replace("html","</?(?:tag)(?: +|\\n|/?>)|<(?:script|pre|style|textarea|!--)").replace("tag",H).getRegex()},Ce={...W,html:d(`^ *(?:comment *(?:\\n|\\s*$)|<(tag)[\\s\\S]+?</\\1> *(?:\\n{2,}|\\s*$)|<tag(?:"[^"]*"|'[^']*'|\\s[^'"/>\\s]*)*?/?> *(?:\\n{2,}|\\s*$))`).replace("comment",K).replace(/tag/g,"(?!(?:a|em|strong|small|s|cite|q|dfn|abbr|data|time|code|var|samp|kbd|sub|sup|i|b|u|mark|ruby|rt|rp|bdi|bdo|span|br|wbr|ins|del|img)\\b)\\w+(?!:|[^\\w\\s@]*@)\\b").getRegex(),def:/^ *\[([^\]]+)\]: *<?([^\s>]+)>?(?: +(["(][^\n]+[")]))? *(?:\n+|$)/,heading:/^(#{1,6})(.*)(?:\n+|$)/,fences:_,lheading:/^(.+?)\n {0,3}(=+|-+) *(?:\n+|$)/,paragraph:d(F).replace("hr",B).replace("heading",` *#{1,6} *[^
-]`).replace("lheading",ae).replace("|table","").replace("blockquote"," {0,3}>").replace("|fences","").replace("|list","").replace("|html","").replace("|tag","").getRegex()},Be=/^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/,qe=/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,ue=/^( {2,}|\\)\n(?!\s*$)/,De=/^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/,I=/[\p{P}\p{S}]/u,Z=/[\s\p{P}\p{S}]/u,X=/[^\s\p{P}\p{S}]/u,ve=d(/^((?![*_])punctSpace)/,"u").replace(/punctSpace/g,Z).getRegex(),pe=/(?!~)[\p{P}\p{S}]/u,He=/(?!~)[\s\p{P}\p{S}]/u,Ze=/(?:[^\s\p{P}\p{S}]|~)/u,Ge=d(/link|precode-code|html/,"g").replace("link",/\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-",Te?"(?<!`)()":"(^^|[^`])").replace("code",/(?<b>`+)[^`]+\k<b>(?!`)/).replace("html",/<(?! )[^<>]*?>/).getRegex(),ce=/^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/,Ne=d(ce,"u").replace(/punct/g,I).getRegex(),Qe=d(ce,"u").replace(/punct/g,pe).getRegex(),he="^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)",je=d(he,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Fe=d(he,"gu").replace(/notPunctSpace/g,Ze).replace(/punctSpace/g,He).replace(/punct/g,pe).getRegex(),Ue=d("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)","gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Ke=d(/^~~?(?:((?!~)punct)|[^\s~])/,"u").replace(/punct/g,I).getRegex(),We="^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)",Xe=d(We,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Je=d(/\\(punct)/,"gu").replace(/punct/g,I).getRegex(),Ve=d(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme",/[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email",/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex(),Ye=d(K).replace("(?:-->|$)","-->").getRegex(),et=d("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment",Ye).replace("attribute",/\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex(),v=/(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/,tt=d(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label",v).replace("href",/<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]+|(?=\))/).replace("title",/"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex(),ke=d(/^!?\[(label)\]\[(ref)\]/).replace("label",v).replace("ref",U).getRegex(),de=d(/^!?\[(ref)\](?:\[\])?/).replace("ref",U).getRegex(),nt=d("reflink|nolink(?!\\()","g").replace("reflink",ke).replace("nolink",de).getRegex(),ie=/[hH][tT][tT][pP][sS]?|[fF][tT][pP]/,J={_backpedal:_,anyPunctuation:Je,autolink:Ve,blockSkip:Ge,br:ue,code:qe,del:_,delLDelim:_,delRDelim:_,emStrongLDelim:Ne,emStrongRDelimAst:je,emStrongRDelimUnd:Ue,escape:Be,link:tt,nolink:de,punctuation:ve,reflink:ke,reflinkSearch:nt,tag:et,text:De,url:_},rt={...J,link:d(/^!?\[(label)\]\((.*?)\)/).replace("label",v).getRegex(),reflink:d(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label",v).getRegex()},Q={...J,emStrongRDelimAst:Fe,emStrongLDelim:Qe,delLDelim:Ke,delRDelim:Xe,url:d(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol",ie).replace("email",/[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(),_backpedal:/(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,del:/^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,text:d(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol",ie).getRegex()},st={...Q,br:d(ue).replace("{2,}","*").getRegex(),text:d(Q.text).replace("\\b_","\\b_| {2,}\\n").replace(/\{2,\}/g,"*").getRegex()},q={normal:W,gfm:Ae,pedantic:Ce},A={normal:J,gfm:Q,breaks:st,pedantic:rt};var it={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"},ge=l=>it[l];function O(l,e){if(e){if(m.escapeTest.test(l))return l.replace(m.escapeReplace,ge)}else if(m.escapeTestNoEncode.test(l))return l.replace(m.escapeReplaceNoEncode,ge);return l}function V(l){try{l=encodeURI(l).replace(m.percentDecode,"%");}catch{return null}return l}function Y(l,e){let t=l.replace(m.findPipe,(r,i,o)=>{let u=false,a=i;for(;--a>=0&&o[a]==="\\";)u=!u;return u?"|":" |"}),n=t.split(m.splitPipe),s=0;if(n[0].trim()||n.shift(),n.length>0&&!n.at(-1)?.trim()&&n.pop(),e)if(n.length>e)n.splice(e);else for(;n.length<e;)n.push("");for(;s<n.length;s++)n[s]=n[s].trim().replace(m.slashPipe,"|");return n}function $$1(l,e,t){let n=l.length;if(n===0)return "";let s=0;for(;s<n;){let r=l.charAt(n-s-1);if(r===e&&true)s++;else break}return l.slice(0,n-s)}function ee(l){let e=l.split(`
+]`).replace("lheading",ae).replace("|table","").replace("blockquote"," {0,3}>").replace("|fences","").replace("|list","").replace("|html","").replace("|tag","").getRegex()},Be=/^\\([!"#$%&'()*+,\-./:;<=>?@\[\]\\^_`{|}~])/,qe=/^(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/,ue=/^( {2,}|\\)\n(?!\s*$)/,De=/^(`+|[^`])(?:(?= {2,}\n)|[\s\S]*?(?:(?=[\\<!\[`*_]|\b_|$)|[^ ](?= {2,}\n)))/,I=/[\p{P}\p{S}]/u,Z=/[\s\p{P}\p{S}]/u,X=/[^\s\p{P}\p{S}]/u,ve=d(/^((?![*_])punctSpace)/,"u").replace(/punctSpace/g,Z).getRegex(),pe=/(?!~)[\p{P}\p{S}]/u,He=/(?!~)[\s\p{P}\p{S}]/u,Ze=/(?:[^\s\p{P}\p{S}]|~)/u,Ge=d(/link|precode-code|html/,"g").replace("link",/\[(?:[^\[\]`]|(?<a>`+)[^`]+\k<a>(?!`))*?\]\((?:\\[\s\S]|[^\\\(\)]|\((?:\\[\s\S]|[^\\\(\)])*\))*\)/).replace("precode-",Te?"(?<!`)()":"(^^|[^`])").replace("code",/(?<b>`+)[^`]+\k<b>(?!`)/).replace("html",/<(?! )[^<>]*?>/).getRegex(),ce=/^(?:\*+(?:((?!\*)punct)|([^\s*]))?)|^_+(?:((?!_)punct)|([^\s_]))?/,Ne=d(ce,"u").replace(/punct/g,I).getRegex(),Qe=d(ce,"u").replace(/punct/g,pe).getRegex(),he="^[^_*]*?__[^_*]*?\\*[^_*]*?(?=__)|[^*]+(?=[^*])|(?!\\*)punct(\\*+)(?=[\\s]|$)|notPunctSpace(\\*+)(?!\\*)(?=punctSpace|$)|(?!\\*)punctSpace(\\*+)(?=notPunctSpace)|[\\s](\\*+)(?!\\*)(?=punct)|(?!\\*)punct(\\*+)(?!\\*)(?=punct)|notPunctSpace(\\*+)(?=notPunctSpace)",je=d(he,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Fe=d(he,"gu").replace(/notPunctSpace/g,Ze).replace(/punctSpace/g,He).replace(/punct/g,pe).getRegex(),Ue=d("^[^_*]*?\\*\\*[^_*]*?_[^_*]*?(?=\\*\\*)|[^_]+(?=[^_])|(?!_)punct(_+)(?=[\\s]|$)|notPunctSpace(_+)(?!_)(?=punctSpace|$)|(?!_)punctSpace(_+)(?=notPunctSpace)|[\\s](_+)(?!_)(?=punct)|(?!_)punct(_+)(?!_)(?=punct)","gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Ke=d(/^~~?(?:((?!~)punct)|[^\s~])/,"u").replace(/punct/g,I).getRegex(),We="^[^~]+(?=[^~])|(?!~)punct(~~?)(?=[\\s]|$)|notPunctSpace(~~?)(?!~)(?=punctSpace|$)|(?!~)punctSpace(~~?)(?=notPunctSpace)|[\\s](~~?)(?!~)(?=punct)|(?!~)punct(~~?)(?!~)(?=punct)|notPunctSpace(~~?)(?=notPunctSpace)",Xe=d(We,"gu").replace(/notPunctSpace/g,X).replace(/punctSpace/g,Z).replace(/punct/g,I).getRegex(),Je=d(/\\(punct)/,"gu").replace(/punct/g,I).getRegex(),Ve=d(/^<(scheme:[^\s\x00-\x1f<>]*|email)>/).replace("scheme",/[a-zA-Z][a-zA-Z0-9+.-]{1,31}/).replace("email",/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+(@)[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+(?![-_])/).getRegex(),Ye=d(K).replace("(?:-->|$)","-->").getRegex(),et=d("^comment|^</[a-zA-Z][\\w:-]*\\s*>|^<[a-zA-Z][\\w-]*(?:attribute)*?\\s*/?>|^<\\?[\\s\\S]*?\\?>|^<![a-zA-Z]+\\s[\\s\\S]*?>|^<!\\[CDATA\\[[\\s\\S]*?\\]\\]>").replace("comment",Ye).replace("attribute",/\s+[a-zA-Z:_][\w.:-]*(?:\s*=\s*"[^"]*"|\s*=\s*'[^']*'|\s*=\s*[^\s"'=<>`]+)?/).getRegex(),v=/(?:\[(?:\\[\s\S]|[^\[\]\\])*\]|\\[\s\S]|`+(?!`)[^`]*?`+(?!`)|``+(?=\])|[^\[\]\\`])*?/,tt=d(/^!?\[(label)\]\(\s*(href)(?:(?:[ \t]+(?:\n[ \t]*)?|\n[ \t]*)(title))?\s*\)/).replace("label",v).replace("href",/<(?:\\.|[^\n<>\\])+>|[^ \t\n\x00-\x1f]+|(?=\))/).replace("title",/"(?:\\"?|[^"\\])*"|'(?:\\'?|[^'\\])*'|\((?:\\\)?|[^)\\])*\)/).getRegex(),ke=d(/^!?\[(label)\]\[(ref)\]/).replace("label",v).replace("ref",U).getRegex(),de=d(/^!?\[(ref)\](?:\[\])?/).replace("ref",U).getRegex(),nt=d("reflink|nolink(?!\\()","g").replace("reflink",ke).replace("nolink",de).getRegex(),ie=/[hH][tT][tT][pP][sS]?|[fF][tT][pP]/,J={_backpedal:_,anyPunctuation:Je,autolink:Ve,blockSkip:Ge,br:ue,code:qe,del:_,delLDelim:_,delRDelim:_,emStrongLDelim:Ne,emStrongRDelimAst:je,emStrongRDelimUnd:Ue,escape:Be,link:tt,nolink:de,punctuation:ve,reflink:ke,reflinkSearch:nt,tag:et,text:De,url:_},rt={...J,link:d(/^!?\[(label)\]\((.*?)\)/).replace("label",v).getRegex(),reflink:d(/^!?\[(label)\]\s*\[([^\]]*)\]/).replace("label",v).getRegex()},Q={...J,emStrongRDelimAst:Fe,emStrongLDelim:Qe,delLDelim:Ke,delRDelim:Xe,url:d(/^((?:protocol):\/\/|www\.)(?:[a-zA-Z0-9\-]+\.?)+[^\s<]*|^email/).replace("protocol",ie).replace("email",/[A-Za-z0-9._+-]+(@)[a-zA-Z0-9-_]+(?:\.[a-zA-Z0-9-_]*[a-zA-Z0-9])+(?![-_])/).getRegex(),_backpedal:/(?:[^?!.,:;*_'"~()&]+|\([^)]*\)|&(?![a-zA-Z0-9]+;$)|[?!.,:;*_'"~)]+(?!$))+/,del:/^(~~?)(?=[^\s~])((?:\\[\s\S]|[^\\])*?(?:\\[\s\S]|[^\s~\\]))\1(?=[^~]|$)/,text:d(/^([`~]+|[^`~])(?:(?= {2,}\n)|(?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)|[\s\S]*?(?:(?=[\\<!\[`*~_]|\b_|protocol:\/\/|www\.|$)|[^ ](?= {2,}\n)|[^a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-](?=[a-zA-Z0-9.!#$%&'*+\/=?_`{\|}~-]+@)))/).replace("protocol",ie).getRegex()},st={...Q,br:d(ue).replace("{2,}","*").getRegex(),text:d(Q.text).replace("\\b_","\\b_| {2,}\\n").replace(/\{2,\}/g,"*").getRegex()},q={normal:W,gfm:Ae,pedantic:Ce},A={normal:J,gfm:Q,breaks:st,pedantic:rt};var it={"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"},ge=l=>it[l];function O(l,e){if(e){if(m.escapeTest.test(l))return l.replace(m.escapeReplace,ge)}else if(m.escapeTestNoEncode.test(l))return l.replace(m.escapeReplaceNoEncode,ge);return l}function V(l){try{l=encodeURI(l).replace(m.percentDecode,"%");}catch{return null}return l}function Y(l,e){let t=l.replace(m.findPipe,(r,i,o)=>{let u=false,a=i;for(;--a>=0&&o[a]==="\\";)u=!u;return u?"|":" |"}),n=t.split(m.splitPipe),s=0;if(n[0].trim()||n.shift(),n.length>0&&!n.at(-1)?.trim()&&n.pop(),e)if(n.length>e)n.splice(e);else for(;n.length<e;)n.push("");for(;s<n.length;s++)n[s]=n[s].trim().replace(m.slashPipe,"|");return n}function $$2(l,e,t){let n=l.length;if(n===0)return "";let s=0;for(;s<n;){let r=l.charAt(n-s-1);if(r===e&&true)s++;else break}return l.slice(0,n-s)}function ee(l){let e=l.split(`
 `),t=e.length-1;for(;t>=0&&m.blankLine.test(e[t]);)t--;return e.length-t<=2?l:e.slice(0,t+1).join(`
 `)}function fe(l,e){if(l.indexOf(e[1])===-1)return  -1;let t=0;for(let n=0;n<l.length;n++)if(l[n]==="\\")n++;else if(l[n]===e[0])t++;else if(l[n]===e[1]&&(t--,t<0))return n;return t>0?-2:-1}function me(l,e=0){let t=e,n="";for(let s of l)if(s==="	"){let r=4-t%4;n+=" ".repeat(r),t+=r;}else n+=s,t++;return n}function xe(l,e,t,n,s){let r=e.href,i=e.title||null,o=l[1].replace(s.other.outputLinkReplace,"$1");n.state.inLink=true;let u={type:l[0].charAt(0)==="!"?"image":"link",raw:t,href:r,title:i,text:o,tokens:n.inlineTokens(o)};return n.state.inLink=false,u}function ot(l,e,t){let n=l.match(t.other.indentCodeCompensation);if(n===null)return e;let s=n[1];return e.split(`
 `).map(r=>{let i=r.match(t.other.beginningSpace);if(i===null)return r;let[o]=i;return o.length>=s.length?r.slice(s.length):r}).join(`
-`)}var w=class{options;rules;lexer;constructor(e){this.options=e||T;}space(e){let t=this.rules.block.newline.exec(e);if(t&&t[0].length>0)return {type:"space",raw:t[0]}}code(e){let t=this.rules.block.code.exec(e);if(t){let n=this.options.pedantic?t[0]:ee(t[0]),s=n.replace(this.rules.other.codeRemoveIndent,"");return {type:"code",raw:n,codeBlockStyle:"indented",text:s}}}fences(e){let t=this.rules.block.fences.exec(e);if(t){let n=t[0],s=ot(n,t[3]||"",this.rules);return {type:"code",raw:n,lang:t[2]?t[2].trim().replace(this.rules.inline.anyPunctuation,"$1"):t[2],text:s}}}heading(e){let t=this.rules.block.heading.exec(e);if(t){let n=t[2].trim();if(this.rules.other.endingHash.test(n)){let s=$$1(n,"#");(this.options.pedantic||!s||this.rules.other.endingSpaceChar.test(s))&&(n=s.trim());}return {type:"heading",raw:$$1(t[0],`
-`),depth:t[1].length,text:n,tokens:this.lexer.inline(n)}}}hr(e){let t=this.rules.block.hr.exec(e);if(t)return {type:"hr",raw:$$1(t[0],`
-`)}}blockquote(e){let t=this.rules.block.blockquote.exec(e);if(t){let n=$$1(t[0],`
+`)}var w=class{options;rules;lexer;constructor(e){this.options=e||T;}space(e){let t=this.rules.block.newline.exec(e);if(t&&t[0].length>0)return {type:"space",raw:t[0]}}code(e){let t=this.rules.block.code.exec(e);if(t){let n=this.options.pedantic?t[0]:ee(t[0]),s=n.replace(this.rules.other.codeRemoveIndent,"");return {type:"code",raw:n,codeBlockStyle:"indented",text:s}}}fences(e){let t=this.rules.block.fences.exec(e);if(t){let n=t[0],s=ot(n,t[3]||"",this.rules);return {type:"code",raw:n,lang:t[2]?t[2].trim().replace(this.rules.inline.anyPunctuation,"$1"):t[2],text:s}}}heading(e){let t=this.rules.block.heading.exec(e);if(t){let n=t[2].trim();if(this.rules.other.endingHash.test(n)){let s=$$2(n,"#");(this.options.pedantic||!s||this.rules.other.endingSpaceChar.test(s))&&(n=s.trim());}return {type:"heading",raw:$$2(t[0],`
+`),depth:t[1].length,text:n,tokens:this.lexer.inline(n)}}}hr(e){let t=this.rules.block.hr.exec(e);if(t)return {type:"hr",raw:$$2(t[0],`
+`)}}blockquote(e){let t=this.rules.block.blockquote.exec(e);if(t){let n=$$2(t[0],`
 `).split(`
 `),s="",r="",i=[];for(;n.length>0;){let o=false,u=[],a;for(a=0;a<n.length;a++)if(this.rules.other.blockquoteStart.test(n[a]))u.push(n[a]),o=true;else if(!o)u.push(n[a]);else break;n=n.slice(a);let c=u.join(`
 `),p=c.replace(this.rules.other.blockquoteSetextReplace,`
@@ -7655,12 +7716,12 @@ ${p}`:p;let k=this.lexer.state.top;if(this.lexer.state.top=true,this.lexer.block
 `,1)[0],C;if(h=G,this.options.pedantic?(h=h.replace(this.rules.other.listReplaceNesting,"  "),C=h):C=h.replace(this.rules.other.tabCharGlobal,"    "),ne.test(h)||re.test(h)||be.test(h)||Re.test(h)||S.test(h)||te.test(h))break;if(C.search(this.rules.other.nonSpaceChar)>=f||!h.trim())p+=`
 `+C.slice(f);else {if(R||k.replace(this.rules.other.tabCharGlobal,"    ").search(this.rules.other.nonSpaceChar)>=4||ne.test(k)||re.test(k)||te.test(k))break;p+=`
 `+h;}R=!h.trim(),c+=G+`
-`,e=e.substring(G.length+1),k=C.slice(f);}}r.loose||(o?r.loose=true:this.rules.other.doubleBlankLine.test(c)&&(o=true)),r.items.push({type:"list_item",raw:c,task:!!this.options.gfm&&this.rules.other.listIsTask.test(p),loose:false,text:p,tokens:[]}),r.raw+=c;}let u=r.items.at(-1);if(u)u.raw=u.raw.trimEnd(),u.text=u.text.trimEnd();else return;r.raw=r.raw.trimEnd();for(let a of r.items){this.lexer.state.top=false,a.tokens=this.lexer.blockTokens(a.text,[]);let c=a.tokens[0];if(a.task&&(c?.type==="text"||c?.type==="paragraph")){a.text=a.text.replace(this.rules.other.listReplaceTask,""),c.raw=c.raw.replace(this.rules.other.listReplaceTask,""),c.text=c.text.replace(this.rules.other.listReplaceTask,"");for(let k=this.lexer.inlineQueue.length-1;k>=0;k--)if(this.rules.other.listIsTask.test(this.lexer.inlineQueue[k].src)){this.lexer.inlineQueue[k].src=this.lexer.inlineQueue[k].src.replace(this.rules.other.listReplaceTask,"");break}let p=this.rules.other.listTaskCheckbox.exec(a.raw);if(p){let k={type:"checkbox",raw:p[0]+" ",checked:p[0]!=="[ ]"};a.checked=k.checked,r.loose?a.tokens[0]&&["paragraph","text"].includes(a.tokens[0].type)&&"tokens"in a.tokens[0]&&a.tokens[0].tokens?(a.tokens[0].raw=k.raw+a.tokens[0].raw,a.tokens[0].text=k.raw+a.tokens[0].text,a.tokens[0].tokens.unshift(k)):a.tokens.unshift({type:"paragraph",raw:k.raw,text:k.raw,tokens:[k]}):a.tokens.unshift(k);}}else a.task&&(a.task=false);if(!r.loose){let p=a.tokens.filter(h=>h.type==="space"),k=p.length>0&&p.some(h=>this.rules.other.anyLine.test(h.raw));r.loose=k;}}if(r.loose)for(let a of r.items){a.loose=true;for(let c of a.tokens)c.type==="text"&&(c.type="paragraph");}return r}}html(e){let t=this.rules.block.html.exec(e);if(t){let n=ee(t[0]);return {type:"html",block:true,raw:n,pre:t[1]==="pre"||t[1]==="script"||t[1]==="style",text:n}}}def(e){let t=this.rules.block.def.exec(e);if(t){let n=t[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal," "),s=t[2]?t[2].replace(this.rules.other.hrefBrackets,"$1").replace(this.rules.inline.anyPunctuation,"$1"):"",r=t[3]?t[3].substring(1,t[3].length-1).replace(this.rules.inline.anyPunctuation,"$1"):t[3];return {type:"def",tag:n,raw:$$1(t[0],`
+`,e=e.substring(G.length+1),k=C.slice(f);}}r.loose||(o?r.loose=true:this.rules.other.doubleBlankLine.test(c)&&(o=true)),r.items.push({type:"list_item",raw:c,task:!!this.options.gfm&&this.rules.other.listIsTask.test(p),loose:false,text:p,tokens:[]}),r.raw+=c;}let u=r.items.at(-1);if(u)u.raw=u.raw.trimEnd(),u.text=u.text.trimEnd();else return;r.raw=r.raw.trimEnd();for(let a of r.items){this.lexer.state.top=false,a.tokens=this.lexer.blockTokens(a.text,[]);let c=a.tokens[0];if(a.task&&(c?.type==="text"||c?.type==="paragraph")){a.text=a.text.replace(this.rules.other.listReplaceTask,""),c.raw=c.raw.replace(this.rules.other.listReplaceTask,""),c.text=c.text.replace(this.rules.other.listReplaceTask,"");for(let k=this.lexer.inlineQueue.length-1;k>=0;k--)if(this.rules.other.listIsTask.test(this.lexer.inlineQueue[k].src)){this.lexer.inlineQueue[k].src=this.lexer.inlineQueue[k].src.replace(this.rules.other.listReplaceTask,"");break}let p=this.rules.other.listTaskCheckbox.exec(a.raw);if(p){let k={type:"checkbox",raw:p[0]+" ",checked:p[0]!=="[ ]"};a.checked=k.checked,r.loose?a.tokens[0]&&["paragraph","text"].includes(a.tokens[0].type)&&"tokens"in a.tokens[0]&&a.tokens[0].tokens?(a.tokens[0].raw=k.raw+a.tokens[0].raw,a.tokens[0].text=k.raw+a.tokens[0].text,a.tokens[0].tokens.unshift(k)):a.tokens.unshift({type:"paragraph",raw:k.raw,text:k.raw,tokens:[k]}):a.tokens.unshift(k);}}else a.task&&(a.task=false);if(!r.loose){let p=a.tokens.filter(h=>h.type==="space"),k=p.length>0&&p.some(h=>this.rules.other.anyLine.test(h.raw));r.loose=k;}}if(r.loose)for(let a of r.items){a.loose=true;for(let c of a.tokens)c.type==="text"&&(c.type="paragraph");}return r}}html(e){let t=this.rules.block.html.exec(e);if(t){let n=ee(t[0]);return {type:"html",block:true,raw:n,pre:t[1]==="pre"||t[1]==="script"||t[1]==="style",text:n}}}def(e){let t=this.rules.block.def.exec(e);if(t){let n=t[1].toLowerCase().replace(this.rules.other.multipleSpaceGlobal," "),s=t[2]?t[2].replace(this.rules.other.hrefBrackets,"$1").replace(this.rules.inline.anyPunctuation,"$1"):"",r=t[3]?t[3].substring(1,t[3].length-1).replace(this.rules.inline.anyPunctuation,"$1"):t[3];return {type:"def",tag:n,raw:$$2(t[0],`
 `),href:s,title:r}}}table(e){let t=this.rules.block.table.exec(e);if(!t||!this.rules.other.tableDelimiter.test(t[2]))return;let n=Y(t[1]),s=t[2].replace(this.rules.other.tableAlignChars,"").split("|"),r=t[3]?.trim()?t[3].replace(this.rules.other.tableRowBlankLine,"").split(`
-`):[],i={type:"table",raw:$$1(t[0],`
-`),header:[],align:[],rows:[]};if(n.length===s.length){for(let o of s)this.rules.other.tableAlignRight.test(o)?i.align.push("right"):this.rules.other.tableAlignCenter.test(o)?i.align.push("center"):this.rules.other.tableAlignLeft.test(o)?i.align.push("left"):i.align.push(null);for(let o=0;o<n.length;o++)i.header.push({text:n[o],tokens:this.lexer.inline(n[o]),header:true,align:i.align[o]});for(let o of r)i.rows.push(Y(o,i.header.length).map((u,a)=>({text:u,tokens:this.lexer.inline(u),header:false,align:i.align[a]})));return i}}lheading(e){let t=this.rules.block.lheading.exec(e);if(t){let n=t[1].trim();return {type:"heading",raw:$$1(t[0],`
+`):[],i={type:"table",raw:$$2(t[0],`
+`),header:[],align:[],rows:[]};if(n.length===s.length){for(let o of s)this.rules.other.tableAlignRight.test(o)?i.align.push("right"):this.rules.other.tableAlignCenter.test(o)?i.align.push("center"):this.rules.other.tableAlignLeft.test(o)?i.align.push("left"):i.align.push(null);for(let o=0;o<n.length;o++)i.header.push({text:n[o],tokens:this.lexer.inline(n[o]),header:true,align:i.align[o]});for(let o of r)i.rows.push(Y(o,i.header.length).map((u,a)=>({text:u,tokens:this.lexer.inline(u),header:false,align:i.align[a]})));return i}}lheading(e){let t=this.rules.block.lheading.exec(e);if(t){let n=t[1].trim();return {type:"heading",raw:$$2(t[0],`
 `),depth:t[2].charAt(0)==="="?1:2,text:n,tokens:this.lexer.inline(n)}}}paragraph(e){let t=this.rules.block.paragraph.exec(e);if(t){let n=t[1].charAt(t[1].length-1)===`
-`?t[1].slice(0,-1):t[1];return {type:"paragraph",raw:t[0],text:n,tokens:this.lexer.inline(n)}}}text(e){let t=this.rules.block.text.exec(e);if(t)return {type:"text",raw:t[0],text:t[0],tokens:this.lexer.inline(t[0])}}escape(e){let t=this.rules.inline.escape.exec(e);if(t)return {type:"escape",raw:t[0],text:t[1]}}tag(e){let t=this.rules.inline.tag.exec(e);if(t)return !this.lexer.state.inLink&&this.rules.other.startATag.test(t[0])?this.lexer.state.inLink=true:this.lexer.state.inLink&&this.rules.other.endATag.test(t[0])&&(this.lexer.state.inLink=false),!this.lexer.state.inRawBlock&&this.rules.other.startPreScriptTag.test(t[0])?this.lexer.state.inRawBlock=true:this.lexer.state.inRawBlock&&this.rules.other.endPreScriptTag.test(t[0])&&(this.lexer.state.inRawBlock=false),{type:"html",raw:t[0],inLink:this.lexer.state.inLink,inRawBlock:this.lexer.state.inRawBlock,block:false,text:t[0]}}link(e){let t=this.rules.inline.link.exec(e);if(t){let n=t[2].trim();if(!this.options.pedantic&&this.rules.other.startAngleBracket.test(n)){if(!this.rules.other.endAngleBracket.test(n))return;let i=$$1(n.slice(0,-1),"\\");if((n.length-i.length)%2===0)return}else {let i=fe(t[2],"()");if(i===-2)return;if(i>-1){let u=(t[0].indexOf("!")===0?5:4)+t[1].length+i;t[2]=t[2].substring(0,i),t[0]=t[0].substring(0,u).trim(),t[3]="";}}let s=t[2],r="";if(this.options.pedantic){let i=this.rules.other.pedanticHrefTitle.exec(s);i&&(s=i[1],r=i[3]);}else r=t[3]?t[3].slice(1,-1):"";return s=s.trim(),this.rules.other.startAngleBracket.test(s)&&(this.options.pedantic&&!this.rules.other.endAngleBracket.test(n)?s=s.slice(1):s=s.slice(1,-1)),xe(t,{href:s&&s.replace(this.rules.inline.anyPunctuation,"$1"),title:r&&r.replace(this.rules.inline.anyPunctuation,"$1")},t[0],this.lexer,this.rules)}}reflink(e,t){let n;if((n=this.rules.inline.reflink.exec(e))||(n=this.rules.inline.nolink.exec(e))){let s=(n[2]||n[1]).replace(this.rules.other.multipleSpaceGlobal," "),r=t[s.toLowerCase()];if(!r){let i=n[0].charAt(0);return {type:"text",raw:i,text:i}}return xe(n,r,n[0],this.lexer,this.rules)}}emStrong(e,t,n=""){let s=this.rules.inline.emStrongLDelim.exec(e);if(!s||!s[1]&&!s[2]&&!s[3]&&!s[4]||s[4]&&n.match(this.rules.other.unicodeAlphaNumeric))return;if(!(s[1]||s[3]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=0,p=s[0][0]==="*"?this.rules.inline.emStrongRDelimAst:this.rules.inline.emStrongRDelimUnd;for(p.lastIndex=0,t=t.slice(-1*e.length+i);(s=p.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o)continue;if(u=[...o].length,s[3]||s[4]){a+=u;continue}else if((s[5]||s[6])&&i%3&&!((i+u)%3)){c+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a+c);let k=[...s[0]][0].length,h=e.slice(0,i+s.index+k+u);if(Math.min(i,u)%2){let f=h.slice(1,-1);return {type:"em",raw:h,text:f,tokens:this.lexer.inlineTokens(f)}}let R=h.slice(2,-2);return {type:"strong",raw:h,text:R,tokens:this.lexer.inlineTokens(R)}}}}codespan(e){let t=this.rules.inline.code.exec(e);if(t){let n=t[2].replace(this.rules.other.newLineCharGlobal," "),s=this.rules.other.nonSpaceChar.test(n),r=this.rules.other.startingSpaceChar.test(n)&&this.rules.other.endingSpaceChar.test(n);return s&&r&&(n=n.substring(1,n.length-1)),{type:"codespan",raw:t[0],text:n}}}br(e){let t=this.rules.inline.br.exec(e);if(t)return {type:"br",raw:t[0]}}del(e,t,n=""){let s=this.rules.inline.delLDelim.exec(e);if(!s)return;if(!(s[1]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=this.rules.inline.delRDelim;for(c.lastIndex=0,t=t.slice(-1*e.length+i);(s=c.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o||(u=[...o].length,u!==i))continue;if(s[3]||s[4]){a+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a);let p=[...s[0]][0].length,k=e.slice(0,i+s.index+p+u),h=k.slice(i,-i);return {type:"del",raw:k,text:h,tokens:this.lexer.inlineTokens(h)}}}}autolink(e){let t=this.rules.inline.autolink.exec(e);if(t){let n,s;return t[2]==="@"?(n=t[1],s="mailto:"+n):(n=t[1],s=n),{type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}url(e){let t;if(t=this.rules.inline.url.exec(e)){let n,s;if(t[2]==="@")n=t[0],s="mailto:"+n;else {let r;do r=t[0],t[0]=this.rules.inline._backpedal.exec(t[0])?.[0]??"";while(r!==t[0]);n=t[0],t[1]==="www."?s="http://"+t[0]:s=t[0];}return {type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}inlineText(e){let t=this.rules.inline.text.exec(e);if(t){let n=this.lexer.state.inRawBlock;return {type:"text",raw:t[0],text:t[0],escaped:n}}}};var x=class l{tokens;options;state;inlineQueue;tokenizer;constructor(e){this.tokens=[],this.tokens.links=Object.create(null),this.options=e||T,this.options.tokenizer=this.options.tokenizer||new w,this.tokenizer=this.options.tokenizer,this.tokenizer.options=this.options,this.tokenizer.lexer=this,this.inlineQueue=[],this.state={inLink:false,inRawBlock:false,top:true};let t={other:m,block:q.normal,inline:A.normal};this.options.pedantic?(t.block=q.pedantic,t.inline=A.pedantic):this.options.gfm&&(t.block=q.gfm,this.options.breaks?t.inline=A.breaks:t.inline=A.gfm),this.tokenizer.rules=t;}static get rules(){return {block:q,inline:A}}static lex(e,t){return new l(t).lex(e)}static lexInline(e,t){return new l(t).inlineTokens(e)}lex(e){e=e.replace(m.carriageReturn,`
+`?t[1].slice(0,-1):t[1];return {type:"paragraph",raw:t[0],text:n,tokens:this.lexer.inline(n)}}}text(e){let t=this.rules.block.text.exec(e);if(t)return {type:"text",raw:t[0],text:t[0],tokens:this.lexer.inline(t[0])}}escape(e){let t=this.rules.inline.escape.exec(e);if(t)return {type:"escape",raw:t[0],text:t[1]}}tag(e){let t=this.rules.inline.tag.exec(e);if(t)return !this.lexer.state.inLink&&this.rules.other.startATag.test(t[0])?this.lexer.state.inLink=true:this.lexer.state.inLink&&this.rules.other.endATag.test(t[0])&&(this.lexer.state.inLink=false),!this.lexer.state.inRawBlock&&this.rules.other.startPreScriptTag.test(t[0])?this.lexer.state.inRawBlock=true:this.lexer.state.inRawBlock&&this.rules.other.endPreScriptTag.test(t[0])&&(this.lexer.state.inRawBlock=false),{type:"html",raw:t[0],inLink:this.lexer.state.inLink,inRawBlock:this.lexer.state.inRawBlock,block:false,text:t[0]}}link(e){let t=this.rules.inline.link.exec(e);if(t){let n=t[2].trim();if(!this.options.pedantic&&this.rules.other.startAngleBracket.test(n)){if(!this.rules.other.endAngleBracket.test(n))return;let i=$$2(n.slice(0,-1),"\\");if((n.length-i.length)%2===0)return}else {let i=fe(t[2],"()");if(i===-2)return;if(i>-1){let u=(t[0].indexOf("!")===0?5:4)+t[1].length+i;t[2]=t[2].substring(0,i),t[0]=t[0].substring(0,u).trim(),t[3]="";}}let s=t[2],r="";if(this.options.pedantic){let i=this.rules.other.pedanticHrefTitle.exec(s);i&&(s=i[1],r=i[3]);}else r=t[3]?t[3].slice(1,-1):"";return s=s.trim(),this.rules.other.startAngleBracket.test(s)&&(this.options.pedantic&&!this.rules.other.endAngleBracket.test(n)?s=s.slice(1):s=s.slice(1,-1)),xe(t,{href:s&&s.replace(this.rules.inline.anyPunctuation,"$1"),title:r&&r.replace(this.rules.inline.anyPunctuation,"$1")},t[0],this.lexer,this.rules)}}reflink(e,t){let n;if((n=this.rules.inline.reflink.exec(e))||(n=this.rules.inline.nolink.exec(e))){let s=(n[2]||n[1]).replace(this.rules.other.multipleSpaceGlobal," "),r=t[s.toLowerCase()];if(!r){let i=n[0].charAt(0);return {type:"text",raw:i,text:i}}return xe(n,r,n[0],this.lexer,this.rules)}}emStrong(e,t,n=""){let s=this.rules.inline.emStrongLDelim.exec(e);if(!s||!s[1]&&!s[2]&&!s[3]&&!s[4]||s[4]&&n.match(this.rules.other.unicodeAlphaNumeric))return;if(!(s[1]||s[3]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=0,p=s[0][0]==="*"?this.rules.inline.emStrongRDelimAst:this.rules.inline.emStrongRDelimUnd;for(p.lastIndex=0,t=t.slice(-1*e.length+i);(s=p.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o)continue;if(u=[...o].length,s[3]||s[4]){a+=u;continue}else if((s[5]||s[6])&&i%3&&!((i+u)%3)){c+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a+c);let k=[...s[0]][0].length,h=e.slice(0,i+s.index+k+u);if(Math.min(i,u)%2){let f=h.slice(1,-1);return {type:"em",raw:h,text:f,tokens:this.lexer.inlineTokens(f)}}let R=h.slice(2,-2);return {type:"strong",raw:h,text:R,tokens:this.lexer.inlineTokens(R)}}}}codespan(e){let t=this.rules.inline.code.exec(e);if(t){let n=t[2].replace(this.rules.other.newLineCharGlobal," "),s=this.rules.other.nonSpaceChar.test(n),r=this.rules.other.startingSpaceChar.test(n)&&this.rules.other.endingSpaceChar.test(n);return s&&r&&(n=n.substring(1,n.length-1)),{type:"codespan",raw:t[0],text:n}}}br(e){let t=this.rules.inline.br.exec(e);if(t)return {type:"br",raw:t[0]}}del(e,t,n=""){let s=this.rules.inline.delLDelim.exec(e);if(!s)return;if(!(s[1]||"")||!n||this.rules.inline.punctuation.exec(n)){let i=[...s[0]].length-1,o,u,a=i,c=this.rules.inline.delRDelim;for(c.lastIndex=0,t=t.slice(-1*e.length+i);(s=c.exec(t))!==null;){if(o=s[1]||s[2]||s[3]||s[4]||s[5]||s[6],!o||(u=[...o].length,u!==i))continue;if(s[3]||s[4]){a+=u;continue}if(a-=u,a>0)continue;u=Math.min(u,u+a);let p=[...s[0]][0].length,k=e.slice(0,i+s.index+p+u),h=k.slice(i,-i);return {type:"del",raw:k,text:h,tokens:this.lexer.inlineTokens(h)}}}}autolink(e){let t=this.rules.inline.autolink.exec(e);if(t){let n,s;return t[2]==="@"?(n=t[1],s="mailto:"+n):(n=t[1],s=n),{type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}url(e){let t;if(t=this.rules.inline.url.exec(e)){let n,s;if(t[2]==="@")n=t[0],s="mailto:"+n;else {let r;do r=t[0],t[0]=this.rules.inline._backpedal.exec(t[0])?.[0]??"";while(r!==t[0]);n=t[0],t[1]==="www."?s="http://"+t[0]:s=t[0];}return {type:"link",raw:t[0],text:n,href:s,tokens:[{type:"text",raw:n,text:n}]}}}inlineText(e){let t=this.rules.inline.text.exec(e);if(t){let n=this.lexer.state.inRawBlock;return {type:"text",raw:t[0],text:t[0],escaped:n}}}};var x=class l{tokens;options;state;inlineQueue;tokenizer;constructor(e){this.tokens=[],this.tokens.links=Object.create(null),this.options=e||T,this.options.tokenizer=this.options.tokenizer||new w,this.tokenizer=this.options.tokenizer,this.tokenizer.options=this.options,this.tokenizer.lexer=this,this.inlineQueue=[],this.state={inLink:false,inRawBlock:false,top:true};let t={other:m,block:q.normal,inline:A.normal};this.options.pedantic?(t.block=q.pedantic,t.inline=A.pedantic):this.options.gfm&&(t.block=q.gfm,this.options.breaks?t.inline=A.breaks:t.inline=A.gfm),this.tokenizer.rules=t;}static get rules(){return {block:q,inline:A}}static lex(e,t){return new l(t).lex(e)}static lexInline(e,t){return new l(t).inlineTokens(e)}lex(e){e=e.replace(m.carriageReturn,`
 `),this.blockTokens(e,this.tokens);for(let t=0;t<this.inlineQueue.length;t++){let n=this.inlineQueue[t];this.inlineTokens(n.src,n.tokens);}return this.inlineQueue=[],this.tokens}blockTokens(e,t=[],n=false){this.tokenizer.lexer=this,this.options.pedantic&&(e=e.replace(m.tabCharGlobal,"    ").replace(m.spaceLine,""));let s=1/0;for(;e;){if(e.length<s)s=e.length;else {this.infiniteLoopError(e.charCodeAt(0));break}let r;if(this.options.extensions?.block?.some(o=>(r=o.call({lexer:this},e,t))?(e=e.substring(r.raw.length),t.push(r),true):false))continue;if(r=this.tokenizer.space(e)){e=e.substring(r.raw.length);let o=t.at(-1);r.raw.length===1&&o!==void 0?o.raw+=`
 `:t.push(r);continue}if(r=this.tokenizer.code(e)){e=e.substring(r.raw.length);let o=t.at(-1);o?.type==="paragraph"||o?.type==="text"?(o.raw+=(o.raw.endsWith(`
 `)?"":`
@@ -7695,7 +7756,7 @@ ${e}</tr>
 `}strong({tokens:e}){return `<strong>${this.parser.parseInline(e)}</strong>`}em({tokens:e}){return `<em>${this.parser.parseInline(e)}</em>`}codespan({text:e}){return `<code>${O(e,true)}</code>`}br(e){return "<br>"}del({tokens:e}){return `<del>${this.parser.parseInline(e)}</del>`}link({href:e,title:t,tokens:n}){let s=this.parser.parseInline(n),r=V(e);if(r===null)return s;e=r;let i='<a href="'+e+'"';return t&&(i+=' title="'+O(t)+'"'),i+=">"+s+"</a>",i}image({href:e,title:t,text:n,tokens:s}){s&&(n=this.parser.parseInline(s,this.parser.textRenderer));let r=V(e);if(r===null)return O(n);e=r;let i=`<img src="${e}" alt="${O(n)}"`;return t&&(i+=` title="${O(t)}"`),i+=">",i}text(e){return "tokens"in e&&e.tokens?this.parser.parseInline(e.tokens):"escaped"in e&&e.escaped?e.text:O(e.text)}};var L=class{strong({text:e}){return e}em({text:e}){return e}codespan({text:e}){return e}del({text:e}){return e}html({text:e}){return e}text({text:e}){return e}link({text:e}){return ""+e}image({text:e}){return ""+e}br(){return ""}checkbox({raw:e}){return e}};var b=class l{options;renderer;textRenderer;constructor(e){this.options=e||T,this.options.renderer=this.options.renderer||new y,this.renderer=this.options.renderer,this.renderer.options=this.options,this.renderer.parser=this,this.textRenderer=new L;}static parse(e,t){return new l(t).parse(e)}static parseInline(e,t){return new l(t).parseInline(e)}parse(e){this.renderer.parser=this;let t="";for(let n=0;n<e.length;n++){let s=e[n];if(this.options.extensions?.renderers?.[s.type]){let i=s,o=this.options.extensions.renderers[i.type].call({parser:this},i);if(o!==false||!["space","hr","heading","code","table","blockquote","list","html","def","paragraph","text"].includes(i.type)){t+=o||"";continue}}let r=s;switch(r.type){case "space":{t+=this.renderer.space(r);break}case "hr":{t+=this.renderer.hr(r);break}case "heading":{t+=this.renderer.heading(r);break}case "code":{t+=this.renderer.code(r);break}case "table":{t+=this.renderer.table(r);break}case "blockquote":{t+=this.renderer.blockquote(r);break}case "list":{t+=this.renderer.list(r);break}case "checkbox":{t+=this.renderer.checkbox(r);break}case "html":{t+=this.renderer.html(r);break}case "def":{t+=this.renderer.def(r);break}case "paragraph":{t+=this.renderer.paragraph(r);break}case "text":{t+=this.renderer.text(r);break}default:{let i='Token with "'+r.type+'" type was not found.';if(this.options.silent)return console.error(i),"";throw new Error(i)}}}return t}parseInline(e,t=this.renderer){this.renderer.parser=this;let n="";for(let s=0;s<e.length;s++){let r=e[s];if(this.options.extensions?.renderers?.[r.type]){let o=this.options.extensions.renderers[r.type].call({parser:this},r);if(o!==false||!["escape","html","link","image","strong","em","codespan","br","del","text"].includes(r.type)){n+=o||"";continue}}let i=r;switch(i.type){case "escape":{n+=t.text(i);break}case "html":{n+=t.html(i);break}case "link":{n+=t.link(i);break}case "image":{n+=t.image(i);break}case "checkbox":{n+=t.checkbox(i);break}case "strong":{n+=t.strong(i);break}case "em":{n+=t.em(i);break}case "codespan":{n+=t.codespan(i);break}case "br":{n+=t.br(i);break}case "del":{n+=t.del(i);break}case "text":{n+=t.text(i);break}default:{let o='Token with "'+i.type+'" type was not found.';if(this.options.silent)return console.error(o),"";throw new Error(o)}}}return n}};var P=class{options;block;constructor(e){this.options=e||T;}static passThroughHooks=new Set(["preprocess","postprocess","processAllTokens","emStrongMask"]);static passThroughHooksRespectAsync=new Set(["preprocess","postprocess","processAllTokens"]);preprocess(e){return e}postprocess(e){return e}processAllTokens(e){return e}emStrongMask(e){return e}provideLexer(e=this.block){return e?x.lex:x.lexInline}provideParser(e=this.block){return e?b.parse:b.parseInline}};var D=class{defaults=M();options=this.setOptions;parse=this.parseMarkdown(true);parseInline=this.parseMarkdown(false);Parser=b;Renderer=y;TextRenderer=L;Lexer=x;Tokenizer=w;Hooks=P;constructor(...e){this.use(...e);}walkTokens(e,t){let n=[];for(let s of e)switch(n=n.concat(t.call(this,s)),s.type){case "table":{let r=s;for(let i of r.header)n=n.concat(this.walkTokens(i.tokens,t));for(let i of r.rows)for(let o of i)n=n.concat(this.walkTokens(o.tokens,t));break}case "list":{let r=s;n=n.concat(this.walkTokens(r.items,t));break}default:{let r=s;this.defaults.extensions?.childTokens?.[r.type]?this.defaults.extensions.childTokens[r.type].forEach(i=>{let o=r[i].flat(1/0);n=n.concat(this.walkTokens(o,t));}):r.tokens&&(n=n.concat(this.walkTokens(r.tokens,t)));}}return n}use(...e){let t=this.defaults.extensions||{renderers:{},childTokens:{}};return e.forEach(n=>{let s={...n};if(s.async=this.defaults.async||s.async||false,n.extensions&&(n.extensions.forEach(r=>{if(!r.name)throw new Error("extension name required");if("renderer"in r){let i=t.renderers[r.name];i?t.renderers[r.name]=function(...o){let u=r.renderer.apply(this,o);return u===false&&(u=i.apply(this,o)),u}:t.renderers[r.name]=r.renderer;}if("tokenizer"in r){if(!r.level||r.level!=="block"&&r.level!=="inline")throw new Error("extension level must be 'block' or 'inline'");let i=t[r.level];i?i.unshift(r.tokenizer):t[r.level]=[r.tokenizer],r.start&&(r.level==="block"?t.startBlock?t.startBlock.push(r.start):t.startBlock=[r.start]:r.level==="inline"&&(t.startInline?t.startInline.push(r.start):t.startInline=[r.start]));}"childTokens"in r&&r.childTokens&&(t.childTokens[r.name]=r.childTokens);}),s.extensions=t),n.renderer){let r=this.defaults.renderer||new y(this.defaults);for(let i in n.renderer){if(!(i in r))throw new Error(`renderer '${i}' does not exist`);if(["options","parser"].includes(i))continue;let o=i,u=n.renderer[o],a=r[o];r[o]=(...c)=>{let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p||""};}s.renderer=r;}if(n.tokenizer){let r=this.defaults.tokenizer||new w(this.defaults);for(let i in n.tokenizer){if(!(i in r))throw new Error(`tokenizer '${i}' does not exist`);if(["options","rules","lexer"].includes(i))continue;let o=i,u=n.tokenizer[o],a=r[o];r[o]=(...c)=>{let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p};}s.tokenizer=r;}if(n.hooks){let r=this.defaults.hooks||new P;for(let i in n.hooks){if(!(i in r))throw new Error(`hook '${i}' does not exist`);if(["options","block"].includes(i))continue;let o=i,u=n.hooks[o],a=r[o];P.passThroughHooks.has(i)?r[o]=c=>{if(this.defaults.async&&P.passThroughHooksRespectAsync.has(i))return (async()=>{let k=await u.call(r,c);return a.call(r,k)})();let p=u.call(r,c);return a.call(r,p)}:r[o]=(...c)=>{if(this.defaults.async)return (async()=>{let k=await u.apply(r,c);return k===false&&(k=await a.apply(r,c)),k})();let p=u.apply(r,c);return p===false&&(p=a.apply(r,c)),p};}s.hooks=r;}if(n.walkTokens){let r=this.defaults.walkTokens,i=n.walkTokens;s.walkTokens=function(o){let u=[];return u.push(i.call(this,o)),r&&(u=u.concat(r.call(this,o))),u};}this.defaults={...this.defaults,...s};}),this}setOptions(e){return this.defaults={...this.defaults,...e},this}lexer(e,t){return x.lex(e,t??this.defaults)}parser(e,t){return b.parse(e,t??this.defaults)}parseMarkdown(e){return (n,s)=>{let r={...s},i={...this.defaults,...r},o=this.onError(!!i.silent,!!i.async);if(this.defaults.async===true&&r.async===false)return o(new Error("marked(): The async option was set to true by an extension. Remove async: false from the parse options object to return a Promise."));if(typeof n>"u"||n===null)return o(new Error("marked(): input parameter is undefined or null"));if(typeof n!="string")return o(new Error("marked(): input parameter is of type "+Object.prototype.toString.call(n)+", string expected"));if(i.hooks&&(i.hooks.options=i,i.hooks.block=e),i.async)return (async()=>{let u=i.hooks?await i.hooks.preprocess(n):n,c=await(i.hooks?await i.hooks.provideLexer(e):e?x.lex:x.lexInline)(u,i),p=i.hooks?await i.hooks.processAllTokens(c):c;i.walkTokens&&await Promise.all(this.walkTokens(p,i.walkTokens));let h=await(i.hooks?await i.hooks.provideParser(e):e?b.parse:b.parseInline)(p,i);return i.hooks?await i.hooks.postprocess(h):h})().catch(o);try{i.hooks&&(n=i.hooks.preprocess(n));let a=(i.hooks?i.hooks.provideLexer(e):e?x.lex:x.lexInline)(n,i);i.hooks&&(a=i.hooks.processAllTokens(a)),i.walkTokens&&this.walkTokens(a,i.walkTokens);let p=(i.hooks?i.hooks.provideParser(e):e?b.parse:b.parseInline)(a,i);return i.hooks&&(p=i.hooks.postprocess(p)),p}catch(u){return o(u)}}}onError(e,t){return n=>{if(n.message+=`
 Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error occurred:</p><pre>"+O(n.message+"",true)+"</pre>";return t?Promise.resolve(s):s}if(t)return Promise.reject(n);throw n}}};var z=new D;function g(l,e){return z.parse(l,e)}g.options=g.setOptions=function(l){return z.setOptions(l),g.defaults=z.defaults,N(g.defaults),g};g.getDefaults=M;g.defaults=T;g.use=function(...l){return z.use(...l),g.defaults=z.defaults,N(g.defaults),g};g.walkTokens=function(l,e){return z.walkTokens(l,e)};g.parseInline=z.parseInline;g.Parser=b;g.parser=b.parse;g.Renderer=y;g.TextRenderer=L;g.Lexer=x;g.lexer=x.lex;g.Tokenizer=w;g.Hooks=P;g.parse=g;g.options;g.setOptions;g.use;g.walkTokens;g.parseInline;b.parse;x.lex;
 
-   const $ = jQuery;
+   const $$1 = jQuery;
    class BackupModal {
        modal = null;
        currentFilter = 'all';
@@ -7707,7 +7768,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            this.render();
        }
        render() {
-           if ($('#kaiz-backup-modal').length === 0) {
+           if ($$1('#kaiz-backup-modal').length === 0) {
                const html = `
                 <dialog id="kaiz-backup-modal" class="kaiz-modal-content" style="width: 600px; max-width: 90vw; padding: 0; background: transparent; border: none;">
                     <div style="background: var(--SmartThemeBlurTintColor); backdrop-filter: blur(10px); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px; padding: 20px; color: var(--SmartThemeBodyColor); box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
@@ -7734,10 +7795,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     </div>
                 </dialog>
             `;
-               $('body').append(html);
+               $$1('body').append(html);
                // Add basic styles
-               if ($('#kaiz-backup-styles').length === 0) {
-                   $('head').append(`
+               if ($$1('#kaiz-backup-styles').length === 0) {
+                   $$1('head').append(`
                     <style id="kaiz-backup-styles">
                         dialog#kaiz-backup-modal::backdrop {
                             background: rgba(0, 0, 0, 0.6);
@@ -7785,7 +7846,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 `);
                }
            }
-           this.modal = $('#kaiz-backup-modal');
+           this.modal = $$1('#kaiz-backup-modal');
            this.bindEvents();
            if (!this.modal[0].open) {
                this.modal[0].showModal();
@@ -7807,7 +7868,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            });
            // Tabs
            this.modal.find('.kaiz-tab').on('click', (e) => {
-               const target = $(e.currentTarget);
+               const target = $$1(e.currentTarget);
                this.modal.find('.kaiz-tab').removeClass('active');
                target.addClass('active');
                this.currentFilter = target.attr('data-type');
@@ -7815,12 +7876,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            });
            // Backup list actions
            this.modal.on('click', '.kaiz-backup-download', (e) => {
-               const id = $(e.currentTarget).attr('data-id');
+               const id = $$1(e.currentTarget).attr('data-id');
                if (id)
                    this.downloadBackup(parseInt(id));
            });
            this.modal.on('click', '.kaiz-backup-delete', (e) => {
-               const id = $(e.currentTarget).attr('data-id');
+               const id = $$1(e.currentTarget).attr('data-id');
                if (id) {
                    if (confirm('Are you sure you want to delete this backup?')) {
                        this.deleteBackup(parseInt(id));
@@ -9274,6 +9335,473 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        }
    }
 
+   class AutoTaskScheduler {
+       agentLoop;
+       stateManager;
+       tasks = [];
+       timers = new Map();
+       eventSourceListener = null;
+       messageCount = 0;
+       constructor(agentLoop, stateManager) {
+           this.agentLoop = agentLoop;
+           this.stateManager = stateManager;
+       }
+       async start(tasks) {
+           this.stop();
+           this.tasks = tasks.filter(t => t.enabled);
+           console.log(`[AutoTaskScheduler] Starting with ${this.tasks.length} active tasks.`);
+           // 1. Setup Time-based triggers
+           for (const task of this.tasks) {
+               if (task.triggerMode === 'time' && task.triggerValue > 0) {
+                   const intervalId = window.setInterval(() => {
+                       this.executeTask(task);
+                   }, task.triggerValue * 1000);
+                   this.timers.set(task.id, intervalId);
+               }
+           }
+           // 2. Setup Turn-based triggers
+           const hasTurnTasks = this.tasks.some(t => t.triggerMode === 'turn');
+           if (hasTurnTasks) {
+               try {
+                   // SillyTavern global eventSource
+                   const ctx = window.SillyTavern?.getContext?.();
+                   if (ctx?.eventSource && ctx?.eventTypes?.MESSAGE_RECEIVED) {
+                       this.eventSourceListener = () => this.handleMessageReceived();
+                       ctx.eventSource.on(ctx.eventTypes.MESSAGE_RECEIVED, this.eventSourceListener);
+                       console.log('[AutoTaskScheduler] Hooked to ST MESSAGE_RECEIVED event.');
+                   }
+               }
+               catch (e) {
+                   console.warn('[AutoTaskScheduler] Failed to hook into ST eventSource:', e);
+               }
+           }
+       }
+       stop() {
+           for (const [taskId, intervalId] of this.timers.entries()) {
+               clearInterval(intervalId);
+           }
+           this.timers.clear();
+           if (this.eventSourceListener) {
+               try {
+                   const ctx = window.SillyTavern?.getContext?.();
+                   if (ctx?.eventSource && ctx?.eventTypes?.MESSAGE_RECEIVED) {
+                       ctx.eventSource.off(ctx.eventTypes.MESSAGE_RECEIVED, this.eventSourceListener);
+                   }
+               }
+               catch (e) {
+                   // ignore
+               }
+               this.eventSourceListener = null;
+           }
+           this.messageCount = 0;
+       }
+       async handleMessageReceived() {
+           this.messageCount++;
+           const turnTasks = this.tasks.filter(t => t.triggerMode === 'turn');
+           for (const task of turnTasks) {
+               if (task.triggerValue > 0 && this.messageCount % task.triggerValue === 0) {
+                   this.executeTask(task);
+               }
+           }
+       }
+       async addTask(task) {
+           // Cập nhật lại toàn bộ list từ DB
+           const allTasks = await this.stateManager.db.getAllAutoTasks();
+           await this.start(allTasks);
+       }
+       async removeTask(taskId) {
+           const allTasks = await this.stateManager.db.getAllAutoTasks();
+           await this.start(allTasks);
+       }
+       async executeTask(task) {
+           if (!task.id)
+               return;
+           console.log(`[AutoTaskScheduler] Attempting to execute task ${task.id}: "${task.name}"`);
+           // Queue check: wait if agent is running
+           let attempts = 0;
+           while (this.agentLoop.isRunning && attempts < 120) { // Max 60 seconds (500ms * 120)
+               await new Promise(r => setTimeout(r, 500));
+               attempts++;
+           }
+           if (this.agentLoop.isRunning) {
+               console.warn(`[AutoTaskScheduler] Skipped task ${task.id} execution because Agent is busy for too long.`);
+               return;
+           }
+           // Setup History for the run
+           let historyForRun = [];
+           if (task.executionMode === 'persist') {
+               if (!task.chatId) {
+                   // Lần đầu chạy persist -> Tạo chat mới riêng cho auto task này (không nằm trong current workspace)
+                   const chatId = await this.stateManager.db.createChat(`[Auto] ${task.name}`, null);
+                   task.chatId = chatId;
+                   await this.stateManager.db.updateAutoTask(task.id, { chatId });
+                   console.log(`[AutoTaskScheduler] Created distinct chat history (ID: ${chatId}) for task ${task.id}`);
+               }
+               // Load history của task
+               const messages = await this.stateManager.db.getMessages(task.chatId);
+               historyForRun = messages.map(m => ({ role: m.role, content: m.content }));
+           }
+           else {
+               // mode = 'fresh'
+               historyForRun = [];
+           }
+           // Add prompt as user message
+           historyForRun.push({ role: 'user', content: task.prompt });
+           // Run agent
+           try {
+               console.log(`[AutoTaskScheduler] Running AgentLoop for task ${task.id}`);
+               let finalResult = '';
+               await this.agentLoop.run(historyForRun, 15, // max steps (15 là hợp lý cho auto tasks)
+               async (event) => {
+                   // Collect final result or partial events if needed
+                   if (event.type === 'step_end' && event.isFinal) {
+                       finalResult = event.text || '';
+                   }
+               }, false, // continueMode
+               task.toolsConfig // toolsConfigOverride
+               );
+               // Save result if persist
+               if (task.executionMode === 'persist' && task.chatId) {
+                   await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
+                   if (finalResult) {
+                       await this.stateManager.db.addMessage(task.chatId, 'agent', finalResult);
+                   }
+               }
+               // Expiry logic
+               task.runCount = (task.runCount || 0) + 1;
+               const updates = { runCount: task.runCount };
+               if (task.maxRuns > 0 && task.runCount >= task.maxRuns) {
+                   updates.enabled = false;
+                   console.log(`[AutoTaskScheduler] Task ${task.id} has reached maxRuns (${task.maxRuns}). Disabling.`);
+               }
+               await this.stateManager.db.updateAutoTask(task.id, updates);
+               // Update local memory and restart if enabled state changed
+               if (updates.enabled === false) {
+                   const allTasks = await this.stateManager.db.getAllAutoTasks();
+                   await this.start(allTasks);
+               }
+           }
+           catch (e) {
+               console.error(`[AutoTaskScheduler] Error executing task ${task.id}:`, e);
+           }
+       }
+   }
+
+   class AutoTaskModal {
+       stateManager;
+       scheduler;
+       toolRegistry;
+       // DOM Elements
+       modal;
+       listContainer;
+       addBtn;
+       closeBtn;
+       formContainer;
+       formSaveBtn;
+       formCancelBtn;
+       toolsListContainer;
+       currentToolsConfig = {};
+       // History Modal
+       historyModal;
+       historyContent;
+       constructor(stateManager, scheduler, toolRegistry) {
+           this.stateManager = stateManager;
+           this.scheduler = scheduler;
+           this.toolRegistry = toolRegistry;
+           this.modal = $('#kaiz-auto-task-modal')[0];
+           this.listContainer = $('#kaiz-auto-task-list');
+           this.addBtn = $('#kaiz-auto-task-add-btn');
+           this.closeBtn = $('#kaiz-auto-task-close');
+           this.formContainer = $('#kaiz-auto-task-form-container');
+           this.formSaveBtn = $('#kaiz-auto-task-save-btn');
+           this.formCancelBtn = $('#kaiz-auto-task-cancel-btn');
+           this.toolsListContainer = $('#kaiz-auto-task-tools-list');
+           this.historyModal = $('#kaiz-auto-task-history-modal')[0];
+           this.historyContent = $('#kaiz-auto-task-history-content');
+           this.initEvents();
+       }
+       initEvents() {
+           $('#kaiz-auto-task-btn').on('click', () => {
+               this.show();
+           });
+           this.closeBtn.on('click', () => {
+               this.modal.close();
+           });
+           this.addBtn.on('click', () => {
+               this.showForm();
+           });
+           this.formCancelBtn.on('click', () => {
+               this.hideForm();
+           });
+           this.formSaveBtn.on('click', async () => {
+               await this.saveTask();
+           });
+           $('#kaiz-auto-task-history-close').on('click', () => {
+               this.historyModal.close();
+           });
+       }
+       async show() {
+           await this.renderList();
+           this.hideForm();
+           if (!this.modal.open) {
+               this.modal.showModal();
+           }
+       }
+       async renderList() {
+           const tasks = await this.stateManager.db.getAllAutoTasks();
+           this.listContainer.empty();
+           if (tasks.length === 0) {
+               this.listContainer.append('<div style="color:#aaa; font-size:12px; text-align:center; padding:10px;">Chưa có Auto Task nào. Nhấn "Tạo Task mới" để thêm.</div>');
+               return;
+           }
+           tasks.forEach(task => {
+               const isTurn = task.triggerMode === 'turn';
+               const triggerText = isTurn ? `${task.triggerValue} lượt` : `${task.triggerValue} giây`;
+               const icon = isTurn ? 'fa-message' : 'fa-clock';
+               const runsText = task.maxRuns > 0 ? `${task.runCount || 0}/${task.maxRuns}` : `${task.runCount || 0}/∞`;
+               const item = $(`
+                <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1; min-width: 0; padding-right: 10px;">
+                        <div style="font-weight: bold; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${this.escapeHtml(task.name)}</div>
+                        <div style="font-size: 11px; color: #aaa; margin-bottom: 2px;">
+                            <i class="fa-solid ${icon}"></i> ${triggerText} &nbsp;|&nbsp; 
+                            <i class="fa-solid fa-bolt"></i> ${runsText}
+                        </div>
+                        <div style="font-size: 11px; color: #aaa;">
+                            <i class="fa-solid ${task.executionMode === 'persist' ? 'fa-database' : 'fa-leaf'}"></i> ${task.executionMode === 'persist' ? 'Persist' : 'Fresh'}
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 6px; align-items: center;">
+                        <button class="kaiz-auto-task-toggle menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: ${task.enabled ? '#2ecc71' : '#aaa'};" title="${task.enabled ? 'Đang chạy' : 'Đã dừng'}">
+                            <i class="fa-solid ${task.enabled ? 'fa-pause' : 'fa-play'}"></i>
+                        </button>
+                        ${task.executionMode === 'persist' ? `
+                        <button class="kaiz-auto-task-history menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px;" title="Xem History">
+                            <i class="fa-solid fa-eye"></i>
+                        </button>
+                        ` : ''}
+                        <button class="kaiz-auto-task-edit menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #f39c12;" title="Sửa">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button class="kaiz-auto-task-delete menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #e74c3c;" title="Xóa">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `);
+               // Toggle Events
+               item.find('.kaiz-auto-task-toggle').on('click', async () => {
+                   await this.stateManager.db.updateAutoTask(task.id, { enabled: !task.enabled });
+                   const updatedTask = (await this.stateManager.db.getAllAutoTasks()).find(t => t.id === task.id);
+                   if (updatedTask) {
+                       if (updatedTask.enabled) {
+                           await this.scheduler.addTask(updatedTask);
+                       }
+                       else {
+                           await this.scheduler.removeTask(updatedTask.id);
+                       }
+                   }
+                   this.renderList();
+               });
+               // Delete
+               item.find('.kaiz-auto-task-delete').on('click', async () => {
+                   if (confirm(`Bạn có chắc chắn muốn xóa task "${task.name}"?`)) {
+                       await this.stateManager.db.deleteAutoTask(task.id);
+                       if (task.chatId) {
+                           await this.stateManager.db.deleteChat(task.chatId);
+                       }
+                       await this.scheduler.removeTask(task.id);
+                       this.renderList();
+                   }
+               });
+               // Edit
+               item.find('.kaiz-auto-task-edit').on('click', () => {
+                   this.showForm(task);
+               });
+               // History
+               item.find('.kaiz-auto-task-history').on('click', () => {
+                   this.showHistory(task);
+               });
+               this.listContainer.append(item);
+           });
+       }
+       showForm(task) {
+           this.addBtn.hide();
+           this.listContainer.hide();
+           this.formContainer.show();
+           if (task) {
+               $('#kaiz-auto-task-id').val(task.id.toString());
+               $('#kaiz-auto-task-name').val(task.name);
+               $('#kaiz-auto-task-prompt').val(task.prompt);
+               $('#kaiz-auto-task-trigger-mode').val(task.triggerMode);
+               $('#kaiz-auto-task-trigger-value').val(task.triggerValue);
+               $('#kaiz-auto-task-max-runs').val(task.maxRuns);
+               $('#kaiz-auto-task-exec-mode').val(task.executionMode);
+               this.currentToolsConfig = { ...(task.toolsConfig || {}) };
+           }
+           else {
+               $('#kaiz-auto-task-id').val('');
+               $('#kaiz-auto-task-name').val('');
+               $('#kaiz-auto-task-prompt').val('');
+               $('#kaiz-auto-task-trigger-mode').val('time');
+               $('#kaiz-auto-task-trigger-value').val(30);
+               $('#kaiz-auto-task-max-runs').val(0);
+               $('#kaiz-auto-task-exec-mode').val('fresh');
+               this.currentToolsConfig = {};
+           }
+           this.renderToolsUI();
+       }
+       hideForm() {
+           this.formContainer.hide();
+           this.listContainer.show();
+           this.addBtn.show();
+       }
+       renderToolsUI() {
+           const allSchemas = this.toolRegistry.getAllSchemas();
+           this.toolsListContainer.empty();
+           const chipsContainer = $('<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>');
+           const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`);
+           const resultList = $(`<div style="max-height:100px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`);
+           this.toolsListContainer.append(chipsContainer, searchInput, resultList);
+           const refreshChips = () => {
+               chipsContainer.empty();
+               const enabled = allSchemas.filter(s => this.currentToolsConfig[s.name] === true);
+               if (enabled.length === 0) {
+                   chipsContainer.append('<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>');
+                   return;
+               }
+               enabled.forEach(schema => {
+                   const chip = $(`
+                    <span style="
+                        display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+                        background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
+                        border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
+                    ">
+                        ${this.escapeHtml(schema.name)}
+                        <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${this.escapeHtml(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                    </span>
+                `);
+                   chip.find('.kaiz-ws-tool-remove').on('click', () => {
+                       delete this.currentToolsConfig[schema.name];
+                       refreshChips();
+                       refreshResults(String(searchInput.val() || ''));
+                   });
+                   chipsContainer.append(chip);
+               });
+           };
+           const refreshResults = (query) => {
+               resultList.empty();
+               const available = allSchemas.filter(s => this.currentToolsConfig[s.name] !== true);
+               const q = query.trim().toLowerCase();
+               const matches = q ? available.filter(s => s.name.toLowerCase().includes(q)) : available;
+               if (matches.length === 0) {
+                   resultList.append('<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>');
+                   return;
+               }
+               matches.forEach(schema => {
+                   const item = $(`
+                    <div style="padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd; border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <span style="color:#fff; font-weight:500;">${this.escapeHtml(schema.name)}</span>
+                    </div>
+                `);
+                   item.on('mouseenter', () => item.css('background', 'rgba(255,255,255,0.07)'));
+                   item.on('mouseleave', () => item.css('background', ''));
+                   item.on('click', () => {
+                       this.currentToolsConfig[schema.name] = true;
+                       refreshChips();
+                       refreshResults(String(searchInput.val() || ''));
+                   });
+                   resultList.append(item);
+               });
+           };
+           searchInput.on('input', function () {
+               refreshResults(String($(this).val() || ''));
+           });
+           refreshChips();
+           refreshResults('');
+       }
+       async saveTask() {
+           const idVal = $('#kaiz-auto-task-id').val();
+           const name = $('#kaiz-auto-task-name').val().trim();
+           const prompt = $('#kaiz-auto-task-prompt').val().trim();
+           const triggerMode = $('#kaiz-auto-task-trigger-mode').val();
+           const triggerValue = parseInt($('#kaiz-auto-task-trigger-value').val(), 10);
+           const maxRuns = parseInt($('#kaiz-auto-task-max-runs').val(), 10);
+           const executionMode = $('#kaiz-auto-task-exec-mode').val();
+           if (!name || !prompt || isNaN(triggerValue) || triggerValue <= 0) {
+               alert('Vui lòng điền đầy đủ và đúng định dạng các trường bắt buộc!');
+               return;
+           }
+           const taskData = {
+               name,
+               prompt,
+               triggerMode,
+               triggerValue,
+               maxRuns: isNaN(maxRuns) ? 0 : maxRuns,
+               executionMode,
+               toolsConfig: this.currentToolsConfig,
+               enabled: true,
+               runCount: 0, // Reset runCount when editing/creating
+               createdAt: Date.now() // Will be overwritten if editing
+           };
+           if (idVal) {
+               const id = parseInt(idVal, 10);
+               const { createdAt, ...updateData } = taskData;
+               await this.stateManager.db.updateAutoTask(id, updateData);
+           }
+           else {
+               await this.stateManager.db.createAutoTask(taskData);
+           }
+           // Cập nhật lại scheduler
+           const allTasks = await this.stateManager.db.getAllAutoTasks();
+           await this.scheduler.start(allTasks);
+           this.hideForm();
+           this.renderList();
+       }
+       async showHistory(task) {
+           if (!task.chatId)
+               return;
+           $('#kaiz-auto-task-history-title').text(task.name);
+           this.historyContent.empty();
+           const messages = await this.stateManager.db.getMessages(task.chatId);
+           if (messages.length === 0) {
+               this.historyContent.append('<div style="text-align: center; color: #aaa; margin-top: 20px;">Lịch sử trống.</div>');
+           }
+           else {
+               // Render plain text blocks just like ST/chat_window but simpler
+               messages.forEach(msg => {
+                   const isUser = msg.role === 'user';
+                   const bg = isUser ? 'rgba(0, 201, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)';
+                   const color = isUser ? '#00c9ff' : '#a29bfe';
+                   const name = isUser ? 'Prompt' : 'Agent';
+                   // Format content (simple markdown-like formatting for tools)
+                   let formatted = this.escapeHtml(msg.content);
+                   formatted = formatted.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
+                   const msgHtml = `
+                    <div style="margin-bottom: 10px; background: ${bg}; padding: 10px; border-radius: 8px;">
+                        <div style="font-size: 11px; font-weight: bold; color: ${color}; margin-bottom: 5px;">${name}</div>
+                        <div style="font-size: 13px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${formatted}</div>
+                    </div>
+                `;
+                   this.historyContent.append(msgHtml);
+               });
+           }
+           this.historyModal.showModal();
+           // Scroll to bottom
+           setTimeout(() => {
+               this.historyContent.scrollTop(this.historyContent[0].scrollHeight);
+           }, 50);
+       }
+       escapeHtml(unsafe) {
+           return (unsafe || '')
+               .replace(/&/g, '&amp;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;')
+               .replace(/"/g, '&quot;')
+               .replace(/'/g, '&#039;');
+       }
+   }
+
    const EXT_NAME = 'kaiz_agent';
    console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
    // Tìm chính xác thư mục extension
@@ -9375,12 +9903,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                await SettingsUI.init(extPath, EXT_NAME, registry);
                const stateManager = new StateManager();
                const loop = new AgentLoop(adapter, registry, stateManager);
+               const autoTaskScheduler = new AutoTaskScheduler(loop, stateManager);
                // Gắn kết UI trước để đăng ký callback
                ChatWindowUI.init(loop, stateManager, registry);
                ToolCheckerUI.init(registry, adapter);
                BrowserWindowUI.init();
+               new AutoTaskModal(stateManager, autoTaskScheduler, registry);
                // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
                await stateManager.init();
+               // Bắt đầu Auto Tasks sau khi DB đã init
+               const allTasks = await stateManager.db.getAllAutoTasks();
+               await autoTaskScheduler.start(allTasks);
            }
            else {
                console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');
