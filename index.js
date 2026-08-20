@@ -9361,6 +9361,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        tasks = [];
        timers = new Map();
        eventSourceListener = null;
+       chatChangedListener = null;
        messageCount = 0;
        constructor(agentLoop, stateManager) {
            this.agentLoop = agentLoop;
@@ -9385,10 +9386,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                try {
                    // SillyTavern global eventSource
                    const ctx = window.SillyTavern?.getContext?.();
-                   if (ctx?.eventSource && ctx?.eventTypes?.MESSAGE_RECEIVED) {
+                   if (ctx?.eventSource) {
+                       const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
                        this.eventSourceListener = () => this.handleMessageReceived();
-                       ctx.eventSource.on(ctx.eventTypes.MESSAGE_RECEIVED, this.eventSourceListener);
-                       console.log('[AutoTaskScheduler] Hooked to ST MESSAGE_RECEIVED event.');
+                       ctx.eventSource.on(renderEvent, this.eventSourceListener);
+                       const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
+                       this.chatChangedListener = () => {
+                           this.messageCount = 0;
+                           console.log('[AutoTaskScheduler] Chat changed. Reset messageCount to 0.');
+                       };
+                       ctx.eventSource.on(chatChangedEvent, this.chatChangedListener);
+                       console.log(`[AutoTaskScheduler] Hooked to ST ${renderEvent} and ${chatChangedEvent} events.`);
                    }
                }
                catch (e) {
@@ -9404,14 +9412,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            if (this.eventSourceListener) {
                try {
                    const ctx = window.SillyTavern?.getContext?.();
-                   if (ctx?.eventSource && ctx?.eventTypes?.MESSAGE_RECEIVED) {
-                       ctx.eventSource.off(ctx.eventTypes.MESSAGE_RECEIVED, this.eventSourceListener);
+                   if (ctx?.eventSource) {
+                       const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+                       ctx.eventSource.off(renderEvent, this.eventSourceListener);
+                       if (this.chatChangedListener) {
+                           const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
+                           ctx.eventSource.off(chatChangedEvent, this.chatChangedListener);
+                       }
                    }
                }
                catch (e) {
                    // ignore
                }
                this.eventSourceListener = null;
+               this.chatChangedListener = null;
            }
            this.messageCount = 0;
        }
