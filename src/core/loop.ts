@@ -690,7 +690,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
                         await onEvent({ type: 'tool_call', data: call });
 
                         let result;
-                        if (call.parseError) {
+                        
+                        // --- TOOLS CONFIG CHECK (Chặn tool bị tắt) ---
+                        if (toolsConfigOverride && toolsConfigOverride[call.name] === false) {
+                            result = { 
+                                content: `Error: Permission denied. Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt của tiến trình này. Vui lòng thử cách khác.`, 
+                                isError: true 
+                            };
+                        } else if (call.parseError) {
                             // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
                             result = { content: call.parseError, isError: true };
                         } else {
