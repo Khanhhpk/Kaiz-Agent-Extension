@@ -67,16 +67,17 @@ export class AutoTaskScheduler {
             try {
                 const ctx = (window as any).SillyTavern?.getContext?.();
                 if (ctx?.eventSource) {
+                    const removeFn = ctx.eventSource.removeListener ? ctx.eventSource.removeListener.bind(ctx.eventSource) : ctx.eventSource.off.bind(ctx.eventSource);
                     const renderEvent = ctx.eventTypes?.GENERATION_ENDED || 'generation_ended';
-                    ctx.eventSource.off(renderEvent, this.eventSourceListener);
+                    removeFn(renderEvent, this.eventSourceListener);
                     
                     if (this.chatChangedListener) {
                         const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
-                        ctx.eventSource.off(chatChangedEvent, this.chatChangedListener);
+                        removeFn(chatChangedEvent, this.chatChangedListener);
                     }
                 }
             } catch (e) {
-                // ignore
+                console.error('[AutoTaskScheduler] Error removing ST event listener:', e);
             }
             this.eventSourceListener = null;
             this.chatChangedListener = null;
