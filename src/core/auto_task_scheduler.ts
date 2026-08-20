@@ -109,10 +109,10 @@ export class AutoTaskScheduler {
         
         if (task.executionMode === 'persist') {
             if (!task.chatId) {
-                // Lần đầu chạy persist -> Tạo chat mới riêng cho auto task này (không nằm trong current workspace)
-                const chatId = await this.stateManager.db.createChat(`[Auto] ${task.name}`, null);
+                // Lần đầu chạy persist -> Tạo chat mới riêng cho auto task này (sử dụng -1 để ẩn khỏi danh sách chat mặc định)
+                const chatId = await this.stateManager.db.createChat(`[Auto] ${task.name}`, -1);
                 task.chatId = chatId;
-                await this.stateManager.db.updateAutoTask(task.id, { chatId });
+                await this.stateManager.db.updateAutoTask(task.id!, { chatId });
                 console.log(`[AutoTaskScheduler] Created distinct chat history (ID: ${chatId}) for task ${task.id}`);
             }
             
