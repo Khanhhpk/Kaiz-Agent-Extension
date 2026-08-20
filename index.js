@@ -9746,8 +9746,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                matches.forEach(schema => {
                    const item = $(`
-                    <div style="padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd; border-bottom:1px solid rgba(255,255,255,0.04);">
-                        <span style="color:#fff; font-weight:500;">${this.escapeHtml(schema.name)}</span>
+                    <div style="padding:8px 10px; cursor:pointer; font-size:13px; color:#ddd; border-bottom:1px solid rgba(255,255,255,0.04);">
+                        <div style="color:#fff; font-weight:bold;">${this.escapeHtml(schema.name)}</div>
+                        <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${this.escapeHtml(schema.description)}</div>
                     </div>
                 `);
                    item.on('mouseenter', () => item.css('background', 'rgba(255,255,255,0.07)'));
