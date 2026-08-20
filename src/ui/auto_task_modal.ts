@@ -69,6 +69,15 @@ export class AutoTaskModal {
         $('#kaiz-auto-task-history-close').on('click', () => {
             this.historyModal.close();
         });
+
+        $('#kaiz-auto-task-trigger-mode').on('change', function(this: any) {
+            const mode = $(this).val();
+            if (mode === 'turn') {
+                $('#kaiz-auto-task-trigger-label').text('Giá trị (lượt):');
+            } else {
+                $('#kaiz-auto-task-trigger-label').text('Giá trị (giây):');
+            }
+        });
     }
 
     public async show() {
@@ -191,6 +200,7 @@ export class AutoTaskModal {
         }
 
         this.renderToolsUI();
+        $('#kaiz-auto-task-trigger-mode').trigger('change');
     }
 
     private hideForm() {

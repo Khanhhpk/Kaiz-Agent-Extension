@@ -9539,6 +9539,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            $('#kaiz-auto-task-history-close').on('click', () => {
                this.historyModal.close();
            });
+           $('#kaiz-auto-task-trigger-mode').on('change', function () {
+               const mode = $(this).val();
+               if (mode === 'turn') {
+                   $('#kaiz-auto-task-trigger-label').text('Giá trị (lượt):');
+               }
+               else {
+                   $('#kaiz-auto-task-trigger-label').text('Giá trị (giây):');
+               }
+           });
        }
        async show() {
            await this.renderList();
@@ -9650,6 +9659,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                this.currentToolsConfig = {};
            }
            this.renderToolsUI();
+           $('#kaiz-auto-task-trigger-mode').trigger('change');
        }
        hideForm() {
            this.formContainer.hide();
