@@ -39,9 +39,26 @@ export interface BackupEntry {
     timestamp: number;
 }
 
+export interface AutoTask {
+    id?: number;
+    name: string;
+    prompt: string;
+    triggerMode: 'turn' | 'time';
+    triggerValue: number;
+    maxRuns: number;
+    runCount: number;
+    executionMode: 'fresh' | 'persist';
+    chatId?: number;
+    lastTurnRequests?: number;
+    totalRequests?: number;
+    toolsConfig: Record<string, boolean>;
+    enabled: boolean;
+    createdAt: number;
+}
+
 export class KaizDB {
     private dbName = 'KaizAgentDB';
-    private dbVersion = 3;
+    private dbVersion = 4;
     private db: IDBDatabase | null = null;
 
     public async init(): Promise<void> {
@@ -78,6 +95,11 @@ export class KaizDB {
                     const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
                     backupStore.createIndex('type', 'type', { unique: false });
                     backupStore.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+
+                // --- AUTO TASKS (DB v4) ---
+                if (!db.objectStoreNames.contains('autoTasks')) {
+                    db.createObjectStore('autoTasks', { keyPath: 'id', autoIncrement: true });
                 }
             };
 
@@ -415,6 +437,28 @@ export class KaizDB {
         });
     }
 
+    public async clearMessages(chatId: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['messages'], 'readwrite');
+            const msgStore = transaction.objectStore('messages');
+            
+            const msgIndex = msgStore.index('chatId');
+            const req = msgIndex.openCursor(IDBKeyRange.only(chatId));
+            req.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    cursor.delete();
+                    cursor.continue();
+                }
+            };
+            req.onerror = () => reject(req.error);
+
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
     // --- MESSAGES ---
 
     public async addMessage(
@@ -524,6 +568,63 @@ export class KaizDB {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['backups'], 'readwrite');
             const store = transaction.objectStore('backups');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- AUTO TASKS ---
+
+    public async createAutoTask(task: Omit<AutoTask, 'id'>): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+            const store = transaction.objectStore('autoTasks');
+
+            const request = store.add(task);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllAutoTasks(): Promise<AutoTask[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readonly');
+            const store = transaction.objectStore('autoTasks');
+
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result as AutoTask[]);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async updateAutoTask(id: number, data: Partial<AutoTask>): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+            const store = transaction.objectStore('autoTasks');
+
+            const getReq = store.get(id);
+            getReq.onsuccess = () => {
+                const task = getReq.result as AutoTask;
+                if (!task) return reject(new Error('AutoTask not found'));
+                Object.assign(task, data);
+                const putReq = store.put(task);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
+            };
+            getReq.onerror = () => reject(getReq.error);
+        });
+    }
+
+    public async deleteAutoTask(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+            const store = transaction.objectStore('autoTasks');
 
             const request = store.delete(id);
             request.onsuccess = () => resolve();

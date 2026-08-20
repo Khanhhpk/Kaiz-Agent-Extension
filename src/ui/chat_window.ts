@@ -18,6 +18,8 @@ declare const toastr: any;
 
 export class ChatWindowUI {
     private static currentAttachments: import('../core/db').ChatAttachment[] = [];
+    public static lastLogSent: string = 'No data yet.';
+    public static lastLogRecv: string = 'No data yet.';
 
     public static init(loop: AgentLoop, stateManager: StateManager, registry: ToolRegistry) {
         const $ = jQuery;
@@ -61,8 +63,7 @@ export class ChatWindowUI {
             `);
         }
 
-        let lastLogSent = 'No data yet.';
-        let lastLogRecv = 'No data yet.';
+
 
         $('#kaiz-log-close').on('click', () => {
             ($('#kaiz-log-modal')[0] as HTMLDialogElement).close();
@@ -84,8 +85,8 @@ export class ChatWindowUI {
         });
 
         logBtn.on('click', () => {
-            $('#kaiz-log-sent').text(lastLogSent);
-            $('#kaiz-log-recv').text(lastLogRecv);
+            $('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
+            $('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
             const dialog = $('#kaiz-log-modal')[0] as HTMLDialogElement;
             if (!dialog.open) {
                 dialog.showModal();
@@ -1266,8 +1267,8 @@ export class ChatWindowUI {
                         }
                         await stateManager.addMessage('agent', `[Error] ${event.text}`);
                     } else if (event.type === 'debug') {
-                        lastLogSent = JSON.stringify(event.data.messages, null, 2);
-                        lastLogRecv = event.data.responseText;
+                        ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
+                        ChatWindowUI.lastLogRecv = event.data.responseText;
                     }
                 },
                 continueMode,

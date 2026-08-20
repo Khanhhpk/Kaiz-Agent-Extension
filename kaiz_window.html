@@ -109,6 +109,12 @@
             </div>
             <div class="kaiz-header-actions">
                 <i
+                    id="kaiz-auto-task-btn"
+                    class="fa-solid fa-clock-rotate-left interactable"
+                    style="cursor: pointer; margin-right: 8px"
+                    title="Quản lý Auto Tasks"
+                ></i>
+                <i
                     id="kaiz-chat-browser-btn"
                     class="fa-solid fa-globe interactable"
                     style="cursor: pointer; margin-right: 8px"
@@ -497,5 +503,112 @@
                 <i class="fa-solid fa-save"></i> Lưu cài đặt
             </button>
         </div>
+    </div>
+</dialog>
+
+<!-- Auto Tasks Manager Modal -->
+<dialog id="kaiz-auto-task-modal" class="kaiz-modal" style="
+    background: rgba(20, 25, 35, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ddd;
+    padding: 15px;
+    width: 600px;
+    max-width: 90vw;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 10px;">
+        <h3 style="margin: 0; font-size: 16px"><i class="fa-solid fa-bolt"></i> Auto Tasks Manager</h3>
+        <i id="kaiz-auto-task-close" class="fa-solid fa-xmark interactable" style="cursor: pointer; font-size: 16px"></i>
+    </div>
+
+    <!-- Nút tạo mới -->
+    <button id="kaiz-auto-task-add-btn" class="menu_button interactable" style="width: 100%; margin-bottom: 15px;">
+        <i class="fa-solid fa-plus"></i> Tạo Task mới
+    </button>
+
+    <!-- Danh sách Task -->
+    <div id="kaiz-auto-task-list" style="display: flex; flex-direction: column; gap: 10px; max-height: 250px; overflow-y: auto; padding-right: 5px; margin-bottom: 15px;">
+        <!-- Auto Task Items sẽ được inject vào đây -->
+    </div>
+
+    <!-- Form sửa/tạo -->
+    <div id="kaiz-auto-task-form-container" style="display: none; border: 1px solid rgba(255, 255, 255, 0.1); padding: 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.2);">
+        <input type="hidden" id="kaiz-auto-task-id" />
+        
+        <div style="margin-bottom: 8px;">
+            <label style="font-size: 12px; color: #aaa; display: block;">Tên task:</label>
+            <input type="text" id="kaiz-auto-task-name" class="text_pole" style="width: 100%; box-sizing: border-box;" placeholder="Nhập tên task (vd: Tóm tắt)" />
+        </div>
+        
+        <div style="margin-bottom: 8px;">
+            <label style="font-size: 12px; color: #aaa; display: block;">Prompt (Yêu cầu Agent):</label>
+            <textarea id="kaiz-auto-task-prompt" class="text_pole" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical;"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+            <div style="flex: 1;">
+                <label style="font-size: 12px; color: #aaa; display: block;">Trigger Mode:</label>
+                <select id="kaiz-auto-task-trigger-mode" class="text_pole" style="width: 100%;">
+                    <option value="time">Thời gian (giây)</option>
+                    <option value="turn">Lượt chat (turn)</option>
+                </select>
+            </div>
+            <div style="flex: 1;">
+                <label id="kaiz-auto-task-trigger-label" style="font-size: 12px; color: #aaa; display: block;">Giá trị (giây):</label>
+                <input type="number" id="kaiz-auto-task-trigger-value" class="text_pole" style="width: 100%; box-sizing: border-box;" min="1" />
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+            <div style="flex: 1;">
+                <label style="font-size: 12px; color: #aaa; display: block;">Số lần chạy tối đa (0 = vĩnh viễn):</label>
+                <input type="number" id="kaiz-auto-task-max-runs" class="text_pole" style="width: 100%; box-sizing: border-box;" min="0" value="0" />
+            </div>
+            <div style="flex: 1;">
+                <label style="font-size: 12px; color: #aaa; display: block;">Execution Mode:</label>
+                <select id="kaiz-auto-task-exec-mode" class="text_pole" style="width: 100%;">
+                    <option value="fresh">Fresh (Không lưu History)</option>
+                    <option value="persist">Persist (Có History riêng)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tool Configuration (giống workspace) -->
+        <div style="margin-bottom: 10px;">
+            <label style="font-size: 12px; color: #aaa; margin-bottom: 4px; display: block">Tools cho phép (Để trống = Agent không thể gọi Tool):</label>
+            <div id="kaiz-auto-task-tools-list" style="border: 1px solid rgba(255, 255, 255, 0.1); padding: 8px; border-radius: 4px; background: rgba(0, 0, 0, 0.2);">
+                <!-- Tools config UI injected here -->
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button id="kaiz-auto-task-cancel-btn" class="menu_button interactable" style="background: rgba(255,255,255,0.1);">Hủy</button>
+            <button id="kaiz-auto-task-save-btn" class="menu_button interactable" style="background: rgba(0, 201, 255, 0.2);"><i class="fa-solid fa-save"></i> Lưu Task</button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Modal xem lịch sử của 1 Auto Task -->
+<dialog id="kaiz-auto-task-history-modal" class="kaiz-modal" style="
+    background: rgba(20, 25, 35, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    color: #ddd;
+    padding: 15px;
+    width: 600px;
+    max-width: 90vw;
+    height: 70vh;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    flex-direction: column;
+">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 10px;">
+        <h3 style="margin: 0; font-size: 16px"><i class="fa-solid fa-clock-rotate-left"></i> History: <span id="kaiz-auto-task-history-title">...</span></h3>
+        <i id="kaiz-auto-task-history-close" class="fa-solid fa-xmark interactable" style="cursor: pointer; font-size: 16px"></i>
+    </div>
+    <div id="kaiz-auto-task-history-content" class="kaiz-chat-history" style="flex: 1; overflow-y: auto;">
+        <!-- Lịch sử (read only) -->
     </div>
 </dialog>

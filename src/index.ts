@@ -8,6 +8,8 @@ import { SettingsUI } from './ui/settings';
 import { ChatWindowUI } from './ui/chat_window';
 import { ToolCheckerUI } from './ui/tool_checker';
 import { BrowserWindowUI } from './ui/browser_window';
+import { AutoTaskScheduler } from './core/auto_task_scheduler';
+import { AutoTaskModal } from './ui/auto_task_modal';
 
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
@@ -122,14 +124,20 @@ jQuery(async () => {
 
             const stateManager = new StateManager();
             const loop = new AgentLoop(adapter, registry, stateManager);
+            const autoTaskScheduler = new AutoTaskScheduler(loop, stateManager);
 
             // Gắn kết UI trước để đăng ký callback
             ChatWindowUI.init(loop, stateManager, registry);
             ToolCheckerUI.init(registry, adapter);
             BrowserWindowUI.init();
+            new AutoTaskModal(stateManager, autoTaskScheduler, registry);
 
             // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
             await stateManager.init();
+
+            // Bắt đầu Auto Tasks sau khi DB đã init
+            const allTasks = await stateManager.db.getAllAutoTasks();
+            await autoTaskScheduler.start(allTasks);
         } else {
             console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');
         }

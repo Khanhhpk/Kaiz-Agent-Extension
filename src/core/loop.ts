@@ -119,13 +119,16 @@ export class AgentLoop {
         return Math.ceil(fullText.split(/\s+/).length * 1.3);
     }
 
-    private generateSystemPrompt(maxSteps: number): string {
+    private generateSystemPrompt(maxSteps: number, toolsConfigOverride?: Record<string, boolean>): string {
         const ctx = (window as any).SillyTavern.getContext();
         const settings = ctx.extensionSettings?.kaiz_agent || {};
         const disabledTools = settings.disabledTools || {};
         let schemas = this.toolRegistry.getAllSchemas();
 
-        if (this.stateManager.currentWorkspace) {
+        if (toolsConfigOverride) {
+            // Auto Task mode: chỉ dùng danh sách tool mà user đã gán cho task
+            schemas = schemas.filter((s) => toolsConfigOverride[s.name] === true);
+        } else if (this.stateManager.currentWorkspace) {
             const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
             schemas = schemas.filter((s) => wsConfig[s.name] === true);
         } else {
@@ -229,6 +232,17 @@ CÁC CÔNG CỤ HIỆN CÓ:
 
         if (excessTokens <= 0) return currentHistory;
 
+        // [TỐI ƯU HÓA]: Tính toán số lượng token của tất cả tin nhắn bằng Promise.all thay vì đợi tuần tự trong vòng lặp
+        const msgTokensCache = await Promise.all(
+            currentHistory.map((m) => {
+                let contentStr = m.content || '';
+                if (m.role === 'agent' || m.role === 'assistant') {
+                    contentStr = this.stripCotAndPrefill(contentStr) || '[Đã xử lý suy luận CoT]';
+                }
+                return getTokenCount(contentStr);
+            })
+        );
+
         for (let i = 0; i < currentHistory.length; i++) {
             if (excessTokens <= 0) break;
 
@@ -248,15 +262,12 @@ CÁC CÔNG CỤ HIỆN CÓ:
             }
 
             if ((isAgentMsg && trimAgent) || (isUserMsg && trimUser) || (isToolResult && trimTool)) {
-                let contentStr = m.content || '';
-                if (isAgentMsg) {
-                    contentStr = this.stripCotAndPrefill(contentStr) || '[Đã xử lý suy luận CoT]';
-                }
-                const msgTokens = await getTokenCount(contentStr);
+                const msgTokens = msgTokensCache[i];
 
                 if (typeof m.content === 'string' && m.content.includes('đã bị lược bỏ do giới hạn Context Limit')) {
                     // Already a placeholder, completely remove it
                     currentHistory.splice(i, 1);
+                    msgTokensCache.splice(i, 1); // keep cache aligned
                     excessTokens -= msgTokens;
                     i--; // adjust index since we removed an element
                 } else {
@@ -271,6 +282,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
                         replacement = '[Tin nhắn của User đã bị lược bỏ do giới hạn Context Limit]';
                     }
 
+                    // Dùng lại hàm đếm token chính xác của ST cho placeholder để đảm bảo độ chuẩn xác 100%. 
+                    // ST có cache nội bộ cho chuỗi trùng lặp nên bước này rất nhanh, không bị overhead.
                     const replacementTokens = await getTokenCount(replacement);
                     const saving = msgTokens - replacementTokens;
 
@@ -420,10 +433,11 @@ CÁC CÔNG CỤ HIỆN CÓ:
         maxSteps: number,
         onEvent: (event: AgentEvent) => void | Promise<void>,
         continueMode: boolean = false,
+        toolsConfigOverride?: Record<string, boolean>,
     ) {
         console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
 
-        const cachedSystemPrompt = this.generateSystemPrompt(maxSteps);
+        const cachedSystemPrompt = this.generateSystemPrompt(maxSteps, toolsConfigOverride);
 
         const internalHistory = history.map((msg) => ({ ...msg }));
 
