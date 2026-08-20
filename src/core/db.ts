@@ -435,6 +435,28 @@ export class KaizDB {
         });
     }
 
+    public async clearMessages(chatId: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['messages'], 'readwrite');
+            const msgStore = transaction.objectStore('messages');
+            
+            const msgIndex = msgStore.index('chatId');
+            const req = msgIndex.openCursor(IDBKeyRange.only(chatId));
+            req.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    cursor.delete();
+                    cursor.continue();
+                }
+            };
+            req.onerror = () => reject(req.error);
+
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
     // --- MESSAGES ---
 
     public async addMessage(

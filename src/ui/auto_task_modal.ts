@@ -4,6 +4,7 @@ import { AutoTask } from '../core/db';
 import { ToolRegistry } from '../core/tool_registry';
 
 declare const $: any;
+declare const toastr: any;
 
 export class AutoTaskModal {
     private stateManager: StateManager;
@@ -121,8 +122,11 @@ export class AutoTaskModal {
                             <i class="fa-solid ${task.enabled ? 'fa-pause' : 'fa-play'}"></i>
                         </button>
                         ${task.executionMode === 'persist' ? `
-                        <button class="kaiz-auto-task-history menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px;" title="Xem History">
+                        <button class="kaiz-auto-task-history menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #3498db;" title="Xem History">
                             <i class="fa-solid fa-eye"></i>
+                        </button>
+                        <button class="kaiz-auto-task-reset menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #9b59b6;" title="Xóa lịch sử (Reset)">
+                            <i class="fa-solid fa-eraser"></i>
                         </button>
                         ` : ''}
                         <button class="kaiz-auto-task-edit menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #f39c12;" title="Sửa">
@@ -169,6 +173,16 @@ export class AutoTaskModal {
             // History
             item.find('.kaiz-auto-task-history').on('click', () => {
                 this.showHistory(task);
+            });
+
+            // Reset
+            item.find('.kaiz-auto-task-reset').on('click', async () => {
+                if (confirm(`Bạn có chắc chắn muốn xóa toàn bộ lịch sử (Reset) của task "${task.name}"?`)) {
+                    if (task.chatId) {
+                        await this.stateManager.db.clearMessages(task.chatId);
+                        toastr.success(`Đã xóa lịch sử của task ${task.name}`);
+                    }
+                }
             });
 
             this.listContainer.append(item);
