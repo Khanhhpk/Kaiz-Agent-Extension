@@ -9506,6 +9506,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                        window.jQuery?.('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
                        window.jQuery?.('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
                    }
+                   else if (event.type === 'tool_confirm') {
+                       // Auto-allow cho Auto Task để không bị kẹt tiến trình
+                       console.log(`[AutoTaskScheduler] Auto-allowing tool ${event.data?.call?.name} (Safe Mode bypassed)`);
+                       event.data?.resolve?.(true);
+                   }
                    // Save to DB on the fly if persist
                    if (task.executionMode === 'persist' && task.chatId) {
                        if (event.type === 'step_end') {

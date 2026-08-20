@@ -173,6 +173,10 @@ export class AutoTaskScheduler {
                         // Update logs real-time if the modal happens to be open
                         (window as any).jQuery?.('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
                         (window as any).jQuery?.('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
+                    } else if (event.type === 'tool_confirm') {
+                        // Auto-allow cho Auto Task để không bị kẹt tiến trình
+                        console.log(`[AutoTaskScheduler] Auto-allowing tool ${event.data?.call?.name} (Safe Mode bypassed)`);
+                        event.data?.resolve?.(true);
                     }
 
                     // Save to DB on the fly if persist
