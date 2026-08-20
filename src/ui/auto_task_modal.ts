@@ -352,16 +352,13 @@ export class AutoTaskModal {
                 }
                 
                 let formatted = '';
-                const openIndex = textContent.indexOf('<agent_cot>');
                 const closeIndex = textContent.indexOf('</agent_cot>');
                 
-                if (openIndex !== -1 && closeIndex !== -1 && closeIndex > openIndex) {
-                    const beforeCot = this.escapeHtml(textContent.substring(0, openIndex).trim());
-                    const cotContent = this.escapeHtml(textContent.substring(openIndex + '<agent_cot>'.length, closeIndex).trim());
+                if (closeIndex !== -1) {
+                    const cotContent = this.escapeHtml(textContent.substring(0, closeIndex).replace('<agent_cot>', '').trim());
                     let restContent = this.escapeHtml(textContent.substring(closeIndex + '</agent_cot>'.length).trim());
                     restContent = restContent.replace(/&lt;tool_call([^&gt;]*)&gt;([\s\S]*?)&lt;\/tool_call&gt;/g, '<div style="background: rgba(0,0,0,0.5); padding: 5px; border-radius: 4px; font-family: monospace; font-size: 11px; margin: 5px 0;">[Tool Call]$2</div>');
                     
-                    if (beforeCot) formatted += `<div>${beforeCot}</div>`;
                     formatted += `<details class="kaiz-cot-block" style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 5px; margin-bottom: 8px; border-left: 3px solid #a29bfe;">
                         <summary style="cursor: pointer; font-size: 12px; font-weight: bold; color: #a29bfe; user-select: none;">
                             <i class="fa-solid fa-brain"></i> Agent Thoughts
