@@ -7,3 +7,4 @@ eslint-report.json
 *_test*.html
 tools_dump.txt
 *.cjs
+.agents/

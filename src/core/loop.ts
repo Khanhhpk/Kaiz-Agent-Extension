@@ -229,6 +229,17 @@ CÁC CÔNG CỤ HIỆN CÓ:
 
         if (excessTokens <= 0) return currentHistory;
 
+        // [TỐI ƯU HÓA]: Tính toán số lượng token của tất cả tin nhắn bằng Promise.all thay vì đợi tuần tự trong vòng lặp
+        const msgTokensCache = await Promise.all(
+            currentHistory.map((m) => {
+                let contentStr = m.content || '';
+                if (m.role === 'agent' || m.role === 'assistant') {
+                    contentStr = this.stripCotAndPrefill(contentStr) || '[Đã xử lý suy luận CoT]';
+                }
+                return getTokenCount(contentStr);
+            })
+        );
+
         for (let i = 0; i < currentHistory.length; i++) {
             if (excessTokens <= 0) break;
 
@@ -248,15 +259,12 @@ CÁC CÔNG CỤ HIỆN CÓ:
             }
 
             if ((isAgentMsg && trimAgent) || (isUserMsg && trimUser) || (isToolResult && trimTool)) {
-                let contentStr = m.content || '';
-                if (isAgentMsg) {
-                    contentStr = this.stripCotAndPrefill(contentStr) || '[Đã xử lý suy luận CoT]';
-                }
-                const msgTokens = await getTokenCount(contentStr);
+                const msgTokens = msgTokensCache[i];
 
                 if (typeof m.content === 'string' && m.content.includes('đã bị lược bỏ do giới hạn Context Limit')) {
                     // Already a placeholder, completely remove it
                     currentHistory.splice(i, 1);
+                    msgTokensCache.splice(i, 1); // keep cache aligned
                     excessTokens -= msgTokens;
                     i--; // adjust index since we removed an element
                 } else {
@@ -271,6 +279,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
                         replacement = '[Tin nhắn của User đã bị lược bỏ do giới hạn Context Limit]';
                     }
 
+                    // Dùng lại hàm đếm token chính xác của ST cho placeholder để đảm bảo độ chuẩn xác 100%. 
+                    // ST có cache nội bộ cho chuỗi trùng lặp nên bước này rất nhanh, không bị overhead.
                     const replacementTokens = await getTokenCount(replacement);
                     const saving = msgTokens - replacementTokens;
 
