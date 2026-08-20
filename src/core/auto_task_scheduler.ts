@@ -6,6 +6,7 @@ export class AutoTaskScheduler {
     private tasks: AutoTask[] = [];
     private timers: Map<number, number> = new Map();
     private eventSourceListener: any = null;
+    private chatChangedListener: any = null;
     private messageCount: number = 0;
     
     constructor(
@@ -35,10 +36,19 @@ export class AutoTaskScheduler {
             try {
                 // SillyTavern global eventSource
                 const ctx = (window as any).SillyTavern?.getContext?.();
-                if (ctx?.eventSource && ctx?.eventTypes?.MESSAGE_RECEIVED) {
+                if (ctx?.eventSource) {
+                    const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
                     this.eventSourceListener = () => this.handleMessageReceived();
-                    ctx.eventSource.on(ctx.eventTypes.MESSAGE_RECEIVED, this.eventSourceListener);
-                    console.log('[AutoTaskScheduler] Hooked to ST MESSAGE_RECEIVED event.');
+                    ctx.eventSource.on(renderEvent, this.eventSourceListener);
+                    
+                    const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
+                    this.chatChangedListener = () => {
+                        this.messageCount = 0;
+                        console.log('[AutoTaskScheduler] Chat changed. Reset messageCount to 0.');
+                    };
+                    ctx.eventSource.on(chatChangedEvent, this.chatChangedListener);
+
+                    console.log(`[AutoTaskScheduler] Hooked to ST ${renderEvent} and ${chatChangedEvent} events.`);
                 }
             } catch (e) {
                 console.warn('[AutoTaskScheduler] Failed to hook into ST eventSource:', e);
@@ -55,13 +65,20 @@ export class AutoTaskScheduler {
         if (this.eventSourceListener) {
             try {
                 const ctx = (window as any).SillyTavern?.getContext?.();
-                if (ctx?.eventSource && ctx?.eventTypes?.MESSAGE_RECEIVED) {
-                    ctx.eventSource.off(ctx.eventTypes.MESSAGE_RECEIVED, this.eventSourceListener);
+                if (ctx?.eventSource) {
+                    const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+                    ctx.eventSource.off(renderEvent, this.eventSourceListener);
+                    
+                    if (this.chatChangedListener) {
+                        const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
+                        ctx.eventSource.off(chatChangedEvent, this.chatChangedListener);
+                    }
                 }
             } catch (e) {
                 // ignore
             }
             this.eventSourceListener = null;
+            this.chatChangedListener = null;
         }
         this.messageCount = 0;
     }
