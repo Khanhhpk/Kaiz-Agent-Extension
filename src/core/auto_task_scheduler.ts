@@ -37,7 +37,7 @@ export class AutoTaskScheduler {
                 // SillyTavern global eventSource
                 const ctx = (window as any).SillyTavern?.getContext?.();
                 if (ctx?.eventSource) {
-                    const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+                    const renderEvent = ctx.eventTypes?.GENERATION_ENDED || 'generation_ended';
                     this.eventSourceListener = () => this.handleMessageReceived();
                     ctx.eventSource.on(renderEvent, this.eventSourceListener);
                     
@@ -66,7 +66,7 @@ export class AutoTaskScheduler {
             try {
                 const ctx = (window as any).SillyTavern?.getContext?.();
                 if (ctx?.eventSource) {
-                    const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+                    const renderEvent = ctx.eventTypes?.GENERATION_ENDED || 'generation_ended';
                     ctx.eventSource.off(renderEvent, this.eventSourceListener);
                     
                     if (this.chatChangedListener) {

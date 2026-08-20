@@ -9387,7 +9387,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    // SillyTavern global eventSource
                    const ctx = window.SillyTavern?.getContext?.();
                    if (ctx?.eventSource) {
-                       const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+                       const renderEvent = ctx.eventTypes?.GENERATION_ENDED || 'generation_ended';
                        this.eventSourceListener = () => this.handleMessageReceived();
                        ctx.eventSource.on(renderEvent, this.eventSourceListener);
                        const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
@@ -9413,7 +9413,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                try {
                    const ctx = window.SillyTavern?.getContext?.();
                    if (ctx?.eventSource) {
-                       const renderEvent = ctx.eventTypes?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+                       const renderEvent = ctx.eventTypes?.GENERATION_ENDED || 'generation_ended';
                        ctx.eventSource.off(renderEvent, this.eventSourceListener);
                        if (this.chatChangedListener) {
                            const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
