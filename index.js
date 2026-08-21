@@ -4838,17 +4838,74 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
    function initCSSManagerTool(engine) {
        engineInstance$1 = engine;
    }
+   /**
+    * Bản đồ CSS selectors phổ biến nhất của SillyTavern
+    * Giúp AI biết chính xác cần target element nào khi viết CSS
+    */
+   const ST_SELECTORS_GUIDE = `## SillyTavern CSS Selectors Guide
+
+### Layout chính
+- \`body\` — Body trang
+- \`#sheld\` — Container chat chính (bao gồm cả sidebar)
+- \`#chat\` — Danh sách tin nhắn (scrollable)
+- \`#top-bar\` — Thanh điều hướng trên cùng
+- \`#top-settings-holder\` — Container settings bên phải
+- \`#form_sheld\` — Khu vực nhập tin nhắn (input area)
+- \`#send_textarea\` — Textarea nhập tin nhắn
+- \`#send_but\` — Nút gửi tin nhắn
+
+### Tin nhắn
+- \`.mes\` — Mỗi tin nhắn (chung)
+- \`.mes[is_user="true"]\` — Tin nhắn của User
+- \`.mes[is_user="false"]\` — Tin nhắn của Bot/Character
+- \`.mes_text\` — Nội dung text của tin nhắn
+- \`.mes_block\` — Block chứa avatar + text
+- \`.mes_buttons\` — Container các nút (edit, copy, delete...)
+- \`.mesAvatarWrapper\` — Wrapper avatar
+- \`.avatar img\` — Ảnh avatar
+
+### Sidebar
+- \`#left-nav-panel\` — Sidebar trái (character list)
+- \`#right-nav-panel\` — Sidebar phải (settings)
+- \`#options\` — Menu options (hamburger)
+
+### Character
+- \`#character_popup\` — Popup thông tin nhân vật
+- \`#avatar_div\` — Container avatar chính
+- \`#rm_print_characters_block\` — Danh sách character cards
+
+### CSS Variables (Có thể thay đổi qua st_theme_manager)
+- \`--SmartThemeBodyColor\` — Màu text chính
+- \`--SmartThemeEmColor\` — Màu text nghiêng
+- \`--SmartThemeQuoteColor\` — Màu quote
+- \`--SmartThemeBlurTintColor\` — Màu tint blur nền
+- \`--SmartThemeChatTintColor\` — Màu tint chat area
+- \`--SmartThemeUserMesBlurTintColor\` — Màu tint tin nhắn user
+- \`--SmartThemeBotMesBlurTintColor\` — Màu tint tin nhắn bot
+- \`--SmartThemeShadowColor\` — Màu shadow
+- \`--SmartThemeBorderColor\` — Màu border
+- \`--SmartThemeBlurStrength\` — Độ mạnh blur (px)
+- \`--SmartThemeFontScale\` — Tỉ lệ font
+- \`--sheldWidth\` — Độ rộng chat container (%)
+
+### Ví dụ CSS phổ biến
+1. Bo tròn avatar: \`.avatar img { border-radius: 50%; }\`
+2. Bubble chat: \`.mes { border-radius: 18px; padding: 12px 16px; margin: 4px 0; }\`
+3. Ẩn sidebar: \`#left-nav-panel { display: none; }\`
+4. Custom font: \`body, .mes_text { font-family: 'Noto Sans', sans-serif; }\`
+5. Gradient background: \`body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); }\`
+`;
    const stCSSManagerTool = {
        schema: {
            name: 'st_css_manager',
-           description: 'Quản lý các stylesheet CSS tuỳ chỉnh. Cho phép inject, sửa, xoá các block CSS vào giao diện SillyTavern. Mỗi style có ID riêng biệt để quản lý. Dùng để thay đổi layout, animation, color scheme, font... của bất kỳ thành phần nào. Mỗi thay đổi đều được snapshot để rollback.',
+           description: 'Quản lý các stylesheet CSS tuỳ chỉnh. Cho phép inject, sửa, xoá các block CSS vào giao diện SillyTavern. Mỗi style có ID riêng biệt để quản lý. Dùng để thay đổi layout, animation, color scheme, font... của bất kỳ thành phần nào. Mỗi thay đổi đều được snapshot để rollback. Dùng action "get_selectors_guide" để xem bản đồ CSS selectors của SillyTavern.',
            parameters: {
                type: 'object',
                properties: {
                    action: {
                        type: 'string',
-                       description: 'Hành động cần thực hiện: "inject" (chèn style mới), "update" (cập nhật style đã có), "remove" (xoá style), "list" (liệt kê tất cả custom styles)',
-                       enum: ['inject', 'update', 'remove', 'list'],
+                       description: 'Hành động cần thực hiện: "inject" (chèn style mới), "update" (cập nhật style đã có), "remove" (xoá style), "list" (liệt kê tất cả custom styles), "get_selectors_guide" (xem bản đồ CSS selectors phổ biến của SillyTavern)',
+                       enum: ['inject', 'update', 'remove', 'list', 'get_selectors_guide'],
                    },
                    style_id: {
                        type: 'string',
@@ -4912,6 +4969,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                            output += `• [${s.id}]: ${s.preview}\n`;
                        }
                        return { content: output };
+                   }
+                   case 'get_selectors_guide': {
+                       return { content: ST_SELECTORS_GUIDE };
                    }
                    default:
                        return { content: `Lỗi: Action "${action}" không hợp lệ.`, isError: true };
@@ -6737,30 +6797,28 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        async ensureSystemWorkspaces() {
            const workspaces = await this.getAllWorkspaces();
            const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
+           const roleplayPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
+           const roleplayTools = ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input'];
            if (!roleplayWs) {
-               await this.createSystemWorkspace('roleplay', 'Roleplay & Story', `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`, ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input']);
+               await this.createSystemWorkspace('roleplay', 'Roleplay & Story', roleplayPrompt, roleplayTools);
            }
            const modderWs = workspaces.find((w) => w.systemId === 'modder');
+           const modderPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
+           const modderTools = [
+               'get_chat_history', 'get_char_info', 'list_characters', 'edit_character_card',
+               'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook',
+               'get_regex_list', 'get_regex_info', 'manage_regex',
+               'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script',
+               'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup'
+           ];
            if (!modderWs) {
-               await this.createSystemWorkspace('modder', 'Modding & Editor', `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`, [
-                   'get_chat_history',
-                   'get_char_info',
-                   'list_characters',
-                   'edit_character_card',
-                   'get_lorebook_info',
-                   'manage_lorebook_entry',
-                   'manage_worldbook',
-                   'get_regex_list',
-                   'get_regex_info',
-                   'manage_regex',
-                   'get_tavern_helper_scripts',
-                   'get_tavern_helper_script_info',
-                   'manage_tavern_helper_script',
-                   'get_user_persona',
-                   'edit_user_persona',
-                   'manage_chat_text',
-                   'manage_backup',
-               ]);
+               await this.createSystemWorkspace('modder', 'Modding & Editor', modderPrompt, modderTools);
+           }
+           const uiDesignerWs = workspaces.find((w) => w.systemId === 'ui_designer');
+           const uiDesignerPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+           const uiDesignerTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
+           if (!uiDesignerWs) {
+               await this.createSystemWorkspace('ui_designer', 'UI & Theme Designer', uiDesignerPrompt, uiDesignerTools);
            }
        }
        async createSystemWorkspace(systemId, name, systemPrompt, toolNames) {
@@ -6892,24 +6950,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                defaultName = 'Modding & Editor';
                defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
                defaultTools = [
-                   'get_chat_history',
-                   'get_char_info',
-                   'list_characters',
-                   'edit_character_card',
-                   'get_lorebook_info',
-                   'manage_lorebook_entry',
-                   'manage_worldbook',
-                   'get_regex_list',
-                   'get_regex_info',
-                   'manage_regex',
-                   'get_tavern_helper_scripts',
-                   'get_tavern_helper_script_info',
-                   'manage_tavern_helper_script',
-                   'get_user_persona',
-                   'edit_user_persona',
-                   'manage_chat_text',
-                   'manage_backup',
+                   'get_chat_history', 'get_char_info', 'list_characters', 'edit_character_card',
+                   'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook',
+                   'get_regex_list', 'get_regex_info', 'manage_regex',
+                   'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script',
+                   'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup'
                ];
+           }
+           else if (ws.systemId === 'ui_designer') {
+               defaultName = 'UI & Theme Designer';
+               defaultPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+               defaultTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
            }
            const toolsConfig = {};
            defaultTools.forEach((t) => (toolsConfig[t] = true));
@@ -10825,6 +10876,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            if (themeJson.shadow_width !== undefined) {
                variables['--SmartThemeShadowWidth'] = themeJson.shadow_width + 'px';
            }
+           if (themeJson.chat_width !== undefined) {
+               variables['--sheldWidth'] = themeJson.chat_width + '%';
+           }
            // Áp dụng CSS variables
            if (Object.keys(variables).length > 0) {
                await this.setThemeVariables(variables);
@@ -10838,7 +10892,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            const root = document.documentElement;
            const computedStyle = getComputedStyle(root);
            const info = {
-               // Màu sắc
+               // Màu sắc cốt lõi
                main_text_color: computedStyle.getPropertyValue('--SmartThemeBodyColor').trim(),
                italics_text_color: computedStyle.getPropertyValue('--SmartThemeEmColor').trim(),
                underline_text_color: computedStyle.getPropertyValue('--SmartThemeUnderlineColor').trim(),
@@ -10849,8 +10903,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                bot_mes_blur_tint_color: computedStyle.getPropertyValue('--SmartThemeBotMesBlurTintColor').trim(),
                shadow_color: computedStyle.getPropertyValue('--SmartThemeShadowColor').trim(),
                border_color: computedStyle.getPropertyValue('--SmartThemeBorderColor').trim(),
+               // Layout & effects
                blur_strength: computedStyle.getPropertyValue('--SmartThemeBlurStrength').trim(),
                font_scale: computedStyle.getPropertyValue('--SmartThemeFontScale').trim(),
+               chat_width: computedStyle.getPropertyValue('--sheldWidth').trim(),
+               // Font
+               font_family: computedStyle.getPropertyValue('--mainFontFamily').trim() || computedStyle.fontFamily,
+               // Body background
+               body_background: getComputedStyle(document.body).backgroundColor,
                // Trạng thái customization hiện tại
                active_custom_styles: this.listCSS(),
                active_injected_elements: this.listElements(),
@@ -10891,6 +10951,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            // Gỡ tất cả injected elements
            const elements = document.querySelectorAll('[data-kaiz-injected="true"]');
            elements.forEach((el) => el.remove());
+           // Gỡ tất cả theme variables đã được set trên :root
+           const snapshots = await this.db.getAllSnapshots();
+           const root = document.documentElement;
+           for (const snap of snapshots) {
+               if (snap.type === 'theme' && snap.themeData) {
+                   for (const name of Object.keys(snap.themeData.previousValues)) {
+                       root.style.removeProperty(name);
+                   }
+               }
+           }
            // Xoá tất cả snapshots
            await this.db.clearAllSnapshots();
        }
@@ -10992,6 +11062,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        }
    }
 
+   // Default theme JSONs — cần import để reload khi reset
    class UICustomizationModal {
        db;
        uiEngine;
@@ -11043,9 +11114,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                if (!file)
                    return;
                const reader = new FileReader();
-               reader.onload = async (e) => {
+               reader.onload = async (evt) => {
                    try {
-                       const content = e.target?.result;
+                       const content = evt.target?.result;
                        // Validate JSON
                        JSON.parse(content);
                        const name = file.name.replace('.json', '');
@@ -11066,17 +11137,33 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                };
                reader.readAsText(file);
            });
-           // Theme Library: Khôi phục Default
+           // Theme Library: Khôi phục Default — nạp lại ngay lập tức
            $('#kaiz-theme-reset-btn').off('click').on('click', async () => {
                if (confirm('Bạn có chắc muốn xóa tất cả custom themes và khôi phục về mặc định?')) {
                    await this.db.clearThemeLibrary();
-                   // Import tool `ensureDefaultThemes` functionality is triggered next time `get_reference_themes` runs, 
-                   // but since we want it immediately visible, we will trigger it via tool or manually here.
-                   // We'll just clear it and tell user they'll be auto-loaded next time.
-                   alert('Đã xóa tất cả themes. Các theme mặc định sẽ được nạp lại tự động khi AI yêu cầu.');
+                   // Nạp lại 2 theme mặc định ngay lập tức
+                   await this.loadDefaultThemes();
+                   alert('Đã khôi phục thư viện về mặc định (2 theme mẫu).');
                    await this.renderThemeLibrary();
                }
            });
+       }
+       /**
+        * Nạp 2 theme mặc định vào DB (dùng khi reset)
+        */
+       async loadDefaultThemes() {
+           const defaults = [
+               { name: 'Catppuccin Nights', json: catppuccinTheme },
+               { name: 'SillyTavern Redesign', json: redesignTheme },
+           ];
+           for (const d of defaults) {
+               await this.db.addThemeReference({
+                   name: d.name,
+                   themeJson: JSON.stringify(d.json),
+                   isDefault: true,
+                   addedAt: Date.now(),
+               });
+           }
        }
        async renderSnapshots() {
            const $ = jQuery;
@@ -11087,7 +11174,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                list.append('<div style="color: #aaa; font-style: italic; text-align: center; padding: 20px;">Chưa có lịch sử thay đổi giao diện nào.</div>');
                return;
            }
-           // Sort descending by timestamp
+           // Sort descending by timestamp (getAllSnapshots đã sort nhưng chắc chắn)
            snapshots.sort((a, b) => b.timestamp - a.timestamp);
            snapshots.forEach((snap) => {
                const date = new Date(snap.timestamp).toLocaleString();
@@ -11105,20 +11192,53 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    icon = 'fa-palette';
                    color = '#f1c40f';
                }
-               const statusHtml = snap.applied
-                   ? '<span style="color: #2ecc71; font-size: 11px; margin-left: auto;">[Đang Áp dụng]</span>'
-                   : '<span style="color: #e74c3c; font-size: 11px; margin-left: auto;">[Đã Rollback]</span>';
+               const statusBadge = snap.applied
+                   ? '<span style="color: #2ecc71; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(46, 204, 113, 0.15);">Đang Áp dụng</span>'
+                   : '<span style="color: #e74c3c; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(231, 76, 60, 0.15);">Đã Rollback</span>';
+               // Nút undo riêng cho từng snapshot (chỉ hiển thị cho snapshot đang applied)
+               const undoBtn = snap.applied
+                   ? `<button class="kaiz-snap-undo-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #f1c40f; border-color: rgba(241, 196, 15, 0.3);" title="Rollback riêng bước này"><i class="fa-solid fa-rotate-left"></i></button>`
+                   : '';
+               // Nút xoá
+               const deleteBtn = `<button class="kaiz-snap-del-btn menu_button interactable" data-snapshot-id="${snap.id}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3);" title="Xoá khỏi lịch sử"><i class="fa-solid fa-trash"></i></button>`;
                const item = $(`
                 <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid ${icon}" style="color: ${color}; font-size: 18px; width: 24px; text-align: center;"></i>
+                    <i class="fa-solid ${icon}" style="color: ${color}; font-size: 18px; width: 24px; text-align: center; flex-shrink: 0;"></i>
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${snap.label}</div>
-                        <div style="font-size: 11px; color: #aaa;">${date}</div>
+                        <div style="font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 6px; margin-top: 2px;">${date} ${statusBadge}</div>
                     </div>
-                    ${statusHtml}
+                    <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                        ${undoBtn}
+                        ${deleteBtn}
+                    </div>
                 </div>
             `);
                list.append(item);
+           });
+           // Bind event: Undo từng snapshot
+           list.find('.kaiz-snap-undo-btn').on('click', async (e) => {
+               const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
+               if (!snapshotId)
+                   return;
+               // Undo chỉ bước gần nhất (đã active) — engine.undo() lấy bước mới nhất
+               const result = await this.uiEngine.undo();
+               if (result) {
+                   await this.renderSnapshots();
+               }
+           });
+           // Bind event: Xoá từng snapshot
+           list.find('.kaiz-snap-del-btn').on('click', async (e) => {
+               const idStr = $(e.currentTarget).attr('data-snapshot-id');
+               if (!idStr)
+                   return;
+               const id = parseInt(idStr, 10);
+               if (isNaN(id))
+                   return;
+               if (confirm('Xoá bước này khỏi lịch sử? (Không rollback)')) {
+                   await this.db.deleteSnapshot(id);
+                   await this.renderSnapshots();
+               }
            });
        }
        async renderThemeLibrary() {
@@ -11127,19 +11247,21 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            list.empty();
            const themes = await this.db.getAllThemeReferences();
            if (themes.length === 0) {
-               list.append('<div style="color: #aaa; font-style: italic; text-align: center; padding: 20px;">Thư viện trống. Theme mặc định sẽ tự nạp khi cần.</div>');
+               list.append('<div style="color: #aaa; font-style: italic; text-align: center; padding: 20px;">Thư viện trống. Bấm "Khôi phục Default" để nạp lại theme mẫu.</div>');
                return;
            }
            themes.forEach((theme) => {
                const date = new Date(theme.addedAt).toLocaleString();
                const defaultTag = theme.isDefault ? '<span style="background: rgba(46, 204, 113, 0.2); color: #2ecc71; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 5px;">Mặc định</span>' : '';
+               // Hiển thị kích thước theme JSON
+               const sizeKB = (theme.themeJson.length / 1024).toFixed(1);
                const item = $(`
                 <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-weight: 600; font-size: 14px; color: #fff;">${theme.name} ${defaultTag}</div>
-                        <div style="font-size: 11px; color: #aaa;">Đã thêm: ${date}</div>
+                        <div style="font-size: 11px; color: #aaa;">Đã thêm: ${date} · ${sizeKB} KB</div>
                     </div>
-                    ${!theme.isDefault ? `<button class="kaiz-del-theme-btn menu_button interactable" data-id="${theme.id}" style="padding: 4px 8px; color: #ff6b6b; height: auto;"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    <button class="kaiz-del-theme-btn menu_button interactable" data-id="${theme.id}" style="padding: 4px 8px; color: #ff6b6b; height: auto;" title="Xoá theme này"><i class="fa-solid fa-trash"></i></button>
                 </div>
             `);
                list.append(item);

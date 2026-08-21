@@ -289,6 +289,9 @@ export class UICustomizationEngine {
         if (themeJson.shadow_width !== undefined) {
             variables['--SmartThemeShadowWidth'] = themeJson.shadow_width + 'px';
         }
+        if (themeJson.chat_width !== undefined) {
+            variables['--sheldWidth'] = themeJson.chat_width + '%';
+        }
 
         // Áp dụng CSS variables
         if (Object.keys(variables).length > 0) {
@@ -306,7 +309,7 @@ export class UICustomizationEngine {
         const computedStyle = getComputedStyle(root);
 
         const info: Record<string, any> = {
-            // Màu sắc
+            // Màu sắc cốt lõi
             main_text_color: computedStyle.getPropertyValue('--SmartThemeBodyColor').trim(),
             italics_text_color: computedStyle.getPropertyValue('--SmartThemeEmColor').trim(),
             underline_text_color: computedStyle.getPropertyValue('--SmartThemeUnderlineColor').trim(),
@@ -317,8 +320,14 @@ export class UICustomizationEngine {
             bot_mes_blur_tint_color: computedStyle.getPropertyValue('--SmartThemeBotMesBlurTintColor').trim(),
             shadow_color: computedStyle.getPropertyValue('--SmartThemeShadowColor').trim(),
             border_color: computedStyle.getPropertyValue('--SmartThemeBorderColor').trim(),
+            // Layout & effects
             blur_strength: computedStyle.getPropertyValue('--SmartThemeBlurStrength').trim(),
             font_scale: computedStyle.getPropertyValue('--SmartThemeFontScale').trim(),
+            chat_width: computedStyle.getPropertyValue('--sheldWidth').trim(),
+            // Font
+            font_family: computedStyle.getPropertyValue('--mainFontFamily').trim() || computedStyle.fontFamily,
+            // Body background
+            body_background: getComputedStyle(document.body).backgroundColor,
             // Trạng thái customization hiện tại
             active_custom_styles: this.listCSS(),
             active_injected_elements: this.listElements(),
@@ -368,6 +377,17 @@ export class UICustomizationEngine {
         // Gỡ tất cả injected elements
         const elements = document.querySelectorAll('[data-kaiz-injected="true"]');
         elements.forEach((el) => el.remove());
+
+        // Gỡ tất cả theme variables đã được set trên :root
+        const snapshots = await this.db.getAllSnapshots();
+        const root = document.documentElement;
+        for (const snap of snapshots) {
+            if (snap.type === 'theme' && snap.themeData) {
+                for (const name of Object.keys(snap.themeData.previousValues)) {
+                    root.style.removeProperty(name);
+                }
+            }
+        }
 
         // Xoá tất cả snapshots
         await this.db.clearAllSnapshots();

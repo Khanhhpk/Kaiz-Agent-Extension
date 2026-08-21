@@ -1,6 +1,10 @@
 import { KaizDB } from '../core/db';
 import { UICustomizationEngine } from '../core/ui_customization_engine';
 
+// Default theme JSONs — cần import để reload khi reset
+import catppuccinTheme from '../core/tools/catppuccin';
+import redesignTheme from '../core/tools/redesign';
+
 declare const jQuery: any;
 
 export class UICustomizationModal {
@@ -62,9 +66,9 @@ export class UICustomizationModal {
             if (!file) return;
 
             const reader = new FileReader();
-            reader.onload = async (e) => {
+            reader.onload = async (evt: any) => {
                 try {
-                    const content = e.target?.result as string;
+                    const content = evt.target?.result as string;
                     // Validate JSON
                     JSON.parse(content);
                     const name = file.name.replace('.json', '');
@@ -87,17 +91,34 @@ export class UICustomizationModal {
             reader.readAsText(file);
         });
 
-        // Theme Library: Khôi phục Default
+        // Theme Library: Khôi phục Default — nạp lại ngay lập tức
         $('#kaiz-theme-reset-btn').off('click').on('click', async () => {
             if (confirm('Bạn có chắc muốn xóa tất cả custom themes và khôi phục về mặc định?')) {
                 await this.db.clearThemeLibrary();
-                // Import tool `ensureDefaultThemes` functionality is triggered next time `get_reference_themes` runs, 
-                // but since we want it immediately visible, we will trigger it via tool or manually here.
-                // We'll just clear it and tell user they'll be auto-loaded next time.
-                alert('Đã xóa tất cả themes. Các theme mặc định sẽ được nạp lại tự động khi AI yêu cầu.');
+                // Nạp lại 2 theme mặc định ngay lập tức
+                await this.loadDefaultThemes();
+                alert('Đã khôi phục thư viện về mặc định (2 theme mẫu).');
                 await this.renderThemeLibrary();
             }
         });
+    }
+
+    /**
+     * Nạp 2 theme mặc định vào DB (dùng khi reset)
+     */
+    private async loadDefaultThemes(): Promise<void> {
+        const defaults = [
+            { name: 'Catppuccin Nights', json: catppuccinTheme },
+            { name: 'SillyTavern Redesign', json: redesignTheme },
+        ];
+        for (const d of defaults) {
+            await this.db.addThemeReference({
+                name: d.name,
+                themeJson: JSON.stringify(d.json),
+                isDefault: true,
+                addedAt: Date.now(),
+            });
+        }
     }
 
     private async renderSnapshots() {
@@ -111,7 +132,7 @@ export class UICustomizationModal {
             return;
         }
 
-        // Sort descending by timestamp
+        // Sort descending by timestamp (getAllSnapshots đã sort nhưng chắc chắn)
         snapshots.sort((a, b) => b.timestamp - a.timestamp);
 
         snapshots.forEach((snap) => {
@@ -122,21 +143,56 @@ export class UICustomizationModal {
             else if (snap.type === 'element') { icon = 'fa-cube'; color = '#2ecc71'; }
             else if (snap.type === 'theme') { icon = 'fa-palette'; color = '#f1c40f'; }
 
-            const statusHtml = snap.applied 
-                ? '<span style="color: #2ecc71; font-size: 11px; margin-left: auto;">[Đang Áp dụng]</span>'
-                : '<span style="color: #e74c3c; font-size: 11px; margin-left: auto;">[Đã Rollback]</span>';
+            const statusBadge = snap.applied 
+                ? '<span style="color: #2ecc71; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(46, 204, 113, 0.15);">Đang Áp dụng</span>'
+                : '<span style="color: #e74c3c; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(231, 76, 60, 0.15);">Đã Rollback</span>';
+
+            // Nút undo riêng cho từng snapshot (chỉ hiển thị cho snapshot đang applied)
+            const undoBtn = snap.applied 
+                ? `<button class="kaiz-snap-undo-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #f1c40f; border-color: rgba(241, 196, 15, 0.3);" title="Rollback riêng bước này"><i class="fa-solid fa-rotate-left"></i></button>`
+                : '';
+            
+            // Nút xoá
+            const deleteBtn = `<button class="kaiz-snap-del-btn menu_button interactable" data-snapshot-id="${snap.id}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3);" title="Xoá khỏi lịch sử"><i class="fa-solid fa-trash"></i></button>`;
 
             const item = $(`
                 <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 10px;">
-                    <i class="fa-solid ${icon}" style="color: ${color}; font-size: 18px; width: 24px; text-align: center;"></i>
+                    <i class="fa-solid ${icon}" style="color: ${color}; font-size: 18px; width: 24px; text-align: center; flex-shrink: 0;"></i>
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${snap.label}</div>
-                        <div style="font-size: 11px; color: #aaa;">${date}</div>
+                        <div style="font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 6px; margin-top: 2px;">${date} ${statusBadge}</div>
                     </div>
-                    ${statusHtml}
+                    <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                        ${undoBtn}
+                        ${deleteBtn}
+                    </div>
                 </div>
             `);
             list.append(item);
+        });
+
+        // Bind event: Undo từng snapshot
+        list.find('.kaiz-snap-undo-btn').on('click', async (e: any) => {
+            const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
+            if (!snapshotId) return;
+            // Undo chỉ bước gần nhất (đã active) — engine.undo() lấy bước mới nhất
+            const result = await this.uiEngine.undo();
+            if (result) {
+                await this.renderSnapshots();
+            }
+        });
+
+        // Bind event: Xoá từng snapshot
+        list.find('.kaiz-snap-del-btn').on('click', async (e: any) => {
+            const idStr = $(e.currentTarget).attr('data-snapshot-id');
+            if (!idStr) return;
+            const id = parseInt(idStr, 10);
+            if (isNaN(id)) return;
+            
+            if (confirm('Xoá bước này khỏi lịch sử? (Không rollback)')) {
+                await this.db.deleteSnapshot(id);
+                await this.renderSnapshots();
+            }
         });
     }
 
@@ -147,7 +203,7 @@ export class UICustomizationModal {
 
         const themes = await this.db.getAllThemeReferences();
         if (themes.length === 0) {
-            list.append('<div style="color: #aaa; font-style: italic; text-align: center; padding: 20px;">Thư viện trống. Theme mặc định sẽ tự nạp khi cần.</div>');
+            list.append('<div style="color: #aaa; font-style: italic; text-align: center; padding: 20px;">Thư viện trống. Bấm "Khôi phục Default" để nạp lại theme mẫu.</div>');
             return;
         }
 
@@ -155,13 +211,16 @@ export class UICustomizationModal {
             const date = new Date(theme.addedAt).toLocaleString();
             const defaultTag = theme.isDefault ? '<span style="background: rgba(46, 204, 113, 0.2); color: #2ecc71; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 5px;">Mặc định</span>' : '';
             
+            // Hiển thị kích thước theme JSON
+            const sizeKB = (theme.themeJson.length / 1024).toFixed(1);
+            
             const item = $(`
                 <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="flex: 1; min-width: 0;">
                         <div style="font-weight: 600; font-size: 14px; color: #fff;">${theme.name} ${defaultTag}</div>
-                        <div style="font-size: 11px; color: #aaa;">Đã thêm: ${date}</div>
+                        <div style="font-size: 11px; color: #aaa;">Đã thêm: ${date} · ${sizeKB} KB</div>
                     </div>
-                    ${!theme.isDefault ? `<button class="kaiz-del-theme-btn menu_button interactable" data-id="${theme.id}" style="padding: 4px 8px; color: #ff6b6b; height: auto;"><i class="fa-solid fa-trash"></i></button>` : ''}
+                    <button class="kaiz-del-theme-btn menu_button interactable" data-id="${theme.id}" style="padding: 4px 8px; color: #ff6b6b; height: auto;" title="Xoá theme này"><i class="fa-solid fa-trash"></i></button>
                 </div>
             `);
             list.append(item);
