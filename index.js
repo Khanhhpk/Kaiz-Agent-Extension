@@ -7283,6 +7283,20 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                request.onerror = () => reject(request.error);
            });
        }
+       async getSnapshotById(snapshotId) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const index = store.index('snapshotId');
+               const req = index.get(snapshotId);
+               req.onsuccess = () => {
+                   resolve(req.result || null);
+               };
+               req.onerror = () => reject(req.error);
+           });
+       }
        async getActiveSnapshots() {
            const all = await this.getAllSnapshots();
            return all.filter((s) => s.applied === true);
@@ -10930,6 +10944,32 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            await this.db.markSnapshotRolledBack(snapshot.snapshotId);
            return snapshot;
        }
+       async undoSpecific(snapshotId) {
+           const snapshot = await this.db.getSnapshotById(snapshotId);
+           if (!snapshot || !snapshot.applied)
+               return false;
+           await this.applyRollback(snapshot);
+           await this.db.markSnapshotRolledBack(snapshot.snapshotId);
+           return true;
+       }
+       async rollbackTo(snapshotId) {
+           const activeSnapshots = await this.db.getActiveSnapshots();
+           if (activeSnapshots.length === 0)
+               return 0;
+           const targetIndex = activeSnapshots.findIndex(s => s.snapshotId === snapshotId);
+           if (targetIndex === -1)
+               return 0;
+           let count = 0;
+           // activeSnapshots được sắp xếp từ mới nhất (0) đến cũ nhất.
+           // Undo từ mới nhất (0) cho đến trước targetIndex (không undo targetIndex)
+           for (let i = 0; i < targetIndex; i++) {
+               const snapshot = activeSnapshots[i];
+               await this.applyRollback(snapshot);
+               await this.db.markSnapshotRolledBack(snapshot.snapshotId);
+               count++;
+           }
+           return count;
+       }
        async rollbackAll() {
            const activeSnapshots = await this.db.getActiveSnapshots();
            if (activeSnapshots.length === 0)
@@ -11197,7 +11237,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    : '<span style="color: #e74c3c; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(231, 76, 60, 0.15);">Đã Rollback</span>';
                // Nút undo riêng cho từng snapshot (chỉ hiển thị cho snapshot đang applied)
                const undoBtn = snap.applied
-                   ? `<button class="kaiz-snap-undo-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #f1c40f; border-color: rgba(241, 196, 15, 0.3);" title="Rollback riêng bước này"><i class="fa-solid fa-rotate-left"></i></button>`
+                   ? `<button class="kaiz-snap-undo-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #f1c40f; border-color: rgba(241, 196, 15, 0.3);" title="Gỡ riêng thay đổi này (Cherry-pick)"><i class="fa-solid fa-eraser"></i></button>`
+                   : '';
+               // Nút rollback về điểm này
+               const rollbackToBtn = snap.applied
+                   ? `<button class="kaiz-snap-rollback-to-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #3498db; border-color: rgba(52, 152, 219, 0.3);" title="Rollback lịch sử về điểm này (Xoá các thay đổi mới hơn)"><i class="fa-solid fa-clock-rotate-left"></i></button>`
                    : '';
                // Nút xoá
                const deleteBtn = `<button class="kaiz-snap-del-btn menu_button interactable" data-snapshot-id="${snap.id}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3);" title="Xoá khỏi lịch sử"><i class="fa-solid fa-trash"></i></button>`;
@@ -11209,6 +11253,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         <div style="font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 6px; margin-top: 2px;">${date} ${statusBadge}</div>
                     </div>
                     <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                        ${rollbackToBtn}
                         ${undoBtn}
                         ${deleteBtn}
                     </div>
@@ -11221,10 +11266,25 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
                if (!snapshotId)
                    return;
-               // Undo chỉ bước gần nhất (đã active) — engine.undo() lấy bước mới nhất
-               const result = await this.uiEngine.undo();
+               // Rollback trực tiếp snapshot này (cherry-pick undo)
+               const result = await this.uiEngine.undoSpecific(snapshotId);
                if (result) {
                    await this.renderSnapshots();
+               }
+           });
+           // Bind event: Rollback về điểm này
+           list.find('.kaiz-snap-rollback-to-btn').on('click', async (e) => {
+               const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
+               if (!snapshotId)
+                   return;
+               if (confirm('Khôi phục lịch sử về thời điểm này? (Tất cả các thay đổi mới hơn sẽ bị gỡ bỏ)')) {
+                   const count = await this.uiEngine.rollbackTo(snapshotId);
+                   if (count > 0) {
+                       await this.renderSnapshots();
+                   }
+                   else {
+                       toastr.info('Đây đã là phiên bản mới nhất.');
+                   }
                }
            });
            // Bind event: Xoá từng snapshot

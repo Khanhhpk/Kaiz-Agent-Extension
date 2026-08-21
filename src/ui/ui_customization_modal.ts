@@ -1,6 +1,8 @@
 import { KaizDB } from '../core/db';
 import { UICustomizationEngine } from '../core/ui_customization_engine';
 
+declare const toastr: any;
+
 // Default theme JSONs — cần import để reload khi reset
 import catppuccinTheme from '../core/tools/catppuccin';
 import redesignTheme from '../core/tools/redesign';
