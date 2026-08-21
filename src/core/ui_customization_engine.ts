@@ -361,6 +361,25 @@ export class UICustomizationEngine {
         return true;
     }
 
+    public async rollbackTo(snapshotId: string): Promise<number> {
+        const activeSnapshots = await this.db.getActiveSnapshots();
+        if (activeSnapshots.length === 0) return 0;
+
+        const targetIndex = activeSnapshots.findIndex(s => s.snapshotId === snapshotId);
+        if (targetIndex === -1) return 0;
+
+        let count = 0;
+        // activeSnapshots được sắp xếp từ mới nhất (0) đến cũ nhất.
+        // Undo từ mới nhất (0) cho đến trước targetIndex (không undo targetIndex)
+        for (let i = 0; i < targetIndex; i++) {
+            const snapshot = activeSnapshots[i];
+            await this.applyRollback(snapshot);
+            await this.db.markSnapshotRolledBack(snapshot.snapshotId);
+            count++;
+        }
+        return count;
+    }
+
     public async rollbackAll(): Promise<number> {
         const activeSnapshots = await this.db.getActiveSnapshots();
         if (activeSnapshots.length === 0) return 0;

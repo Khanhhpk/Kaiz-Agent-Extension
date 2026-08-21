@@ -149,7 +149,12 @@ export class UICustomizationModal {
 
             // Nút undo riêng cho từng snapshot (chỉ hiển thị cho snapshot đang applied)
             const undoBtn = snap.applied 
-                ? `<button class="kaiz-snap-undo-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #f1c40f; border-color: rgba(241, 196, 15, 0.3);" title="Rollback riêng bước này"><i class="fa-solid fa-rotate-left"></i></button>`
+                ? `<button class="kaiz-snap-undo-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #f1c40f; border-color: rgba(241, 196, 15, 0.3);" title="Gỡ riêng thay đổi này (Cherry-pick)"><i class="fa-solid fa-eraser"></i></button>`
+                : '';
+                
+            // Nút rollback về điểm này
+            const rollbackToBtn = snap.applied 
+                ? `<button class="kaiz-snap-rollback-to-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #3498db; border-color: rgba(52, 152, 219, 0.3);" title="Rollback lịch sử về điểm này (Xoá các thay đổi mới hơn)"><i class="fa-solid fa-clock-rotate-left"></i></button>`
                 : '';
             
             // Nút xoá
@@ -163,6 +168,7 @@ export class UICustomizationModal {
                         <div style="font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 6px; margin-top: 2px;">${date} ${statusBadge}</div>
                     </div>
                     <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                        ${rollbackToBtn}
                         ${undoBtn}
                         ${deleteBtn}
                     </div>
@@ -179,6 +185,20 @@ export class UICustomizationModal {
             const result = await this.uiEngine.undoSpecific(snapshotId);
             if (result) {
                 await this.renderSnapshots();
+            }
+        });
+        
+        // Bind event: Rollback về điểm này
+        list.find('.kaiz-snap-rollback-to-btn').on('click', async (e: any) => {
+            const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
+            if (!snapshotId) return;
+            if (confirm('Khôi phục lịch sử về thời điểm này? (Tất cả các thay đổi mới hơn sẽ bị gỡ bỏ)')) {
+                const count = await this.uiEngine.rollbackTo(snapshotId);
+                if (count > 0) {
+                    await this.renderSnapshots();
+                } else {
+                    toastr.info('Đây đã là phiên bản mới nhất.');
+                }
             }
         });
 
