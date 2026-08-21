@@ -632,7 +632,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            // --- END SAFE MODE CHECK ---
                            await onEvent({ type: 'tool_call', data: call });
                            let result;
-                           if (call.parseError) {
+                           // --- TOOLS CONFIG CHECK (Chặn tool bị tắt) ---
+                           if (toolsConfigOverride && toolsConfigOverride[call.name] === false) {
+                               result = {
+                                   content: `Error: Permission denied. Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt của tiến trình này. Vui lòng thử cách khác.`,
+                                   isError: true
+                               };
+                           }
+                           else if (call.parseError) {
                                // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
                                result = { content: call.parseError, isError: true };
                            }
@@ -4594,6 +4601,502 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        },
    };
 
+   var catppuccinTheme = {
+       "name": "Catppuccin Nights",
+       "blur_strength": 10,
+       "main_text_color": "rgba(205, 214, 244, 1)",
+       "italics_text_color": "rgba(166, 173, 200, 1)",
+       "underline_text_color": "rgba(245, 194, 231, 1)",
+       "quote_text_color": "rgba(180, 190, 254, 1)",
+       "blur_tint_color": "rgba(24, 24, 37, 1)",
+       "chat_tint_color": "rgba(30, 30, 46, 0.8)",
+       "user_mes_blur_tint_color": "rgba(17, 17, 27, 0.5)",
+       "bot_mes_blur_tint_color": "rgba(17, 17, 27, 0.5)",
+       "shadow_color": "rgba(17, 17, 27, 1)",
+       "shadow_width": 1,
+       "border_color": "rgba(121, 116, 168, 0)",
+       "font_scale": 1,
+       "fast_ui_mode": false,
+       "waifuMode": false,
+       "avatar_style": 1,
+       "chat_display": 1,
+       "toastr_position": "toast-top-center",
+       "noShadows": false,
+       "chat_width": 58,
+       "timer_enabled": false,
+       "timestamps_enabled": true,
+       "timestamp_model_icon": false,
+       "mesIDDisplay_enabled": false,
+       "hideChatAvatars_enabled": false,
+       "message_token_count_enabled": false,
+       "expand_message_actions": false,
+       "enableZenSliders": false,
+       "enableLabMode": false,
+       "hotswap_enabled": true,
+       "custom_css": "@import url('https://fonts.googleapis.com/css2?family=DynaPuff:wght@400..700&family=Roboto:ital,wght@0,100..900&display=swap');\n\n:root {\n  --custom-theme-style-inputs: [\n  {\n    \"type\": \"color\",\n    \"varId\": \"TopBarBg\",\n    \"displayText\": \"Top bar bg\",\n    \"default\": \"rgba(17, 17, 27, 0.2)\"\n  },\n  {\n    \"type\": \"color\",\n    \"varId\": \"DarkPurple\",\n    \"displayText\": \"Dark grey\",\n    \"default\": \"rgba(49, 50, 68, 1)\"\n  },\n  {\n    \"type\": \"color\",\n    \"varId\": \"MidPurple\",\n    \"displayText\": \"Med. grey\",\n    \"default\": \"rgba(88, 91, 112, 1)\"\n  },\n  {\n    \"type\": \"select\",\n    \"varId\": \"customQR-Position\",\n    \"displayText\": \"QR Button position\",\n    \"default\": \"flex-end\",\n    \"options\": [\n      {\n        \"label\": \"Left\",\n        \"value\": \"flex-start\"\n      },\n      {\n        \"label\": \"Center\",\n        \"value\": \"center\"\n      },\n      {\n        \"label\": \"Right\",\n        \"value\": \"flex-end\"\n      }\n    ]\n  },\n  {\n    \"type\": \"select\",\n    \"varId\": \"headerFont\",\n    \"displayText\": \"Header font\",\n    \"default\": \"'DynaPuff', system-ui\",\n    \"options\": [\n      {\n        \"label\": \"DynaPuff\",\n        \"value\": \"'DynaPuff', system-ui\"\n      },\n      {\n        \"label\": \"Default\",\n        \"value\": \"'Noto Sans', sans-serif\"\n      }\n    ]\n  },\n  {\n    \"type\": \"select\",\n    \"varId\": \"mainFont\",\n    \"displayText\": \"Main body font\",\n    \"default\": \"'Roboto', sans-serif\",\n    \"options\": [\n      {\n        \"label\": \"Roboto\",\n        \"value\": \"'Roboto', sans-serif\"\n      },\n      {\n        \"label\": \"Default\",\n        \"value\": \"'Noto Sans', sans-serif\"\n      }\n    ]\n  },\n  {\n    \"type\": \"slider\",\n    \"varId\": \"borderSize\",\n    \"displayText\": \"Avatar border size\",\n    \"default\": \"3\",\n    \"min\": 0,\n    \"max\": 8,\n    \"step\": 1\n  },\n  {\n    \"type\": \"select\",\n    \"varId\": \"avatarFrame\",\n    \"displayText\": \"Avatar frame color\",\n    \"default\": \"#f5c2e7, #f38ba8, #eba0ac, #fab387, #f9e2af, #a6e3a1, #94e2d5, #89dceb, #74c7ec, #89b4fa, #b4befe, #cba6f7, #f5c2e7\",\n    \"options\": [\n      {\n        \"label\": \"Rainbow\",\n        \"value\": \"#f5c2e7, #f38ba8, #eba0ac, #fab387, #f9e2af, #a6e3a1, #94e2d5, #89dceb, #74c7ec, #89b4fa, #b4befe, #cba6f7, #f5c2e7\"\n      },\n      {\n        \"label\": \"Simple\",\n        \"value\": \"var(--DarkPurple), var(--SmartThemeUnderlineColor), var(--DarkPurple), var(--DarkPurple)\"\n      },\n      {\n        \"label\": \"Golden\",\n        \"value\": \"#ffd700, #ffec8b, #fff8dc, #ffd700, #daa520, #b8860b, #daa520, #ffd700, #ffec8b, #fff8dc, #ffd700\"\n      }\n    ]\n  },\n  {\n    \"type\": \"select\",\n    \"varId\": \"favoriteFrame\",\n    \"displayText\": \"Favorite frame color\",\n    \"default\": \"#ffd700, #ffec8b, #fff8dc, #ffd700, #daa520, #b8860b, #daa520, #ffd700, #ffec8b, #fff8dc, #ffd700\",\n    \"options\": [\n      {\n        \"label\": \"Rainbow\",\n        \"value\": \"#f5c2e7, #f38ba8, #eba0ac, #fab387, #f9e2af, #a6e3a1, #94e2d5, #89dceb, #74c7ec, #89b4fa, #b4befe, #cba6f7, #f5c2e7\"\n      },\n      {\n        \"label\": \"Simple\",\n        \"value\": \"var(--DarkPurple), var(--SmartThemeUnderlineColor), var(--DarkPurple), var(--DarkPurple)\"\n      },\n      {\n        \"label\": \"Golden\",\n        \"value\": \"#ffd700, #ffec8b, #fff8dc, #ffd700, #daa520, #b8860b, #daa520, #ffd700, #ffec8b, #fff8dc, #ffd700\"\n      }\n    ]\n  },\n  {\n    \"type\": \"select\",\n    \"varId\": \"frameAnimation\",\n    \"displayText\": \"Frame animation\",\n    \"default\": \"running\",\n    \"options\": [\n      {\n        \"label\": \"Animated\",\n        \"value\": \"running\"\n      },\n      {\n        \"label\": \"Static\",\n        \"value\": \"paused\"\n      }\n    ]\n  }\n]\n}\n\nbody {\n  font-family: var(--mainFont);\n  font-weight: 500;\n}\n\n:root{\n  --crimson70a: rgba(235, 160, 172, 0.7);\n  --fullred: rgba(243, 139, 168, 1);\n  --warning: rgba(243, 139, 168, 0.9);\n  --okGreen70a: rgba(166, 227, 161, 0.7);\n}\n\n/* SLIDERS */\n\ninput[type=\"range\"]::-webkit-slider-runnable-track {\n  -webkit-appearance: none;\n  appearance: none;\n  background: var(--SmartThemeShadowColor);\n  border-radius: 0.3em;\n}\n\ninput[type=\"range\"]::-webkit-slider-thumb {\n  -webkit-appearance: none;\n  background: var(--SmartThemeEmColor);\n  border-radius: 25%;\n}\n\n::-moz-range-track {\n  height: 0.5em;\n  background: var(--SmartThemeShadowColor);\n  border-radius: 0.3em;\n}\n\n::-moz-range-thumb {\n  background: var(--SmartThemeEmColor);\n  border-radius: 25%;\n  border: none;\n}\n\n::-moz-range-progress {\n  background-color: var(--SmartThemeUnderlineColor);\n  height: 0.5em;\n  border-radius: 0.3em;\n}\n\n/* SCROLLBARS */\n\n@-moz-document url-prefix() {\n  * {\n    scrollbar-width: auto;\n    scrollbar-color: var(--SmartThemeUnderlineColor) transparent;\n  }\n  \n  *:hover {\n    scrollbar-color: var(--SmartThemeUnderlineColor) var(--SmartThemeChatTintColor);\n  }\n}\n\n::-webkit-scrollbar {\n  width: 0.65em;\n  background-color: transparent;\n}\n\n::-webkit-scrollbar-track:hover {\n  background-color: var(--SmartThemeChatTintColor);\n}\n\n::-webkit-scrollbar-thumb:vertical {\n  background-color: var(--SmartThemeUnderlineColor);\n}\n\n::-webkit-scrollbar-thumb:horizontal {\n  background-color: var(--SmartThemeUnderlineColor);\n}\n\n::-webkit-scrollbar-button {\n  display: none;\n}\n\n/* FONT SETTINGS */\n\n.ch_name,\nh1, h2, h3, h4, h5,\n.drawer-header,\n.inline-drawer-header,\n.characterName,\n.welcomePanel .recentChatsTitle,\n.standoutHeader {\n  font-family: var(--headerFont);\n  font-optical-sizing: auto;\n  font-weight: 700;\n  font-style: normal;\n  font-variation-settings: \"wdth\" 100;\n  color: var(--SmartThemeUnderlineColor);\n}\n\n.drawer-header svg,\n.drawer-header .drawer-icon {\n  color: var(--SmartThemeBodyColor);\n  fill: var(--SmartThemeBodyColor);\n}\n\n/* AVATAR FRAME */\n\n@property --a {\n  syntax: '<angle>';\n  initial-value: 0deg;\n  inherits: false;\n}\n\n.avatar img {\n  box-sizing: border-box;\n  border: solid calc(var(--borderSize) * 1px) transparent !important;\n  background: \n    conic-gradient(from var(--a),\n      var(--avatarFrame)\n    ) border-box;\n  animation: border-spin 5s linear infinite;\n  animation-play-state: var(--frameAnimation);\n}\n@keyframes border-spin {\n  to { --a: 360deg; }\n}\n\n/* FAVORITE CHARACTER */\n\n.character_select.is_fav .avatar img,\n.group_select.is_fav .avatar img,\n.group_member.is_fav .avatar img,\n.avatar.is_fav img {\n  background: \n    conic-gradient(from var(--a),\n      var(--favoriteFrame)\n    ) border-box;\n  animation: border-spin 5s linear infinite;\n  animation-play-state: var(--frameAnimation);\n}\n\n.character_select.is_fav .avatar,\n.group_select.is_fav .avatar,\n.group_member.is_fav .avatar,\n.avatar.is_fav {\n  outline: none;\n}\n\n/* MENU TITLE BACKGROUND */\n\n#extensions_settings .inline-drawer-toggle.inline-drawer-header, #extensions_settings2 .inline-drawer-toggle.inline-drawer-header, #user-settings-block h4, .standoutHeader{\n  color: var(--SmartThemeUnderlineColor);\n  background-color: var(--DarkPurple);\n  background-image: \n    radial-gradient(var(--MidPurple) 2px, transparent 2px), \n    radial-gradient(var(--MidPurple) 2px, transparent 2px);\n  background-size: 20px 20px;\n  background-position: 0 0, 10px 10px;\n}\n\n/* TOP BAR */\n\n#top-bar{\n  box-shadow: none;\n  backdrop-filter: blur(var(--SmartThemeBlurStrength));\n  border-radius: 0 0 15px 15px;\n  background-color: var(--TopBarBg);\n}\n\n.drawer-icon.closedIcon {\n  opacity: 0.5;\n}\n\n#leftNavDrawerIcon::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M9.25 14a3 3 0 1 1 0 6a3 3 0 0 1 0-6m5-10a3 3 0 1 0 0 6a3 3 0 0 0 0-6'/%3E%3Cpath fill='%23000' d='M17.166 7.709a3 3 0 0 0-.021-1.5h4.605a.75.75 0 0 1 0 1.5zm-5.81-1.5a3 3 0 0 0-.022 1.5H1.75a.75.75 0 0 1 0-1.5zm-5 10H1.75a.75.75 0 0 0 0 1.5h4.584a3 3 0 0 1 .022-1.5m5.81 1.5h9.584a.75.75 0 0 0 0-1.5h-9.605a3 3 0 0 1 .02 1.5' opacity='0.5'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#API-status-top.fa-plug-circle-exclamation::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M6.333 2h11.334c.31 0 .464 0 .595.012c1.45.133 2.6 1.34 2.727 2.861c.011.137.011.3.011.624V20.26c0 .872-1.059 1.243-1.558.544a.84.84 0 0 0-1.384 0l-.433.606a1.367 1.367 0 0 1-2.25 0a1.367 1.367 0 0 0-2.25 0a1.367 1.367 0 0 1-2.25 0a1.367 1.367 0 0 0-2.25 0a1.367 1.367 0 0 1-2.25 0l-.433-.605a.84.84 0 0 0-1.384 0c-.5.698-1.558.327-1.558-.545V5.497c0-.324 0-.487.011-.624c.127-1.521 1.277-2.728 2.728-2.861C5.869 2 6.024 2 6.333 2' opacity='0.5'/%3E%3Cpath fill='%23000' d='M10.53 7.47a.75.75 0 1 0-1.06 1.06L10.94 10l-1.47 1.47a.75.75 0 1 0 1.06 1.06L12 11.06l1.47 1.47a.75.75 0 1 0 1.06-1.06L13.06 10l1.47-1.47a.75.75 0 0 0-1.06-1.06L12 8.94zM7.5 14.75a.75.75 0 0 0 0 1.5h9a.75.75 0 0 0 0-1.5z'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n.redOverlayGlow {\n  color: #f38ba8 !important;\n  opacity: 0.8 !important;\n  text-shadow: none !important;\n}\n\n#API-status-top.fa-plug::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M7.245 2h9.51c1.159 0 1.738 0 2.206.163a3.05 3.05 0 0 1 1.881 1.936C21 4.581 21 5.177 21 6.37v14.004c0 .858-.985 1.314-1.608.744a.946.946 0 0 0-1.284 0l-.483.442a1.657 1.657 0 0 1-2.25 0a1.657 1.657 0 0 0-2.25 0a1.657 1.657 0 0 1-2.25 0a1.657 1.657 0 0 0-2.25 0a1.657 1.657 0 0 1-2.25 0l-.483-.442a.946.946 0 0 0-1.284 0c-.623.57-1.608.114-1.608-.744V6.37c0-1.193 0-1.79.158-2.27c.3-.913.995-1.629 1.881-1.937C5.507 2 6.086 2 7.245 2' opacity='0.5'/%3E%3Cpath fill='%23000' d='M15.06 8.5a.75.75 0 0 0-1.12-1l-3.011 3.374l-.87-.974a.75.75 0 0 0-1.118 1l1.428 1.6a.75.75 0 0 0 1.119 0zM7.5 14.75a.75.75 0 0 0 0 1.5h9a.75.75 0 0 0 0-1.5z'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n.drawer-icon[title=\"AI Response Formatting\"]::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M1 12c0-5.185 0-7.778 1.61-9.39C4.223 1 6.816 1 12 1s7.778 0 9.39 1.61C23 4.223 23 6.816 23 12s0 7.778-1.61 9.39C19.777 23 17.184 23 12 23s-7.778 0-9.39-1.61C1 19.777 1 17.184 1 12' opacity='0.5'/%3E%3Cpath fill='%23000' d='M13.926 14.302c.245-.191.467-.413.912-.858l5.54-5.54c.134-.134.073-.365-.106-.427a6.1 6.1 0 0 1-2.3-1.449a6.1 6.1 0 0 1-1.45-2.3c-.061-.18-.292-.24-.426-.106l-5.54 5.54c-.445.444-.667.667-.858.912a5 5 0 0 0-.577.932c-.133.28-.233.579-.431 1.175l-.257.77l-.409 1.226l-.382 1.148a.817.817 0 0 0 1.032 1.033l1.15-.383l1.224-.408l.77-.257c.597-.199.895-.298 1.175-.432q.498-.237.933-.576m8.187-8.132a3.028 3.028 0 0 0-4.282-4.283l-.179.178a.73.73 0 0 0-.206.651c.027.15.077.37.168.633a4.9 4.9 0 0 0 1.174 1.863a4.9 4.9 0 0 0 1.862 1.174c.263.09.483.141.633.168c.24.043.48-.035.652-.207z'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#WIDrawerIcon::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M12 20.028V18H8v2.028c0 .277 0 .416.095.472s.224-.006.484-.13l1.242-.593c.088-.042.132-.063.179-.063s.091.02.179.063l1.242.593c.26.124.39.186.484.13c.095-.056.095-.195.095-.472' opacity='0.5'/%3E%3Cpath fill='%23000' d='M8 18h-.574c-1.084 0-1.462.006-1.753.068c-.513.11-.96.347-1.285.667c-.11.108-.164.161-.291.505s-.107.489-.066.78l.022.15c.11.653.31.998.616 1.244c.307.246.737.407 1.55.494c.837.09 1.946.092 3.536.092h4.43c1.59 0 2.7-.001 3.536-.092c.813-.087 1.243-.248 1.55-.494s.506-.591.616-1.243c.091-.548.11-1.241.113-2.171h-8v2.028c0 .277 0 .416-.095.472s-.224-.006-.484-.13l-1.242-.593c-.088-.042-.132-.063-.179-.063s-.091.02-.179.063l-1.242.593c-.26.124-.39.186-.484.13C8 20.444 8 20.305 8 20.028z'/%3E%3Cpath fill='%23000' d='M4.727 2.733c.306-.308.734-.508 1.544-.618C7.105 2.002 8.209 2 9.793 2h4.414c1.584 0 2.688.002 3.522.115c.81.11 1.238.31 1.544.618c.305.308.504.74.613 1.557c.112.84.114 1.955.114 3.552V18H7.426c-1.084 0-1.462.006-1.753.068c-.513.11-.96.347-1.285.667c-.11.108-.164.161-.291.505A1.3 1.3 0 0 0 4 19.7V7.842c0-1.597.002-2.711.114-3.552c.109-.816.308-1.249.613-1.557' opacity='0.5'/%3E%3Cpath fill='%23000' d='M7.25 7A.75.75 0 0 1 8 6.25h8a.75.75 0 0 1 0 1.5H8A.75.75 0 0 1 7.25 7M8 9.75a.75.75 0 0 0 0 1.5h5a.75.75 0 0 0 0-1.5z'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n.drawer-icon[title=\"User Settings\"]::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' fill-rule='evenodd' d='M14.279 2.152C13.909 2 13.439 2 12.5 2s-1.408 0-1.779.152a2 2 0 0 0-1.09 1.083c-.094.223-.13.484-.145.863a1.62 1.62 0 0 1-.796 1.353a1.64 1.64 0 0 1-1.579.008c-.338-.178-.583-.276-.825-.308a2.03 2.03 0 0 0-1.49.396c-.318.242-.553.646-1.022 1.453c-.47.807-.704 1.21-.757 1.605c-.07.526.074 1.058.4 1.479c.148.192.357.353.68.555c.477.297.783.803.783 1.361s-.306 1.064-.782 1.36c-.324.203-.533.364-.682.556a2 2 0 0 0-.399 1.479c.053.394.287.798.757 1.605s.704 1.21 1.022 1.453c.424.323.96.465 1.49.396c.242-.032.487-.13.825-.308a1.64 1.64 0 0 1 1.58.008c.486.28.774.795.795 1.353c.015.38.051.64.145.863c.204.49.596.88 1.09 1.083c.37.152.84.152 1.779.152s1.409 0 1.779-.152a2 2 0 0 0 1.09-1.083c.094-.223.13-.483.145-.863c.02-.558.309-1.074.796-1.353a1.64 1.64 0 0 1 1.579-.008c.338.178.583.276.825.308c.53.07 1.066-.073 1.49-.396c.318-.242.553-.646 1.022-1.453c.47-.807.704-1.21.757-1.605a2 2 0 0 0-.4-1.479c-.148-.192-.357-.353-.68-.555c-.477-.297-.783-.803-.783-1.361s.306-1.064.782-1.36c.324-.203.533-.364.682-.556a2 2 0 0 0 .399-1.479c-.053-.394-.287-.798-.757-1.605s-.704-1.21-1.022-1.453a2.03 2.03 0 0 0-1.49-.396c-.242.032-.487.13-.825.308a1.64 1.64 0 0 1-1.58-.008a1.62 1.62 0 0 1-.795-1.353c-.015-.38-.051-.64-.145-.863a2 2 0 0 0-1.09-1.083' clip-rule='evenodd' opacity='0.5'/%3E%3Cpath fill='%23000' d='M15.523 12c0 1.657-1.354 3-3.023 3s-3.023-1.343-3.023-3S10.83 9 12.5 9s3.023 1.343 3.023 3'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#backgrounds-drawer-toggle .drawer-icon::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M18.512 10.077c0 .738-.625 1.337-1.396 1.337s-1.395-.599-1.395-1.337c0-.739.625-1.338 1.395-1.338s1.396.599 1.396 1.338'/%3E%3Cpath fill='%23000' fill-rule='evenodd' d='M18.036 5.532c-1.06-.137-2.414-.137-4.123-.136h-3.826c-1.71 0-3.064 0-4.123.136c-1.09.14-1.974.437-2.67 1.104S2.29 8.149 2.142 9.195C2 10.21 2 11.508 2 13.147v.1c0 1.64 0 2.937.142 3.953c.147 1.046.456 1.892 1.152 2.559s1.58.963 2.67 1.104c1.06.136 2.414.136 4.123.136h3.826c1.71 0 3.064 0 4.123-.136c1.09-.14 1.974-.437 2.67-1.104s1.005-1.514 1.152-2.559C22 16.184 22 14.886 22 13.248v-.1c0-1.64 0-2.937-.142-3.953c-.147-1.046-.456-1.892-1.152-2.559s-1.58-.963-2.67-1.104M6.15 6.858c-.936.12-1.475.346-1.87.724c-.393.377-.629.894-.755 1.791c-.1.72-.123 1.619-.128 2.795l.47-.395c1.125-.942 2.819-.888 3.875.124l3.99 3.825a1.2 1.2 0 0 0 1.491.124l.278-.187a3.606 3.606 0 0 1 4.34.25l2.407 2.077c.098-.264.173-.579.227-.964c.128-.916.13-2.124.13-3.824s-.002-2.909-.13-3.825c-.126-.897-.362-1.414-.756-1.791c-.393-.378-.933-.604-1.869-.724c-.956-.124-2.216-.125-3.99-.125h-3.72c-1.774 0-3.034.001-3.99.125' clip-rule='evenodd'/%3E%3Cpath fill='%23000' d='M17.087 2.61c-.86-.11-1.955-.11-3.32-.11h-3.09c-1.364 0-2.459 0-3.318.11c-.89.115-1.633.358-2.222.92a2.9 2.9 0 0 0-.724 1.12c.504-.23 1.074-.366 1.714-.45c1.085-.14 2.47-.14 4.22-.14h3.915c1.749 0 3.134 0 4.219.14c.559.073 1.064.186 1.52.366a2.9 2.9 0 0 0-.693-1.035c-.589-.563-1.331-.806-2.221-.92' opacity='0.5'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n.drawer-icon[title=\"Extensions\"]::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' fill-rule='evenodd' d='M17.5 2.75a.75.75 0 0 1 .75.75v2.25h2.25a.75.75 0 0 1 0 1.5h-2.25V9.5a.75.75 0 0 1-1.5 0V7.25H14.5a.75.75 0 0 1 0-1.5h2.25V3.5a.75.75 0 0 1 .75-.75' clip-rule='evenodd'/%3E%3Cpath fill='%23000' d='M2 6.5c0-2.121 0-3.182.659-3.841S4.379 2 6.5 2s3.182 0 3.841.659S11 4.379 11 6.5s0 3.182-.659 3.841S8.621 11 6.5 11s-3.182 0-3.841-.659S2 8.621 2 6.5m11 11c0-2.121 0-3.182.659-3.841S15.379 13 17.5 13s3.182 0 3.841.659S22 15.379 22 17.5s0 3.182-.659 3.841S19.621 22 17.5 22s-3.182 0-3.841-.659S13 19.621 13 17.5'/%3E%3Cpath fill='%23000' d='M2 17.5c0-2.121 0-3.182.659-3.841S4.379 13 6.5 13s3.182 0 3.841.659S11 15.379 11 17.5s0 3.182-.659 3.841S8.621 22 6.5 22s-3.182 0-3.841-.659S2 19.621 2 17.5' opacity='0.5'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n.drawer-icon[title=\"Persona Management\"]::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='currentColor' d='M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2S2 6.477 2 12s4.477 10 10 10' opacity='0.5'/%3E%3Cpath fill='currentColor' d='M8.397 15.553a.75.75 0 0 1 1.05-.155c.728.54 1.607.852 2.553.852s1.825-.313 2.553-.852a.75.75 0 1 1 .894 1.204A5.77 5.77 0 0 1 12 17.75a5.77 5.77 0 0 1-3.447-1.148a.75.75 0 0 1-.156-1.049M15 12c.552 0 1-.672 1-1.5S15.552 9 15 9s-1 .672-1 1.5s.448 1.5 1 1.5m-6 0c.552 0 1-.672 1-1.5S9.552 9 9 9s-1 .672-1 1.5s.448 1.5 1 1.5'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#rightNavDrawerIcon::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='m13.629 20.472l-.542.916c-.483.816-1.69.816-2.174 0l-.542-.916c-.42-.71-.63-1.066-.968-1.262c-.338-.197-.763-.204-1.613-.219c-1.256-.021-2.043-.098-2.703-.372a5 5 0 0 1-2.706-2.706C2 14.995 2 13.83 2 11.5v-1c0-3.273 0-4.91.737-6.112a5 5 0 0 1 1.65-1.651C5.59 2 7.228 2 10.5 2h3c3.273 0 4.91 0 6.113.737a5 5 0 0 1 1.65 1.65C22 5.59 22 7.228 22 10.5v1c0 2.33 0 3.495-.38 4.413a5 5 0 0 1-2.707 2.706c-.66.274-1.447.35-2.703.372c-.85.015-1.275.022-1.613.219c-.338.196-.548.551-.968 1.262' opacity='0.5'/%3E%3Cpath fill='%23000' d='M10.99 14.308c-1.327-.978-3.49-2.84-3.49-4.593c0-2.677 2.475-3.677 4.5-1.609c2.025-2.068 4.5-1.068 4.5 1.609c0 1.752-2.163 3.615-3.49 4.593c-.454.335-.681.502-1.01.502s-.556-.167-1.01-.502'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n/* BOTTOM BAR */\n\n#form_sheld,\n#send_form {\n  margin: 0;\n}\n\n#options_button::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-linecap='round' stroke-width='1.5'%3E%3Cpath d='M20 7H4'/%3E%3Cpath d='M20 12H4' opacity='0.5'/%3E%3Cpath d='M20 17H4'/%3E%3C/g%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#extensionsMenuButton::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M3.845 3.845a2.883 2.883 0 0 0 0 4.077L5.432 9.51c.012-.014.555.503.568.49l4-4c.013-.013-.504-.556-.49-.568L7.922 3.845a2.883 2.883 0 0 0-4.077 0m1.288 11.462a.483.483 0 0 1 .9 0l.157.4a.48.48 0 0 0 .272.273l.398.157a.486.486 0 0 1 0 .903l-.398.158a.48.48 0 0 0-.272.273l-.157.4a.483.483 0 0 1-.9 0l-.157-.4a.48.48 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.903l.398-.157a.48.48 0 0 0 .272-.274z' opacity='0.5'/%3E%3Cpath fill='%23000' d='M19.967 9.13a.483.483 0 0 1 .9 0l.156.399c.05.125.148.224.273.273l.398.158a.486.486 0 0 1 0 .902l-.398.158a.5.5 0 0 0-.273.273l-.156.4a.483.483 0 0 1-.9 0l-.157-.4a.5.5 0 0 0-.272-.273l-.398-.158a.486.486 0 0 1 0-.902l.398-.158a.5.5 0 0 0 .272-.273z' opacity='0.2'/%3E%3Cpath fill='%23000' d='M16.1 2.307a.483.483 0 0 1 .9 0l.43 1.095a.48.48 0 0 0 .272.274l1.091.432a.486.486 0 0 1 0 .903l-1.09.432a.5.5 0 0 0-.273.273L17 6.81a.483.483 0 0 1-.9 0l-.43-1.095a.5.5 0 0 0-.273-.273l-1.09-.432a.486.486 0 0 1 0-.903l1.09-.432a.5.5 0 0 0 .273-.274z' opacity='0.7'/%3E%3Cpath fill='%23000' d='M10.568 6.49c-.012.014-.555-.503-.568-.49l-4 4c-.013.013.504.556.49.568l9.588 9.587a2.883 2.883 0 1 0 4.078-4.077z'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n  transform: scaleX(-1);\n}\n\n#group_member_picker_button::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M15.5 7.5a3.5 3.5 0 1 1-7 0a3.5 3.5 0 0 1 7 0'/%3E%3Cpath fill='%23000' d='M19.5 7.5a2.5 2.5 0 1 1-5 0a2.5 2.5 0 0 1 5 0m-15 0a2.5 2.5 0 1 0 5 0a2.5 2.5 0 0 0-5 0' opacity='0.4'/%3E%3Cpath fill='%23000' d='M18 16.5c0 1.933-2.686 3.5-6 3.5s-6-1.567-6-3.5S8.686 13 12 13s6 1.567 6 3.5'/%3E%3Cpath fill='%23000' d='M22 16.5c0 1.38-1.79 2.5-4 2.5s-4-1.12-4-2.5s1.79-2.5 4-2.5s4 1.12 4 2.5m-20 0C2 17.88 3.79 19 6 19s4-1.12 4-2.5S8.21 14 6 14s-4 1.12-4 2.5' opacity='0.4'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#mes_impersonate::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' d='M21 16.5a3.5 3.5 0 1 1-7 0a3.5 3.5 0 0 1 7 0'/%3E%3Cpath fill='%23000' fill-rule='evenodd' d='M1.25 10A.75.75 0 0 1 2 9.25h20a.75.75 0 0 1 0 1.5H2a.75.75 0 0 1-.75-.75' clip-rule='evenodd'/%3E%3Cpath fill='%23000' d='m4.188 9.25l.426-1.705c.545-2.183.818-3.274 1.632-3.91C7.06 3 8.185 3 10.435 3h3.13c2.25 0 3.375 0 4.189.635c.814.636 1.086 1.727 1.632 3.91l.427 1.705z' opacity='0.5'/%3E%3Cpath fill='%23000' d='M10 16.5a3.5 3.5 0 1 1-7 0a3.5 3.5 0 0 1 7 0'/%3E%3Cpath fill='%23000' d='M9.884 17.397a3.5 3.5 0 0 0 .025-1.69l.414-.207a3.75 3.75 0 0 1 3.354 0l.413.206a3.5 3.5 0 0 0 .026 1.69l-1.11-.555a2.25 2.25 0 0 0-2.012 0z' opacity='0.5'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#mes_continue::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' fill-rule='evenodd' d='M3.25 12a.75.75 0 0 1 .75-.75h9.25v1.5H4a.75.75 0 0 1-.75-.75' clip-rule='evenodd' opacity='0.5'/%3E%3Cpath fill='%23000' d='M13.25 12.75V18a.75.75 0 0 0 1.28.53l6-6a.75.75 0 0 0 0-1.06l-6-6a.75.75 0 0 0-1.28.53z'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n#send_but::before {\n  content: '';\n  display: block;\n  width: 1em;\n  height: 1em;\n  background-color: currentColor;\n  mask-image: url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath fill='%23000' fill-rule='evenodd' d='M3.464 20.536C4.93 22 7.286 22 12 22s7.071 0 8.535-1.465C22 19.072 22 16.714 22 12s0-7.071-1.465-8.536C19.072 2 16.714 2 12 2S4.929 2 3.464 3.464C2 4.93 2 7.286 2 12s0 7.071 1.464 8.535' clip-rule='evenodd' opacity='0.5'/%3E%3Cpath fill='%23000' d='m13.423 17.362l3.512-9.166a.863.863 0 0 0-1.131-1.13l-9.166 3.511c-.83.319-.857 1.483-.04 1.731l3.477 1.057c.27.082.478.29.56.56l1.057 3.477c.248.817 1.412.79 1.73-.04'/%3E%3C/svg%3E\");\n  mask-size: contain;\n  mask-repeat: no-repeat;\n  mask-position: center;\n}\n\n/* WELCOME PAGE */\n\n.welcomePanel .welcomeHeaderTitle {\n  background-image: url(\"https://phampyk.github.io/assets/dark-purple-clouds.gif\");\n  background-position: center top;\n  background-size: contain;\n  background-repeat: no-repeat;\n  padding-top: min(30%, 200px);\n  flex-direction: column;\n  align-items: end;\n  image-rendering: pixelated;\n  padding-bottom: 1em;\n}\n\n.welcomeHeaderLogo{\n  display: none;\n}\n\n.welcomeHeaderVersionDisplay,\n.welcomeShortcuts,\n.mes.smallSysMes {\n  display: none !important;\n}\n\n/* MENU BUTTONS */\n\n.menu_button {\n  color: var(--SmartThemeBodyColor);\n  filter: none;\n  background-color: var(--SmartThemeChatTintColor);\n  border: 1px solid var(--SmartThemeBorderColor);\n  border-radius: 5px;\n  padding: 3px 5px;\n  width: min-content;\n  cursor: pointer;\n  margin: 5px 0;\n  transition: var(--animation-duration-2x);\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  text-align: center;\n}\n\n/* QR BAR */\n\n#qr--bar, .qr--popout{\n  background-color: var(--DarkPurple);\n  background-image: \n    radial-gradient(var(--MidPurple) 2px, transparent 2px), \n    radial-gradient(var(--MidPurple) 2px, transparent 2px);\n  background-size: 20px 20px;\n  background-position: 0 0, 10px 10px;\n}\n\n#qr--bar > .qr--buttons{\n  justify-content: var(--customQR-Position) !important;\n}\n\n#qr--bar > .qr--buttons .qr--button, #qr--popout > .qr--body > .qr--buttons .qr--button {\n  color: var(--SmartThemeEmColor) !important;\n  background-color: var(--SmartThemeBlurTintColor) !important;\n  border: 2px solid var(--SmartThemeShadowColor) !important;\n  border-radius: 5px !important;\n  filter: none !important;\n}\n\n#qr--bar > .qr--buttons:hover .qr--button:hover, #qr--popout > .qr--body > .qr--buttons:hover .qr--button:hover{\n  filter: brightness(120%) !important;\n}\n\n/* NOTEBOOK */\n\n#notebookPanel .react-tabs__tab--selected {\n  color: var(--DarkPurple) !important;\n}\n\n.ql-snow .ql-stroke {\n  stroke: var(--SmartThemeEmColor) !important;\n}\n\n/* CODE BLOCK */\n.hljs {\n  color:#cdd6f4;\n  background:#11111b\n}\n.hljs ::selection,\n.hljs::selection {\n  background-color:#585b70;\n  color:#cdd6f4\n}\n.hljs-comment {\n  color:#a6adc8\n}\n.hljs-tag {\n  color:#bac2de\n}\n.hljs-operator,\n.hljs-punctuation,\n.hljs-subst {\n  color:#cdd6f4\n}\n.hljs-bullet,\n.hljs-deletion,\n.hljs-name,\n.hljs-selector-tag,\n.hljs-template-variable,\n.hljs-variable {\n  color:#f38ba8;\n}\n.hljs-attr,\n.hljs-link,\n.hljs-literal,\n.hljs-number,\n.hljs-symbol,\n.hljs-variable.constant_ {\n  color:#f9e2af;\n}\n.hljs-class .hljs-title,\n.hljs-title,\n.hljs-title.class_ {\n  color:#fab387;\n}\n.hljs-strong {\n  color:#fab387;\n}\n.hljs-addition,\n.hljs-code,\n.hljs-string,\n.hljs-title.class_.inherited__ {\n  color:#a6e3a1;\n}\n.hljs-built_in,\n.hljs-doctag,\n.hljs-keyword.hljs-atrule,\n.hljs-quote,\n.hljs-regexp {\n  color:#94e2d5;\n}\n.hljs-attribute,\n.hljs-function .hljs-title,\n.hljs-section,\n.hljs-title.function_,\n.ruby .hljs-property {\n  color:#74c7ec;\n}\n.diff .hljs-meta,\n.hljs-keyword,\n.hljs-template-tag,\n.hljs-type {\n  color:#f5c2e7;\n}\n.hljs-emphasis {\n  color:#f5c2e7;\n}\n.hljs-meta,\n.hljs-meta .hljs-keyword,\n.hljs-meta .hljs-string {\n  color:#eba0ac;\n}\n\n/* SCROLL FAVORITES */\n.avatars_inline {\n  display: flex;\n  gap: 5px;\n  flex-wrap: nowrap;\n  overflow-x: auto;\n  overflow-y: hidden;\n}\n\n#HotSwapWrapper {\n  overflow: hidden;\n}\n\n/* hide the bottom scroll bar */\n.avatars_inline {\n  scrollbar-width: none;\n}\n.avatars_inline::-webkit-scrollbar {\n  display: none;\n}\n/* hide the bottom scroll bar */",
+       "bogus_folders": true,
+       "zoomed_avatar_magnification": true,
+       "reduced_motion": false,
+       "compact_input_area": true,
+       "show_swipe_num_all_messages": "",
+       "click_to_edit": false,
+       "media_display": "gallery"
+   };
+
+   var redesignTheme = {
+       "name": "SillyTavern Redesign",
+       "main_text_color": "rgba(232, 232, 234, 1)",
+       "italics_text_color": "rgba(138, 138, 146, 1)",
+       "underline_text_color": "rgba(185, 195, 238, 1)",
+       "quote_text_color": "rgba(154, 168, 224, 1)",
+       "blur_tint_color": "rgba(19, 19, 22, 1)",
+       "chat_tint_color": "rgba(8, 8, 10, 1)",
+       "user_mes_blur_tint_color": "rgba(20, 20, 23, 1)",
+       "bot_mes_blur_tint_color": "rgba(26, 26, 30, 1)",
+       "shadow_color": "rgba(0, 0, 0, 0)",
+       "border_color": "rgba(0, 0, 0, 0)",
+       "blur_strength": 0,
+       "shadow_width": 0,
+       "font_scale": 1,
+       "chat_width": 100,
+       "fast_ui_mode": true,
+       "noShadows": true,
+       "waifuMode": false,
+       "avatar_style": 0,
+       "chat_display": 1,
+       "media_display": "gallery",
+       "toastr_position": "toast-top-right",
+       "timer_enabled": false,
+       "timestamps_enabled": false,
+       "timestamp_model_icon": false,
+       "message_token_count_enabled": false,
+       "mesIDDisplay_enabled": false,
+       "hideChatAvatars_enabled": false,
+       "expand_message_actions": false,
+       "show_swipe_num_all_messages": false,
+       "click_to_edit": false,
+       "enableZenSliders": false,
+       "enableLabMode": false,
+       "hotswap_enabled": false,
+       "bogus_folders": false,
+       "zoomed_avatar_magnification": false,
+       "reduced_motion": false,
+       "compact_input_area": true,
+       "custom_css": "/* =====================================================================\n   SillyTavern Redesign — theme stylesheet\n   ---------------------------------------------------------------------\n   Ships as the `custom_css` field of \"SillyTavern Redesign.json\".\n   Edit THIS file, then run `node build.mjs` to regenerate the JSON.\n\n   Route A from the design notes: colour, type, radius, spacing, the left\n   rail, the docked sheets, chat bubbles, the composer pill and the\n   character grid — all reachable without touching SillyTavern's code.\n\n   Injected as <style id=\"custom-style\"> at the end of <head>, so it wins\n   ties against every stylesheet SillyTavern links. !important is only\n   used where upstream already used it.\n   ===================================================================== */\n\n@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@200;300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');\n\n/* ---------------------------------------------------------------------\n   1. Tokens\n   ------------------------------------------------------------------ */\n\n:root {\n    /* Surfaces, darkest to lightest */\n    --st-bg: #08080a;\n    /* page */\n    --st-sheet: #0b0b0d;\n    /* settings sheet, overlay pages */\n    --st-well: #101013;\n    /* code blocks, textareas, read-only wells */\n    --st-card: #131316;\n    /* panel + card surface */\n    --st-user-mes: #141417;\n    /* your bubble */\n    --st-line: #17171b;\n    /* hairline divider */\n    --st-bot-mes: #1a1a1e;\n    /* character bubble, inset control */\n    --st-inset: #1a1a1e;\n    --st-selected: #22222a;\n    /* selected chip / segment */\n    --st-track: #232329;\n    /* slider track */\n    --st-rail-active: #191920;\n    /* active rail slot */\n\n    /* Text, brightest to dimmest */\n    --st-text: #e8e8ea;\n    --st-text-2: #dcdce0;\n    --st-text-3: #c4c4cb;\n    --st-text-4: #9a9aa4;\n    --st-muted: #7c7c85;\n    --st-faint: #5c5c64;\n    --st-fainter: #4e4e56;\n\n    /* The single accent */\n    --st-accent: #9aa8e0;\n    --st-accent-hover: #b9c3ee;\n    --st-accent-fill: #7f8bc4;\n    --st-accent-thumb: #cfd4ea;\n    --st-accent-on: #3d4470;\n    /* toggle track, \"on\" */\n    --st-accent-knob: #dfe3f4;\n    --st-accent-solid: #2b2f4a;\n    /* primary button */\n\n    /* Status */\n    --st-ok: #4ade80;\n    --st-warn-bg: #1c1a15;\n    --st-warn-fg: #c9b989;\n    --st-danger: #d08f9a;\n    --st-danger-bg: #2a1c20;\n\n    /* Geometry */\n    --st-radius: 18px;\n    /* card */\n    --st-radius-sm: 12px;\n    /* control */\n    --st-radius-xs: 8px;\n    --st-radius-pill: 999px;\n    --st-rail-width: 68px;\n    --st-rail-slot: 40px;\n    --st-sheet-width: 452px;\n    --st-content-max: 820px;\n    /* message column */\n    --st-composer-max: 720px;\n    --st-composer-height: 46px;\n    /* Half the single-line height: renders as a pill on one line, and stays\n       a rounded rectangle as the field grows instead of curving into the\n       text. A literal 999px would clamp to half of whatever the height\n       becomes, which is what eats the first and last characters. */\n    --st-composer-radius: 23px;\n    --st-editor-max: 980px;\n    /* character editor, advanced definitions */\n    --st-wi-title-row: 42px;\n    /* height of a World Info entry's title row */\n    --st-bar-height: 62px;\n    /* mobile bottom bar */\n\n    /* Type */\n    --mainFontFamily: 'Outfit', 'Noto Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;\n    --monoFontFamily: 'JetBrains Mono', 'Noto Sans Mono', ui-monospace, Consolas, monospace;\n\n    /* Avatars are round in this system — that comes from avatar_style: 0, not\n       from --avatar-base-border-radius, which upstream uses as a border WIDTH\n       and margin (a percentage there breaks .add_avatar). Only the size moves. */\n    --avatar-base-width: 38px;\n    --avatar-base-height: 38px;\n\n    /* Borders are replaced by surface contrast */\n    --interactable-outline-color: var(--st-accent);\n    --interactable-outline-color-faint: #2b2b32;\n}\n\n/* ---------------------------------------------------------------------\n   2. Global\n   ------------------------------------------------------------------ */\n\n/* SillyTavern puts `transform: translateZ(0)` on <html> as a Chrome blur fix,\n   which makes <html> — not the viewport — the containing block for every\n   position:fixed element. On narrow screens <body> goes out of flow, <html>\n   collapses to 0, and anything anchored to `bottom` lands off-screen. Giving\n   <html> the viewport height restores it. */\nhtml {\n    height: 100dvh;\n}\n\nbody {\n    background-color: var(--st-bg);\n    font-weight: 400;\n    letter-spacing: 0;\n}\n\n/* No text shadows anywhere in this system. */\n*,\n.mes_text,\n#chat {\n    text-shadow: none !important;\n}\n\na,\n.mes_text a {\n    color: var(--st-accent);\n    text-decoration: none;\n}\n\na:hover,\n.mes_text a:hover {\n    color: var(--st-accent-hover);\n}\n\n/* Upstream paints <hr> as a body-coloured gradient fade, which reads as a\n   bright bar here. Dividers are hairlines in this system. */\nhr {\n    border: 0;\n    border-top: 1px solid var(--st-line);\n    background-image: none;\n    background-color: transparent;\n    height: 0;\n    margin: 14px 0;\n}\n\n/* Scrollbars: thin, unobtrusive, no track. */\n* {\n    scrollbar-width: thin;\n    scrollbar-color: #26262b transparent;\n}\n\n::-webkit-scrollbar {\n    width: 8px;\n    height: 8px;\n}\n\n::-webkit-scrollbar-track,\nbody ::-webkit-scrollbar-track {\n    background: transparent;\n    border: 0;\n    box-shadow: none;\n}\n\n::-webkit-scrollbar-thumb,\nbody ::-webkit-scrollbar-thumb {\n    background: #26262b;\n    border-radius: 8px;\n    border: 0;\n    box-shadow: none;\n}\n\n::-webkit-scrollbar-thumb:hover {\n    background: #34343b;\n}\n\n/* The design is a flat near-black surface; the wallpaper stays out of it.\n   To bring your background image back, delete this rule and set\n   `#chat { background-color: transparent }` in your own Custom CSS. */\n#bg1,\n#bg_custom {\n    display: none;\n}\n\n/* ---------------------------------------------------------------------\n   3. Left rail  (#top-settings-holder)\n   ------------------------------------------------------------------ */\n\n/* The strip behind the old top bar has no place in this layout. */\n#top-bar {\n    display: none;\n}\n\n@media screen and (min-width: 1001px) {\n\n    #top-settings-holder {\n        position: fixed;\n        top: 0;\n        left: 0;\n        bottom: 0;\n        width: var(--st-rail-width);\n        height: 100dvh;\n        margin: 0;\n        padding: 14px 0;\n        flex-direction: column;\n        align-items: center;\n        justify-content: flex-start;\n        gap: 14px;\n        background-color: var(--st-bg);\n        z-index: 3005;\n    }\n\n    #top-settings-holder>.drawer {\n        width: auto;\n        flex: none;\n    }\n\n    /* Rail order — mirrors the mock top to bottom. User Settings is given\n       its own position at the foot. */\n    #ai-config-button {\n        order: 1;\n    }\n\n    #sys-settings-button {\n        order: 2;\n    }\n\n    #advanced-formatting-button {\n        order: 3;\n    }\n\n    #WI-SP-button {\n        order: 4;\n    }\n\n    #rightNavHolder {\n        order: 5;\n    }\n\n    #persona-management-button {\n        order: 6;\n    }\n\n    #backgrounds-button {\n        order: 7;\n    }\n\n    #extensions-settings-button {\n        order: 8;\n    }\n\n    #user-settings-button {\n        order: 9;\n        margin-top: auto;\n    }\n}\n\n#top-settings-holder .drawer-toggle {\n    display: flex;\n}\n\n#top-settings-holder .drawer-icon {\n    width: var(--st-rail-slot);\n    height: var(--st-rail-slot);\n    display: grid;\n    place-items: center;\n    padding: 0;\n    font-size: 17px;\n    border-radius: var(--st-radius-sm);\n    color: var(--st-muted);\n    opacity: 1;\n    transition:\n        background-color var(--animation-duration-2x),\n        color var(--animation-duration-2x);\n}\n\n#top-settings-holder .drawer-icon:hover {\n    background-color: #131316;\n    color: var(--st-text-3);\n    opacity: 1;\n}\n\n#top-settings-holder .drawer-icon.openIcon {\n    background-color: var(--st-rail-active);\n    color: var(--st-text-2);\n}\n\n/* Connection status dot, as in the mock. */\n#top-settings-holder #API-status-top {\n    position: relative;\n}\n\n#top-settings-holder #API-status-top.fa-plug::after {\n    content: '';\n    position: absolute;\n    top: 5px;\n    right: 5px;\n    width: 6px;\n    height: 6px;\n    border-radius: 50%;\n    background-color: var(--st-ok);\n}\n\n/* ---------------------------------------------------------------------\n   4. Docked settings sheet  (.drawer-content)\n   ------------------------------------------------------------------ */\n\n@media screen and (min-width: 1001px) {\n\n    #top-settings-holder .drawer-content {\n        position: fixed;\n        top: 0;\n        bottom: 0;\n        left: var(--st-rail-width);\n        right: auto;\n        width: var(--st-sheet-width);\n        min-width: 0;\n        max-width: none;\n        max-height: 100dvh;\n        margin: 0;\n        padding: 20px 20px 0;\n        border: 0;\n        border-radius: 0;\n        background-color: var(--st-sheet);\n        box-shadow: 34px 0 60px -20px rgba(0, 0, 0, .8);\n        backdrop-filter: none;\n        -webkit-backdrop-filter: none;\n        z-index: 3000;\n    }\n\n    #top-settings-holder .drawer-content.openDrawer {\n        display: flex;\n        flex-direction: column;\n        height: 100dvh;\n    }\n\n    /* Character management is a full page in this design, not a sheet. */\n    #top-settings-holder #right-nav-panel {\n        left: var(--st-rail-width);\n        right: 0;\n        width: calc(100dvw - var(--st-rail-width));\n        background-color: var(--st-bg);\n        box-shadow: none;\n        padding: 22px 24px 0;\n    }\n\n    /* The grid wants the whole page; the editor is a reading column. */\n    #right-nav-panel #rm_ch_create_block,\n    #right-nav-panel #rm_PinAndTabs,\n    #right-nav-panel #CharListButtonAndHotSwaps {\n        max-width: var(--st-editor-max);\n        margin-left: auto;\n        margin-right: auto;\n        width: 100%;\n    }\n\n    /* Advanced Definitions is a large centred dialog, not a takeover. */\n    #character_popup {\n        left: var(--st-rail-width);\n        right: 0;\n        top: 24px;\n        width: auto;\n        max-width: min(var(--st-editor-max), calc(100dvw - var(--st-rail-width) - 48px));\n        height: calc(100dvh - 48px);\n        min-height: 0;\n        max-height: calc(100dvh - 48px);\n    }\n\n    /* Same footprint for the large editor. */\n    .popup.wide_dialogue_popup,\n    .popup.large_dialogue_popup {\n        left: var(--st-rail-width);\n        right: 0;\n        margin-left: auto;\n        margin-right: auto;\n        width: min(var(--st-editor-max), calc(100dvw - var(--st-rail-width) - 48px));\n        max-width: min(var(--st-editor-max), calc(100dvw - var(--st-rail-width) - 48px)) !important;\n    }\n\n    /* The character list is a full-width page of cards; the editor is a\n       docked sheet like every other panel. Upstream shows one .right_menu at\n       a time by writing an inline display, so that is the signal available. */\n    #top-settings-holder #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) {\n        left: var(--st-rail-width);\n        right: auto;\n        width: var(--st-sheet-width);\n        background-color: var(--st-sheet);\n        box-shadow: 34px 0 60px -20px rgba(0, 0, 0, .8);\n        padding: 20px 20px 0;\n    }\n\n    /* --- Character list header -----------------------------------\n       Upstream stacks the list button over the selected-character name in\n       a flex column, and the pin sits in its own sub-column. Lay the panel\n       out as a grid so all three read as one inline row at the left. */\n    #top-settings-holder #right-nav-panel.openDrawer:not(:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"]))) {\n        display: grid;\n        grid-template-columns: auto minmax(0, 1fr);\n        grid-template-rows: auto minmax(0, 1fr);\n        align-items: start;\n        align-content: start;\n        column-gap: 14px;\n    }\n\n    /* start, not center: centring would float .scrollableInner in the\n       middle of its 1fr row. Only the header pair centres. */\n    #right-nav-panel #CharListButtonAndHotSwaps,\n    #right-nav-panel #rm_PinAndTabs {\n        align-self: center;\n    }\n\n    #right-nav-panel>.scrollableInner {\n        align-self: stretch;\n    }\n\n    #right-nav-panel #CharListButtonAndHotSwaps {\n        grid-row: 1;\n        grid-column: 1;\n        max-width: none;\n        margin: 0;\n        width: auto;\n        align-items: center;\n        gap: 10px;\n    }\n\n    #right-nav-panel #rm_PinAndTabs {\n        grid-row: 1;\n        grid-column: 2;\n        max-width: none;\n        margin: 0;\n        width: auto;\n    }\n\n    #right-nav-panel>.scrollableInner {\n        grid-row: 2;\n        grid-column: 1 / -1;\n    }\n\n    /* The list button and the pin share a row rather than a column, and the\n       pin comes out of the absolute top-right corner to join them. */\n    #right-nav-panel #CharListButtonAndHotSwaps>.flexFlowColumn {\n        flex-direction: row;\n        align-items: center;\n        gap: 10px;\n        width: auto;\n    }\n\n    #right-nav-panel #rm_button_panel_pin_div {\n        position: static;\n        order: 2;\n    }\n\n    #right-nav-panel #rm_button_characters {\n        order: 1;\n    }\n\n    /* Hotswaps are off in this theme; the empty wrapper still claims the row. */\n    #right-nav-panel #HotSwapWrapper {\n        width: auto;\n        flex: 0 0 auto;\n        margin: 0;\n    }\n\n    /* Upstream fades this block to 50%, which no colour on the <h2> can\n       undo — opacity applies to the whole subtree. */\n    #right-nav-panel #rm_button_selected_ch {\n        opacity: 1;\n    }\n\n    #right-nav-panel #rm_button_selected_ch h2 {\n        margin: 0;\n        text-align: left;\n        color: var(--st-text);\n        font-weight: 400;\n    }\n\n    #right-nav-panel #right-nav-panel-tabs {\n        align-items: center;\n    }\n\n    /* --- Character editor header ---------------------------------\n       Sheet width wants a different arrangement from the full-width list:\n       list button and pin pinned to opposite corners, then the character\n       name on the left with its token counts on the right. */\n    /* flex-grow only on the inner row. #CharListButtonAndHotSwaps is an item\n       of the panel's COLUMN, so growing it eats the panel's vertical space\n       and pushes the whole header into the middle of the sheet. */\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #CharListButtonAndHotSwaps {\n        width: 100%;\n        flex: 0 0 auto;\n        justify-content: space-between;\n    }\n\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #CharListButtonAndHotSwaps>.flexFlowColumn {\n        width: 100%;\n        flex: 1 1 auto;\n        justify-content: space-between;\n    }\n\n    /* Upstream centres this block and lets it shrink to its content, which\n       keeps the name and token counts bunched in the middle. */\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #rm_PinAndTabs {\n        align-self: stretch;\n        width: 100%;\n    }\n\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #right-nav-panel-tabs {\n        display: flex;\n        flex-direction: row;\n        align-items: center;\n        justify-content: space-between;\n        gap: 12px;\n        width: 100%;\n    }\n\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #rm_button_selected_ch {\n        flex: 1 1 auto;\n        min-width: 0;\n    }\n\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #rm_button_selected_ch h2 {\n        overflow: hidden;\n        text-overflow: ellipsis;\n        white-space: nowrap;\n    }\n\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #result_info {\n        flex: 0 0 auto;\n        align-items: center;\n        justify-content: flex-end;\n        gap: 8px;\n        text-align: right;\n    }\n\n    /* No reading-column cap once it is already sheet width. */\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #rm_ch_create_block,\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #rm_PinAndTabs,\n    #right-nav-panel:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"])) #CharListButtonAndHotSwaps {\n        max-width: 100%;\n    }\n\n    /* The sheets are children of #top-settings-holder, so their z-index is\n       resolved inside the rail's own stacking context — at 3000 they paint\n       over the rail as they slide past it. Repaint the rail on top: its\n       background as a pseudo-element above the sheet, its icons above that.\n       .drawer stays position:static so it forms no stacking context of its\n       own and the sheet's 3000 keeps competing at this level. */\n    #top-settings-holder::before {\n        content: '';\n        position: fixed;\n        top: 0;\n        left: 0;\n        bottom: 0;\n        width: var(--st-rail-width);\n        background-color: var(--st-bg);\n        z-index: 3001;\n        pointer-events: none;\n    }\n\n    #top-settings-holder .drawer-toggle {\n        position: relative;\n        z-index: 3002;\n    }\n\n    /* The character list is a full-width page, not a sheet — sweeping it in\n       from the left reads as the whole app moving, so it just fades. The\n       character editor is the same element in sheet form, and that one still\n       slides like every other sheet; hence the :has() rather than a blanket\n       rule on #right-nav-panel. */\n    #top-settings-holder #right-nav-panel:not(:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"]))),\n    #top-settings-holder #right-nav-panel:not(:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"]))).openDrawer {\n        transform: none;\n    }\n\n    /* Upstream opens a drawer by animating height 0 -> auto, which reads as\n       \"unrolling downward\". Docked to the left edge, that looks wrong — the\n       sheet should come in from the side it lives on. Hold the height\n       constant and animate the slide instead. display is transitioned with\n       allow-discrete so the panel can still leave the layout when closed. */\n    #top-settings-holder .drawer-content {\n        height: 100dvh;\n        transform: translateX(-100%);\n        opacity: 0;\n        transition-property: transform, opacity, display;\n        transition-duration: var(--animation-duration-2x);\n        transition-timing-function: ease;\n        transition-behavior: allow-discrete;\n    }\n\n    #top-settings-holder .drawer-content.openDrawer {\n        transform: translateX(0);\n        opacity: 1;\n    }\n\n    @starting-style {\n        #top-settings-holder .drawer-content.openDrawer {\n            transform: translateX(-100%);\n            opacity: 0;\n        }\n    }\n\n    @starting-style {\n        #top-settings-holder #right-nav-panel:not(:has(#rm_ch_create_block:not([style*=\"display: none\"]):not([style*=\"display:none\"]))).openDrawer {\n            transform: none;\n            opacity: 0;\n        }\n    }\n\n    /* Free-dragging a docked sheet does not survive the dock. */\n    #top-settings-holder .drag-grabber {\n        display: none !important;\n    }\n}\n\n#top-settings-holder .drawer-content>.scrollableInner,\n#top-settings-holder .drawer-content>.scrollableInnerFull {\n    flex: 1;\n    min-height: 0;\n    height: auto;\n    padding: 0 4px 24px 0;\n}\n\n.fillLeft .scrollableInner {\n    padding: 0 4px 24px 0;\n}\n\n/* --- Sheet header band ---------------------------------------------\n   Each panel scatters a pin toggle, a help link and a caption around its\n   top edge, all absolutely positioned and overlapping at this width.\n   Reserve a band for them and lay them out. */\n\n#top-settings-holder .drawer-content {\n    padding-top: 54px;\n}\n\n/* No `display` here — mobile-styles.css hides these on small screens and\n   that decision should stand. */\n#lm_button_panel_pin_div,\n#WI_panel_pin_div,\n#rm_button_panel_pin_div {\n    position: absolute;\n    top: 15px;\n    right: 52px;\n    width: 32px;\n    height: 32px;\n    padding: 0;\n    place-items: center;\n    border-radius: 10px;\n    background-color: var(--st-card);\n    color: var(--st-muted);\n    font-size: 13px;\n    line-height: 32px;\n    text-align: center;\n    opacity: 1;\n    z-index: 3;\n}\n\n#lm_button_panel_pin_div:hover,\n#WI_button_panel_pin_div:hover,\n#rm_button_panel_pin_div:hover {\n    color: var(--st-text-3);\n}\n\n.topRightInset {\n    top: 15px;\n    right: 16px;\n    width: 32px;\n    height: 32px;\n    display: grid;\n    place-items: center;\n    border-radius: 10px;\n    background-color: var(--st-card);\n    z-index: 3;\n}\n\n.note-link-span {\n    color: var(--st-muted);\n    font-size: 13px;\n    opacity: 1;\n}\n\n#clickSlidersTips,\n.editable-slider-notification {\n    position: absolute;\n    top: 21px;\n    left: 20px;\n    right: 96px;\n    width: auto;\n    text-align: left;\n    z-index: 2;\n}\n\n/* Panel headings: quiet, uppercase, letter-spaced. */\n.drawer-content h3,\n.drawer-content h4,\n.drawer-content .standoutHeader,\n.drawer-content .range-block-title>b,\n.drawer-content>.scrollableInner>h4 {\n    color: var(--st-text-4);\n    font-weight: 400;\n}\n\n.drawer-content h4 {\n    font-size: calc(var(--mainFontSize) * 0.75);\n    letter-spacing: .08em;\n    text-transform: uppercase;\n    color: var(--st-faint);\n    margin: 18px 0 10px;\n}\n\n/* Upstream gives these a gradient plate with an accent corner; in this\n   system a heading is just a heading.\n\n   One declaration carries that gradient for four different selectors —\n   .standoutHeader (0,1,0), #user-settings-block h4 (1,0,1) and two\n   #extensions_settings ones (1,3,0) — so matching on specificity alone\n   means chasing each of them. This kills the image outright on anything\n   header-shaped, which also holds against extensions that copy the trick.\n   The user's requirement here is absolute: never, anywhere. */\n.standoutHeader,\n.inline-drawer-header,\n.inline-drawer-toggle,\n#user-settings-block h4,\n.drawer-content h3,\n.drawer-content h4,\n.drawer-content h5,\n.popup h3,\n.popup h4 {\n    background-image: none !important;\n}\n\n.standoutHeader,\n.standoutHeader.inline-drawer-header,\n#user-settings-block h4,\n#extensions_settings .inline-drawer-toggle.inline-drawer-header,\n#extensions_settings2 .inline-drawer-toggle.inline-drawer-header {\n    background-color: transparent;\n    border: 0;\n    border-radius: 0;\n    box-shadow: none;\n    padding: 4px 0;\n    margin-bottom: 4px;\n}\n\n/* Group headings come in two flavours upstream: an <h4> (User Settings) and\n   a .standoutHeader div wrapping a <strong> (AI Response Configuration).\n   They were reading as two different levels — small grey caps versus large\n   bold white. One caption style for both. */\n.drawer-content .standoutHeader>strong,\n.drawer-content .standoutHeader>strong>span,\n.drawer-content .standoutHeader>b,\n.drawer-content .standoutHeader>span:first-child {\n    font-size: calc(var(--mainFontSize) * 0.75);\n    letter-spacing: .08em;\n    text-transform: uppercase;\n    color: var(--st-faint);\n    font-weight: 400;\n}\n\n.drawer-content .standoutHeader {\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n    gap: 10px;\n    margin: 18px 0 10px;\n}\n\n/* Label-and-control rows: one control column, aligned on both edges, rather\n   than each select sizing to its own text. .widthNatural is\n   `width: unset !important`, so the basis has to be !important too. */\n#user-settings-block [name=\"AvatarAndChatDisplay\"]>.flex-container {\n    display: flex;\n    align-items: center;\n    justify-content: space-between;\n    gap: 12px;\n    margin-bottom: 6px;\n}\n\n#user-settings-block [name=\"AvatarAndChatDisplay\"]>.flex-container>span {\n    flex: 0 1 auto;\n    min-width: 0;\n    color: var(--st-text-4);\n}\n\n#user-settings-block [name=\"AvatarAndChatDisplay\"]>.flex-container>select {\n    flex: 0 0 58% !important;\n    width: 58% !important;\n    min-width: 0 !important;\n    max-width: 58% !important;\n}\n\n/* The panel title, the language picker and the version stamp fight for one\n   row and clip the picker. Let them wrap. */\n#user-settings-block [name=\"userSettingsRowOne\"] {\n    flex-wrap: wrap;\n    align-items: center;\n    gap: 8px 12px;\n}\n\n#user-settings-block #UI-language-block {\n    flex: 1 1 auto;\n    min-width: 0;\n    justify-content: flex-end;\n    gap: 8px;\n}\n\n#user-settings-block #UI-language-block>select {\n    flex: 0 1 auto;\n    min-width: 110px;\n    width: auto;\n}\n\n#user-settings-block #version_display {\n    flex: 1 1 100%;\n    text-align: left;\n}\n\n/* #user-settings-block h4 outranks the generic .drawer-content h4 styling. */\n#user-settings-block h4 {\n    font-size: calc(var(--mainFontSize) * 0.75);\n    letter-spacing: .08em;\n    text-transform: uppercase;\n    color: var(--st-faint);\n    margin: 18px 0 10px;\n}\n\n#extensions_settings .inline-drawer-toggle.inline-drawer-header:hover,\n#extensions_settings2 .inline-drawer-toggle.inline-drawer-header:hover {\n    background-image: none;\n    background-color: transparent;\n    color: var(--st-text);\n}\n\n/* The plate was what separated one extension from the next; the card does\n   that job now. */\n#extensions_settings .inline-drawer-toggle.inline-drawer-header,\n#extensions_settings2 .inline-drawer-toggle.inline-drawer-header {\n    padding: 12px 0;\n}\n\n.drawer-content h3 {\n    font-size: calc(var(--mainFontSize) * 1.15);\n    font-weight: 300;\n    color: var(--st-text-4);\n}\n\n/* ---------------------------------------------------------------------\n   5. Cards inside panels\n   ------------------------------------------------------------------ */\n\n.drawer-content .inline-drawer,\n.drawer-content .settingsSectionWrap,\n.drawer-content .standoutHeader~.inline-drawer-content,\n#extensions_settings .inline-drawer,\n#extensions_settings2 .inline-drawer {\n    background-color: var(--st-card);\n    border: 0;\n    border-radius: var(--st-radius);\n    padding: 4px 18px;\n    margin-bottom: 12px;\n}\n\n.drawer-content .inline-drawer-header,\n.drawer-content .inline-drawer-toggle {\n    padding: 12px 0;\n    font-size: calc(var(--mainFontSize) * 0.97);\n    color: var(--st-text-2);\n    font-weight: 400;\n}\n\n.drawer-content .inline-drawer-header b,\n.drawer-content .inline-drawer-toggle b,\n.drawer-content .inline-drawer-header strong {\n    font-weight: 400;\n}\n\n.drawer-content .inline-drawer-icon {\n    font-size: 11px;\n    color: var(--st-muted);\n    filter: none;\n}\n\n.drawer-content .inline-drawer-content {\n    padding-bottom: 14px;\n}\n\n.drawer-content .inline-drawer .inline-drawer {\n    background-color: var(--st-inset);\n    border-radius: var(--st-radius-sm);\n    padding: 2px 14px;\n}\n\n/* Hint / footnote text. */\n.toggle-description,\n.drawer-content small,\n#clickSlidersTips,\n.wi-enter-footer-text {\n    color: var(--st-fainter);\n    font-size: calc(var(--mainFontSize) * 0.78);\n    line-height: 1.5;\n    opacity: 1;\n}\n\n/* Callouts. */\n.redWarningBG,\n.warning,\n#AdvancedFormatting .warning {\n    background-color: var(--st-warn-bg) !important;\n    color: var(--st-warn-fg) !important;\n    border: 0;\n    border-radius: var(--st-radius-sm);\n    padding: 12px 15px;\n    font-size: calc(var(--mainFontSize) * 0.83);\n}\n\n/* ---------------------------------------------------------------------\n   6. Form controls\n   ------------------------------------------------------------------ */\n\n.text_pole,\nselect,\nselect.text_pole,\ntextarea,\ninput[type=\"text\"],\ninput[type=\"number\"],\ninput[type=\"search\"],\ninput[type=\"password\"] {\n    background-color: var(--st-inset);\n    color: var(--st-text-2);\n    border: 1px solid transparent;\n    border-radius: var(--st-radius-sm);\n    padding: 8px 13px;\n    font-family: var(--mainFontFamily);\n    transition: border-color var(--animation-duration-2x);\n}\n\nselect,\nselect.text_pole {\n    height: 38px;\n    padding-right: 28px;\n    background-position: right 13px center;\n}\n\n.text_pole:focus-visible,\nselect:focus-visible,\ntextarea:focus-visible,\ninput:focus-visible {\n    border-color: #2f2f38;\n    outline: none;\n}\n\n.text_pole::placeholder,\ntextarea::placeholder {\n    color: var(--st-fainter);\n    opacity: 1;\n}\n\nselect option {\n    background-color: var(--st-card);\n    color: var(--st-text-2);\n}\n\n/* Multi-line fields read as wells, not as inputs. */\ntextarea,\ntextarea.text_pole,\n#send_textarea {\n    background-color: var(--st-well);\n    line-height: 1.6;\n}\n\ntextarea.monospace,\n.monospace,\ncode,\npre,\ntt,\n.mes_text code {\n    font-family: var(--monoFontFamily);\n    font-size: calc(var(--mainFontSize) * 0.82);\n}\n\npre,\n.mes_text pre {\n    background-color: var(--st-well);\n    border: 0;\n    border-radius: var(--st-radius-sm);\n    padding: 13px 15px;\n}\n\n.mes_text code:not(pre code) {\n    background-color: var(--st-well);\n    border-radius: 5px;\n    padding: 1px 5px;\n}\n\n/* Buttons.\n   No font-family here: many buttons carry their Font Awesome class on the\n   button element itself (`class=\"menu_button fa-solid fa-save\"`), so setting\n   a font on .menu_button replaces the icon with a tofu box. */\n.menu_button {\n    background-color: var(--st-inset);\n    color: var(--st-text-3);\n    border: 0;\n    border-radius: var(--st-radius-sm);\n    padding: 8px 13px;\n    filter: none;\n    transition: background-color var(--animation-duration-2x), color var(--animation-duration-2x);\n}\n\n.menu_button:not(.disabled):not([disabled]):hover,\n.menu_button:not(.disabled):not([disabled]).active {\n    background-color: var(--st-selected);\n    color: var(--st-text);\n}\n\n.menu_button.menu_button_icon {\n    gap: 8px;\n}\n\n.menu_button.toggleable.toggled {\n    background-color: var(--st-accent-solid);\n    color: #e6e9f7;\n}\n\n/* The one solid, primary-coloured control per panel. */\n#api_button,\n#api_button_textgenerationwebui,\n#api_button_novel,\n.api_button {\n    background-color: var(--st-accent-solid);\n    color: #e6e9f7;\n}\n\n.right_menu_button,\n.menu_button_icon i {\n    color: var(--st-muted);\n}\n\n/* Checkboxes become pill toggles. */\n.drawer-content input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox):not(#lm_button_panel_pin):not(#rm_button_panel_pin):not(#WI_panel_pin),\n.popup input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox) {\n    appearance: none;\n    -webkit-appearance: none;\n    position: relative;\n    width: 40px;\n    height: 22px;\n    min-width: 40px;\n    border: 0;\n    outline: none;\n    border-radius: var(--st-radius-pill);\n    background-color: var(--st-track);\n    box-shadow: none;\n    filter: none;\n    overflow: visible;\n    transform: none;\n    display: inline-block;\n    transition: background-color var(--animation-duration-2x);\n}\n\n.drawer-content input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox):not(#lm_button_panel_pin):not(#rm_button_panel_pin):not(#WI_panel_pin)::before,\n.popup input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox)::before {\n    content: '';\n    position: absolute;\n    top: 3px;\n    left: 3px;\n    width: 16px;\n    height: 16px;\n    border-radius: 50%;\n    background-color: var(--st-faint);\n    box-shadow: none;\n    clip-path: none;\n    transform: none;\n    transition: left var(--animation-duration-2x), background-color var(--animation-duration-2x);\n}\n\n.drawer-content input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox):not(#lm_button_panel_pin):not(#rm_button_panel_pin):not(#WI_panel_pin):checked,\n.popup input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox):checked {\n    background-color: var(--st-accent-on);\n}\n\n.drawer-content input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox):not(#lm_button_panel_pin):not(#rm_button_panel_pin):not(#WI_panel_pin):checked::before,\n.popup input[type=\"checkbox\"]:not(.del_checkbox):not(.bulk_select_checkbox):checked::before {\n    left: 21px;\n    background-color: var(--st-accent-knob);\n}\n\n.checkbox_label,\nlabel.checkbox_label {\n    gap: 12px;\n    align-items: center;\n    color: var(--st-text-4);\n    font-size: calc(var(--mainFontSize) * 0.87);\n}\n\n/* ---------------------------------------------------------------------\n   7. Sliders\n   ------------------------------------------------------------------ */\n\n/* Label on the left, value on the right, full-width track underneath.\n\n   SillyTavern's slider markup has no single wrapper class — some blocks use\n   .range-block-range-and-counter, others are a bare .flex-container.\n   The one reliable anchor is \"the element that directly contains the range\n   input\", so that is what the layout hangs off. */\n\n.drawer-content :has(> .neo-range-slider),\n.popup :has(> .neo-range-slider) {\n    display: grid;\n    grid-template-columns: 1fr auto;\n    align-items: center;\n    /* !important because most of these blocks carry .gap0, which upstream\n       declares as `gap: 0 !important` — without it the value sits directly\n       on the track and the thumb rides into the digits. */\n    column-gap: 10px !important;\n    row-gap: 12px !important;\n    margin-bottom: 24px;\n}\n\n.drawer-content :has(> .neo-range-slider)>small,\n.drawer-content :has(> .neo-range-slider)>label,\n.drawer-content :has(> .neo-range-slider)> span,\n.popup :has(> .neo-range-slider)>small,\n.popup :has(> .neo-range-slider)>label {\n    grid-row: 1;\n    grid-column: 1;\n    justify-self: start;\n    text-align: left;\n    font-size: calc(var(--mainFontSize) * 0.84);\n    color: var(--st-text-4);\n    opacity: 1;\n}\n\n.drawer-content :has(> .neo-range-slider)>.neo-range-slider,\n.popup :has(> .neo-range-slider)>.neo-range-slider {\n    grid-row: 2;\n    grid-column: 1 / -1;\n    margin-top: 0 !important;\n}\n\n.drawer-content :has(> .neo-range-slider)>.neo-range-input,\n.drawer-content :has(> .neo-range-slider)> :has(> .neo-range-input),\n.popup :has(> .neo-range-slider)>.neo-range-input,\n.popup :has(> .neo-range-slider)> :has(> .neo-range-input) {\n    grid-row: 1;\n    grid-column: 2;\n    justify-self: end;\n    width: auto;\n    margin: 0;\n}\n\n/* Anything else the block carries (a streaming toggle, a hint) goes below. */\n.drawer-content :has(> .neo-range-slider)> :not(small):not(label):not(span):not(.neo-range-slider):not(.neo-range-input):not(:has(> .neo-range-input)) {\n    grid-column: 1 / -1;\n}\n\n/* The info tooltip icon that rides along with the label. */\n.drawer-content :has(> .neo-range-slider)>small>.fa-circle-info {\n    font-size: calc(var(--mainFontSize) * 0.7);\n    margin-left: 5px;\n    opacity: .5;\n}\n\n/* Slider groups sit directly on the panel, matching User Settings — the\n   <hr> between groups carries the separation instead of a card. */\n.drawer-content .flex-container.gap10h5v:has(> * > .neo-range-slider),\n#pro-settings-block {\n    background-color: transparent;\n    border-radius: 0;\n    padding: 0;\n    margin-bottom: 4px;\n    gap: 4px 20px;\n}\n\n/* Legacy .range-block wrapper. */\n.range-block:has(> .range-block-range-and-counter) {\n    display: grid;\n    grid-template-columns: 1fr auto;\n    grid-template-areas:\n        \"title counter\"\n        \"range range\";\n    align-items: baseline;\n    column-gap: 14px;\n    row-gap: 10px;\n    margin-bottom: 20px;\n}\n\n.range-block:has(> .range-block-range-and-counter)>.range-block-title {\n    grid-area: title;\n    width: auto;\n    text-align: left;\n    font-size: calc(var(--mainFontSize) * 0.87);\n    color: var(--st-text-4);\n}\n\n.range-block:has(> .range-block-range-and-counter)>.range-block-range-and-counter {\n    display: contents;\n}\n\n.range-block:has(> .range-block-range-and-counter) .range-block-range {\n    grid-area: range;\n    flex: none;\n}\n\n.range-block:has(> .range-block-range-and-counter) .range-block-counter {\n    grid-area: counter;\n    margin: 0;\n    flex: none;\n    justify-self: end;\n}\n\n/* Specificity has to clear the generic input[type=\"number\"] rule above. */\n.range-block-counter input[type=\"number\"],\ninput.neo-range-input {\n    background-color: transparent;\n    border: 0;\n    border-radius: var(--st-radius-xs) !important;\n    color: var(--st-text-3);\n    font-family: var(--monoFontFamily);\n    font-size: calc(var(--mainFontSize) * 0.8);\n    text-align: right;\n    padding: 2px 6px;\n    padding-left: 6px;\n    width: 72px;\n    height: auto;\n}\n\n.range-block-counter input[type=\"number\"]:hover,\ninput.neo-range-input:hover {\n    background-color: var(--st-inset);\n}\n\n/* A 452 px sheet has no room for the two- and three-up column classes the\n   panels use at full width; one control per row instead. */\n/* The panels that are laid out as columns at full width. mobile-styles.css\n   already flattens these below 1000px; the docked sheet needs it always. */\n#UI-Theme-Block,\n#UI-Customization,\n#power-user-options-block,\n#ContextSettings,\n#InstructSettingsColumn,\n#InstructSequencesColumn {\n    flex-basis: 100%;\n    max-width: 100%;\n}\n\n/* Extensions register into two side-by-side .wide50p columns. At sheet width\n   that halves every card and wraps the titles, so give each column the full\n   row instead.\n\n   Do NOT do this by turning .extensions_block into a flex column: the two\n   blocks are .flex1, whose basis would then apply to their HEIGHT inside a\n   height-bounded drawer, collapsing both to nothing and blanking the panel.\n   Keeping the row and wrapping it keeps the basis on the width axis. */\n#rm_extensions_block .extensions_block {\n    flex-wrap: wrap;\n}\n\n#rm_extensions_block #extensions_settings,\n#rm_extensions_block #extensions_settings2 {\n    flex: 0 0 100%;\n    width: 100%;\n    max-width: 100%;\n    min-width: 0;\n}\n\n/* --- Persona Management ------------------------------------------------\n   Three rows here assume a wide panel and collide at sheet width: the title\n   shares a line with three labelled buttons, the create row packs a button,\n   a search field, a sort select, a pager and a view toggle onto one line,\n   and the persona's action buttons wrap under its name. */\n\n/* Title keeps its line; Usage Stats / Backup / Restore take the next. */\n#PersonaManagement>.flex-container>.flex-container.alignItemsBaseline {\n    flex-wrap: wrap;\n    gap: 8px;\n}\n\n#PersonaManagement>.flex-container>.flex-container.alignItemsBaseline>.flex1 {\n    flex: 1 1 100%;\n}\n\n#PersonaManagement>.flex-container>.flex-container.alignItemsBaseline>.flex-container {\n    flex: 1 1 100%;\n    flex-wrap: wrap;\n    gap: 8px;\n}\n\n/* Create + search on one line, sort / pager / view toggle on the next. */\n#persona-management-block .flex-container.marginBot10 {\n    flex-wrap: wrap;\n    gap: 8px;\n}\n\n#create_dummy_persona {\n    flex: 0 0 auto;\n    margin: 0;\n}\n\n#persona_search_bar {\n    flex: 1 1 140px;\n    min-width: 120px;\n    width: auto;\n}\n\n#persona_sort_order {\n    flex: 0 0 auto;\n    min-width: 92px;\n    width: auto;\n    margin: 0;\n}\n\n/* Wide enough to break onto its own line, but still sharing it with the\n   view toggle rather than stranding it below. */\n#persona_pagination_container {\n    flex: 1 1 200px;\n    min-width: 0;\n}\n\n#persona_grid_toggle {\n    flex: 0 0 auto;\n    margin: 0;\n}\n\n/* Name and the More… picker share a line; the icon row gets its own. */\n#persona_controls {\n    flex-wrap: wrap;\n    align-items: center;\n    gap: 8px;\n}\n\n#persona_controls .persona_name {\n    order: 1;\n    flex: 1 1 auto;\n    min-width: 0;\n    margin: 0;\n}\n\n#persona_controls label[for=\"persona-management-dropdown\"] {\n    order: 2;\n    flex: 0 1 auto;\n    height: auto;\n}\n\n#persona_controls .persona_controls_buttons_block {\n    order: 3;\n    flex: 1 1 100%;\n    flex-wrap: nowrap;\n    justify-content: flex-start;\n    gap: 6px;\n}\n\n#persona_controls .persona_controls_buttons_block .menu_button {\n    flex: 0 1 auto;\n    margin: 0;\n}\n\n/* Persona Management is a two-column layout that does not fit the sheet. */\n#persona-management-block {\n    flex-direction: column;\n}\n\n#persona-management-block>div {\n    width: 100%;\n    max-width: 100%;\n    flex-basis: auto;\n}\n\n#rm_ch_create_block .flexBasis25p,\n#rm_ch_create_block .flexBasis30p,\n#rm_ch_create_block .flexBasis48p,\n#rm_ch_create_block .flexBasis50p,\n#rm_ch_create_block .flexBasis200px,\n.drawer-content:not(#right-nav-panel) .flexBasis25p,\n.drawer-content:not(#right-nav-panel) .flexBasis30p,\n.drawer-content:not(#right-nav-panel) .flexBasis48p,\n.drawer-content:not(#right-nav-panel) .flexBasis50p,\n.drawer-content:not(#right-nav-panel) .flexBasis200px,\n.drawer-content:not(#right-nav-panel) .drawer25pWidth,\n.drawer-content:not(#right-nav-panel) .drawer33pWidth {\n    flex-basis: 100%;\n    max-width: 100%;\n}\n\ninput[type=\"range\"],\n.neo-range-slider {\n    height: 4px !important;\n    margin: 0 !important;\n    padding: 0 !important;\n    background: var(--st-track) !important;\n    border-radius: var(--st-radius-pill) !important;\n    box-shadow: none !important;\n    filter: none !important;\n    cursor: pointer !important;\n}\n\ninput[type=\"range\"]:hover,\n.neo-range-slider:hover {\n    filter: none !important;\n    background: #2b2b32 !important;\n}\n\ninput[type=\"range\"]::-webkit-slider-thumb,\n.neo-range-slider::-webkit-slider-thumb {\n    -webkit-appearance: none;\n    width: 13px;\n    height: 13px;\n    border: 0;\n    border-radius: 50%;\n    background: var(--st-accent-thumb);\n    box-shadow: none;\n    cursor: pointer;\n}\n\ninput[type=\"range\"]::-moz-range-thumb,\n.neo-range-slider::-moz-range-thumb {\n    width: 13px;\n    height: 13px;\n    border: 0;\n    border-radius: 50%;\n    background: var(--st-accent-thumb);\n}\n\ninput[type=\"range\"]:hover::-webkit-slider-thumb,\n.neo-range-slider:hover::-webkit-slider-thumb {\n    background: #e6e9f7;\n}\n\n/* ---------------------------------------------------------------------\n   8. Chat column\n   ------------------------------------------------------------------ */\n\n@media screen and (min-width: 1001px) {\n    #sheld {\n        left: var(--st-rail-width);\n        right: 0;\n        top: 0;\n        width: calc(100dvw - var(--st-rail-width));\n        height: 100dvh;\n        max-height: 100dvh;\n    }\n}\n\n#chat {\n    background-color: var(--st-bg);\n    backdrop-filter: none;\n    -webkit-backdrop-filter: none;\n    max-height: none;\n    /* the bottom value is breathing room between the last message and the\n       composer — upstream forces .last_mes to margin-bottom: 0 */\n    padding: 14px 24px 20px;\n    gap: 4px;\n}\n\n#chat>.mes,\n#chat>.welcomePanel {\n    width: 100%;\n    max-width: min(var(--st-content-max), var(--sheldWidth));\n    margin-left: auto;\n    margin-right: auto;\n}\n\n/* ---------------------------------------------------------------------\n   9. Messages\n   ------------------------------------------------------------------ */\n\n.mes {\n    color: var(--st-text-2);\n    padding: 0;\n    gap: 14px;\n    margin-bottom: 14px;\n}\n\n.mes_text,\n.mes_reasoning {\n    font-weight: 400;\n    line-height: 1.62;\n}\n\n.mes_text i,\n.mes_text em {\n    color: #8f8f98;\n}\n\n.mes_text q,\n.mes_text q::before,\n.mes_text q::after {\n    color: var(--st-accent);\n}\n\n.mes .avatar,\n.mes .avatar img {\n    width: 38px;\n    height: 38px;\n    border-radius: 50%;\n    border: 0;\n    box-shadow: none;\n}\n\n.mes .mes_block {\n    padding-left: 0;\n    min-width: 0;\n}\n\n.mes_block .ch_name {\n    min-height: 0;\n    font-size: calc(var(--mainFontSize) * 0.95);\n    font-weight: 400;\n    color: var(--st-text);\n    margin-bottom: 6px;\n}\n\n.mes_block .ch_name .name_text {\n    font-weight: 400;\n}\n\n.mes_buttons .mes_button,\n.mes_buttons .extraMesButtonsHint {\n    color: var(--st-faint);\n    opacity: 1;\n}\n\n.mes_buttons .mes_button:hover {\n    color: var(--st-text-3);\n}\n\n.timestamp,\n.mes_timer,\n.mesIDDisplay,\n.tokenCounterDisplay {\n    color: var(--st-fainter);\n    font-family: var(--monoFontFamily);\n    font-size: calc(var(--mainFontSize) * 0.65);\n}\n\n/* --- Bubbles ------------------------------------------------------- */\n\n/* Upstream paints the bubble on .mes, which swallows the avatar.\n   Move it onto .mes_block so the avatar sits outside, as in the mock. */\nbody.bubblechat #chat .mes {\n    background-color: transparent;\n    border: 0;\n    border-radius: 0;\n    padding: 0;\n    margin-bottom: 18px;\n    align-items: flex-start;\n}\n\nbody.bubblechat #chat .mes .mes_block {\n    background-color: var(--st-bot-mes);\n    border-radius: 16px;\n    padding: 13px 17px;\n    width: auto;\n    max-width: calc(100% - 52px);\n    overflow: visible;\n}\n\nbody.bubblechat #chat .mes[is_user=\"true\"] {\n    flex-direction: row-reverse;\n}\n\n/* The avatar is a flex sibling, so the bubble's cap leaves room for it. */\nbody.bubblechat #chat .mes[is_user=\"true\"] .mes_block {\n    background-color: var(--st-user-mes);\n    max-width: min(78%, calc(100% - 52px));\n    color: var(--st-text-3);\n}\n\n/* row-reverse puts the avatar on the trailing side, so your persona sits to\n   the right of your own bubbles. */\nbody.bubblechat #chat .mes[is_user=\"true\"] .mesAvatarWrapper {\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n}\n\nbody.bubblechat #chat .mes .ch_name {\n    margin-bottom: 5px;\n    min-height: 0;\n}\n\nbody.bubblechat #chat .mes:not(:hover) .mes_buttons {\n    opacity: 0;\n}\n\nbody.bubblechat #chat .mes .mes_buttons {\n    transition: opacity var(--animation-duration-2x);\n}\n\nbody.bubblechat .welcomePanel {\n    background-color: var(--st-card);\n    border: 0;\n    border-radius: var(--st-radius);\n    padding: 20px 24px;\n}\n\n/* --- Flat / document ----------------------------------------------- */\n\nbody:not(.bubblechat) #chat .mes {\n    padding: 0 0 22px;\n    border-bottom: 1px solid #131317;\n    margin-bottom: 22px;\n}\n\nbody:not(.bubblechat) #chat .mes.last_mes {\n    border-bottom: 0;\n}\n\n/* Swipes. */\n.swipe_left,\n.swipe_right {\n    color: var(--st-faint);\n    opacity: 0;\n    transition: opacity var(--animation-duration-2x);\n}\n\n.mes:hover .swipe_left,\n.mes:hover .swipe_right,\n.last_mes .swipe_left,\n.last_mes .swipe_right {\n    opacity: .6;\n}\n\n.swipes-counter {\n    color: var(--st-fainter);\n    font-family: var(--monoFontFamily);\n    font-size: calc(var(--mainFontSize) * 0.62);\n}\n\n/* Reasoning block reads as a well, not a bubble-in-a-bubble. */\n.mes_reasoning_details {\n    background-color: var(--st-well);\n    border: 0;\n    border-radius: var(--st-radius-sm);\n    padding: 10px 14px;\n    margin-bottom: 10px;\n}\n\n.mes_reasoning_header_title {\n    color: var(--st-muted);\n    font-size: calc(var(--mainFontSize) * 0.8);\n}\n\n/* ---------------------------------------------------------------------\n   10. Composer\n   ------------------------------------------------------------------ */\n\n#form_sheld {\n    background: transparent;\n    padding: 0 22px 18px;\n}\n\n/* toggle-dependent.css paints #send_form with !important under body.no-blur. */\n#send_form,\nbody.no-blur #send_form {\n    background: transparent !important;\n    border: 0;\n    border-radius: 0;\n    backdrop-filter: none;\n    justify-content: center;\n}\n\n#send_form:has(#send_textarea:focus-visible) {\n    border-color: transparent;\n    outline: none;\n}\n\n/* stretch, not center: the pill is two halves, and a centred right half\n   stays 46px tall while the textarea grows, leaving the send button\n   floating in a detached stub. */\n#nonQRFormItems {\n    max-width: calc(min(var(--st-composer-max), var(--sheldWidth)) + 54px);\n    margin: 0 auto;\n    align-items: stretch;\n    column-gap: 0;\n}\n\n/* The options button sits outside the pill, on its own, level with the\n   pill's last line once the field has grown. */\n#leftSendForm {\n    padding-left: 0;\n    margin-right: 16px;\n    align-self: flex-end;\n    height: var(--st-composer-height);\n    align-items: center;\n}\n\n#leftSendForm>div {\n    color: var(--st-muted);\n    opacity: 1;\n}\n\n#leftSendForm>div:hover {\n    color: var(--st-text-3);\n    filter: none;\n}\n\n/* The textarea and the right icon cluster are the two halves of one pill. */\n#send_textarea {\n    background-color: var(--st-card);\n    border: 0;\n    border-radius: var(--st-composer-radius) 0 0 var(--st-composer-radius);\n    border-top: 0;\n    clip-path: none;\n    min-height: var(--st-composer-height);\n    height: var(--st-composer-height);\n    padding: 12px 4px 12px 20px;\n    color: var(--st-text-2);\n    line-height: 1.45;\n}\n\n#send_textarea::placeholder {\n    color: var(--st-fainter) !important;\n    text-align: start;\n    opacity: 1;\n}\n\n/* Matches the textarea's height so the two halves stay one shape; the\n   buttons ride the bottom line rather than the vertical middle. */\n#rightSendForm {\n    background-color: var(--st-card);\n    border-radius: 0 var(--st-composer-radius) var(--st-composer-radius) 0;\n    padding-right: 12px;\n    align-items: flex-end;\n    align-self: stretch;\n    min-height: var(--st-composer-height);\n    flex-wrap: nowrap;\n}\n\n#rightSendForm>div:not(.mes_stop) {\n    width: 32px;\n    height: var(--st-composer-height);\n    opacity: 1;\n    color: var(--st-muted);\n    font-size: 15px;\n}\n\n#rightSendForm>div:hover {\n    filter: none;\n    color: var(--st-text-3);\n}\n\n#send_but {\n    color: var(--st-accent) !important;\n}\n\n#send_but:hover {\n    color: var(--st-accent-hover) !important;\n}\n\n#mes_stop {\n    color: var(--st-danger);\n}\n\n/* Quick replies sit above the pill, as chips. */\n#qr--bar {\n    max-width: min(var(--st-composer-max), var(--sheldWidth));\n    margin: 0 auto 10px;\n    gap: 6px;\n}\n\n#qr--bar .qr--button {\n    background-color: var(--st-card);\n    border: 0;\n    border-radius: var(--st-radius-pill);\n    padding: 6px 14px;\n    color: var(--st-text-4);\n    font-size: calc(var(--mainFontSize) * 0.85);\n}\n\n#qr--bar .qr--button:hover {\n    background-color: var(--st-selected);\n    color: var(--st-text);\n}\n\n/* ---------------------------------------------------------------------\n   11. Character list page\n   ------------------------------------------------------------------ */\n\n#right-nav-panel #rm_print_characters_block {\n    display: grid;\n    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));\n    gap: 14px;\n    align-content: start;\n    height: auto;\n    padding: 8px 2px 24px;\n}\n\n.character_select,\n.group_select,\n.bogus_folder_select {\n    background-color: var(--st-well);\n    border-radius: var(--st-radius);\n    padding: 16px 44px 16px 16px;\n    margin-bottom: 0;\n    gap: 16px;\n    align-items: center;\n    transition: background-color var(--animation-duration-2x);\n}\n\n.character_select:hover,\n.group_select:hover,\n.bogus_folder_select:hover {\n    background-color: #16161a;\n}\n\n.character_select .avatar,\n.group_select .avatar,\n.bogus_folder_select .avatar {\n    width: 52px;\n    height: 52px;\n    flex: none;\n}\n\n.character_select .avatar img,\n.group_select .avatar img {\n    width: 52px;\n    height: 52px;\n    border: 0;\n    box-shadow: none;\n}\n\n.character_name_block .ch_name,\n.avatar-container .ch_name {\n    font-size: calc(var(--mainFontSize) * 1.13);\n    font-weight: 600;\n    color: #f0f0f2;\n}\n\n.ch_description {\n    font-size: calc(var(--mainFontSize) * 0.83);\n    color: var(--st-muted);\n    margin-top: 2px;\n}\n\n.ch_fav_icon {\n    filter: none;\n    color: #2b2b32;\n    font-size: 14px;\n}\n\n.character_select.is_fav .ch_fav_icon,\n.group_select.is_fav .ch_fav_icon {\n    color: #f0c040;\n}\n\n.character_select.is_fav .ch_name,\n.group_select.is_fav .ch_name,\n.group_member.is_fav .ch_name {\n    color: #f0f0f2;\n}\n\n/* Character portraits read as rounded rectangles in the character panes.\n   Chat avatars stay circular, so this is a CSS override rather than the\n   avatar_style theme setting, which would change both. */\n#rm_print_characters_block .character_select .avatar,\n#rm_print_characters_block .character_select .avatar img,\n#rm_print_characters_block .group_select .avatar,\n#rm_print_characters_block .group_select .avatar img,\n#rm_print_characters_block .bogus_folder_select .avatar,\n#rm_print_characters_block .bogus_folder_select .avatar img,\n#avatar_div_div,\n#avatar_load_preview,\n#rm_ch_create_block .avatar_div .avatar,\n#rm_ch_create_block .avatar_div .avatar img {\n    border-radius: 14px;\n}\n\n/* The editor's portrait is capped at --avatar-base-width (38px) and squashed\n   by .avatar img's fixed dimensions. Character cards are 2:3, so give it a\n   real portrait footprint and let the controls take the rest of the row.\n   .add_avatar's \"border\" is a 2px solid rule in the body colour — a white\n   ring here — so that goes too. */\n#rm_ch_create_block #avatar_div {\n    align-items: flex-start;\n    gap: 14px;\n    flex-wrap: nowrap;\n}\n\n#rm_ch_create_block #avatar_div_div {\n    flex: 0 0 auto;\n    height: 120px;\n    width: auto;\n    aspect-ratio: 2 / 3;\n    margin: 0;\n    border: 0;\n    padding: 0;\n    overflow: hidden;\n    border-radius: 14px;\n}\n\n#rm_ch_create_block #avatar_load_preview {\n    width: 100%;\n    height: 100%;\n    object-fit: cover;\n    object-position: center top;\n    border: 0;\n    border-radius: 14px;\n    box-shadow: none;\n}\n\n#rm_ch_create_block #avatar_controls {\n    flex: 1 1 auto;\n    min-width: 0;\n    align-content: flex-start;\n}\n\n/* Tags as pills. */\n.tag {\n    background-color: var(--st-selected);\n    border: 0;\n    border-radius: var(--st-radius-pill);\n    padding: 2px 10px;\n    font-size: calc(var(--mainFontSize) * 0.68);\n    color: var(--st-text-2);\n}\n\n#rm_button_selected_ch h2 {\n    font-weight: 300;\n    color: var(--st-text-4);\n}\n\n/* ---------------------------------------------------------------------\n   11b. Backgrounds panel\n   ------------------------------------------------------------------ */\n\n/* Five thumbnails across a 452 px sheet is a filmstrip; three is a grid. */\n#Backgrounds {\n    --bg-thumb-columns: 3;\n}\n\n#bg-header-fixed {\n    background-color: transparent;\n    border-bottom: 0;\n    padding: 0 0 10px;\n}\n\n/* The control row overflows its container rather than wrapping, which cuts\n   the last button off the right edge. */\n.bg-header-row-1,\n.bg-header-row-2 {\n    flex-wrap: wrap;\n    align-items: center;\n    gap: 8px;\n}\n\n#bg-header-fixed .menu_button {\n    margin: 0;\n}\n\n#background_fitting {\n    width: auto;\n    flex: 0 1 auto;\n}\n\n.bg_example,\n.bg_folder_tile {\n    border-radius: 14px;\n    overflow: hidden;\n}\n\n/* ---------------------------------------------------------------------\n   11b2. World Info / Lorebooks\n   ------------------------------------------------------------------ */\n\n/* This panel assumes a full-width drawer: a two-column header, and a\n   floating strip of column titles (#WIEntryHeaderTitlesPC) that only lines\n   up with the fields underneath it when the panel is wide. In a 452px sheet\n   the two header columns collide and the strip floats free of its columns.\n\n   SillyTavern already has a narrow layout for all of it — it is just gated\n   behind the 1000px breakpoint. Run it at every width instead. */\n\n#wiTopBlock,\n#wiActivationSettings,\n.wi-settings {\n    flex-direction: column;\n    gap: 8px;\n}\n\n#WIMultiSelector {\n    align-self: normal;\n    width: 100%;\n}\n\n/* Column-title strip off; the per-field labels it was standing in for on. */\n#WIEntryHeaderTitlesPC {\n    display: none;\n}\n\n.WIEntryHeaderTitleMobile {\n    display: block !important;\n}\n\n/* Upstream's own narrow rule says `.WIEntryHeaderControls`, but the element\n   in the DOM is `.WIEnteryHeaderControls` — an \"Entery\" typo in the template\n   that has never matched. That is why only half the header ever reflowed.\n   Both spellings are listed so this keeps working if upstream fixes it. */\n.WIEntryTitleAndStatus,\n.WIEntryHeaderControls,\n.WIEnteryHeaderControls {\n    width: 100%;\n}\n\n/* Entry header — title row, then the four controls, then the actions. */\n#WorldInfo .world_entry .inline-drawer-header,\n#world_popup .world_entry .inline-drawer-header {\n    flex-wrap: wrap;\n    align-items: center;\n    row-gap: 8px;\n}\n\n/* The title/status pair and the controls stack instead of competing. */\n.world_entry .flex-container:has(> .WIEntryTitleAndStatus) {\n    flex-direction: column;\n    align-items: stretch;\n    gap: 10px;\n}\n\n.world_entry .WIEntryTitleAndStatus {\n    gap: 8px;\n    flex-wrap: nowrap;\n}\n\n.world_entry .WIEntryTitleAndStatus>.flex-container {\n    flex: 1 1 auto;\n    min-width: 0;\n}\n\n/* The memo field was collapsing to a few characters wide. field-sizing lets\n   a long title grow the box instead of hiding behind a scrollbar. */\n.world_entry .WIEntryTitleAndStatus textarea[name=\"comment\"] {\n    width: 100%;\n    min-width: 0;\n    margin: 0;\n    resize: none;\n    field-sizing: content;\n    overflow: hidden;\n    min-height: var(--st-wi-title-row);\n    max-height: 6lh;\n}\n\n/* The plaintext/fancy toggle is offset by a label height that this layout\n   no longer puts above it; centre it on the field it belongs to. */\n.world_entry .switch_input_type_icon {\n    margin-top: 0;\n    top: auto;\n    bottom: 0;\n    right: 8px;\n    height: 38px;\n    display: grid;\n    place-items: center;\n}\n\n/* Position / Order / Trigger % share one row. Inline labels plus three\n   controls need ~380px against the ~334px a 412px card actually offers, so\n   the labels sit above their controls in three columns — which is also how\n   every other field in this card is labelled. */\n.world_entry .WIEnteryHeaderControls,\n.world_entry .WIEntryHeaderControls {\n    display: grid;\n    grid-template-columns: 1.25fr 1fr 1fr;\n    align-items: start;\n    gap: 4px 10px;\n    min-width: 0;\n}\n\n/* Equal control heights so the three labels sit on one line. */\n.world_entry .WIEnteryHeaderControls select,\n.world_entry .WIEnteryHeaderControls input[type=\"number\"],\n.world_entry .WIEntryHeaderControls select,\n.world_entry .WIEntryHeaderControls input[type=\"number\"] {\n    height: 38px;\n}\n\n.world_entry .WIEnteryHeaderControls>.world_entry_form_control,\n.world_entry .WIEntryHeaderControls>.world_entry_form_control {\n    min-width: 0;\n}\n\n.world_entry .WIEnteryHeaderControls select[name=\"position\"] {\n    width: 100%;\n    min-width: 0;\n    padding-left: 10px;\n    padding-right: 22px;\n    background-position: right 8px center;\n}\n\n.world_entry .WIEnteryHeaderControls .world_entry_form_control,\n.world_entry .WIEntryHeaderControls .world_entry_form_control {\n    display: flex;\n    flex-direction: column;\n    align-items: stretch;\n    gap: 4px;\n    margin: 0;\n    min-width: 0;\n}\n\n.world_entry .WIEntryHeaderTitleMobile {\n    margin: 0;\n    white-space: nowrap;\n    color: var(--st-muted);\n    font-size: calc(var(--mainFontSize) * 0.76);\n    overflow: hidden;\n    text-overflow: ellipsis;\n}\n\n/* Room for four digits plus the spin buttons Chrome reserves space for,\n   trimmed to what a single row can afford. */\n.world_entry .WIEnteryHeaderControls input[type=\"number\"],\n.world_entry .WIEntryHeaderControls input[type=\"number\"] {\n    width: 100%;\n    min-width: 0;\n    max-width: none;\n    padding-left: 10px;\n    padding-right: 4px;\n    text-align: left;\n}\n\n/* Chrome reserves content-box width for the spin buttons whether or not\n   they are wanted. These values are typed, and the row needs the pixels. */\n.world_entry .WIEnteryHeaderControls input[type=\"number\"]::-webkit-inner-spin-button,\n.world_entry .WIEnteryHeaderControls input[type=\"number\"]::-webkit-outer-spin-button,\n.world_entry .WIEntryHeaderControls input[type=\"number\"]::-webkit-inner-spin-button,\n.world_entry .WIEntryHeaderControls input[type=\"number\"]::-webkit-outer-spin-button {\n    -webkit-appearance: none;\n    appearance: none;\n    margin: 0;\n}\n\n/* The expanded edit form packs three keyword fields and six override fields\n   into single rows. Neither survives sheet width — wrap them. */\n.world_entry [name=\"keywordsAndLogicBlock\"],\n.world_entry [name=\"perEntryOverridesBlock\"] {\n    flex-wrap: wrap;\n    gap: 12px;\n    align-items: flex-start;\n}\n\n.world_entry [name=\"keywordsAndLogicBlock\"]>.world_entry_form_control {\n    flex: 1 1 100%;\n    min-width: 0;\n}\n\n.world_entry [name=\"keywordsAndLogicBlock\"]>.world_entry_form_control:has(select[name=\"entryLogicType\"]) {\n    flex: 0 0 auto;\n}\n\n.world_entry [name=\"perEntryOverridesBlock\"]>.world_entry_form_control {\n    flex: 1 1 45%;\n    min-width: 140px;\n}\n\n/* The lower half of the entry form is two five- and two-up flex rows sized\n   in flex units (flex4 / flex2). At sheet width a \"flex2\" column lands\n   around 60px, which clips its own value — \"100\" renders as \"10\". Wrap the\n   rows and give the columns a floor. */\n.world_entry .flex-container.flexGap10 {\n    flex-wrap: wrap;\n    gap: 12px;\n}\n\n.world_entry .flex-container.flexGap10>* {\n    min-width: 0;\n}\n\n.world_entry .flex-container.flexGap10>.flex4 {\n    flex: 1 1 100%;\n}\n\n.world_entry .flex-container.flexGap10>.flex2 {\n    flex: 1 1 calc(50% - 6px);\n    min-width: 132px;\n}\n\n/* The Content caption crams a title, a token count and a stack of four\n   toggles onto one nowrap line. Let it wrap; the toggles take their own. */\n.world_entry .world_entry_form_control>label>small>.flex-container.flexnowrap {\n    flex-wrap: wrap;\n    justify-content: flex-start;\n    gap: 6px 12px;\n}\n\n.world_entry .world_entry_form_control>label>small>.flex-container.flexnowrap>.flex-container {\n    width: 100%;\n}\n\n/* Nothing in an entry may clip its own value. No text-overflow here: on a\n   narrow input[type=number] Chrome reserves room for the spin buttons, so\n   an ellipsis kicks in with the value still fitting — \"100\" became \"1…\". */\n.world_entry .text_pole,\n.world_entry input[type=\"number\"],\n.world_entry input[type=\"text\"] {\n    min-width: 0;\n}\n\n/* Field captions read left in a column layout, not centred over nothing. */\n.world_entry .world_entry_form_control>small {\n    text-align: left;\n    color: var(--st-muted);\n    font-size: calc(var(--mainFontSize) * 0.78);\n    margin-bottom: 4px;\n}\n\n/* Depth only applies at position \"@D\". Upstream disables the input and sets\n   visibility:hidden, which in a column layout leaves a dangling \"Depth:\"\n   label over an empty gap. Drop the whole control while it is inert. */\n.world_entry .world_entry_form_control:has(> input[name=\"depth\"]:disabled) {\n    display: none;\n}\n\n/* Chevron, kill switch and the action buttons align to the title row rather\n   than floating against the middle of a now two-row block. */\n.world_entry .inline-drawer-header {\n    align-items: flex-start;\n}\n\n/* Stays full width so the four controls have room to flow two-up; the\n   action buttons take the row underneath. */\n.world_entry .world_entry_thin_controls {\n    align-items: flex-start;\n}\n\n/* The collapse chevron and the kill switch render at different font sizes\n   (11px vs 14.55px), and the chevron also inherits `padding: 12px 0` from\n   the inline-drawer-header rule — so equal margins align neither their\n   boxes nor, more visibly, their glyph ink. Give both an identical box the\n   height of the title row and an identical font size, then centre the glyph\n   in it: they line up with each other and sit on the memo's centre line.\n   Fixed height on purpose — as the memo grows they stay on its first line\n   rather than drifting down with it. */\n.world_entry .world_entry_thin_controls>.inline-drawer-toggle,\n.world_entry .world_entry_thin_controls>.killSwitch {\n    margin-top: 0;\n    padding: 0;\n    height: var(--st-wi-title-row);\n    min-height: var(--st-wi-title-row);\n    font-size: 14px;\n    line-height: 1;\n    display: grid;\n    place-items: center;\n    flex: none;\n    align-self: flex-start;\n}\n\n.world_entry .inline-drawer-header>.drag-handle {\n    margin-top: 7px;\n}\n\n.world_entry .inline-drawer-header>.menu_button {\n    margin-top: 0;\n    padding: 7px 9px;\n}\n\n.world_entry .inline-drawer-header>.menu_button:first-of-type {\n    margin-left: auto;\n}\n\n/* A collapsed entry should not reserve a screenful of empty card. */\n#WorldInfo .world_entry .inline-drawer-content:empty,\n#world_popup .world_entry .inline-drawer-content:empty {\n    padding: 0;\n    min-height: 0;\n}\n\n#WorldInfo .wi-card-entry,\n#world_popup .wi-card-entry {\n    padding: 6px 14px 8px;\n}\n\n.WIEntryContentAndMemo {\n    flex-flow: column;\n}\n\n.WIEntryContentAndMemo .world_entry_thin_controls {\n    width: 100%;\n}\n\n.world_entry_form_control.world_entry_form_horizontal {\n    align-items: flex-start;\n    row-gap: 8px;\n}\n\n.world_entry_form_control.world_entry_form_horizontal .world_popup_expander {\n    display: none;\n}\n\n#worldInfoScanningCheckboxes {\n    flex-flow: row;\n    flex-wrap: wrap;\n}\n\n/* Entries as cards, matching the rest of the system. One card per entry:\n   .wi-card-entry is it. The .inline-drawer nested inside would otherwise\n   pick up the generic card treatment and stack a second surface — and its\n   padding — inside the first. */\n#WorldInfo .world_entry .inline-drawer,\n#world_popup .world_entry .inline-drawer {\n    background-color: transparent;\n    border-radius: 0;\n    padding: 0;\n    margin-bottom: 0;\n}\n\n#WorldInfo .wi-card-entry,\n#world_popup .wi-card-entry {\n    background-color: var(--st-card);\n    border: 0;\n    border-radius: var(--st-radius);\n    padding: 6px 14px;\n    margin-bottom: 10px;\n}\n\n#WorldInfo .world_entry .inline-drawer-header,\n#world_popup .world_entry .inline-drawer-header {\n    padding: 10px 0;\n}\n\n/* Number fields were clipping their own values (\"100\" showing as \"10\"). */\n.world_entry_form_control input[type=\"number\"],\n.world_entry_form_control input.text_pole[type=\"number\"] {\n    min-width: 4.5em;\n    text-align: left;\n}\n\n.world_entry_form_control {\n    min-width: 0;\n}\n\n/* --- Toolbar ---------------------------------------------------------\n   Upstream packs the lorebook picker, five file buttons, five entry\n   buttons, a search box, a sort select and the pager into two flex rows.\n   At sheet width the picker gets whatever is left over — a sliver too\n   narrow to read a single lorebook name, and since a native <select>\n   sizes its dropdown to itself, the open list is unreadable too.\n\n   Rebuilt as: picker row, button row, search row. The line breaks are\n   forced with full-basis pseudo-elements rather than left to wrapping,\n   so the rows hold regardless of how wide the buttons render. */\n\n#world_popup>.flex-container:has(#world_editor_select),\n#world_popup>.flex-container:has(#world_info_search) {\n    flex-wrap: wrap;\n    align-items: center;\n    justify-content: center;\n    gap: 12px 8px;\n    width: 100%;\n    margin-bottom: 4px;\n}\n\n/* Row 1 — Create or [ picker ] */\n#world_create_button {\n    order: 1;\n    flex: 0 0 auto;\n    margin: 0;\n}\n\n#world_popup>.flex-container:has(#world_editor_select)>small {\n    order: 2;\n    color: var(--st-muted);\n}\n\n/* select2 replaces the picker with a wrapper span and hides the real\n   <select> (position:absolute, .select2-hidden-accessible), so the visible\n   control — and the width the dropdown list inherits — is the span. It also\n   writes its width as an inline style, hence !important. */\n#world_popup>.flex-container:has(#world_editor_select)>.select2-container {\n    order: 3;\n    flex: 1 1 200px;\n    min-width: 200px;\n    width: auto !important;\n    margin: 0;\n}\n\n#world_editor_select {\n    order: 3;\n}\n\n#world_popup .select2-container .select2-selection--single {\n    height: 38px;\n    display: flex;\n    align-items: center;\n}\n\n#world_popup>.flex-container:has(#world_editor_select)::before {\n    content: '';\n    order: 4;\n    flex-basis: 100%;\n    height: 0;\n}\n\n/* Row 2 — the lorebook file buttons */\n#world_import_button,\n#world_popup_export,\n#world_popup_name_button,\n#world_duplicate,\n#world_popup_delete {\n    order: 5;\n    margin: 0;\n}\n\n/* Row 3 — the entry buttons, pulled together with refresh */\n#world_popup_new,\n#OpenAllWIEntries,\n#CloseAllWIEntries,\n#world_backfill_memos,\n#world_apply_current_sorting,\n#world_refresh {\n    order: 1;\n    margin: 0;\n}\n\n#world_popup>.flex-container:has(#world_info_search)::before {\n    content: '';\n    order: 2;\n    flex-basis: 100%;\n    height: 0;\n}\n\n/* Row 4 — search, full width and on its own */\n#world_info_search {\n    order: 3;\n    flex: 1 1 100%;\n    width: 100%;\n    margin: 0;\n}\n\n#world_popup>.flex-container:has(#world_info_search)::after {\n    content: '';\n    order: 4;\n    flex-basis: 100%;\n    height: 0;\n}\n\n/* Row 5 — sort and pager */\n#world_info_sort_order {\n    order: 5;\n    flex: 0 1 auto;\n    width: auto;\n    min-width: 140px;\n    margin: 0;\n}\n\n#world_info_pagination {\n    order: 6;\n    flex: 1 1 auto;\n    justify-content: flex-end;\n}\n\n#WorldInfo .world_info_select_block {\n    flex-wrap: wrap;\n}\n\n/* The activation-settings disclosure sits under its own label, not on it. */\n#wiTopBlock .range-block-title {\n    width: 100%;\n    text-align: left;\n    margin-bottom: 6px;\n}\n\n#wiTopBlock .inline-drawer {\n    width: 100%;\n}\n\n/* ---------------------------------------------------------------------\n   11c. Zoomed avatar\n   ------------------------------------------------------------------ */\n\n/* Upstream parks this in the empty gutter beside the chat and sizes it from\n   that gutter's width. This layout has no gutter — the chat fills everything\n   right of the rail — so the sum came out at zero and the panel collapsed\n   into the corner underneath the rail. Anchor it to the chat area instead.\n   No !important on `left`: dragging sets an inline style that must still win. */\n.zoomed_avatar {\n    --maxWidth: min(calc(90dvh * 0.666), 34vw);\n    --leftPosition: calc(var(--st-rail-width) + 18px);\n    left: calc(var(--st-rail-width) + 18px);\n    /* clear the composer rather than sitting on top of it */\n    bottom: 78px;\n    width: auto;\n    min-width: 220px;\n    max-width: var(--maxWidth);\n    max-height: calc(100dvh - 96px) !important;\n    border: 0;\n    border-radius: var(--st-radius);\n    overflow: hidden;\n    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .85);\n    z-index: 3010;\n}\n\n.zoomed_avatar .zoomed_avatar_container {\n    width: 100%;\n    height: 100%;\n}\n\n/* Scale a tall portrait down to fit rather than cropping it. */\n.zoomed_avatar .zoomed_avatar_img {\n    display: block;\n    width: auto;\n    height: auto;\n    max-width: 100%;\n    max-height: calc(100dvh - 96px);\n    object-fit: contain;\n    border: 0;\n    border-radius: 0;\n    box-shadow: none;\n}\n\n.zoomed_avatar .panelControlBar {\n    background-color: rgba(8, 8, 10, .6);\n    border-radius: var(--st-radius-xs);\n    padding: 2px;\n}\n\n@media screen and (max-width: 1000px) {\n    .zoomed_avatar {\n        --maxWidth: min(calc(70dvh * 0.666), 80vw);\n        --leftPosition: 12px;\n        left: 12px;\n        bottom: calc(var(--st-bar-height) + 12px);\n        max-height: calc(100dvh - var(--st-bar-height) - 24px) !important;\n    }\n\n    .zoomed_avatar .zoomed_avatar_img {\n        max-height: calc(100dvh - var(--st-bar-height) - 24px);\n    }\n}\n\n/* ---------------------------------------------------------------------\n   12. Popups and menus\n   ------------------------------------------------------------------ */\n\n.popup,\n#shadow_popup .popup,\ndialog.popup {\n    background-color: var(--st-card);\n    border: 0;\n    border-radius: var(--st-radius);\n    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .85);\n    color: var(--st-text-2);\n}\n\n/* Advanced Definitions. Sized in the desktop block; skinned here so the\n   mobile full-bleed version gets the same surface. */\n#character_popup {\n    background-color: var(--st-sheet);\n    backdrop-filter: none;\n    -webkit-backdrop-filter: none;\n    border: 0;\n    border-radius: var(--st-radius);\n    box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .85);\n    padding: 24px 28px;\n}\n\n/* The \"large editor\" (the maximize icon on any big text field) opens as a\n   popup with { wide: true, large: true }. .wide_dialogue_popup sets\n   `min-width: var(--sheldWidth)` — which this theme sets to 100vw — so it\n   swallows the screen. Size it like Advanced Definitions instead.\n\n   Centred with insets rather than a transform: the open animation is a\n   scaleY keyframe, and a translate here would snap once it finished. */\n.popup.wide_dialogue_popup,\n.popup.large_dialogue_popup {\n    min-width: 0;\n}\n\n.popup.large_dialogue_popup {\n    height: calc(100dvh - 48px) !important;\n    max-height: calc(100dvh - 48px) !important;\n}\n\n.popup.wide_dialogue_popup .popup-body,\n.popup.large_dialogue_popup .popup-body {\n    max-height: none;\n}\n\n.popup::backdrop,\n#shadow_popup {\n    background-color: rgba(4, 4, 6, .72);\n    backdrop-filter: none;\n}\n\n.popup .popup-button-ok,\n.popup .popup-button-close {\n    background-color: var(--st-accent-solid);\n    color: #e6e9f7;\n}\n\n#options .options-content,\n.list-group,\n.autoComplete,\n#context_menu,\n#character_context_menu ul {\n    background-color: var(--st-card);\n    border: 0;\n    border-radius: var(--st-radius-sm);\n    box-shadow: 0 18px 50px -14px rgba(0, 0, 0, .8);\n    padding: 6px;\n}\n\n#options .options-content a,\n#character_context_menu li button {\n    border-radius: var(--st-radius-xs);\n    color: var(--st-text-3);\n    padding: 9px 12px;\n}\n\n#options .options-content a:hover,\n#character_context_menu li button:hover {\n    background-color: var(--st-inset);\n    color: var(--st-text);\n}\n\n/* ---------------------------------------------------------------------\n   13. Third-party widgets\n   ------------------------------------------------------------------ */\n\n/* select2 */\n.select2-container--default .select2-selection--multiple,\n.select2-container--default .select2-selection--single,\n.select2-dropdown,\n.select2-container--default .select2-search--dropdown .select2-search__field {\n    background-color: var(--st-inset) !important;\n    border: 0 !important;\n    border-radius: var(--st-radius-sm) !important;\n    color: var(--st-text-2) !important;\n}\n\n.select2-container--default .select2-results__option {\n    background-color: var(--st-card);\n    color: var(--st-text-3);\n}\n\n.select2-container--default .select2-results__option--highlighted[aria-selected],\n.select2-container--default .select2-results__option--selected {\n    background-color: var(--st-selected) !important;\n    color: var(--st-text) !important;\n}\n\n.select2-container--default .select2-selection--multiple .select2-selection__choice {\n    background-color: var(--st-selected) !important;\n    border: 0 !important;\n    border-radius: var(--st-radius-pill) !important;\n    color: var(--st-text-2) !important;\n    padding: 2px 10px !important;\n}\n\n/* toastr */\n#toast-container>div {\n    background-color: var(--st-card) !important;\n    border: 0 !important;\n    border-radius: var(--st-radius-sm) !important;\n    box-shadow: 0 18px 50px -14px rgba(0, 0, 0, .8) !important;\n    color: var(--st-text-2) !important;\n    opacity: 1 !important;\n}\n\n#toast-container>div .toast-title {\n    color: var(--st-text);\n}\n\n/* jQuery UI */\n.ui-widget-content,\n.ui-dialog,\n.ui-autocomplete {\n    background: var(--st-card) !important;\n    border: 0 !important;\n    border-radius: var(--st-radius-sm) !important;\n    color: var(--st-text-2) !important;\n}\n\n.ui-widget-header,\n.ui-dialog-titlebar {\n    background: var(--st-card) !important;\n    border: 0 !important;\n    color: var(--st-text-4) !important;\n}\n\n.ui-state-default,\n.ui-state-hover,\n.ui-menu-item-wrapper.ui-state-active {\n    background: var(--st-selected) !important;\n    border: 0 !important;\n    color: var(--st-text) !important;\n}\n\n/* cropper */\n.cropper-view-box,\n.cropper-line,\n.cropper-point {\n    background-color: var(--st-accent);\n}\n\n/* toolcool-color-picker renders in a shadow root: set variables, not\n   descendant selectors. */\ntoolcool-color-picker {\n    --tool-cool-color-picker-btn-bg: var(--st-inset);\n    --tool-cool-color-picker-btn-border-color: transparent;\n    --tool-cool-color-picker-bg: var(--st-card);\n    --tool-cool-color-picker-text-color: var(--st-text-2);\n    --tool-cool-color-picker-border-color: transparent;\n    border-radius: var(--st-radius-xs);\n    overflow: hidden;\n}\n\n/* ---------------------------------------------------------------------\n   14. Mobile — rail becomes a bottom bar, sheets become bottom sheets\n   ------------------------------------------------------------------ */\n\n@media screen and (max-width: 1000px) {\n\n    #top-settings-holder {\n        position: fixed;\n        top: auto;\n        bottom: 0;\n        left: 0;\n        right: 0;\n        width: 100%;\n        height: var(--st-bar-height);\n        margin: 0;\n        padding: 0 6px env(safe-area-inset-bottom, 6px);\n        flex-direction: row;\n        align-items: center;\n        justify-content: space-around;\n        gap: 2px;\n        overflow-x: auto;\n        background-color: var(--st-sheet);\n        z-index: 3005;\n    }\n\n    #top-settings-holder>.drawer {\n        width: auto;\n        flex: none;\n    }\n\n    /* Nine slots have to fit a 390 px phone: shrink rather than overflow. */\n    #top-settings-holder .drawer-icon {\n        width: min(44px, 10vw);\n        height: 44px;\n        font-size: 16px;\n    }\n\n    /* A 20px touch thumb overhangs ~10px above the track, and at high values\n       it sits directly under the right-aligned number. Buy it clearance. */\n    .drawer-content :has(> .neo-range-slider) {\n        row-gap: 20px !important;\n        margin-bottom: 26px;\n    }\n\n    /* mobile-styles.css pins these panels with `top: ... !important`, so the\n       bottom-sheet anchor has to answer in kind. */\n    /* Full height, not a 72dvh sheet: SillyTavern's panels carry far too many\n       controls to spend a quarter of a phone screen on the chat behind them.\n       The bottom bar is the only thing kept clear. */\n    #top-settings-holder .drawer-content,\n    #left-nav-panel,\n    #right-nav-panel,\n    #WorldInfo,\n    #floatingPrompt,\n    #cfgConfig,\n    #logprobsViewer {\n        top: 0 !important;\n        bottom: var(--st-bar-height) !important;\n    }\n\n    #top-settings-holder .drawer-content {\n        position: fixed;\n        left: 0;\n        right: 0;\n        bottom: var(--st-bar-height);\n        top: auto;\n        width: 100%;\n        min-width: 0;\n        max-width: none;\n        max-height: 80dvh;\n        margin: 0;\n        padding: 46px 16px 0;\n        border: 0;\n        border-radius: 0;\n        background-color: var(--st-sheet);\n        box-shadow: 0 -20px 60px -20px rgba(0, 0, 0, .85);\n        backdrop-filter: none;\n        -webkit-backdrop-filter: none;\n        z-index: 3000;\n    }\n\n    /* Bottom bar paints above the sheets sliding up past it. */\n    #top-settings-holder::before {\n        content: '';\n        position: fixed;\n        top: auto;\n        left: 0;\n        right: 0;\n        bottom: 0;\n        width: 100%;\n        height: var(--st-bar-height);\n        background-color: var(--st-sheet);\n        z-index: 3001;\n        pointer-events: none;\n    }\n\n    #top-settings-holder .drawer-toggle {\n        position: relative;\n        z-index: 3002;\n    }\n\n    /* Bottom sheets come in from the bottom, for the same reason. */\n    #top-settings-holder .drawer-content {\n        transform: translateY(100%);\n        opacity: 0;\n        transition-property: transform, opacity, display;\n        transition-duration: var(--animation-duration-2x);\n        transition-timing-function: ease;\n        transition-behavior: allow-discrete;\n    }\n\n    #top-settings-holder .drawer-content.openDrawer {\n        transform: translateY(0);\n        opacity: 1;\n    }\n\n    @starting-style {\n        #top-settings-holder .drawer-content.openDrawer {\n            transform: translateY(100%);\n            opacity: 0;\n        }\n    }\n\n    /* An explicit height, not auto: .scrollableInner is height:100%, so an\n       auto-height sheet resolves to nothing and collapses to its min-height. */\n    #top-settings-holder .drawer-content.openDrawer {\n        display: flex;\n        flex-direction: column;\n        height: calc(100dvh - var(--st-bar-height));\n        max-height: calc(100dvh - var(--st-bar-height));\n    }\n\n    .topRightInset {\n        top: 12px;\n        right: 14px;\n    }\n\n    #clickSlidersTips,\n    .editable-slider-notification {\n        top: 18px;\n        left: 16px;\n        right: 58px;\n    }\n\n    #sheld {\n        left: 0;\n        right: 0;\n        top: 0;\n        width: 100dvw;\n        height: calc(100dvh - var(--st-bar-height));\n        max-height: calc(100dvh - var(--st-bar-height));\n    }\n\n    #chat {\n        padding: 12px 14px 18px;\n    }\n\n    #form_sheld {\n        padding: 0 14px 10px;\n    }\n\n    /* Touch targets: 44px minimum, fatter slider tracks and thumbs. */\n    input[type=\"range\"],\n    .neo-range-slider {\n        height: 6px !important;\n    }\n\n    input[type=\"range\"]::-webkit-slider-thumb,\n    .neo-range-slider::-webkit-slider-thumb {\n        width: 18px;\n        height: 18px;\n    }\n\n    input[type=\"range\"]::-moz-range-thumb,\n    .neo-range-slider::-moz-range-thumb {\n        width: 18px;\n        height: 18px;\n    }\n\n    #right-nav-panel #rm_print_characters_block {\n        grid-template-columns: 1fr;\n    }\n\n    /* --- No horizontal scrolling, anywhere ---------------------------\n       Content wraps or clips; it never asks for a sideways scrollbar. */\n\n    html,\n    body {\n        overflow-x: hidden;\n        max-width: 100dvw;\n    }\n\n    #sheld,\n    #chat,\n    #form_sheld,\n    #top-settings-holder,\n    .drawer-content,\n    #character_popup,\n    .popup {\n        max-width: 100dvw;\n    }\n\n    /* Every pane that could scroll sideways clips instead.\n\n       NOT .mes / .mes_block / .mes_text. Setting overflow-x on a flex item\n       makes it a scroll container, which drops its automatic min-height\n       floor — so in #chat's flex column every message shrinks. With a long\n       chat they compress to ~10px and the conversation vanishes. #chat\n       clips at the pane level, so they gain nothing anyway. */\n    #chat,\n    #sheld,\n    .drawer-content,\n    .scrollableInner,\n    .scrollableInnerFull,\n    #rm_print_characters_block,\n    #world_popup_entries_list,\n    #rm_ch_create_block {\n        overflow-x: hidden;\n    }\n\n    /* And messages hold their height regardless. */\n    #chat>.mes {\n        flex-shrink: 0;\n    }\n\n    /* A flex or grid child that refuses to shrink is what makes its parent\n       wider than the screen in the first place. */\n    .drawer-content .flex-container>*,\n    #rm_print_characters_block>*,\n    .mes_block>*,\n    .character_select>*,\n    .group_select>* {\n        min-width: 0;\n    }\n\n    /* Long words, code and tables wrap rather than demanding a scrollbar. */\n    .mes_text,\n    .mes_text p,\n    .mes_text li,\n    .mes_reasoning {\n        overflow-wrap: break-word;\n    }\n\n    .mes_text pre,\n    .mes_text code,\n    .drawer-content pre,\n    .drawer-content code {\n        white-space: pre-wrap;\n        overflow-wrap: break-word;\n        word-break: break-word;\n    }\n\n    .mes_text table {\n        table-layout: fixed;\n        width: 100%;\n    }\n\n    .mes_text td,\n    .mes_text th {\n        overflow-wrap: break-word;\n    }\n\n    /* A modal <dialog> centres itself with `margin: auto`, so shrinking the\n       height alone still leaves it overlapping the bottom bar. A fixed\n       bottom margin against an auto top margin lifts it clear. */\n    .popup.wide_dialogue_popup,\n    .popup.large_dialogue_popup {\n        width: calc(100dvw - 24px);\n        max-width: calc(100dvw - 24px) !important;\n        height: calc(100dvh - var(--st-bar-height) - 36px) !important;\n        max-height: calc(100dvh - var(--st-bar-height) - 36px) !important;\n        margin-bottom: var(--st-bar-height);\n    }\n\n    /* The recent-chat row squeezes the chat name down to ~46px and ellipses\n       almost all of it. Give it the row. */\n    .welcomeRecent .recentChatList .recentChat .chatNameContainer {\n        flex-wrap: wrap;\n    }\n\n    .welcomeRecent .recentChatList .recentChat .chatName {\n        flex: 1 1 100%;\n        min-width: 0;\n    }\n}"
+   };
+
+   // Default theme JSONs được nhúng sẵn — sẽ được nạp vào IndexedDB khi cần
+   let engineInstance$2 = null;
+   let dbInstance = null;
+   function initThemeManagerTool(engine, db) {
+       engineInstance$2 = engine;
+       dbInstance = db;
+   }
+   /**
+    * Đảm bảo theme library đã có các theme mặc định
+    */
+   async function ensureDefaultThemes(db) {
+       const existing = await db.getAllThemeReferences();
+       if (existing.length === 0) {
+           await loadDefaultThemes(db);
+       }
+   }
+   async function loadDefaultThemes(db) {
+       const defaults = [
+           { name: 'Catppuccin Nights', json: catppuccinTheme },
+           { name: 'SillyTavern Redesign', json: redesignTheme },
+       ];
+       for (const d of defaults) {
+           const theme = {
+               name: d.name,
+               themeJson: JSON.stringify(d.json),
+               isDefault: true,
+               addedAt: Date.now(),
+           };
+           await db.addThemeReference(theme);
+       }
+   }
+   const stThemeManagerTool = {
+       schema: {
+           name: 'st_theme_manager',
+           description: 'Quản lý theme và CSS variables của SillyTavern. Sử dụng để đọc/đổi màu sắc, font chữ, blur, shadow và các cài đặt giao diện. Mỗi thay đổi đều được snapshot vào IndexedDB để rollback. Dùng action "get_reference_themes" để xem các theme mẫu và học cấu trúc.',
+           parameters: {
+               type: 'object',
+               properties: {
+                   action: {
+                       type: 'string',
+                       description: 'Hành động cần thực hiện: "get_current_theme" (đọc cấu hình hiện tại), "set_variables" (đặt CSS variables), "apply_theme_json" (áp dụng theme JSON đầy đủ), "get_reference_themes" (xem theme mẫu trong library)',
+                       enum: ['get_current_theme', 'set_variables', 'apply_theme_json', 'get_reference_themes'],
+                   },
+                   variables: {
+                       type: 'string',
+                       description: 'JSON string chứa object { variableName: value }. Dùng cho action "set_variables". Ví dụ: \'{"--SmartThemeBodyColor": "rgba(200, 200, 255, 1)"}\'',
+                   },
+                   theme_json: {
+                       type: 'string',
+                       description: 'JSON string chứa đối tượng theme đầy đủ (theo format ST theme file). Dùng cho action "apply_theme_json".',
+                   },
+                   mode: {
+                       type: 'string',
+                       description: 'Chế độ trả dữ liệu cho "get_reference_themes": "full" (đầy đủ gồm custom_css, tốn token) hoặc "structure_only" (chỉ JSON keys, tiết kiệm token). Mặc định: "structure_only".',
+                       enum: ['full', 'structure_only'],
+                   },
+               },
+               required: ['action'],
+           },
+       },
+       execute: async (args) => {
+           try {
+               if (!engineInstance$2 || !dbInstance) {
+                   return { content: 'Lỗi: UI Customization Engine chưa được khởi tạo.', isError: true };
+               }
+               const action = args.action;
+               switch (action) {
+                   case 'get_current_theme': {
+                       const info = engineInstance$2.getCurrentThemeInfo();
+                       return { content: JSON.stringify(info, null, 2) };
+                   }
+                   case 'set_variables': {
+                       if (!args.variables) {
+                           return { content: 'Lỗi: Thiếu tham số "variables".', isError: true };
+                       }
+                       let variables;
+                       try {
+                           variables = JSON.parse(args.variables);
+                       }
+                       catch {
+                           return { content: 'Lỗi: "variables" không phải JSON hợp lệ.', isError: true };
+                       }
+                       await engineInstance$2.setThemeVariables(variables);
+                       const changedKeys = Object.keys(variables);
+                       return {
+                           content: `Đã cập nhật ${changedKeys.length} CSS variable(s): ${changedKeys.join(', ')}. Đã tạo snapshot để rollback.`,
+                       };
+                   }
+                   case 'apply_theme_json': {
+                       if (!args.theme_json) {
+                           return { content: 'Lỗi: Thiếu tham số "theme_json".', isError: true };
+                       }
+                       let themeJson;
+                       try {
+                           themeJson = JSON.parse(args.theme_json);
+                       }
+                       catch {
+                           return { content: 'Lỗi: "theme_json" không phải JSON hợp lệ.', isError: true };
+                       }
+                       await engineInstance$2.applyThemeJSON(themeJson);
+                       return {
+                           content: `Đã áp dụng theme "${themeJson.name || 'Custom'}" thành công. Đã tạo snapshot để rollback.`,
+                       };
+                   }
+                   case 'get_reference_themes': {
+                       await ensureDefaultThemes(dbInstance);
+                       const themes = await dbInstance.getAllThemeReferences();
+                       const mode = args.mode || 'structure_only';
+                       if (themes.length === 0) {
+                           return { content: 'Theme Library trống. Chưa có theme tham khảo nào.' };
+                       }
+                       if (mode === 'full') {
+                           const result = themes.map((t) => ({
+                               id: t.id,
+                               name: t.name,
+                               isDefault: t.isDefault,
+                               theme: JSON.parse(t.themeJson),
+                           }));
+                           return { content: JSON.stringify(result, null, 2) };
+                       }
+                       else {
+                           // structure_only: chỉ trả keys và giá trị ngắn, bỏ custom_css
+                           const result = themes.map((t) => {
+                               const parsed = JSON.parse(t.themeJson);
+                               const summary = {};
+                               for (const [key, value] of Object.entries(parsed)) {
+                                   if (key === 'custom_css') {
+                                       const cssStr = value;
+                                       summary[key] = `[${cssStr.length} chars — dùng mode "full" để xem chi tiết]`;
+                                   }
+                                   else {
+                                       summary[key] = value;
+                                   }
+                               }
+                               return { id: t.id, name: t.name, isDefault: t.isDefault, theme: summary };
+                           });
+                           return { content: JSON.stringify(result, null, 2) };
+                       }
+                   }
+                   default:
+                       return { content: `Lỗi: Action "${action}" không hợp lệ.`, isError: true };
+               }
+           }
+           catch (e) {
+               return { content: `Lỗi khi thực thi st_theme_manager: ${e.message}`, isError: true };
+           }
+       },
+   };
+
+   let engineInstance$1 = null;
+   function initCSSManagerTool(engine) {
+       engineInstance$1 = engine;
+   }
+   /**
+    * Bản đồ CSS selectors phổ biến nhất của SillyTavern
+    * Giúp AI biết chính xác cần target element nào khi viết CSS
+    */
+   const ST_SELECTORS_GUIDE = `## SillyTavern CSS Selectors Guide
+
+### Layout chính
+- \`body\` — Body trang
+- \`#sheld\` — Container chat chính (bao gồm cả sidebar)
+- \`#chat\` — Danh sách tin nhắn (scrollable)
+- \`#top-bar\` — Thanh điều hướng trên cùng
+- \`#top-settings-holder\` — Container settings bên phải
+- \`#form_sheld\` — Khu vực nhập tin nhắn (input area)
+- \`#send_textarea\` — Textarea nhập tin nhắn
+- \`#send_but\` — Nút gửi tin nhắn
+
+### Tin nhắn
+- \`.mes\` — Mỗi tin nhắn (chung)
+- \`.mes[is_user="true"]\` — Tin nhắn của User
+- \`.mes[is_user="false"]\` — Tin nhắn của Bot/Character
+- \`.mes_text\` — Nội dung text của tin nhắn
+- \`.mes_block\` — Block chứa avatar + text
+- \`.mes_buttons\` — Container các nút (edit, copy, delete...)
+- \`.mesAvatarWrapper\` — Wrapper avatar
+- \`.avatar img\` — Ảnh avatar
+
+### Sidebar
+- \`#left-nav-panel\` — Sidebar trái (character list)
+- \`#right-nav-panel\` — Sidebar phải (settings)
+- \`#options\` — Menu options (hamburger)
+
+### Character
+- \`#character_popup\` — Popup thông tin nhân vật
+- \`#avatar_div\` — Container avatar chính
+- \`#rm_print_characters_block\` — Danh sách character cards
+
+### CSS Variables (Có thể thay đổi qua st_theme_manager)
+- \`--SmartThemeBodyColor\` — Màu text chính
+- \`--SmartThemeEmColor\` — Màu text nghiêng
+- \`--SmartThemeQuoteColor\` — Màu quote
+- \`--SmartThemeBlurTintColor\` — Màu tint blur nền
+- \`--SmartThemeChatTintColor\` — Màu tint chat area
+- \`--SmartThemeUserMesBlurTintColor\` — Màu tint tin nhắn user
+- \`--SmartThemeBotMesBlurTintColor\` — Màu tint tin nhắn bot
+- \`--SmartThemeShadowColor\` — Màu shadow
+- \`--SmartThemeBorderColor\` — Màu border
+- \`--SmartThemeBlurStrength\` — Độ mạnh blur (px)
+- \`--SmartThemeFontScale\` — Tỉ lệ font
+- \`--sheldWidth\` — Độ rộng chat container (%)
+
+### Ví dụ CSS phổ biến
+1. Bo tròn avatar: \`.avatar img { border-radius: 50%; }\`
+2. Bubble chat: \`.mes { border-radius: 18px; padding: 12px 16px; margin: 4px 0; }\`
+3. Ẩn sidebar: \`#left-nav-panel { display: none; }\`
+4. Custom font: \`body, .mes_text { font-family: 'Noto Sans', sans-serif; }\`
+5. Gradient background: \`body { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); }\`
+`;
+   const stCSSManagerTool = {
+       schema: {
+           name: 'st_css_manager',
+           description: 'Quản lý các stylesheet CSS tuỳ chỉnh. Cho phép inject, sửa, xoá các block CSS vào giao diện SillyTavern. Mỗi style có ID riêng biệt để quản lý. Dùng để thay đổi layout, animation, color scheme, font... của bất kỳ thành phần nào. Mỗi thay đổi đều được snapshot để rollback. Dùng action "get_selectors_guide" để xem bản đồ CSS selectors của SillyTavern.',
+           parameters: {
+               type: 'object',
+               properties: {
+                   action: {
+                       type: 'string',
+                       description: 'Hành động cần thực hiện: "inject" (chèn style mới), "update" (cập nhật style đã có), "remove" (xoá style), "list" (liệt kê tất cả custom styles), "get_selectors_guide" (xem bản đồ CSS selectors phổ biến của SillyTavern)',
+                       enum: ['inject', 'update', 'remove', 'list', 'get_selectors_guide'],
+                   },
+                   style_id: {
+                       type: 'string',
+                       description: 'ID định danh cho style block (tự động prefix "kaiz-custom-"). Ví dụ: "chat-bubbles", "dark-mode-fix". Bắt buộc cho action "inject", "update", "remove".',
+                   },
+                   css_content: {
+                       type: 'string',
+                       description: 'Nội dung CSS thuần tuý. Ví dụ: ".mes { border-radius: 16px; background: rgba(0,0,0,0.3); }". Bắt buộc cho action "inject" và "update".',
+                   },
+               },
+               required: ['action'],
+           },
+       },
+       execute: async (args) => {
+           try {
+               if (!engineInstance$1) {
+                   return { content: 'Lỗi: UI Customization Engine chưa được khởi tạo.', isError: true };
+               }
+               const action = args.action;
+               switch (action) {
+                   case 'inject': {
+                       if (!args.style_id) {
+                           return { content: 'Lỗi: Thiếu tham số "style_id".', isError: true };
+                       }
+                       if (!args.css_content) {
+                           return { content: 'Lỗi: Thiếu tham số "css_content".', isError: true };
+                       }
+                       await engineInstance$1.injectCSS(args.style_id, args.css_content);
+                       return {
+                           content: `Đã inject CSS style "${args.style_id}" thành công (ID đầy đủ: kaiz-custom-${args.style_id}). Đã tạo snapshot để rollback.`,
+                       };
+                   }
+                   case 'update': {
+                       if (!args.style_id) {
+                           return { content: 'Lỗi: Thiếu tham số "style_id".', isError: true };
+                       }
+                       if (!args.css_content) {
+                           return { content: 'Lỗi: Thiếu tham số "css_content".', isError: true };
+                       }
+                       await engineInstance$1.updateCSS(args.style_id, args.css_content);
+                       return {
+                           content: `Đã cập nhật CSS style "${args.style_id}" thành công. Đã tạo snapshot để rollback.`,
+                       };
+                   }
+                   case 'remove': {
+                       if (!args.style_id) {
+                           return { content: 'Lỗi: Thiếu tham số "style_id".', isError: true };
+                       }
+                       await engineInstance$1.removeCSS(args.style_id);
+                       return {
+                           content: `Đã xoá CSS style "${args.style_id}" thành công. Đã tạo snapshot để rollback.`,
+                       };
+                   }
+                   case 'list': {
+                       const styles = engineInstance$1.listCSS();
+                       if (styles.length === 0) {
+                           return { content: 'Hiện chưa có custom CSS nào đang hoạt động.' };
+                       }
+                       let output = `Có ${styles.length} custom style(s) đang hoạt động:\n\n`;
+                       for (const s of styles) {
+                           output += `• [${s.id}]: ${s.preview}\n`;
+                       }
+                       return { content: output };
+                   }
+                   case 'get_selectors_guide': {
+                       return { content: ST_SELECTORS_GUIDE };
+                   }
+                   default:
+                       return { content: `Lỗi: Action "${action}" không hợp lệ.`, isError: true };
+               }
+           }
+           catch (e) {
+               return { content: `Lỗi khi thực thi st_css_manager: ${e.message}`, isError: true };
+           }
+       },
+   };
+
+   let engineInstance = null;
+   function initInjectElementTool(engine) {
+       engineInstance = engine;
+   }
+   const stInjectElementTool = {
+       schema: {
+           name: 'st_inject_element',
+           description: 'Chèn, gỡ bỏ và quản lý các phần tử HTML tuỳ chỉnh trong giao diện SillyTavern. HTML KHÔNG bị sanitize — hỗ trợ đầy đủ mọi tag, attribute, inline style, img src, iframe... Hỗ trợ rollback (undo) mọi thay đổi giao diện (CSS, element, theme). LƯU Ý: Dùng tool này cho các action undo/rollback_all/remove_all để hoàn tác mọi loại thay đổi.',
+           parameters: {
+               type: 'object',
+               properties: {
+                   action: {
+                       type: 'string',
+                       description: 'Hành động: "inject" (chèn HTML), "remove" (gỡ element), "list" (liệt kê elements), "undo" (rollback bước gần nhất), "rollback_all" (rollback toàn bộ), "remove_all" (gỡ hết customization + xoá snapshots)',
+                       enum: ['inject', 'remove', 'list', 'undo', 'rollback_all', 'remove_all'],
+                   },
+                   element_id: {
+                       type: 'string',
+                       description: 'ID cho element (tự động prefix "kaiz-injected-"). Bắt buộc cho action "inject" và "remove".',
+                   },
+                   html_content: {
+                       type: 'string',
+                       description: 'Nội dung HTML cần chèn. Không bị lọc — hỗ trợ đầy đủ mọi tag, attribute, inline style, img src, iframe... Bắt buộc cho action "inject".',
+                   },
+                   parent_selector: {
+                       type: 'string',
+                       description: 'CSS selector của phần tử cha mà HTML sẽ được chèn vào. Ví dụ: "#top-bar", "#form_sheld", ".mes:last-child .mes_buttons". Bắt buộc cho action "inject".',
+                   },
+                   position: {
+                       type: 'string',
+                       description: 'Vị trí chèn: "beforeend" (cuối phần tử cha, mặc định), "afterbegin" (đầu phần tử cha), "before" (trước phần tử cha), "after" (sau phần tử cha)',
+                       enum: ['beforeend', 'afterbegin', 'before', 'after'],
+                   },
+               },
+               required: ['action'],
+           },
+       },
+       execute: async (args) => {
+           try {
+               if (!engineInstance) {
+                   return { content: 'Lỗi: UI Customization Engine chưa được khởi tạo.', isError: true };
+               }
+               const action = args.action;
+               switch (action) {
+                   case 'inject': {
+                       if (!args.element_id) {
+                           return { content: 'Lỗi: Thiếu tham số "element_id".', isError: true };
+                       }
+                       if (!args.html_content) {
+                           return { content: 'Lỗi: Thiếu tham số "html_content".', isError: true };
+                       }
+                       if (!args.parent_selector) {
+                           return { content: 'Lỗi: Thiếu tham số "parent_selector".', isError: true };
+                       }
+                       const position = args.position || 'beforeend';
+                       await engineInstance.injectElement(args.element_id, args.html_content, args.parent_selector, position);
+                       return {
+                           content: `Đã chèn element "${args.element_id}" vào ${args.parent_selector} (position: ${position}). ID đầy đủ: kaiz-injected-${args.element_id}. Đã tạo snapshot để rollback.`,
+                       };
+                   }
+                   case 'remove': {
+                       if (!args.element_id) {
+                           return { content: 'Lỗi: Thiếu tham số "element_id".', isError: true };
+                       }
+                       await engineInstance.removeElement(args.element_id);
+                       return {
+                           content: `Đã gỡ bỏ element "${args.element_id}" thành công. Đã tạo snapshot để rollback.`,
+                       };
+                   }
+                   case 'list': {
+                       const elements = engineInstance.listElements();
+                       if (elements.length === 0) {
+                           return { content: 'Hiện chưa có element nào được chèn vào giao diện.' };
+                       }
+                       let output = `Có ${elements.length} element(s) đang được chèn:\n\n`;
+                       for (const el of elements) {
+                           output += `• [${el.id}] <${el.tag}> trong ${el.parent}: ${el.preview || '(trống)'}\n`;
+                       }
+                       return { content: output };
+                   }
+                   case 'undo': {
+                       const snapshot = await engineInstance.undo();
+                       if (!snapshot) {
+                           return { content: 'Không có thay đổi nào để hoàn tác.' };
+                       }
+                       return {
+                           content: `Đã hoàn tác: "${snapshot.label}" (${snapshot.type}, ${new Date(snapshot.timestamp).toLocaleTimeString()}).`,
+                       };
+                   }
+                   case 'rollback_all': {
+                       const count = await engineInstance.rollbackAll();
+                       if (count === 0) {
+                           return { content: 'Không có thay đổi nào để hoàn tác.' };
+                       }
+                       return {
+                           content: `Đã rollback ${count} thay đổi. Giao diện đã được khôi phục về trạng thái ban đầu.`,
+                       };
+                   }
+                   case 'remove_all': {
+                       await engineInstance.removeAllCustomizations();
+                       return {
+                           content: 'Đã gỡ bỏ tất cả CSS tuỳ chỉnh, element đã chèn, và xoá toàn bộ snapshot history.',
+                       };
+                   }
+                   default:
+                       return { content: `Lỗi: Action "${action}" không hợp lệ.`, isError: true };
+               }
+           }
+           catch (e) {
+               return { content: `Lỗi khi thực thi st_inject_element: ${e.message}`, isError: true };
+           }
+       },
+   };
+
    /**
     * Đăng ký tất cả các tools mặc định vào Registry
     */
@@ -4637,6 +5140,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        registry.registerTool(listWorkspacesTool);
        registry.registerTool(switchWorkspaceTool);
        registry.registerTool(createWorkspaceTool);
+       registry.registerTool(stThemeManagerTool);
+       registry.registerTool(stCSSManagerTool);
+       registry.registerTool(stInjectElementTool);
    }
 
    /**
@@ -6228,7 +6734,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 
    class KaizDB {
        dbName = 'KaizAgentDB';
-       dbVersion = 4;
+       dbVersion = 5;
        db = null;
        async init() {
            return new Promise((resolve, reject) => {
@@ -6265,6 +6771,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    if (!db.objectStoreNames.contains('autoTasks')) {
                        db.createObjectStore('autoTasks', { keyPath: 'id', autoIncrement: true });
                    }
+                   // --- UI CUSTOMIZATION (DB v5) ---
+                   if (!db.objectStoreNames.contains('kaiz_ui_snapshots')) {
+                       const snapStore = db.createObjectStore('kaiz_ui_snapshots', { keyPath: 'id', autoIncrement: true });
+                       snapStore.createIndex('snapshotId', 'snapshotId', { unique: true });
+                       snapStore.createIndex('timestamp', 'timestamp', { unique: false });
+                       snapStore.createIndex('applied', 'applied', { unique: false });
+                   }
+                   if (!db.objectStoreNames.contains('kaiz_theme_library')) {
+                       const themeStore = db.createObjectStore('kaiz_theme_library', { keyPath: 'id', autoIncrement: true });
+                       themeStore.createIndex('name', 'name', { unique: false });
+                   }
                };
                request.onsuccess = async (event) => {
                    this.db = event.target.result;
@@ -6280,30 +6797,28 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        async ensureSystemWorkspaces() {
            const workspaces = await this.getAllWorkspaces();
            const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
+           const roleplayPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
+           const roleplayTools = ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input'];
            if (!roleplayWs) {
-               await this.createSystemWorkspace('roleplay', 'Roleplay & Story', `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`, ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input']);
+               await this.createSystemWorkspace('roleplay', 'Roleplay & Story', roleplayPrompt, roleplayTools);
            }
            const modderWs = workspaces.find((w) => w.systemId === 'modder');
+           const modderPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
+           const modderTools = [
+               'get_chat_history', 'get_char_info', 'list_characters', 'edit_character_card',
+               'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook',
+               'get_regex_list', 'get_regex_info', 'manage_regex',
+               'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script',
+               'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup'
+           ];
            if (!modderWs) {
-               await this.createSystemWorkspace('modder', 'Modding & Editor', `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`, [
-                   'get_chat_history',
-                   'get_char_info',
-                   'list_characters',
-                   'edit_character_card',
-                   'get_lorebook_info',
-                   'manage_lorebook_entry',
-                   'manage_worldbook',
-                   'get_regex_list',
-                   'get_regex_info',
-                   'manage_regex',
-                   'get_tavern_helper_scripts',
-                   'get_tavern_helper_script_info',
-                   'manage_tavern_helper_script',
-                   'get_user_persona',
-                   'edit_user_persona',
-                   'manage_chat_text',
-                   'manage_backup',
-               ]);
+               await this.createSystemWorkspace('modder', 'Modding & Editor', modderPrompt, modderTools);
+           }
+           const uiDesignerWs = workspaces.find((w) => w.systemId === 'ui_designer');
+           const uiDesignerPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+           const uiDesignerTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
+           if (!uiDesignerWs) {
+               await this.createSystemWorkspace('ui_designer', 'UI & Theme Designer', uiDesignerPrompt, uiDesignerTools);
            }
        }
        async createSystemWorkspace(systemId, name, systemPrompt, toolNames) {
@@ -6435,24 +6950,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                defaultName = 'Modding & Editor';
                defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
                defaultTools = [
-                   'get_chat_history',
-                   'get_char_info',
-                   'list_characters',
-                   'edit_character_card',
-                   'get_lorebook_info',
-                   'manage_lorebook_entry',
-                   'manage_worldbook',
-                   'get_regex_list',
-                   'get_regex_info',
-                   'manage_regex',
-                   'get_tavern_helper_scripts',
-                   'get_tavern_helper_script_info',
-                   'manage_tavern_helper_script',
-                   'get_user_persona',
-                   'edit_user_persona',
-                   'manage_chat_text',
-                   'manage_backup',
+                   'get_chat_history', 'get_char_info', 'list_characters', 'edit_character_card',
+                   'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook',
+                   'get_regex_list', 'get_regex_info', 'manage_regex',
+                   'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script',
+                   'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup'
                ];
+           }
+           else if (ws.systemId === 'ui_designer') {
+               defaultName = 'UI & Theme Designer';
+               defaultPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+               defaultTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
            }
            const toolsConfig = {};
            defaultTools.forEach((t) => (toolsConfig[t] = true));
@@ -6737,6 +7245,168 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                const transaction = this.db.transaction(['autoTasks'], 'readwrite');
                const store = transaction.objectStore('autoTasks');
                const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- UI SNAPSHOTS ---
+       async addSnapshot(snapshot) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.add(snapshot);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getAllSnapshots() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const index = store.index('timestamp');
+               const snapshots = [];
+               const request = index.openCursor(null, 'prev');
+               request.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       snapshots.push(cursor.value);
+                       cursor.continue();
+                   }
+                   else {
+                       resolve(snapshots);
+                   }
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getSnapshotById(snapshotId) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const index = store.index('snapshotId');
+               const req = index.get(snapshotId);
+               req.onsuccess = () => {
+                   resolve(req.result || null);
+               };
+               req.onerror = () => reject(req.error);
+           });
+       }
+       async getActiveSnapshots() {
+           const all = await this.getAllSnapshots();
+           return all.filter((s) => s.applied === true);
+       }
+       async markSnapshotRolledBack(snapshotId) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const index = store.index('snapshotId');
+               const req = index.get(snapshotId);
+               req.onsuccess = () => {
+                   const snap = req.result;
+                   if (!snap)
+                       return resolve();
+                   snap.applied = false;
+                   const putReq = store.put(snap);
+                   putReq.onsuccess = () => resolve();
+                   putReq.onerror = () => reject(putReq.error);
+               };
+               req.onerror = () => reject(req.error);
+           });
+       }
+       async markAllSnapshotsRolledBack() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.openCursor();
+               request.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       const snap = cursor.value;
+                       if (snap.applied) {
+                           snap.applied = false;
+                           cursor.update(snap);
+                       }
+                       cursor.continue();
+                   }
+               };
+               request.onerror = () => reject(request.error);
+               transaction.oncomplete = () => resolve();
+               transaction.onerror = () => reject(transaction.error);
+           });
+       }
+       async deleteSnapshot(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async clearAllSnapshots() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.clear();
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- THEME LIBRARY ---
+       async addThemeReference(theme) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.add(theme);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getAllThemeReferences() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readonly');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.getAll();
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async deleteThemeReference(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async clearThemeLibrary() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.clear();
                request.onsuccess = () => resolve();
                request.onerror = () => reject(request.error);
            });
@@ -9967,6 +10637,709 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        }
    }
 
+   /**
+    * UI Customization Engine
+    * Module trung tâm quản lý mọi thay đổi giao diện SillyTavern do AI tạo ra.
+    * Hỗ trợ: CSS injection, Element injection, Theme variables, Snapshot/Rollback.
+    */
+   function generateUUID() {
+       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+           const r = (Math.random() * 16) | 0;
+           const v = c === 'x' ? r : (r & 0x3) | 0x8;
+           return v.toString(16);
+       });
+   }
+   const STYLE_PREFIX = 'kaiz-custom-';
+   const ELEMENT_PREFIX = 'kaiz-injected-';
+   class UICustomizationEngine {
+       db;
+       constructor(db) {
+           this.db = db;
+       }
+       // ========================================================================
+       // CSS Management
+       // ========================================================================
+       async injectCSS(styleId, cssContent) {
+           const fullId = STYLE_PREFIX + styleId;
+           const existing = document.getElementById(fullId);
+           // Snapshot trạng thái cũ
+           await this.createSnapshot({
+               label: `inject CSS: ${styleId}`,
+               type: 'css',
+               cssData: {
+                   styleId: fullId,
+                   previousContent: existing ? existing.textContent : null,
+               },
+           });
+           if (existing) {
+               existing.textContent = cssContent;
+           }
+           else {
+               const style = document.createElement('style');
+               style.id = fullId;
+               style.textContent = cssContent;
+               document.head.appendChild(style);
+           }
+       }
+       async updateCSS(styleId, newContent) {
+           const fullId = STYLE_PREFIX + styleId;
+           const existing = document.getElementById(fullId);
+           if (!existing) {
+               throw new Error(`Style '${styleId}' không tồn tại. Hãy dùng action 'inject' trước.`);
+           }
+           await this.createSnapshot({
+               label: `update CSS: ${styleId}`,
+               type: 'css',
+               cssData: {
+                   styleId: fullId,
+                   previousContent: existing.textContent,
+               },
+           });
+           existing.textContent = newContent;
+       }
+       async removeCSS(styleId) {
+           const fullId = STYLE_PREFIX + styleId;
+           const existing = document.getElementById(fullId);
+           if (!existing) {
+               throw new Error(`Style '${styleId}' không tồn tại.`);
+           }
+           await this.createSnapshot({
+               label: `remove CSS: ${styleId}`,
+               type: 'css',
+               cssData: {
+                   styleId: fullId,
+                   previousContent: existing.textContent,
+               },
+           });
+           existing.remove();
+       }
+       listCSS() {
+           const results = [];
+           const styles = document.querySelectorAll(`style[id^="${STYLE_PREFIX}"]`);
+           styles.forEach((style) => {
+               const rawId = style.id.replace(STYLE_PREFIX, '');
+               const content = style.textContent || '';
+               const preview = content.length > 150 ? content.substring(0, 147) + '...' : content;
+               results.push({ id: rawId, preview: preview.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim() });
+           });
+           return results;
+       }
+       // ========================================================================
+       // Element Management (KHÔNG sanitize HTML)
+       // ========================================================================
+       async injectElement(elementId, htmlContent, parentSelector, position = 'beforeend') {
+           const fullId = ELEMENT_PREFIX + elementId;
+           const parent = document.querySelector(parentSelector);
+           if (!parent) {
+               throw new Error(`Không tìm thấy phần tử cha với selector '${parentSelector}'.`);
+           }
+           // Kiểm tra element đã tồn tại chưa
+           const existing = document.getElementById(fullId);
+           await this.createSnapshot({
+               label: `inject element: ${elementId}`,
+               type: 'element',
+               elementData: {
+                   elementId: fullId,
+                   previousOuterHTML: existing ? existing.outerHTML : null,
+                   parentSelector,
+                   position,
+               },
+           });
+           // Tạo wrapper tạm để parse HTML
+           const temp = document.createElement('div');
+           temp.innerHTML = htmlContent;
+           // Lấy phần tử đầu tiên hoặc wrap toàn bộ nội dung
+           let newElement;
+           if (temp.children.length === 1) {
+               newElement = temp.children[0];
+           }
+           else {
+               // Nhiều phần tử hoặc chỉ có text → wrap trong div
+               newElement = temp;
+               newElement.style.display = 'contents'; // Không ảnh hưởng layout
+           }
+           newElement.id = fullId;
+           newElement.setAttribute('data-kaiz-injected', 'true');
+           if (existing) {
+               existing.replaceWith(newElement);
+           }
+           else {
+               switch (position) {
+                   case 'afterbegin':
+                       parent.insertBefore(newElement, parent.firstChild);
+                       break;
+                   case 'before':
+                       parent.parentNode?.insertBefore(newElement, parent);
+                       break;
+                   case 'after':
+                       parent.parentNode?.insertBefore(newElement, parent.nextSibling);
+                       break;
+                   case 'beforeend':
+                   default:
+                       parent.appendChild(newElement);
+                       break;
+               }
+           }
+       }
+       async removeElement(elementId) {
+           const fullId = ELEMENT_PREFIX + elementId;
+           const existing = document.getElementById(fullId);
+           if (!existing) {
+               throw new Error(`Element '${elementId}' không tồn tại.`);
+           }
+           const parentSelector = this.getParentSelector(existing);
+           await this.createSnapshot({
+               label: `remove element: ${elementId}`,
+               type: 'element',
+               elementData: {
+                   elementId: fullId,
+                   previousOuterHTML: existing.outerHTML,
+                   parentSelector,
+                   position: 'beforeend',
+               },
+           });
+           existing.remove();
+       }
+       listElements() {
+           const results = [];
+           const elements = document.querySelectorAll('[data-kaiz-injected="true"]');
+           elements.forEach((el) => {
+               const rawId = el.id.replace(ELEMENT_PREFIX, '');
+               const tag = el.tagName.toLowerCase();
+               const parent = this.getParentSelector(el);
+               const text = el.innerText || '';
+               const preview = text.length > 80 ? text.substring(0, 77) + '...' : text;
+               results.push({ id: rawId, tag, parent, preview: preview.replace(/\n/g, ' ').trim() });
+           });
+           return results;
+       }
+       // ========================================================================
+       // Theme Variables
+       // ========================================================================
+       async setThemeVariables(variables) {
+           const root = document.documentElement;
+           const previousValues = {};
+           for (const [name, _value] of Object.entries(variables)) {
+               previousValues[name] = getComputedStyle(root).getPropertyValue(name).trim();
+           }
+           await this.createSnapshot({
+               label: `set_variables: ${Object.keys(variables).join(', ')}`,
+               type: 'theme',
+               themeData: { previousValues },
+           });
+           for (const [name, value] of Object.entries(variables)) {
+               root.style.setProperty(name, value);
+           }
+       }
+       getThemeVariables(variableNames) {
+           const root = document.documentElement;
+           const result = {};
+           if (variableNames && variableNames.length > 0) {
+               for (const name of variableNames) {
+                   result[name] = getComputedStyle(root).getPropertyValue(name).trim();
+               }
+           }
+           else {
+               // Trả về các biến theme cốt lõi của ST
+               const coreVars = [
+                   '--SmartThemeBodyColor',
+                   '--SmartThemeEmColor',
+                   '--SmartThemeQuoteColor',
+                   '--SmartThemeChatTintColor',
+                   '--SmartThemeBlurTintColor',
+                   '--SmartThemeBorderColor',
+                   '--SmartThemeShadowColor',
+                   '--SmartThemeUnderlineColor',
+                   '--SmartThemeBlurStrength',
+                   '--SmartThemeFontScale',
+               ];
+               for (const name of coreVars) {
+                   const val = getComputedStyle(root).getPropertyValue(name).trim();
+                   if (val)
+                       result[name] = val;
+               }
+           }
+           return result;
+       }
+       async applyThemeJSON(themeJson) {
+           // Mapping từ theme JSON fields sang CSS variables của ST
+           const fieldToVar = {
+               main_text_color: '--SmartThemeBodyColor',
+               italics_text_color: '--SmartThemeEmColor',
+               underline_text_color: '--SmartThemeUnderlineColor',
+               quote_text_color: '--SmartThemeQuoteColor',
+               blur_tint_color: '--SmartThemeBlurTintColor',
+               chat_tint_color: '--SmartThemeChatTintColor',
+               user_mes_blur_tint_color: '--SmartThemeUserMesBlurTintColor',
+               bot_mes_blur_tint_color: '--SmartThemeBotMesBlurTintColor',
+               shadow_color: '--SmartThemeShadowColor',
+               border_color: '--SmartThemeBorderColor',
+           };
+           const variables = {};
+           for (const [field, cssVar] of Object.entries(fieldToVar)) {
+               if (themeJson[field] !== undefined) {
+                   variables[cssVar] = themeJson[field];
+               }
+           }
+           if (themeJson.blur_strength !== undefined) {
+               variables['--SmartThemeBlurStrength'] = themeJson.blur_strength + 'px';
+           }
+           if (themeJson.font_scale !== undefined) {
+               variables['--SmartThemeFontScale'] = String(themeJson.font_scale);
+           }
+           if (themeJson.shadow_width !== undefined) {
+               variables['--SmartThemeShadowWidth'] = themeJson.shadow_width + 'px';
+           }
+           if (themeJson.chat_width !== undefined) {
+               variables['--sheldWidth'] = themeJson.chat_width + '%';
+           }
+           // Áp dụng CSS variables
+           if (Object.keys(variables).length > 0) {
+               await this.setThemeVariables(variables);
+           }
+           // Áp dụng custom_css nếu có
+           if (themeJson.custom_css) {
+               await this.injectCSS('theme-custom-css', themeJson.custom_css);
+           }
+       }
+       getCurrentThemeInfo() {
+           const root = document.documentElement;
+           const computedStyle = getComputedStyle(root);
+           const info = {
+               // Màu sắc cốt lõi
+               main_text_color: computedStyle.getPropertyValue('--SmartThemeBodyColor').trim(),
+               italics_text_color: computedStyle.getPropertyValue('--SmartThemeEmColor').trim(),
+               underline_text_color: computedStyle.getPropertyValue('--SmartThemeUnderlineColor').trim(),
+               quote_text_color: computedStyle.getPropertyValue('--SmartThemeQuoteColor').trim(),
+               blur_tint_color: computedStyle.getPropertyValue('--SmartThemeBlurTintColor').trim(),
+               chat_tint_color: computedStyle.getPropertyValue('--SmartThemeChatTintColor').trim(),
+               user_mes_blur_tint_color: computedStyle.getPropertyValue('--SmartThemeUserMesBlurTintColor').trim(),
+               bot_mes_blur_tint_color: computedStyle.getPropertyValue('--SmartThemeBotMesBlurTintColor').trim(),
+               shadow_color: computedStyle.getPropertyValue('--SmartThemeShadowColor').trim(),
+               border_color: computedStyle.getPropertyValue('--SmartThemeBorderColor').trim(),
+               // Layout & effects
+               blur_strength: computedStyle.getPropertyValue('--SmartThemeBlurStrength').trim(),
+               font_scale: computedStyle.getPropertyValue('--SmartThemeFontScale').trim(),
+               chat_width: computedStyle.getPropertyValue('--sheldWidth').trim(),
+               // Font
+               font_family: computedStyle.getPropertyValue('--mainFontFamily').trim() || computedStyle.fontFamily,
+               // Body background
+               body_background: getComputedStyle(document.body).backgroundColor,
+               // Trạng thái customization hiện tại
+               active_custom_styles: this.listCSS(),
+               active_injected_elements: this.listElements(),
+           };
+           return info;
+       }
+       // ========================================================================
+       // Rollback System
+       // ========================================================================
+       async undo() {
+           const activeSnapshots = await this.db.getActiveSnapshots();
+           if (activeSnapshots.length === 0)
+               return null;
+           // Lấy snapshot mới nhất (đã sort desc by timestamp)
+           const snapshot = activeSnapshots[0];
+           await this.applyRollback(snapshot);
+           await this.db.markSnapshotRolledBack(snapshot.snapshotId);
+           return snapshot;
+       }
+       async undoSpecific(snapshotId) {
+           const snapshot = await this.db.getSnapshotById(snapshotId);
+           if (!snapshot || !snapshot.applied)
+               return false;
+           await this.applyRollback(snapshot);
+           await this.db.markSnapshotRolledBack(snapshot.snapshotId);
+           return true;
+       }
+       async rollbackTo(snapshotId) {
+           const activeSnapshots = await this.db.getActiveSnapshots();
+           if (activeSnapshots.length === 0)
+               return 0;
+           const targetIndex = activeSnapshots.findIndex(s => s.snapshotId === snapshotId);
+           if (targetIndex === -1)
+               return 0;
+           let count = 0;
+           // activeSnapshots được sắp xếp từ mới nhất (0) đến cũ nhất.
+           // Undo từ mới nhất (0) cho đến trước targetIndex (không undo targetIndex)
+           for (let i = 0; i < targetIndex; i++) {
+               const snapshot = activeSnapshots[i];
+               await this.applyRollback(snapshot);
+               await this.db.markSnapshotRolledBack(snapshot.snapshotId);
+               count++;
+           }
+           return count;
+       }
+       async rollbackAll() {
+           const activeSnapshots = await this.db.getActiveSnapshots();
+           if (activeSnapshots.length === 0)
+               return 0;
+           // Rollback từ mới nhất đến cũ nhất
+           for (const snapshot of activeSnapshots) {
+               await this.applyRollback(snapshot);
+           }
+           await this.db.markAllSnapshotsRolledBack();
+           return activeSnapshots.length;
+       }
+       async getSnapshotHistory() {
+           return this.db.getAllSnapshots();
+       }
+       async removeAllCustomizations() {
+           // Gỡ tất cả custom CSS
+           const styles = document.querySelectorAll(`style[id^="${STYLE_PREFIX}"]`);
+           styles.forEach((s) => s.remove());
+           // Gỡ tất cả injected elements
+           const elements = document.querySelectorAll('[data-kaiz-injected="true"]');
+           elements.forEach((el) => el.remove());
+           // Gỡ tất cả theme variables đã được set trên :root
+           const snapshots = await this.db.getAllSnapshots();
+           const root = document.documentElement;
+           for (const snap of snapshots) {
+               if (snap.type === 'theme' && snap.themeData) {
+                   for (const name of Object.keys(snap.themeData.previousValues)) {
+                       root.style.removeProperty(name);
+                   }
+               }
+           }
+           // Xoá tất cả snapshots
+           await this.db.clearAllSnapshots();
+       }
+       // ========================================================================
+       // Private Helpers
+       // ========================================================================
+       async createSnapshot(data) {
+           const snapshot = {
+               snapshotId: generateUUID(),
+               timestamp: Date.now(),
+               applied: true,
+               ...data,
+           };
+           await this.db.addSnapshot(snapshot);
+       }
+       async applyRollback(snapshot) {
+           switch (snapshot.type) {
+               case 'css':
+                   if (snapshot.cssData) {
+                       const el = document.getElementById(snapshot.cssData.styleId);
+                       if (snapshot.cssData.previousContent === null) {
+                           // Style chưa tồn tại trước đó → xoá nó
+                           if (el)
+                               el.remove();
+                       }
+                       else {
+                           // Khôi phục nội dung cũ
+                           if (el) {
+                               el.textContent = snapshot.cssData.previousContent;
+                           }
+                           else {
+                               // Style đã bị xoá → tạo lại với nội dung cũ
+                               const style = document.createElement('style');
+                               style.id = snapshot.cssData.styleId;
+                               style.textContent = snapshot.cssData.previousContent;
+                               document.head.appendChild(style);
+                           }
+                       }
+                   }
+                   break;
+               case 'element':
+                   if (snapshot.elementData) {
+                       const el = document.getElementById(snapshot.elementData.elementId);
+                       if (snapshot.elementData.previousOuterHTML === null) {
+                           // Element chưa tồn tại trước đó → xoá nó
+                           if (el)
+                               el.remove();
+                       }
+                       else {
+                           // Khôi phục element cũ
+                           if (el) {
+                               const temp = document.createElement('div');
+                               temp.innerHTML = snapshot.elementData.previousOuterHTML;
+                               if (temp.firstElementChild) {
+                                   el.replaceWith(temp.firstElementChild);
+                               }
+                           }
+                           // Nếu element đã bị xoá (remove action), cần chèn lại
+                           else {
+                               const parent = document.querySelector(snapshot.elementData.parentSelector);
+                               if (parent) {
+                                   const temp = document.createElement('div');
+                                   temp.innerHTML = snapshot.elementData.previousOuterHTML;
+                                   if (temp.firstElementChild) {
+                                       parent.appendChild(temp.firstElementChild);
+                                   }
+                               }
+                           }
+                       }
+                   }
+                   break;
+               case 'theme':
+                   if (snapshot.themeData) {
+                       const root = document.documentElement;
+                       for (const [name, value] of Object.entries(snapshot.themeData.previousValues)) {
+                           if (value) {
+                               root.style.setProperty(name, value);
+                           }
+                           else {
+                               root.style.removeProperty(name);
+                           }
+                       }
+                   }
+                   break;
+           }
+       }
+       getParentSelector(el) {
+           const parent = el.parentElement;
+           if (!parent)
+               return 'body';
+           if (parent.id)
+               return '#' + parent.id;
+           if (parent.className && typeof parent.className === 'string') {
+               const classes = parent.className.trim().split(/\s+/).slice(0, 2).join('.');
+               if (classes)
+                   return parent.tagName.toLowerCase() + '.' + classes;
+           }
+           return parent.tagName.toLowerCase();
+       }
+   }
+
+   // Default theme JSONs — cần import để reload khi reset
+   class UICustomizationModal {
+       db;
+       uiEngine;
+       constructor(db, uiEngine) {
+           this.db = db;
+           this.uiEngine = uiEngine;
+           this.bindEvents();
+       }
+       bindEvents() {
+           const $ = jQuery;
+           // Mở UI Snapshot Modal từ nút trên header
+           $('#kaiz-chat-ui-custom-btn').off('click').on('click', async () => {
+               await this.renderSnapshots();
+               $('#kaiz-ui-snapshot-modal')[0].showModal();
+           });
+           $('#kaiz-ui-snapshot-close').off('click').on('click', () => {
+               $('#kaiz-ui-snapshot-modal')[0].close();
+           });
+           // Nút mở Theme Library từ Snapshot Modal
+           $('#kaiz-ui-theme-lib-btn').off('click').on('click', async () => {
+               $('#kaiz-ui-snapshot-modal')[0].close();
+               await this.renderThemeLibrary();
+               $('#kaiz-theme-library-modal')[0].showModal();
+           });
+           $('#kaiz-theme-library-close').off('click').on('click', () => {
+               $('#kaiz-theme-library-modal')[0].close();
+               $('#kaiz-ui-snapshot-modal')[0].showModal(); // Quay lại
+           });
+           // Rollback all
+           $('#kaiz-ui-rollback-all-btn').off('click').on('click', async () => {
+               if (confirm('Bạn có chắc muốn rollback TẤT CẢ thay đổi UI không? (Vẫn giữ lịch sử)')) {
+                   await this.uiEngine.rollbackAll();
+                   await this.renderSnapshots();
+               }
+           });
+           // Remove all (Delete everything)
+           $('#kaiz-ui-remove-all-btn').off('click').on('click', async () => {
+               if (confirm('Xóa TẤT CẢ thay đổi UI và XÓA LUÔN LỊCH SỬ. Bạn có chắc không?')) {
+                   await this.uiEngine.removeAllCustomizations();
+                   await this.renderSnapshots();
+               }
+           });
+           // Theme Library: Upload JSON
+           $('#kaiz-theme-upload-btn').off('click').on('click', () => {
+               $('#kaiz-theme-upload-input').click();
+           });
+           $('#kaiz-theme-upload-input').off('change').on('change', (e) => {
+               const file = e.target.files[0];
+               if (!file)
+                   return;
+               const reader = new FileReader();
+               reader.onload = async (evt) => {
+                   try {
+                       const content = evt.target?.result;
+                       // Validate JSON
+                       JSON.parse(content);
+                       const name = file.name.replace('.json', '');
+                       await this.db.addThemeReference({
+                           name,
+                           themeJson: content,
+                           isDefault: false,
+                           addedAt: Date.now()
+                       });
+                       alert(`Đã thêm theme "${name}" thành công.`);
+                       await this.renderThemeLibrary();
+                   }
+                   catch (err) {
+                       alert('File không hợp lệ hoặc lỗi JSON: ' + err.message);
+                   }
+                   // Reset input
+                   $('#kaiz-theme-upload-input').val('');
+               };
+               reader.readAsText(file);
+           });
+           // Theme Library: Khôi phục Default — nạp lại ngay lập tức
+           $('#kaiz-theme-reset-btn').off('click').on('click', async () => {
+               if (confirm('Bạn có chắc muốn xóa tất cả custom themes và khôi phục về mặc định?')) {
+                   await this.db.clearThemeLibrary();
+                   // Nạp lại 2 theme mặc định ngay lập tức
+                   await this.loadDefaultThemes();
+                   alert('Đã khôi phục thư viện về mặc định (2 theme mẫu).');
+                   await this.renderThemeLibrary();
+               }
+           });
+       }
+       /**
+        * Nạp 2 theme mặc định vào DB (dùng khi reset)
+        */
+       async loadDefaultThemes() {
+           const defaults = [
+               { name: 'Catppuccin Nights', json: catppuccinTheme },
+               { name: 'SillyTavern Redesign', json: redesignTheme },
+           ];
+           for (const d of defaults) {
+               await this.db.addThemeReference({
+                   name: d.name,
+                   themeJson: JSON.stringify(d.json),
+                   isDefault: true,
+                   addedAt: Date.now(),
+               });
+           }
+       }
+       async renderSnapshots() {
+           const $ = jQuery;
+           const list = $('#kaiz-ui-snapshot-list');
+           list.empty();
+           const snapshots = await this.uiEngine.getSnapshotHistory();
+           if (snapshots.length === 0) {
+               list.append('<div style="color: #aaa; font-style: italic; text-align: center; padding: 20px;">Chưa có lịch sử thay đổi giao diện nào.</div>');
+               return;
+           }
+           // Sort descending by timestamp (getAllSnapshots đã sort nhưng chắc chắn)
+           snapshots.sort((a, b) => b.timestamp - a.timestamp);
+           snapshots.forEach((snap) => {
+               const date = new Date(snap.timestamp).toLocaleString();
+               let icon = 'fa-code';
+               let color = '#aaa';
+               if (snap.type === 'css') {
+                   icon = 'fa-css3-alt';
+                   color = '#3498db';
+               }
+               else if (snap.type === 'element') {
+                   icon = 'fa-cube';
+                   color = '#2ecc71';
+               }
+               else if (snap.type === 'theme') {
+                   icon = 'fa-palette';
+                   color = '#f1c40f';
+               }
+               const statusBadge = snap.applied
+                   ? '<span style="color: #2ecc71; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(46, 204, 113, 0.15);">Đang Áp dụng</span>'
+                   : '<span style="color: #e74c3c; font-size: 10px; padding: 2px 6px; border-radius: 4px; background: rgba(231, 76, 60, 0.15);">Đã Rollback</span>';
+               // Nút undo riêng cho từng snapshot (chỉ hiển thị cho snapshot đang applied)
+               const undoBtn = snap.applied
+                   ? `<button class="kaiz-snap-undo-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #f1c40f; border-color: rgba(241, 196, 15, 0.3);" title="Gỡ riêng thay đổi này (Cherry-pick)"><i class="fa-solid fa-eraser"></i></button>`
+                   : '';
+               // Nút rollback về điểm này
+               const rollbackToBtn = snap.applied
+                   ? `<button class="kaiz-snap-rollback-to-btn menu_button interactable" data-snapshot-id="${snap.snapshotId}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #3498db; border-color: rgba(52, 152, 219, 0.3);" title="Rollback lịch sử về điểm này (Xoá các thay đổi mới hơn)"><i class="fa-solid fa-clock-rotate-left"></i></button>`
+                   : '';
+               // Nút xoá
+               const deleteBtn = `<button class="kaiz-snap-del-btn menu_button interactable" data-snapshot-id="${snap.id}" style="padding: 3px 8px; height: auto; font-size: 11px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3);" title="Xoá khỏi lịch sử"><i class="fa-solid fa-trash"></i></button>`;
+               const item = $(`
+                <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 10px;">
+                    <i class="fa-solid ${icon}" style="color: ${color}; font-size: 18px; width: 24px; text-align: center; flex-shrink: 0;"></i>
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; font-size: 13px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${snap.label}</div>
+                        <div style="font-size: 11px; color: #aaa; display: flex; align-items: center; gap: 6px; margin-top: 2px;">${date} ${statusBadge}</div>
+                    </div>
+                    <div style="display: flex; gap: 4px; flex-shrink: 0;">
+                        ${rollbackToBtn}
+                        ${undoBtn}
+                        ${deleteBtn}
+                    </div>
+                </div>
+            `);
+               list.append(item);
+           });
+           // Bind event: Undo từng snapshot
+           list.find('.kaiz-snap-undo-btn').on('click', async (e) => {
+               const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
+               if (!snapshotId)
+                   return;
+               // Rollback trực tiếp snapshot này (cherry-pick undo)
+               const result = await this.uiEngine.undoSpecific(snapshotId);
+               if (result) {
+                   await this.renderSnapshots();
+               }
+           });
+           // Bind event: Rollback về điểm này
+           list.find('.kaiz-snap-rollback-to-btn').on('click', async (e) => {
+               const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
+               if (!snapshotId)
+                   return;
+               if (confirm('Khôi phục lịch sử về thời điểm này? (Tất cả các thay đổi mới hơn sẽ bị gỡ bỏ)')) {
+                   const count = await this.uiEngine.rollbackTo(snapshotId);
+                   if (count > 0) {
+                       await this.renderSnapshots();
+                   }
+                   else {
+                       toastr.info('Đây đã là phiên bản mới nhất.');
+                   }
+               }
+           });
+           // Bind event: Xoá từng snapshot
+           list.find('.kaiz-snap-del-btn').on('click', async (e) => {
+               const idStr = $(e.currentTarget).attr('data-snapshot-id');
+               if (!idStr)
+                   return;
+               const id = parseInt(idStr, 10);
+               if (isNaN(id))
+                   return;
+               if (confirm('Xoá bước này khỏi lịch sử? (Không rollback)')) {
+                   await this.db.deleteSnapshot(id);
+                   await this.renderSnapshots();
+               }
+           });
+       }
+       async renderThemeLibrary() {
+           const $ = jQuery;
+           const list = $('#kaiz-theme-library-list');
+           list.empty();
+           const themes = await this.db.getAllThemeReferences();
+           if (themes.length === 0) {
+               list.append('<div style="color: #aaa; font-style: italic; text-align: center; padding: 20px;">Thư viện trống. Bấm "Khôi phục Default" để nạp lại theme mẫu.</div>');
+               return;
+           }
+           themes.forEach((theme) => {
+               const date = new Date(theme.addedAt).toLocaleString();
+               const defaultTag = theme.isDefault ? '<span style="background: rgba(46, 204, 113, 0.2); color: #2ecc71; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 5px;">Mặc định</span>' : '';
+               // Hiển thị kích thước theme JSON
+               const sizeKB = (theme.themeJson.length / 1024).toFixed(1);
+               const item = $(`
+                <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1; min-width: 0;">
+                        <div style="font-weight: 600; font-size: 14px; color: #fff;">${theme.name} ${defaultTag}</div>
+                        <div style="font-size: 11px; color: #aaa;">Đã thêm: ${date} · ${sizeKB} KB</div>
+                    </div>
+                    <button class="kaiz-del-theme-btn menu_button interactable" data-id="${theme.id}" style="padding: 4px 8px; color: #ff6b6b; height: auto;" title="Xoá theme này"><i class="fa-solid fa-trash"></i></button>
+                </div>
+            `);
+               list.append(item);
+           });
+           // Bắt event xoá
+           list.find('.kaiz-del-theme-btn').on('click', async (e) => {
+               const idStr = $(e.currentTarget).attr('data-id');
+               if (!idStr)
+                   return;
+               const id = parseInt(idStr, 10);
+               if (confirm('Bạn có chắc muốn xoá theme này khỏi thư viện?')) {
+                   await this.db.deleteThemeReference(id);
+                   await this.renderThemeLibrary();
+               }
+           });
+       }
+   }
+
    const EXT_NAME = 'kaiz_agent';
    console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
    // Tìm chính xác thư mục extension
@@ -10076,6 +11449,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                new AutoTaskModal(stateManager, autoTaskScheduler, registry);
                // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
                await stateManager.init();
+               // Khởi tạo UI Customization Engine
+               const uiEngine = new UICustomizationEngine(stateManager.db);
+               initThemeManagerTool(uiEngine, stateManager.db);
+               initCSSManagerTool(uiEngine);
+               initInjectElementTool(uiEngine);
+               new UICustomizationModal(stateManager.db, uiEngine);
+               console.log('[KaizAgent] UI Customization Engine initialized.');
                // Bắt đầu Auto Tasks sau khi DB đã init
                const allTasks = await stateManager.db.getAllAutoTasks();
                await autoTaskScheduler.start(allTasks);

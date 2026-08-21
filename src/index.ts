@@ -10,6 +10,11 @@ import { ToolCheckerUI } from './ui/tool_checker';
 import { BrowserWindowUI } from './ui/browser_window';
 import { AutoTaskScheduler } from './core/auto_task_scheduler';
 import { AutoTaskModal } from './ui/auto_task_modal';
+import { UICustomizationEngine } from './core/ui_customization_engine';
+import { initThemeManagerTool } from './core/tools/st_theme_manager';
+import { initCSSManagerTool } from './core/tools/st_css_manager';
+import { initInjectElementTool } from './core/tools/st_inject_element';
+import { UICustomizationModal } from './ui/ui_customization_modal';
 
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
@@ -134,6 +139,14 @@ jQuery(async () => {
 
             // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
             await stateManager.init();
+
+            // Khởi tạo UI Customization Engine
+            const uiEngine = new UICustomizationEngine(stateManager.db);
+            initThemeManagerTool(uiEngine, stateManager.db);
+            initCSSManagerTool(uiEngine);
+            initInjectElementTool(uiEngine);
+            new UICustomizationModal(stateManager.db, uiEngine);
+            console.log('[KaizAgent] UI Customization Engine initialized.');
 
             // Bắt đầu Auto Tasks sau khi DB đã init
             const allTasks = await stateManager.db.getAllAutoTasks();
