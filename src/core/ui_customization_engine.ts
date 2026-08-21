@@ -352,6 +352,15 @@ export class UICustomizationEngine {
         return snapshot;
     }
 
+    public async undoSpecific(snapshotId: string): Promise<boolean> {
+        const snapshot = await this.db.getSnapshotById(snapshotId);
+        if (!snapshot || !snapshot.applied) return false;
+
+        await this.applyRollback(snapshot);
+        await this.db.markSnapshotRolledBack(snapshot.snapshotId);
+        return true;
+    }
+
     public async rollbackAll(): Promise<number> {
         const activeSnapshots = await this.db.getActiveSnapshots();
         if (activeSnapshots.length === 0) return 0;

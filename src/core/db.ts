@@ -691,6 +691,20 @@ export class KaizDB {
             request.onerror = () => reject(request.error);
         });
     }
+    public async getSnapshotById(snapshotId: string): Promise<UISnapshot | null> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+            const index = store.index('snapshotId');
+
+            const req = index.get(snapshotId);
+            req.onsuccess = () => {
+                resolve((req.result as UISnapshot) || null);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
 
     public async getActiveSnapshots(): Promise<UISnapshot[]> {
         const all = await this.getAllSnapshots();

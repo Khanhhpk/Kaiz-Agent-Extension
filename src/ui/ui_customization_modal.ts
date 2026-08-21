@@ -175,8 +175,8 @@ export class UICustomizationModal {
         list.find('.kaiz-snap-undo-btn').on('click', async (e: any) => {
             const snapshotId = $(e.currentTarget).attr('data-snapshot-id');
             if (!snapshotId) return;
-            // Undo chỉ bước gần nhất (đã active) — engine.undo() lấy bước mới nhất
-            const result = await this.uiEngine.undo();
+            // Rollback trực tiếp snapshot này (cherry-pick undo)
+            const result = await this.uiEngine.undoSpecific(snapshotId);
             if (result) {
                 await this.renderSnapshots();
             }
