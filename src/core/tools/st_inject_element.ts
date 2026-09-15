@@ -126,8 +126,7 @@ export const stInjectElementTool: ITool = {
                 case 'remove_all': {
                     await engineInstance.removeAllCustomizations();
                     return {
-                        content:
-                            'Đã gỡ bỏ tất cả CSS tuỳ chỉnh, element đã chèn, và xoá toàn bộ snapshot history.',
+                        content: 'Đã gỡ bỏ tất cả CSS tuỳ chỉnh, element đã chèn, và xoá toàn bộ snapshot history.',
                     };
                 }
 

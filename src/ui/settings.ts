@@ -43,32 +43,27 @@ export class SettingsUI {
         const settings = ctx.extensionSettings[EXT_NAME];
 
         // Gán giá trị mặc định lên UI
-        $('#kaiz-use-custom-endpoint').prop('checked', settings.useCustomEndpoint);
-        $('#kaiz-custom-url').val(settings.customUrl);
-        $('#kaiz-custom-key').val(settings.customKey);
-        $('#kaiz-custom-model-text').val(settings.customModel);
-
-        if (settings.useCustomEndpoint) {
-            $('#kaiz-custom-endpoint-group').show();
-        }
-
-        // Lắng nghe sự kiện đổi Checkbox
-        $('#kaiz-use-custom-endpoint').on('change', function (this: HTMLInputElement) {
-            settings.useCustomEndpoint = !!this.checked;
-            ctx.saveSettingsDebounced();
-            if (settings.useCustomEndpoint) {
-                $('#kaiz-custom-endpoint-group').slideDown();
-            } else {
-                $('#kaiz-custom-endpoint-group').slideUp();
-            }
-        });
+        $('#kaiz-custom-url').val(settings.customUrl || '');
+        $('#kaiz-custom-key').val(settings.customKey || '');
+        $('#kaiz-custom-model-text').val(settings.customModel || '');
+        $('#kaiz-max-tokens').val(settings.maxTokens ?? 65000);
+        $('#kaiz-temperature').val(settings.temperature ?? 1);
+        $('#kaiz-top-p').val(settings.topP ?? 0.95);
+        $('#kaiz-top-k').val(settings.topK ?? 64);
 
         // Lắng nghe thay đổi input và lưu tự động
-        $('#kaiz-custom-url, #kaiz-custom-key, #kaiz-custom-model-text').on('input', function (this: HTMLInputElement) {
+        $(
+            '#kaiz-custom-url, #kaiz-custom-key, #kaiz-custom-model-text, #kaiz-max-tokens, #kaiz-temperature, #kaiz-top-p, #kaiz-top-k',
+        ).on('input', function (this: HTMLInputElement) {
             const id = this.id;
             if (id === 'kaiz-custom-url') settings.customUrl = this.value;
             if (id === 'kaiz-custom-key') settings.customKey = this.value;
             if (id === 'kaiz-custom-model-text') settings.customModel = this.value;
+            if (id === 'kaiz-max-tokens') settings.maxTokens = parseInt(this.value, 10) || 65000;
+            if (id === 'kaiz-temperature')
+                settings.temperature = parseFloat(this.value) >= 0 ? parseFloat(this.value) : 1;
+            if (id === 'kaiz-top-p') settings.topP = parseFloat(this.value) >= 0 ? parseFloat(this.value) : 0.95;
+            if (id === 'kaiz-top-k') settings.topK = parseInt(this.value, 10) >= 0 ? parseInt(this.value, 10) : 64;
             ctx.saveSettingsDebounced();
         });
 

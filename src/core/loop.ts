@@ -240,7 +240,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                     contentStr = this.stripCotAndPrefill(contentStr) || '[Đã xử lý suy luận CoT]';
                 }
                 return getTokenCount(contentStr);
-            })
+            }),
         );
 
         for (let i = 0; i < currentHistory.length; i++) {
@@ -282,7 +282,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                         replacement = '[Tin nhắn của User đã bị lược bỏ do giới hạn Context Limit]';
                     }
 
-                    // Dùng lại hàm đếm token chính xác của ST cho placeholder để đảm bảo độ chuẩn xác 100%. 
+                    // Dùng lại hàm đếm token chính xác của ST cho placeholder để đảm bảo độ chuẩn xác 100%.
                     // ST có cache nội bộ cho chuỗi trùng lặp nên bước này rất nhanh, không bị overhead.
                     const replacementTokens = await getTokenCount(replacement);
                     const saving = msgTokens - replacementTokens;
@@ -512,13 +512,15 @@ CÁC CÔNG CỤ HIỆN CÓ:
                     let retryCount = 0;
                     let response: any = null;
 
+                    const loopMaxTokens = extSettings.maxTokens ?? 65000;
+
                     while (retryCount <= maxRetries) {
                         try {
                             this._currentAbortController = new AbortController();
                             response = await Promise.race([
                                 this.adapter.generateCompletion(
                                     messages,
-                                    1500,
+                                    loopMaxTokens,
                                     true,
                                     async (text, reasoning) => {
                                         if (this._forceAborted) return;
@@ -690,12 +692,12 @@ CÁC CÔNG CỤ HIỆN CÓ:
                         await onEvent({ type: 'tool_call', data: call });
 
                         let result;
-                        
+
                         // --- TOOLS CONFIG CHECK (Chặn tool bị tắt) ---
                         if (toolsConfigOverride && toolsConfigOverride[call.name] === false) {
-                            result = { 
-                                content: `Error: Permission denied. Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt của tiến trình này. Vui lòng thử cách khác.`, 
-                                isError: true 
+                            result = {
+                                content: `Error: Permission denied. Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt của tiến trình này. Vui lòng thử cách khác.`,
+                                isError: true,
                             };
                         } else if (call.parseError) {
                             // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi

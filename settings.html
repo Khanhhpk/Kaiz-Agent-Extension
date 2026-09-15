@@ -8,23 +8,10 @@
             <div class="flex-container flexFlowColumn gap-1">
                 <details class="scp-settings-flat-section" open>
                     <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-plug"></i> LLM Connection
+                        <i class="fa-solid fa-plug"></i> LLM Connection (Custom Endpoint)
                     </summary>
 
-                    <label class="checkbox_label" style="margin-bottom: 8px">
-                        <input id="kaiz-use-custom-endpoint" type="checkbox" />
-                        <span>Use Custom Endpoint (Bypass SillyTavern)</span>
-                    </label>
-
-                    <div
-                        id="kaiz-custom-endpoint-group"
-                        style="
-                            display: none;
-                            margin-top: 8px;
-                            padding-left: 10px;
-                            border-left: 2px solid rgba(255, 255, 255, 0.1);
-                        "
-                    >
+                    <div id="kaiz-custom-endpoint-group" style="margin-top: 8px">
                         <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
                             >API URL (OpenAI format)</label
                         >
@@ -66,6 +53,84 @@
                             class="text_pole"
                             placeholder="e.g. gemini-1.5-pro"
                         />
+
+                        <!-- LLM Generation Parameters -->
+                        <div
+                            style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.1)"
+                        >
+                            <span
+                                style="
+                                    font-size: 12px;
+                                    font-weight: bold;
+                                    color: #ccc;
+                                    display: block;
+                                    margin-bottom: 8px;
+                                "
+                            >
+                                <i class="fa-solid fa-sliders"></i> Generation Parameters
+                            </span>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+                                <div>
+                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
+                                        >Max Output Tokens</label
+                                    >
+                                    <input
+                                        id="kaiz-max-tokens"
+                                        type="number"
+                                        class="text_pole"
+                                        min="256"
+                                        max="131072"
+                                        placeholder="65000"
+                                        title="Số token tối đa bot có thể sinh ra trong 1 bước (Mặc định: 65000)"
+                                    />
+                                </div>
+                                <div>
+                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
+                                        >Temperature</label
+                                    >
+                                    <input
+                                        id="kaiz-temperature"
+                                        type="number"
+                                        class="text_pole"
+                                        step="0.05"
+                                        min="0"
+                                        max="2"
+                                        placeholder="1"
+                                        title="Độ sáng tạo / ngẫu nhiên của mô hình (Mặc định: 1)"
+                                    />
+                                </div>
+                                <div>
+                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
+                                        >Top P</label
+                                    >
+                                    <input
+                                        id="kaiz-top-p"
+                                        type="number"
+                                        class="text_pole"
+                                        step="0.01"
+                                        min="0"
+                                        max="1"
+                                        placeholder="0.95"
+                                        title="Nucleus sampling (Mặc định: 0.95)"
+                                    />
+                                </div>
+                                <div>
+                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
+                                        >Top K</label
+                                    >
+                                    <input
+                                        id="kaiz-top-k"
+                                        type="number"
+                                        class="text_pole"
+                                        step="1"
+                                        min="0"
+                                        max="200"
+                                        placeholder="64"
+                                        title="Top K sampling (Mặc định: 64, đặt 0 để tắt)"
+                                    />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </details>
                 <!-- UI Settings -->
@@ -98,26 +163,28 @@
                     <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px">
                         Tự động cắt bớt lịch sử cũ khi vượt mức Token (0 hoặc không tick ô nào = Tắt).
                     </label>
-                    <div class="flex-container flexFlowRow alignItemCenter gap-1" style="margin-bottom: 10px;">
+                    <div class="flex-container flexFlowRow alignItemCenter gap-1" style="margin-bottom: 10px">
                         <input
                             id="kaiz-token-safe-limit"
                             type="number"
                             class="text_pole"
                             placeholder="Ví dụ: 600000"
-                            style="width: 150px;"
+                            style="width: 150px"
                         />
-                        <span style="font-size: 12px; color: #aaa;">Tokens</span>
+                        <span style="font-size: 12px; color: #aaa">Tokens</span>
                     </div>
-                    
-                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block">Ưu tiên cắt bớt (từ cũ nhất):</label>
-                    <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #ccc;">
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+
+                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block"
+                        >Ưu tiên cắt bớt (từ cũ nhất):</label
+                    >
+                    <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #ccc">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer">
                             <input type="checkbox" id="kaiz-trim-agent" /> Cắt bớt tin nhắn của Agent
                         </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer">
                             <input type="checkbox" id="kaiz-trim-user" /> Cắt bớt tin nhắn của User
                         </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer">
                             <input type="checkbox" id="kaiz-trim-tool" /> Cắt bớt kết quả trả về của Tools
                         </label>
                     </div>

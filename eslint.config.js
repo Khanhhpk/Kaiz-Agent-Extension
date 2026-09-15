@@ -8,7 +8,16 @@ export default tseslint.config(
     ...tseslint.configs.recommended,
     eslintPluginPrettierRecommended,
     {
-        ignores: ['dist/**', 'build/**', 'node_modules/**', 'index.js', 'fix_eslint.js', 'userscripts/**'],
+        ignores: [
+            'dist/**',
+            'build/**',
+            'node_modules/**',
+            'index.js',
+            'fix_eslint.js',
+            'userscripts/**',
+            '_references/**',
+            '.agents/**',
+        ],
     },
     {
         languageOptions: {
@@ -28,6 +37,8 @@ export default tseslint.config(
             'no-empty': 'warn',
             'no-useless-escape': 'warn',
             'no-prototype-builtins': 'warn',
+            'no-useless-assignment': 'warn',
+            'prefer-const': 'warn',
         },
     },
 );

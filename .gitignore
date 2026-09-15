@@ -8,3 +8,6 @@ eslint-report.json
 tools_dump.txt
 *.cjs
 .agents/
+
+# Reference repos & external code
+_references/

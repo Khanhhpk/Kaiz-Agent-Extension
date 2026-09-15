@@ -72,7 +72,7 @@ export class AutoTaskModal {
             this.historyModal.close();
         });
 
-        $('#kaiz-auto-task-trigger-mode').on('change', function(this: any) {
+        $('#kaiz-auto-task-trigger-mode').on('change', function (this: any) {
             const mode = $(this).val();
             if (mode === 'turn') {
                 $('#kaiz-auto-task-trigger-label').text('Giá trị (lượt):');
@@ -95,17 +95,19 @@ export class AutoTaskModal {
         this.listContainer.empty();
 
         if (tasks.length === 0) {
-            this.listContainer.append('<div style="color:#aaa; font-size:12px; text-align:center; padding:10px;">Chưa có Auto Task nào. Nhấn "Tạo Task mới" để thêm.</div>');
+            this.listContainer.append(
+                '<div style="color:#aaa; font-size:12px; text-align:center; padding:10px;">Chưa có Auto Task nào. Nhấn "Tạo Task mới" để thêm.</div>',
+            );
             return;
         }
 
-        tasks.forEach(task => {
+        tasks.forEach((task) => {
             const isTurn = task.triggerMode === 'turn';
             const triggerText = isTurn ? `${task.triggerValue} lượt` : `${task.triggerValue} giây`;
             const icon = isTurn ? 'fa-message' : 'fa-clock';
             const runsText = task.maxRuns > 0 ? `${task.runCount || 0}/${task.maxRuns}` : `${task.runCount || 0}/∞`;
             const statsText = `🤖 LLM Req: ${task.lastTurnRequests || 0} (Tổng: ${task.totalRequests || 0})`;
-            
+
             const item = $(`
                 <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 10px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="flex: 1; min-width: 0; padding-right: 10px;">
@@ -123,14 +125,18 @@ export class AutoTaskModal {
                         <button class="kaiz-auto-task-toggle menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: ${task.enabled ? '#2ecc71' : '#aaa'};" title="${task.enabled ? 'Đang chạy' : 'Đã dừng'}">
                             <i class="fa-solid ${task.enabled ? 'fa-pause' : 'fa-play'}"></i>
                         </button>
-                        ${task.executionMode === 'persist' ? `
+                        ${
+                            task.executionMode === 'persist'
+                                ? `
                         <button class="kaiz-auto-task-history menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #3498db;" title="Xem History">
                             <i class="fa-solid fa-eye"></i>
                         </button>
                         <button class="kaiz-auto-task-reset menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #9b59b6;" title="Xóa lịch sử (Reset)">
                             <i class="fa-solid fa-eraser"></i>
                         </button>
-                        ` : ''}
+                        `
+                                : ''
+                        }
                         <button class="kaiz-auto-task-edit menu_button interactable" data-id="${task.id}" style="padding: 4px 8px; font-size: 12px; color: #f39c12;" title="Sửa">
                             <i class="fa-solid fa-pen"></i>
                         </button>
@@ -144,7 +150,7 @@ export class AutoTaskModal {
             // Toggle Events
             item.find('.kaiz-auto-task-toggle').on('click', async () => {
                 await this.stateManager.db.updateAutoTask(task.id!, { enabled: !task.enabled });
-                const updatedTask = (await this.stateManager.db.getAllAutoTasks()).find(t => t.id === task.id);
+                const updatedTask = (await this.stateManager.db.getAllAutoTasks()).find((t) => t.id === task.id);
                 if (updatedTask) {
                     if (updatedTask.enabled) {
                         await this.scheduler.addTask(updatedTask);
@@ -230,20 +236,28 @@ export class AutoTaskModal {
         const allSchemas = this.toolRegistry.getAllSchemas();
         this.toolsListContainer.empty();
 
-        const chipsContainer = $('<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>');
-        const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`);
-        const resultList = $(`<div style="max-height:100px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`);
+        const chipsContainer = $(
+            '<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>',
+        );
+        const searchInput = $(
+            `<input type="text" class="text_pole" placeholder="Tìm tool theo tên..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`,
+        );
+        const resultList = $(
+            `<div style="max-height:100px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`,
+        );
 
         this.toolsListContainer.append(chipsContainer, searchInput, resultList);
 
         const refreshChips = () => {
             chipsContainer.empty();
-            const enabled = allSchemas.filter(s => this.currentToolsConfig[s.name] === true);
+            const enabled = allSchemas.filter((s) => this.currentToolsConfig[s.name] === true);
             if (enabled.length === 0) {
-                chipsContainer.append('<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>');
+                chipsContainer.append(
+                    '<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>',
+                );
                 return;
             }
-            enabled.forEach(schema => {
+            enabled.forEach((schema) => {
                 const chip = $(`
                     <span style="
                         display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
@@ -265,15 +279,17 @@ export class AutoTaskModal {
 
         const refreshResults = (query: string) => {
             resultList.empty();
-            const available = allSchemas.filter(s => this.currentToolsConfig[s.name] !== true);
+            const available = allSchemas.filter((s) => this.currentToolsConfig[s.name] !== true);
             const q = query.trim().toLowerCase();
-            const matches = q ? available.filter(s => s.name.toLowerCase().includes(q)) : available;
+            const matches = q ? available.filter((s) => s.name.toLowerCase().includes(q)) : available;
 
             if (matches.length === 0) {
-                resultList.append('<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>');
+                resultList.append(
+                    '<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>',
+                );
                 return;
             }
-            matches.forEach(schema => {
+            matches.forEach((schema) => {
                 const item = $(`
                     <div style="padding:8px 10px; cursor:pointer; font-size:13px; color:#ddd; border-bottom:1px solid rgba(255,255,255,0.04);">
                         <div style="color:#fff; font-weight:bold;">${this.escapeHtml(schema.name)}</div>
@@ -291,7 +307,7 @@ export class AutoTaskModal {
             });
         };
 
-        searchInput.on('input', function(this: any) {
+        searchInput.on('input', function (this: any) {
             refreshResults(String($(this).val() || ''));
         });
 
@@ -323,7 +339,7 @@ export class AutoTaskModal {
             toolsConfig: this.currentToolsConfig,
             enabled: true,
             runCount: 0, // Reset runCount when editing/creating
-            createdAt: Date.now() // Will be overwritten if editing
+            createdAt: Date.now(), // Will be overwritten if editing
         };
 
         if (idVal) {
@@ -350,7 +366,9 @@ export class AutoTaskModal {
 
         const messages = await this.stateManager.db.getMessages(task.chatId);
         if (messages.length === 0) {
-            this.historyContent.append('<div style="text-align: center; color: #aaa; margin-top: 20px;">Lịch sử trống.</div>');
+            this.historyContent.append(
+                '<div style="text-align: center; color: #aaa; margin-top: 20px;">Lịch sử trống.</div>',
+            );
         } else {
             const parseToolCallsToHtml = (contentToParse: string): string => {
                 const toolCalls: string[] = [];
@@ -395,35 +413,41 @@ export class AutoTaskModal {
                 return finalHtml;
             };
 
-            messages.forEach(msg => {
+            messages.forEach((msg) => {
                 const isUser = msg.role === 'user';
                 const name = isUser ? 'Prompt' : 'Agent';
-                
+
                 let textContent = '';
                 if (typeof msg.content === 'string') {
                     textContent = msg.content;
                 } else if (Array.isArray(msg.content)) {
-                    textContent = (msg.content as any[]).map((p: any) => p.type === 'text' ? p.text : '[Image/Attachment]').join('\n');
+                    textContent = (msg.content as any[])
+                        .map((p: any) => (p.type === 'text' ? p.text : '[Image/Attachment]'))
+                        .join('\n');
                 } else {
                     textContent = String(msg.content);
                 }
-                
+
                 let formatted = '';
                 if (isUser) {
                     formatted = formatUserMessage(textContent);
                 } else {
                     const closeIndex = textContent.indexOf('</agent_cot>');
                     if (closeIndex !== -1) {
-                        const cotContent = this.escapeHtml(textContent.substring(0, closeIndex).replace('<agent_cot>', '').trim());
+                        const cotContent = this.escapeHtml(
+                            textContent.substring(0, closeIndex).replace('<agent_cot>', '').trim(),
+                        );
                         let restContent = textContent.substring(closeIndex + '</agent_cot>'.length).trim();
                         restContent = parseToolCallsToHtml(restContent);
-                        
+
                         formatted += `<details class="kaiz-cot-block">
                             <summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary>
                             <div class="kaiz-cot-content">${cotContent}</div>
                         </details>`;
                         if (restContent) {
-                            const parsedMarkdown = (window as any).marked ? (window as any).marked.parse(restContent) : restContent;
+                            const parsedMarkdown = (window as any).marked
+                                ? (window as any).marked.parse(restContent)
+                                : restContent;
                             formatted += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                         }
                     } else {

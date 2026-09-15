@@ -9,16 +9,16 @@ export class AutoTaskScheduler {
     private eventSourceListener: any = null;
     private chatChangedListener: any = null;
     private messageCount: number = 0;
-    
+
     constructor(
         private agentLoop: AgentLoop,
-        private stateManager: StateManager
+        private stateManager: StateManager,
     ) {}
 
     public async start(tasks: AutoTask[]) {
         this.stop();
-        this.tasks = tasks.filter(t => t.enabled);
-        
+        this.tasks = tasks.filter((t) => t.enabled);
+
         console.log(`[AutoTaskScheduler] Starting with ${this.tasks.length} active tasks.`);
 
         // 1. Setup Time-based triggers
@@ -32,7 +32,7 @@ export class AutoTaskScheduler {
         }
 
         // 2. Setup Turn-based triggers
-        const hasTurnTasks = this.tasks.some(t => t.triggerMode === 'turn');
+        const hasTurnTasks = this.tasks.some((t) => t.triggerMode === 'turn');
         if (hasTurnTasks) {
             try {
                 // SillyTavern global eventSource
@@ -41,7 +41,7 @@ export class AutoTaskScheduler {
                     const renderEvent = ctx.eventTypes?.GENERATION_ENDED || 'generation_ended';
                     this.eventSourceListener = () => this.handleMessageReceived();
                     ctx.eventSource.on(renderEvent, this.eventSourceListener);
-                    
+
                     const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
                     this.chatChangedListener = () => {
                         this.messageCount = 0;
@@ -67,10 +67,12 @@ export class AutoTaskScheduler {
             try {
                 const ctx = (window as any).SillyTavern?.getContext?.();
                 if (ctx?.eventSource) {
-                    const removeFn = ctx.eventSource.removeListener ? ctx.eventSource.removeListener.bind(ctx.eventSource) : ctx.eventSource.off.bind(ctx.eventSource);
+                    const removeFn = ctx.eventSource.removeListener
+                        ? ctx.eventSource.removeListener.bind(ctx.eventSource)
+                        : ctx.eventSource.off.bind(ctx.eventSource);
                     const renderEvent = ctx.eventTypes?.GENERATION_ENDED || 'generation_ended';
                     removeFn(renderEvent, this.eventSourceListener);
-                    
+
                     if (this.chatChangedListener) {
                         const chatChangedEvent = ctx.eventTypes?.CHAT_CHANGED || 'chat_id_changed';
                         removeFn(chatChangedEvent, this.chatChangedListener);
@@ -87,8 +89,8 @@ export class AutoTaskScheduler {
 
     private async handleMessageReceived() {
         this.messageCount++;
-        
-        const turnTasks = this.tasks.filter(t => t.triggerMode === 'turn');
+
+        const turnTasks = this.tasks.filter((t) => t.triggerMode === 'turn');
         for (const task of turnTasks) {
             if (task.triggerValue > 0 && this.messageCount % task.triggerValue === 0) {
                 this.executeTask(task);
@@ -113,8 +115,9 @@ export class AutoTaskScheduler {
 
         // Queue check: wait if agent is running
         let attempts = 0;
-        while (this.agentLoop.isRunning && attempts < 120) { // Max 60 seconds (500ms * 120)
-            await new Promise(r => setTimeout(r, 500));
+        while (this.agentLoop.isRunning && attempts < 120) {
+            // Max 60 seconds (500ms * 120)
+            await new Promise((r) => setTimeout(r, 500));
             attempts++;
         }
 
@@ -125,7 +128,7 @@ export class AutoTaskScheduler {
 
         // Setup History for the run
         let historyForRun: any[] = [];
-        
+
         if (task.executionMode === 'persist') {
             if (!task.chatId) {
                 // Lần đầu chạy persist -> Tạo chat mới riêng cho auto task này (sử dụng -1 để ẩn khỏi danh sách chat mặc định)
@@ -134,10 +137,10 @@ export class AutoTaskScheduler {
                 await this.stateManager.db.updateAutoTask(task.id!, { chatId });
                 console.log(`[AutoTaskScheduler] Created distinct chat history (ID: ${chatId}) for task ${task.id}`);
             }
-            
+
             // Load history của task
             const messages = await this.stateManager.db.getMessages(task.chatId);
-            historyForRun = messages.map(m => ({ role: m.role, content: m.content }));
+            historyForRun = messages.map((m) => ({ role: m.role, content: m.content }));
         } else {
             // mode = 'fresh'
             historyForRun = [];
@@ -154,7 +157,7 @@ export class AutoTaskScheduler {
             if (task.executionMode === 'persist' && task.chatId) {
                 await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
             }
-            
+
             let turnRequests = 0;
 
             await this.agentLoop.run(
@@ -169,13 +172,15 @@ export class AutoTaskScheduler {
                     } else if (event.type === 'debug') {
                         ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
                         ChatWindowUI.lastLogRecv = event.data.responseText;
-                        
+
                         // Update logs real-time if the modal happens to be open
                         (window as any).jQuery?.('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
                         (window as any).jQuery?.('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
                     } else if (event.type === 'tool_confirm') {
                         // Auto-allow cho Auto Task để không bị kẹt tiến trình
-                        console.log(`[AutoTaskScheduler] Auto-allowing tool ${event.data?.call?.name} (Safe Mode bypassed)`);
+                        console.log(
+                            `[AutoTaskScheduler] Auto-allowing tool ${event.data?.call?.name} (Safe Mode bypassed)`,
+                        );
                         event.data?.resolve?.(true);
                     }
 
@@ -189,9 +194,9 @@ export class AutoTaskScheduler {
                     }
                 },
                 false, // continueMode
-                task.toolsConfig // toolsConfigOverride
+                task.toolsConfig, // toolsConfigOverride
             );
-            
+
             // Stop UI spinning
             (window as any).jQuery?.('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
             (window as any).jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
@@ -202,26 +207,25 @@ export class AutoTaskScheduler {
             task.runCount = (task.runCount || 0) + 1;
             task.lastTurnRequests = turnRequests;
             task.totalRequests = (task.totalRequests || 0) + turnRequests;
-            
-            const updates: Partial<AutoTask> = { 
+
+            const updates: Partial<AutoTask> = {
                 runCount: task.runCount,
                 lastTurnRequests: task.lastTurnRequests,
-                totalRequests: task.totalRequests
+                totalRequests: task.totalRequests,
             };
-            
+
             if (task.maxRuns > 0 && task.runCount >= task.maxRuns) {
                 updates.enabled = false;
                 console.log(`[AutoTaskScheduler] Task ${task.id} has reached maxRuns (${task.maxRuns}). Disabling.`);
             }
 
             await this.stateManager.db.updateAutoTask(task.id, updates);
-            
+
             // Update local memory and restart if enabled state changed
             if (updates.enabled === false) {
                 const allTasks = await this.stateManager.db.getAllAutoTasks();
                 await this.start(allTasks);
             }
-            
         } catch (e) {
             console.error(`[AutoTaskScheduler] Error executing task ${task.id}:`, e);
         }
