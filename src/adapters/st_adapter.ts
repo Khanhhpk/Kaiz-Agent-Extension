@@ -43,202 +43,129 @@ export class SillyTavernAdapter {
         const abort = new AbortController();
         const effectiveSignal = signal || abort.signal;
 
-        // 1. Nếu bật tính năng Custom Endpoint, ta gọi trực tiếp (bypass ST)
-        if (settings.useCustomEndpoint && settings.customUrl) {
-            console.log('[KaizAgent] Using Custom Endpoint:', settings.customUrl);
-            let text = '';
-            let reasoning: string | null = null;
-            let isMaxTokens = false;
+        // Bắt buộc cấu hình Custom Endpoint
+        const customUrl = (settings.customUrl || '').trim();
+        if (!customUrl) {
+            throw new Error(
+                'Chưa cấu hình API URL! Vui lòng vào Kaiz-Agent Settings -> LLM Connection để nhập Custom API URL và Model.',
+            );
+        }
 
-            try {
-                let url = settings.customUrl;
-                if (!url.endsWith('/chat/completions')) {
-                    url = url.replace(/\/$/, '') + '/chat/completions';
-                }
+        console.log('[KaizAgent] Using Custom Endpoint:', customUrl);
+        let text = '';
+        let reasoning: string | null = null;
+        let isMaxTokens = false;
 
-                const headers: any = { 'Content-Type': 'application/json' };
-                if (settings.customKey) headers['Authorization'] = `Bearer ${settings.customKey}`;
+        try {
+            let url = customUrl;
+            if (!url.endsWith('/chat/completions')) {
+                url = url.replace(/\/$/, '') + '/chat/completions';
+            }
 
-                const payload = {
-                    model: settings.customModel || 'gpt-3.5-turbo',
-                    messages: messages,
-                    max_tokens: maxTokens,
-                    stream: stream,
-                };
+            const headers: any = { 'Content-Type': 'application/json' };
+            if (settings.customKey && settings.customKey.trim()) {
+                headers['Authorization'] = `Bearer ${settings.customKey.trim()}`;
+            }
 
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(payload),
-                    signal: effectiveSignal,
-                });
+            const effMaxTokens =
+                typeof maxTokens === 'number' && maxTokens > 0
+                    ? maxTokens
+                    : typeof settings.maxTokens === 'number' && settings.maxTokens > 0
+                      ? settings.maxTokens
+                      : 65000;
 
-                if (!res.ok) {
-                    const errText = await res.text().catch(() => res.statusText);
-                    throw new Error(`Custom API Error ${res.status}: ${errText}`);
-                }
+            const payload: any = {
+                model: (settings.customModel && settings.customModel.trim()) || 'gpt-3.5-turbo',
+                messages: messages,
+                max_tokens: effMaxTokens,
+                stream: stream,
+            };
 
-                if (stream) {
-                    const reader = res.body?.getReader();
-                    const decoder = new TextDecoder('utf-8');
-                    let buffer = '';
+            // Temperature (Mặc định: 1)
+            if (typeof settings.temperature === 'number') {
+                payload.temperature = settings.temperature;
+            } else {
+                payload.temperature = 1;
+            }
 
-                    if (reader) {
-                        while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
+            // Top P (Mặc định: 0.95)
+            if (typeof settings.topP === 'number') {
+                payload.top_p = settings.topP;
+            } else {
+                payload.top_p = 0.95;
+            }
 
-                            buffer += decoder.decode(value, { stream: true });
-                            const lines = buffer.split('\n');
-                            buffer = lines.pop() || '';
+            // Top K (Mặc định: 64, bỏ qua nếu <= 0)
+            if (typeof settings.topK === 'number' && settings.topK > 0) {
+                payload.top_k = settings.topK;
+            }
 
-                            for (const line of lines) {
-                                const l = line.trim();
-                                if (!l || l.startsWith(':') || l === 'data: [DONE]') continue;
-                                if (l.startsWith('data: ')) {
-                                    try {
-                                        const data = JSON.parse(l.slice(6));
+            const res = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+                signal: effectiveSignal,
+            });
 
-                                        const finish = data.choices?.[0]?.finish_reason;
-                                        if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
+            if (!res.ok) {
+                const errText = await res.text().catch(() => res.statusText);
+                throw new Error(`Custom API Error ${res.status}: ${errText}`);
+            }
 
-                                        const delta = data.choices?.[0]?.delta || {};
-                                        if (delta.content) text += delta.content;
-                                        if (delta.reasoning || delta.reasoning_content) {
-                                            reasoning =
-                                                (reasoning || '') + (delta.reasoning || delta.reasoning_content);
-                                        }
-                                        if (data.thinking) reasoning = (reasoning || '') + data.thinking;
+            if (stream) {
+                const reader = res.body?.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
 
-                                        if (onUpdate) onUpdate(text, reasoning);
-                                    } catch (e) {}
-                                }
+                if (reader) {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            const l = line.trim();
+                            if (!l || l.startsWith(':') || l === 'data: [DONE]') continue;
+                            if (l.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(l.slice(6));
+
+                                    const finish = data.choices?.[0]?.finish_reason;
+                                    if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
+
+                                    const delta = data.choices?.[0]?.delta || {};
+                                    if (delta.content) text += delta.content;
+                                    if (delta.reasoning || delta.reasoning_content) {
+                                        reasoning = (reasoning || '') + (delta.reasoning || delta.reasoning_content);
+                                    }
+                                    if (data.thinking) reasoning = (reasoning || '') + data.thinking;
+
+                                    if (onUpdate) onUpdate(text, reasoning);
+                                } catch (e) {}
                             }
                         }
                     }
-                } else {
-                    const data = await res.json();
-                    const finish = data.choices?.[0]?.finish_reason;
-                    if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
-
-                    const msg = data.choices?.[0]?.message || {};
-                    text = msg.content || '';
-                    if (msg.reasoning || msg.reasoning_content) {
-                        reasoning = msg.reasoning || msg.reasoning_content;
-                    }
-                    if (data.thinking) reasoning = (reasoning || '') + data.thinking;
-                    if (onUpdate) onUpdate(text, reasoning);
                 }
-
-                return { text: text.trim(), reasoning, isMaxTokens };
-            } catch (e) {
-                console.error('[KaizAgent] Custom Endpoint error:', e);
-                throw e;
-            }
-        }
-
-        // 2. Nếu không bật Custom Endpoint, sử dụng ConnectionManager mặc định của SillyTavern
-        const service = ctx.ConnectionManagerRequestService;
-        let asyncGeneratorFn: any;
-
-        try {
-            const profileId =
-                ctx.extensionSettings?.connectionManager?.selectedProfile ||
-                document.getElementById('connection_profiles')?.value;
-
-            if (profileId && service && typeof service.sendRequest === 'function') {
-                asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
-                    stream: stream,
-                    signal: effectiveSignal,
-                    extractData: false,
-                    includePreset: true,
-                });
             } else {
-                const mainApi = window.main_api || ctx.main_api;
-                if (mainApi === 'openai' && ctx.ChatCompletionService) {
-                    const oaiSettings = window.oai_settings || ctx.oai_settings || {};
-                    asyncGeneratorFn = await ctx.ChatCompletionService.processRequest(
-                        {
-                            messages: messages,
-                            max_tokens: maxTokens,
-                            stream: stream,
-                        },
-                        { presetName: oaiSettings.preset_settings_openai },
-                        false,
-                        abort.signal,
-                    );
-                } else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-                    const textGenSettings =
-                        window.textgenerationwebui_settings || ctx.textgenerationwebui_settings || {};
-                    asyncGeneratorFn = await ctx.TextCompletionService.processRequest(
-                        {
-                            prompt: messages,
-                            max_tokens: maxTokens,
-                            stream: stream,
-                        },
-                        { presetName: textGenSettings.preset_settings_textgenerationwebui },
-                        false,
-                        abort.signal,
-                    );
-                } else {
-                    throw new Error('No active API connection found in SillyTavern. Please configure LLM settings.');
+                const data = await res.json();
+                const finish = data.choices?.[0]?.finish_reason;
+                if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
+
+                const msg = data.choices?.[0]?.message || {};
+                text = msg.content || '';
+                if (msg.reasoning || msg.reasoning_content) {
+                    reasoning = msg.reasoning || msg.reasoning_content;
                 }
-            }
-
-            let text = '';
-            let reasoning = null;
-
-            const isGen =
-                typeof asyncGeneratorFn === 'function' ||
-                (asyncGeneratorFn != null && typeof asyncGeneratorFn[Symbol.asyncIterator] === 'function') ||
-                (asyncGeneratorFn != null && typeof asyncGeneratorFn.next === 'function');
-
-            let lastValue: any = null;
-
-            if (!isGen) {
-                const value = asyncGeneratorFn;
-                if (typeof value === 'string') {
-                    text = value.trim();
-                } else {
-                    text =
-                        value?.text ||
-                        value?.content ||
-                        value?.message?.content ||
-                        value?.choices?.[0]?.message?.content ||
-                        '';
-                }
-                const finishReason =
-                    lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
-                const isMaxTokens =
-                    finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
-                if (onUpdate) onUpdate(text, reasoning);
-                return { text: text.trim(), reasoning, isMaxTokens };
-            }
-
-            const gen = typeof asyncGeneratorFn === 'function' ? asyncGeneratorFn() : asyncGeneratorFn;
-            while (true) {
-                const { value, done } = await gen.next();
-                if (done) {
-                    if (value) lastValue = value;
-                    break;
-                }
-                lastValue = value;
-
-                const chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
-                if (value?.thinking) reasoning = (reasoning || '') + value.thinking;
-
-                if (chunkText) text += chunkText;
-
+                if (data.thinking) reasoning = (reasoning || '') + data.thinking;
                 if (onUpdate) onUpdate(text, reasoning);
             }
-
-            const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
-            const isMaxTokens =
-                finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
 
             return { text: text.trim(), reasoning, isMaxTokens };
         } catch (e) {
-            console.error('[KaizAgent] generateCompletion error:', e);
+            console.error('[KaizAgent] Custom Endpoint error:', e);
             throw e;
         }
     }

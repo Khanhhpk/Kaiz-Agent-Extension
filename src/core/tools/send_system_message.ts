@@ -39,15 +39,15 @@ export const sendSystemMessageTool: ITool = {
 
         // Tính thời gian biến mất (từ 3 đến 12 giây dựa trên độ dài)
         const timeout = Math.max(3000, Math.min(12000, message.length * 60));
-        
+
         // Kiểm tra xem Kaiz Window có đang mở không
         const chatWindow = $('#kaiz-chat-window');
         const floatBtn = $('#kaiz-floating-btn');
         const isWindowOpen = chatWindow.length > 0 && chatWindow.css('display') !== 'none';
-        
+
         const popupId = 'kaiz-sys-popup-' + Date.now();
         const safeMessage = message.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
-        
+
         const popup = $(`
             <div id="${popupId}" class="kaiz-sys-notification" style="opacity: 0; pointer-events: none; transition: opacity 0.3s ease, transform 0.3s ease;">
                 <div style="position: absolute; top: 5px; right: 8px; font-size: 12px; color: #aaa; cursor: pointer;" class="kaiz-sys-close"><i class="fa-solid fa-xmark"></i></div>
@@ -69,7 +69,7 @@ export const sendSystemMessageTool: ITool = {
             boxShadow: '0 5px 20px rgba(0,0,0,0.6)',
             maxWidth: '320px',
             minWidth: '200px',
-            backdropFilter: 'blur(5px)'
+            backdropFilter: 'blur(5px)',
         });
 
         $('body').append(popup);
@@ -86,7 +86,7 @@ export const sendSystemMessageTool: ITool = {
             popup.css({
                 top: '20px',
                 left: '50%',
-                marginLeft: `-${popupWidth / 2}px` // căn giữa
+                marginLeft: `-${popupWidth / 2}px`, // căn giữa
             });
             transformStart = 'translateY(-20px)';
             transformEnd = 'translateY(0)';
@@ -95,10 +95,10 @@ export const sendSystemMessageTool: ITool = {
             const btnRect = floatBtn[0].getBoundingClientRect();
             const screenWidth = $(window).width() || 1920;
             const screenHeight = $(window).height() || 1080;
-            
-            let top = btnRect.top - (popupHeight / 2) + (btnRect.height / 2);
+
+            let top = btnRect.top - popupHeight / 2 + btnRect.height / 2;
             let left = 0;
-            
+
             // Mũi tên (Speech bubble tail)
             const arrow = $('<div class="kaiz-sys-arrow"></div>');
             arrow.css({
@@ -107,7 +107,7 @@ export const sendSystemMessageTool: ITool = {
                 height: '0',
                 borderStyle: 'solid',
                 top: '50%',
-                marginTop: '-8px'
+                marginTop: '-8px',
             });
 
             // Kiểm tra nút bong bóng ở nửa trái hay phải màn hình
@@ -117,7 +117,7 @@ export const sendSystemMessageTool: ITool = {
                 arrow.css({
                     right: '-9px',
                     borderWidth: '8px 0 8px 9px',
-                    borderColor: 'transparent transparent transparent #7289da'
+                    borderColor: 'transparent transparent transparent #7289da',
                 });
                 transformStart = 'translateX(15px)';
             } else {
@@ -126,18 +126,18 @@ export const sendSystemMessageTool: ITool = {
                 arrow.css({
                     left: '-9px',
                     borderWidth: '8px 9px 8px 0',
-                    borderColor: 'transparent #7289da transparent transparent'
+                    borderColor: 'transparent #7289da transparent transparent',
                 });
                 transformStart = 'translateX(-15px)';
             }
             transformEnd = 'translateX(0)';
-            
+
             // Chống tràn màn hình dọc
             if (top < 10) top = 10;
             if (top + popupHeight > screenHeight - 10) {
                 top = screenHeight - popupHeight - 10;
             }
-            
+
             popup.css({ top: top + 'px', left: left + 'px' });
             popup.append(arrow);
         } else {
@@ -155,7 +155,7 @@ export const sendSystemMessageTool: ITool = {
             popup.css({
                 opacity: 1,
                 transform: transformEnd,
-                pointerEvents: 'auto'
+                pointerEvents: 'auto',
             });
         }, 10);
 
@@ -167,7 +167,7 @@ export const sendSystemMessageTool: ITool = {
             popup.css({
                 opacity: 0,
                 transform: transformStart,
-                pointerEvents: 'none'
+                pointerEvents: 'none',
             });
             setTimeout(() => popup.remove(), 300);
         };

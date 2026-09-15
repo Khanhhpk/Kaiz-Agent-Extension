@@ -12,7 +12,8 @@ export const renameAgentChatTool: ITool = {
                 newName: { type: 'string', description: 'Tên mới cho đoạn chat.' },
                 chatId: {
                     type: 'number',
-                    description: 'Tùy chọn. ID của đoạn chat cần đổi tên. Nếu không cung cấp, sẽ đổi tên đoạn chat hiện tại.',
+                    description:
+                        'Tùy chọn. ID của đoạn chat cần đổi tên. Nếu không cung cấp, sẽ đổi tên đoạn chat hiện tại.',
                 },
             },
             required: ['newName'],

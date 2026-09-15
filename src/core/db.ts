@@ -141,7 +141,10 @@ export class KaizDB {
                 }
 
                 if (!db.objectStoreNames.contains('kaiz_theme_library')) {
-                    const themeStore = db.createObjectStore('kaiz_theme_library', { keyPath: 'id', autoIncrement: true });
+                    const themeStore = db.createObjectStore('kaiz_theme_library', {
+                        keyPath: 'id',
+                        autoIncrement: true,
+                    });
                     themeStore.createIndex('name', 'name', { unique: false });
                 }
             };
@@ -164,7 +167,13 @@ export class KaizDB {
 
         const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
         const roleplayPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
-        const roleplayTools = ['get_char_info', 'get_chat_history', 'get_lorebook_info', 'get_user_persona', 'manage_user_input'];
+        const roleplayTools = [
+            'get_char_info',
+            'get_chat_history',
+            'get_lorebook_info',
+            'get_user_persona',
+            'manage_user_input',
+        ];
         if (!roleplayWs) {
             await this.createSystemWorkspace('roleplay', 'Roleplay & Story', roleplayPrompt, roleplayTools);
         }
@@ -172,11 +181,23 @@ export class KaizDB {
         const modderWs = workspaces.find((w) => w.systemId === 'modder');
         const modderPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
         const modderTools = [
-            'get_chat_history', 'get_char_info', 'list_characters', 'edit_character_card',
-            'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook',
-            'get_regex_list', 'get_regex_info', 'manage_regex',
-            'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script',
-            'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup'
+            'get_chat_history',
+            'get_char_info',
+            'list_characters',
+            'edit_character_card',
+            'get_lorebook_info',
+            'manage_lorebook_entry',
+            'manage_worldbook',
+            'get_regex_list',
+            'get_regex_info',
+            'manage_regex',
+            'get_tavern_helper_scripts',
+            'get_tavern_helper_script_info',
+            'manage_tavern_helper_script',
+            'get_user_persona',
+            'edit_user_persona',
+            'manage_chat_text',
+            'manage_backup',
         ];
         if (!modderWs) {
             await this.createSystemWorkspace('modder', 'Modding & Editor', modderPrompt, modderTools);
@@ -332,11 +353,23 @@ export class KaizDB {
             defaultName = 'Modding & Editor';
             defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
             defaultTools = [
-                'get_chat_history', 'get_char_info', 'list_characters', 'edit_character_card',
-                'get_lorebook_info', 'manage_lorebook_entry', 'manage_worldbook',
-                'get_regex_list', 'get_regex_info', 'manage_regex',
-                'get_tavern_helper_scripts', 'get_tavern_helper_script_info', 'manage_tavern_helper_script',
-                'get_user_persona', 'edit_user_persona', 'manage_chat_text', 'manage_backup'
+                'get_chat_history',
+                'get_char_info',
+                'list_characters',
+                'edit_character_card',
+                'get_lorebook_info',
+                'manage_lorebook_entry',
+                'manage_worldbook',
+                'get_regex_list',
+                'get_regex_info',
+                'manage_regex',
+                'get_tavern_helper_scripts',
+                'get_tavern_helper_script_info',
+                'manage_tavern_helper_script',
+                'get_user_persona',
+                'edit_user_persona',
+                'manage_chat_text',
+                'manage_backup',
             ];
         } else if (ws.systemId === 'ui_designer') {
             defaultName = 'UI & Theme Designer';
@@ -466,7 +499,7 @@ export class KaizDB {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['messages'], 'readwrite');
             const msgStore = transaction.objectStore('messages');
-            
+
             const msgIndex = msgStore.index('chatId');
             const req = msgIndex.openCursor(IDBKeyRange.only(chatId));
             req.onsuccess = (e) => {

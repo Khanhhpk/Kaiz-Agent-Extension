@@ -365,7 +365,7 @@ export class UICustomizationEngine {
         const activeSnapshots = await this.db.getActiveSnapshots();
         if (activeSnapshots.length === 0) return 0;
 
-        const targetIndex = activeSnapshots.findIndex(s => s.snapshotId === snapshotId);
+        const targetIndex = activeSnapshots.findIndex((s) => s.snapshotId === snapshotId);
         if (targetIndex === -1) return 0;
 
         let count = 0;
@@ -425,9 +425,7 @@ export class UICustomizationEngine {
     // Private Helpers
     // ========================================================================
 
-    private async createSnapshot(
-        data: Omit<UISnapshot, 'id' | 'snapshotId' | 'timestamp' | 'applied'>,
-    ): Promise<void> {
+    private async createSnapshot(data: Omit<UISnapshot, 'id' | 'snapshotId' | 'timestamp' | 'applied'>): Promise<void> {
         const snapshot: UISnapshot = {
             snapshotId: generateUUID(),
             timestamp: Date.now(),

@@ -63,8 +63,6 @@ export class ChatWindowUI {
             `);
         }
 
-
-
         $('#kaiz-log-close').on('click', () => {
             ($('#kaiz-log-modal')[0] as HTMLDialogElement).close();
         });

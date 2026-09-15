@@ -61,10 +61,13 @@ jQuery(async () => {
     // Khởi tạo Settings mặc định
     if (!ctx.extensionSettings[EXT_NAME]) {
         ctx.extensionSettings[EXT_NAME] = {
-            useCustomEndpoint: false,
             customUrl: 'http://localhost:5000/v1',
             customKey: '',
             customModel: '',
+            maxTokens: 65000,
+            temperature: 1,
+            topP: 0.95,
+            topK: 64,
             maxAgentLoops: 5,
             retryKeywords: '',
             maxRetries: 3,
@@ -76,6 +79,18 @@ jQuery(async () => {
             enableBrowser: true,
         };
     } else {
+        if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
+            ctx.extensionSettings[EXT_NAME].maxTokens = 65000;
+        }
+        if (ctx.extensionSettings[EXT_NAME].temperature === undefined) {
+            ctx.extensionSettings[EXT_NAME].temperature = 1;
+        }
+        if (ctx.extensionSettings[EXT_NAME].topP === undefined) {
+            ctx.extensionSettings[EXT_NAME].topP = 0.95;
+        }
+        if (ctx.extensionSettings[EXT_NAME].topK === undefined) {
+            ctx.extensionSettings[EXT_NAME].topK = 64;
+        }
         if (!ctx.extensionSettings[EXT_NAME].disabledTools) {
             ctx.extensionSettings[EXT_NAME].disabledTools = {};
         }
