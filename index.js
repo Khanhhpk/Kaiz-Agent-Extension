@@ -9454,7 +9454,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            // Hàm tiện ích format tin nhắn
            const formatMessage = (text, isFinal) => {
                let html = text || '';
-               const detailsTag = isFinal ? '<details class="kaiz-cot-block">' : '<details open class="kaiz-cot-block">';
+               const detailsTag = '<details class="kaiz-cot-block">';
                const closeIndex = html.indexOf('</agent_cot>');
                if (closeIndex !== -1) {
                    const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
@@ -9467,9 +9467,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    }
                }
                else if (!isFinal) {
-                   // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
+                   // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT (giữ đóng gọn gàng)
                    const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                   html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                   html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                }
                else {
                    // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)

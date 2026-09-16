@@ -882,7 +882,7 @@ export class ChatWindowUI {
         const formatMessage = (text: string, isFinal: boolean): string => {
             let html = text || '';
 
-            const detailsTag = isFinal ? '<details class="kaiz-cot-block">' : '<details open class="kaiz-cot-block">';
+            const detailsTag = '<details class="kaiz-cot-block">';
 
             const closeIndex = html.indexOf('</agent_cot>');
             if (closeIndex !== -1) {
@@ -897,9 +897,9 @@ export class ChatWindowUI {
                     html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                 }
             } else if (!isFinal) {
-                // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
+                // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT (giữ đóng gọn gàng)
                 const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
                 // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
                 const parsedContent = parseToolCallsToHtml(html.trim(), false);
