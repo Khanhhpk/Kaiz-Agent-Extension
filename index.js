@@ -11898,25 +11898,49 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                            const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
                            const base64 = await WebImageBridge.requestImage({ prompt, target });
                            const markdown = `\n\n![Draw: ${prompt}](${base64})\n\n`;
+                           let messageSent = false;
                            if (typeof ctx.sendSystemMessage === 'function') {
-                               ctx.sendSystemMessage(markdown);
+                               try {
+                                   ctx.sendSystemMessage('generic', markdown);
+                                   messageSent = true;
+                               }
+                               catch (err) {
+                                   console.warn('[Kaiz /draw] sendSystemMessage(generic) error:', err);
+                                   try {
+                                       ctx.sendSystemMessage(markdown);
+                                       messageSent = true;
+                                   }
+                                   catch (e2) {
+                                       console.warn('[Kaiz /draw] sendSystemMessage(markdown) error:', e2);
+                                   }
+                               }
                            }
-                           else if (typeof ctx.addOneMessage === 'function') {
+                           if (!messageSent && typeof ctx.addOneMessage === 'function') {
                                ctx.addOneMessage({
                                    is_user: false,
+                                   is_system: true,
                                    name: 'Web Image Bridge',
                                    mes: markdown,
                                    send_date: Date.now(),
                                });
+                               if (typeof ctx.saveChat === 'function') {
+                                   ctx.saveChat();
+                               }
+                               if (typeof ctx.scrollChatToBottom === 'function') {
+                                   ctx.scrollChatToBottom();
+                               }
+                               messageSent = true;
                            }
                            if (typeof toastr !== 'undefined') {
                                toastr.success('Đã vẽ ảnh thành công!');
                            }
+                           return markdown;
                        }
                        catch (e) {
                            if (typeof toastr !== 'undefined') {
                                toastr.error(`Vẽ ảnh thất bại: ${e.message}`);
                            }
+                           return `[Error] ${e.message}`;
                        }
                    }, [], '<mô_tả_ảnh>', 'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Imagen 3 / ChatGPT DALL-E 3)', true);
                }

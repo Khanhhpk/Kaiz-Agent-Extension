@@ -213,23 +213,48 @@ jQuery(async () => {
                             const base64 = await WebImageBridge.requestImage({ prompt, target });
                             const markdown = `\n\n![Draw: ${prompt}](${base64})\n\n`;
 
+                            let messageSent = false;
                             if (typeof ctx.sendSystemMessage === 'function') {
-                                ctx.sendSystemMessage(markdown);
-                            } else if (typeof ctx.addOneMessage === 'function') {
+                                try {
+                                    ctx.sendSystemMessage('generic', markdown);
+                                    messageSent = true;
+                                } catch (err) {
+                                    console.warn('[Kaiz /draw] sendSystemMessage(generic) error:', err);
+                                    try {
+                                        ctx.sendSystemMessage(markdown);
+                                        messageSent = true;
+                                    } catch (e2) {
+                                        console.warn('[Kaiz /draw] sendSystemMessage(markdown) error:', e2);
+                                    }
+                                }
+                            }
+
+                            if (!messageSent && typeof ctx.addOneMessage === 'function') {
                                 ctx.addOneMessage({
                                     is_user: false,
+                                    is_system: true,
                                     name: 'Web Image Bridge',
                                     mes: markdown,
                                     send_date: Date.now(),
                                 });
+                                if (typeof ctx.saveChat === 'function') {
+                                    ctx.saveChat();
+                                }
+                                if (typeof ctx.scrollChatToBottom === 'function') {
+                                    ctx.scrollChatToBottom();
+                                }
+                                messageSent = true;
                             }
+
                             if (typeof toastr !== 'undefined') {
                                 toastr.success('Đã vẽ ảnh thành công!');
                             }
+                            return markdown;
                         } catch (e: any) {
                             if (typeof toastr !== 'undefined') {
                                 toastr.error(`Vẽ ảnh thất bại: ${e.message}`);
                             }
+                            return `[Error] ${e.message}`;
                         }
                     },
                     [],

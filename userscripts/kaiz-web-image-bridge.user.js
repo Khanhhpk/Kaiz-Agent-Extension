@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.1.0
+// @version      1.1.1
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -12,11 +12,17 @@
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
 // @grant        GM_xmlhttpRequest
+// @noframes
 // @run-at       document-start
 // ==/UserScript==
 
 (function () {
     'use strict';
+
+    // BẢO VỆ CỐT LÕI: Tuyệt đối chỉ chạy trong cửa sổ chính (top window), bỏ qua toàn bộ iframe con (Google Ads, auth, ...)
+    if (window.self !== window.top) {
+        return;
+    }
 
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
@@ -26,7 +32,7 @@
     // 1. CONTEXT: SILLYTAVERN (CẦU NỐI CỤC BỘ)
     // =========================================================================
     if (IS_ST) {
-        console.log('[Kaiz Bridge] Userscript loaded on SillyTavern.');
+        console.log('[Kaiz Bridge] Userscript loaded on SillyTavern (Top-level window).');
 
         // Lắng nghe yêu cầu vẽ ảnh từ SillyTavern Extension qua postMessage
         // Lưu ý: Không kiểm tra event.source !== window vì sandbox của Tampermonkey
@@ -43,7 +49,7 @@
                     timestamp: Date.now(),
                 });
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.1.0' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.1.1' }, '*');
             }
         });
 
@@ -144,6 +150,25 @@
             console.warn(`[Kaiz Bridge][${CURRENT_TARGET}] Job đã quá hạn (>60s), bỏ qua.`);
             return;
         }
+
+        // Chống xung đột nhiều tab: Đảm bảo chỉ 1 tab duy nhất nhận xử lý job này
+        const claimKey = `KAIZ_CLAIM_${job.id}`;
+        if (GM_getValue(claimKey)) {
+            console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Job ${job.id} đã được tab khác nhận.`);
+            return;
+        }
+
+        // Nếu tab đang bị ẩn trong nền (document.hidden), nhường cho tab đang active xử lý trước 600ms
+        if (document.hidden) {
+            await new Promise((r) => setTimeout(r, 600));
+            if (GM_getValue(claimKey)) {
+                console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Job ${job.id} đã được tab active nhận.`);
+                return;
+            }
+        }
+
+        // Đánh dấu nhận job
+        GM_setValue(claimKey, Date.now());
 
         console.log(`[Kaiz Bridge][${CURRENT_TARGET}] 🚀 Bắt đầu thực thi job:`, job.id, job.prompt);
 
