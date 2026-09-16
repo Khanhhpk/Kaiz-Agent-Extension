@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.0
+// @version      1.2.1
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -49,7 +49,7 @@
                     timestamp: Date.now(),
                 });
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.0' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.1' }, '*');
             }
         });
 
@@ -235,81 +235,119 @@
 
         console.log('[Kaiz Bridge][Gemini] Tìm thấy inputEl:', inputEl);
 
-        // 3. Điền prompt với đa tầng kỹ thuật (Đảm bảo Quill & Angular nhận text kể cả khi tab không có focus)
+        // 3. Điền prompt với đa tầng kỹ thuật (Đảm bảo Quill & Angular nhận diện text và chuyển Mic -> Gửi)
         inputEl.focus();
         inputEl.dispatchEvent(new Event('focusin', { bubbles: true }));
 
-        // Kỹ thuật 1: Điền qua Quill API trực tiếp nếu có
-        const quill =
-            inputEl.__quill ||
-            inputEl.parentElement?.__quill ||
-            (inputEl.closest && inputEl.closest('.ql-container')?.__quill) ||
-            (window.Quill && window.Quill.find ? window.Quill.find(inputEl) : null);
-
-        let filledViaQuill = false;
-        if (quill && typeof quill.setText === 'function') {
-            try {
-                quill.setText('');
-                quill.insertText(0, job.prompt);
-                filledViaQuill = true;
-                console.log('[Kaiz Bridge][Gemini] Đã điền prompt trực tiếp qua Quill instance.');
-            } catch (qe) {
-                console.warn('[Kaiz Bridge][Gemini] Quill setText lỗi:', qe);
-            }
+        // Xác định node <p> bên trong editor của Quill để bảo toàn cấu trúc DOM
+        let pEl = inputEl.querySelector('p');
+        if (!pEl && inputEl.tagName.toLowerCase() !== 'textarea') {
+            pEl = document.createElement('p');
+            inputEl.appendChild(pEl);
         }
 
-        // Kỹ thuật 2: Giả lập Clipboard Paste Event (Quill lắng nghe paste và cập nhật Delta kể cả khi không focus)
-        if (!filledViaQuill) {
-            try {
-                const dt = new DataTransfer();
-                dt.setData('text/plain', job.prompt);
-                const pasteEvt = new ClipboardEvent('paste', {
-                    bubbles: true,
-                    cancelable: true,
-                    clipboardData: dt,
-                });
-                inputEl.dispatchEvent(pasteEvt);
-            } catch (pe) {
-                console.warn('[Kaiz Bridge][Gemini] Paste event fallback error:', pe);
-            }
-        }
-
-        // Kỹ thuật 3: execCommand insertText
+        // Kỹ thuật 1: Truy cập trực tiếp Quill qua unsafeWindow hoặc DOM property (nếu có)
         try {
+            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            const q =
+                inputEl.__quill ||
+                inputEl.parentElement?.__quill ||
+                (inputEl.closest && inputEl.closest('.ql-container')?.__quill) ||
+                (win.Quill && win.Quill.find ? win.Quill.find(inputEl) : null);
+            if (q && typeof q.setText === 'function') {
+                q.setText('', 'user');
+                q.insertText(0, job.prompt, 'user');
+                console.log('[Kaiz Bridge][Gemini] Đã nạp text trực tiếp qua Quill instance (source: user).');
+            }
+        } catch (qe) {
+            console.warn('[Kaiz Bridge][Gemini] Quill direct API error:', qe);
+        }
+
+        // Kỹ thuật 2: Clipboard Paste Event (Quill xử lý paste tự động tạo Delta và phát sinh event user-input)
+        try {
+            const dt = new DataTransfer();
+            dt.setData('text/plain', job.prompt);
+            const pasteEvt = new ClipboardEvent('paste', {
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+                clipboardData: dt,
+            });
+            inputEl.dispatchEvent(pasteEvt);
+            if (pEl && pEl !== inputEl) {
+                pEl.dispatchEvent(pasteEvt);
+            }
+            console.log('[Kaiz Bridge][Gemini] Đã bắn ClipboardEvent paste với DataTransfer.');
+        } catch (pe) {
+            console.warn('[Kaiz Bridge][Gemini] Paste event fallback error:', pe);
+        }
+
+        // Kỹ thuật 3: Native Selection & execCommand
+        try {
+            const targetNode = pEl || inputEl;
             const selection = window.getSelection();
             const range = document.createRange();
-            range.selectNodeContents(inputEl);
+            range.selectNodeContents(targetNode);
             selection.removeAllRanges();
             selection.addRange(range);
             document.execCommand('insertText', false, job.prompt);
         } catch (e) {
-            /* ignore */
+            console.warn('[Kaiz Bridge][Gemini] execCommand insertText failed:', e);
         }
 
-        // Kỹ thuật 4: DOM innerHTML nếu text vẫn trống
-        if (!filledViaQuill && (!inputEl.innerText || !inputEl.innerText.trim())) {
-            inputEl.innerHTML = `<p>${escapeHtml(job.prompt)}</p>`;
+        // Kỹ thuật 4: DOM Fallback (bảo toàn thẻ <p> để không phá vỡ mô hình của Quill)
+        if (pEl) {
+            if (!pEl.textContent || !pEl.textContent.trim()) {
+                pEl.textContent = job.prompt;
+            }
+        } else if (!inputEl.innerText || !inputEl.innerText.trim()) {
+            inputEl.innerText = job.prompt;
         }
 
-        // Bắn chuỗi event tổng hợp
-        inputEl.dispatchEvent(new Event('beforeinput', { bubbles: true, composed: true }));
-        inputEl.dispatchEvent(
-            new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: job.prompt }),
-        );
+        // Kỹ thuật 5: Bắn chuỗi InputEvent và KeyboardEvent chuẩn
+        const inputEventProps = {
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+            inputType: 'insertText',
+            data: job.prompt,
+        };
+
+        try {
+            inputEl.dispatchEvent(new InputEvent('beforeinput', inputEventProps));
+            inputEl.dispatchEvent(new InputEvent('input', inputEventProps));
+        } catch (ie) {
+            inputEl.dispatchEvent(new Event('beforeinput', { bubbles: true, composed: true }));
+            inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        }
+
+        if (pEl && pEl !== inputEl) {
+            try {
+                pEl.dispatchEvent(new InputEvent('input', inputEventProps));
+            } catch (e) {
+                /* ignore */
+            }
+        }
+
         inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+        inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', bubbles: true, composed: true }));
+        inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Unidentified', bubbles: true, composed: true }));
+
+        const rich = document.querySelector('rich-textarea');
+        if (rich && rich !== inputEl) {
+            try {
+                rich.dispatchEvent(new InputEvent('input', inputEventProps));
+            } catch (e) {
+                rich.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            rich.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
+        }
 
         console.log('[Kaiz Bridge][Gemini] Đã hoàn tất nhập prompt vào ô input.');
-        // Cho Angular và framework 600ms để chạy digest cycle và cập nhật trạng thái nút gửi
+        // Chờ Angular digest cycle cập nhật trạng thái ô nhập và đổi nút Mic sang nút Gửi
         await new Promise((r) => setTimeout(r, 600));
 
-        // 4. Bấm nút gửi (Khoanh vùng tìm kiếm trong khu vực ô nhập để tránh bắt nhầm nút Menu/Mic)
-        const inputArea =
-            inputEl.closest('.input-area-container') ||
-            inputEl.closest('.input-area') ||
-            inputEl.closest('form') ||
-            document.querySelector('.send-button-container')?.parentElement ||
-            document;
-
+        // 4. Tìm và bấm nút gửi
         const sendSelectors = [
             'button.send-button',
             '.send-button-container button',
@@ -322,9 +360,9 @@
         ];
 
         let sendBtn = null;
-        for (let i = 0; i < 25; i++) {
+        for (let i = 0; i < 30; i++) {
             for (const sel of sendSelectors) {
-                const btn = inputArea.querySelector(sel) || document.querySelector(sel);
+                const btn = document.querySelector(sel);
                 if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
                     const label = (btn.getAttribute('aria-label') || '').toLowerCase();
                     const isExcluded =
@@ -341,29 +379,47 @@
                 }
             }
             if (sendBtn) break;
-            await new Promise((r) => setTimeout(r, 150));
+            await new Promise((r) => setTimeout(r, 100));
         }
 
         if (sendBtn) {
             console.log('[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ, đang click:', sendBtn);
+            sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }));
+            sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.click();
         } else {
-            console.log('[Kaiz Bridge][Gemini] Không tìm thấy nút gửi enabled, thử kích hoạt bằng phím Enter...');
-            const enterEvt = new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true,
-                cancelable: true,
-                composed: true,
-            });
-            inputEl.dispatchEvent(enterEvt);
-            inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
-            const rich = document.querySelector('rich-textarea');
-            if (rich && rich !== inputEl) {
-                rich.dispatchEvent(enterEvt);
-            }
+            console.log('[Kaiz Bridge][Gemini] Nút gửi chưa kích hoạt, kích hoạt gửi bằng phím Enter...');
+        }
+
+        // Bổ sung Enter Event mô phỏng để đảm bảo lệnh luôn được gửi đi
+        const enterDown = new KeyboardEvent('keydown', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+        });
+        const enterUp = new KeyboardEvent('keyup', {
+            key: 'Enter',
+            code: 'Enter',
+            keyCode: 13,
+            which: 13,
+            bubbles: true,
+            cancelable: true,
+            composed: true,
+        });
+
+        inputEl.dispatchEvent(enterDown);
+        inputEl.dispatchEvent(enterUp);
+        if (pEl && pEl !== inputEl) {
+            pEl.dispatchEvent(enterDown);
+            pEl.dispatchEvent(enterUp);
+        }
+        if (rich && rich !== inputEl) {
+            rich.dispatchEvent(enterDown);
+            rich.dispatchEvent(enterUp);
         }
 
         // 5. Chờ phản hồi và bắt ảnh mới
