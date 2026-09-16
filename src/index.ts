@@ -19,15 +19,6 @@ import { UICustomizationModal } from './ui/ui_customization_modal';
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
 
-// Bắt tự động mọi vi phạm CSP và in rõ file + số dòng ra Console
-window.addEventListener('securitypolicyviolation', (e: SecurityPolicyViolationEvent) => {
-    console.error(
-        `🚨 [CSP Violation] Directive: ${e.violatedDirective} | Blocked: ${e.blockedURI || 'eval/new Function'}`,
-    );
-    console.error(`📍 Source: ${e.sourceFile}:${e.lineNumber}:${e.columnNumber}`);
-    if (e.sample) console.error(`📝 Code sample: ${e.sample}`);
-});
-
 // Tìm chính xác thư mục extension
 let extPath = 'third-party/Kaiz-Agent-Extension';
 try {
