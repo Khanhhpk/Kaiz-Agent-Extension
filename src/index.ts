@@ -211,20 +211,25 @@ jQuery(async () => {
                         try {
                             const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
                             const base64 = await WebImageBridge.requestImage({ prompt, target });
-                            const markdown = `\n\n![Draw: ${prompt}](${base64})\n\n`;
+                            const safePrompt = prompt
+                                .replace(/&/g, '&amp;')
+                                .replace(/"/g, '&quot;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;');
+                            const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic;">🎨 ${safePrompt}</div></div>`;
 
                             let messageSent = false;
                             if (typeof ctx.sendSystemMessage === 'function') {
                                 try {
-                                    ctx.sendSystemMessage('generic', markdown);
+                                    ctx.sendSystemMessage('generic', imageHtml);
                                     messageSent = true;
                                 } catch (err) {
                                     console.warn('[Kaiz /draw] sendSystemMessage(generic) error:', err);
                                     try {
-                                        ctx.sendSystemMessage(markdown);
+                                        ctx.sendSystemMessage(imageHtml);
                                         messageSent = true;
                                     } catch (e2) {
-                                        console.warn('[Kaiz /draw] sendSystemMessage(markdown) error:', e2);
+                                        console.warn('[Kaiz /draw] sendSystemMessage(imageHtml) error:', e2);
                                     }
                                 }
                             }
@@ -234,7 +239,7 @@ jQuery(async () => {
                                     is_user: false,
                                     is_system: true,
                                     name: 'Web Image Bridge',
-                                    mes: markdown,
+                                    mes: imageHtml,
                                     send_date: Date.now(),
                                 });
                                 if (typeof ctx.saveChat === 'function') {
@@ -249,7 +254,7 @@ jQuery(async () => {
                             if (typeof toastr !== 'undefined') {
                                 toastr.success('Đã vẽ ảnh thành công!');
                             }
-                            return markdown;
+                            return imageHtml;
                         } catch (e: any) {
                             if (typeof toastr !== 'undefined') {
                                 toastr.error(`Vẽ ảnh thất bại: ${e.message}`);

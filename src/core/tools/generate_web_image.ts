@@ -43,7 +43,12 @@ export const generateWebImageTool: ITool = {
                 timeoutMs: 80000,
             });
 
-            const markdownImage = `\n\n![Generated Image](${base64})\n\n`;
+            const safePrompt = prompt
+                .replace(/&/g, '&amp;')
+                .replace(/"/g, '&quot;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic;">🎨 ${safePrompt}</div></div>`;
 
             return {
                 content: JSON.stringify({

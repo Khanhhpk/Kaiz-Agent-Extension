@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.1.1
+// @version      1.2.0
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -49,7 +49,7 @@
                     timestamp: Date.now(),
                 });
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.1.1' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.0' }, '*');
             }
         });
 
@@ -72,22 +72,14 @@
             window.postMessage(
                 {
                     type: 'KAIZ_BRIDGE_HEARTBEAT_UPDATE',
-                    payload: newValue,
-                },
-                '*',
-            );
-        });
-
-        return;
-    }
-
-    // =========================================================================
+                    // =========================================================================
     // 2. CONTEXT: WEB (GEMINI / CHATGPT)
     // =========================================================================
     const CURRENT_TARGET = IS_GEMINI ? 'gemini' : IS_CHATGPT ? 'chatgpt' : 'unknown';
     if (CURRENT_TARGET === 'unknown') return;
 
-    console.log(`[Kaiz Bridge] 🌐 Web Adapter active for: ${CURRENT_TARGET}`);
+    const TAB_ID = 'tab_' + Math.random().toString(36).substring(2, 9);
+    console.log(`[Kaiz Bridge] 🌐 Web Adapter active for: ${CURRENT_TARGET} (Tab ID: ${TAB_ID})`);
 
     // Phát nhịp tim mỗi 3 giây để SillyTavern nhận diện tab đang mở
     setInterval(() => {
@@ -133,43 +125,38 @@
         });
     };
 
-    // Lắng nghe công việc cần vẽ
-    GM_addValueChangeListener('KAIZ_PENDING_JOB', async (name, oldValue, job) => {
-        if (!job || !job.id || !job.prompt) return;
+    let lastHandledJobId = null;
 
-        console.log(`[Kaiz Bridge][${CURRENT_TARGET}] 📥 Nhận job từ Storage:`, job);
+    // Bộ điều phối thực thi job (Tránh xung đột đa tab & Chạy mượt trong Background Tab)
+    async function handleIncomingJob(job) {
+        if (!job || !job.id || !job.prompt) return;
+        if (job.id === lastHandledJobId) return;
 
         // Chỉ xử lý nếu target chỉ định đúng nền tảng hiện tại (hoặc 'auto')
         if (job.target !== 'auto' && job.target !== CURRENT_TARGET) {
-            console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Bỏ qua job vì target là: ${job.target}`);
             return;
         }
 
-        // Kiểm tra tránh thực thi lại job cũ quá 60 giây
+        // Bỏ qua job đã cũ (>60s)
         if (Date.now() - job.timestamp > 60000) {
-            console.warn(`[Kaiz Bridge][${CURRENT_TARGET}] Job đã quá hạn (>60s), bỏ qua.`);
             return;
         }
 
-        // Chống xung đột nhiều tab: Đảm bảo chỉ 1 tab duy nhất nhận xử lý job này
+        // Chống xung đột đa tab: Tab nào gán TAB_ID vào claimKey trước sẽ xử lý
         const claimKey = `KAIZ_CLAIM_${job.id}`;
-        if (GM_getValue(claimKey)) {
-            console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Job ${job.id} đã được tab khác nhận.`);
+        const existingClaim = GM_getValue(claimKey);
+        if (existingClaim && existingClaim !== TAB_ID) {
             return;
         }
 
-        // Nếu tab đang bị ẩn trong nền (document.hidden), nhường cho tab đang active xử lý trước 600ms
-        if (document.hidden) {
-            await new Promise((r) => setTimeout(r, 600));
-            if (GM_getValue(claimKey)) {
-                console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Job ${job.id} đã được tab active nhận.`);
-                return;
-            }
+        GM_setValue(claimKey, TAB_ID);
+        // Chờ 60ms để giải quyết race condition giữa các tab
+        await new Promise((r) => setTimeout(r, 60));
+        if (GM_getValue(claimKey) !== TAB_ID) {
+            return;
         }
 
-        // Đánh dấu nhận job
-        GM_setValue(claimKey, Date.now());
-
+        lastHandledJobId = job.id;
         console.log(`[Kaiz Bridge][${CURRENT_TARGET}] 🚀 Bắt đầu thực thi job:`, job.id, job.prompt);
 
         try {
@@ -187,12 +174,44 @@
                 timestamp: Date.now(),
             });
         }
+    }
+
+    // 1. Lắng nghe qua GM_addValueChangeListener
+    GM_addValueChangeListener('KAIZ_PENDING_JOB', (name, oldValue, job) => {
+        handleIncomingJob(job);
     });
 
+    // 2. Web Worker Keep-Alive & Active Polling (Bí quyết đánh thức tab chạy ngầm không bị Chrome freeze)
+    try {
+        const workerBlob = new Blob(
+            [`setInterval(function() { postMessage('tick'); }, 1000);`],
+            { type: 'application/javascript' },
+        );
+        const worker = new Worker(URL.createObjectURL(workerBlob));
+        worker.onmessage = () => {
+            const pendingJob = GM_getValue('KAIZ_PENDING_JOB');
+            if (pendingJob && pendingJob.id !== lastHandledJobId) {
+                handleIncomingJob(pendingJob);
+            }
+        };
+    } catch (e) {
+        console.warn('[Kaiz Bridge] Keep-alive worker not available, falling back to interval:', e);
+    }
+
+    // 3. Fallback Interval quét bộ nhớ mỗi 1.5s
+    setInterval(() => {
+        const pendingJob = GM_getValue('KAIZ_PENDING_JOB');
+        if (pendingJob && pendingJob.id !== lastHandledJobId) {
+            handleIncomingJob(pendingJob);
+        }
+    }, 1500);
+
     // =========================================================================
-    // 3. GEMINI WEB AUTOMATION
+    // 3. GEMINI WEB AUTOMATION (HỖ TRỢ ĐẦY ĐỦ BACKGROUND TAB)
     // =========================================================================
     async function executeGeminiJob(job) {
+        const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
         // 1. Snapshot URL các ảnh hiện có
         const existingImages = new Set(
             Array.from(document.querySelectorAll('img'))
@@ -201,17 +220,22 @@
         );
         console.log(`[Kaiz Bridge][Gemini] Đã snapshot ${existingImages.size} ảnh cũ trên trang.`);
 
-        // 2. Tìm ô input nhập prompt với đa dạng bộ chọn
-        const richTextarea = document.querySelector('rich-textarea');
-        const inputEl =
-            richTextarea?.querySelector('div[contenteditable="true"]') ||
-            richTextarea?.querySelector('.ql-editor') ||
-            richTextarea?.querySelector('p') ||
-            document.querySelector('div[contenteditable="true"][role="textbox"]') ||
-            document.querySelector('div[contenteditable="true"]') ||
-            document.querySelector('.ql-editor') ||
-            document.querySelector('textarea[aria-label*="prompt" i]') ||
-            document.querySelector('textarea');
+        // 2. Chờ tìm ô input (Tối đa 5s phòng khi Angular render trễ trong background tab)
+        let inputEl = null;
+        for (let i = 0; i < 25; i++) {
+            const richTextarea = document.querySelector('rich-textarea');
+            inputEl =
+                richTextarea?.querySelector('div[contenteditable="true"]') ||
+                richTextarea?.querySelector('.ql-editor') ||
+                richTextarea?.querySelector('p') ||
+                document.querySelector('div[contenteditable="true"][role="textbox"]') ||
+                document.querySelector('div[contenteditable="true"]') ||
+                document.querySelector('.ql-editor') ||
+                document.querySelector('textarea[aria-label*="prompt" i]') ||
+                document.querySelector('textarea');
+            if (inputEl) break;
+            await new Promise((r) => setTimeout(r, 200));
+        }
 
         if (!inputEl) {
             throw new Error('Không tìm thấy ô nhập prompt trên Gemini Web. Hãy chắc chắn tab đang ở trang chat.');
@@ -219,35 +243,72 @@
 
         console.log('[Kaiz Bridge][Gemini] Tìm thấy inputEl:', inputEl);
 
-        // 3. Focus và điền prompt bằng native text command
+        // 3. Điền prompt với đa tầng kỹ thuật (Đảm bảo Quill & Angular nhận text kể cả khi tab không có focus)
         inputEl.focus();
+        inputEl.dispatchEvent(new Event('focusin', { bubbles: true }));
 
-        const selection = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(inputEl);
-        selection.removeAllRanges();
-        selection.addRange(range);
+        // Kỹ thuật 1: Điền qua Quill API trực tiếp nếu có
+        const quill =
+            inputEl.__quill ||
+            inputEl.parentElement?.__quill ||
+            (inputEl.closest && inputEl.closest('.ql-container')?.__quill) ||
+            (window.Quill && window.Quill.find ? window.Quill.find(inputEl) : null);
 
-        let inserted = false;
+        let filledViaQuill = false;
+        if (quill && typeof quill.setText === 'function') {
+            try {
+                quill.setText('');
+                quill.insertText(0, job.prompt);
+                filledViaQuill = true;
+                console.log('[Kaiz Bridge][Gemini] Đã điền prompt trực tiếp qua Quill instance.');
+            } catch (qe) {
+                console.warn('[Kaiz Bridge][Gemini] Quill setText lỗi:', qe);
+            }
+        }
+
+        // Kỹ thuật 2: Giả lập Clipboard Paste Event (Quill lắng nghe paste và cập nhật Delta kể cả khi không focus)
+        if (!filledViaQuill) {
+            try {
+                const dt = new DataTransfer();
+                dt.setData('text/plain', job.prompt);
+                const pasteEvt = new ClipboardEvent('paste', {
+                    bubbles: true,
+                    cancelable: true,
+                    clipboardData: dt,
+                });
+                inputEl.dispatchEvent(pasteEvt);
+            } catch (pe) {
+                console.warn('[Kaiz Bridge][Gemini] Paste event fallback error:', pe);
+            }
+        }
+
+        // Kỹ thuật 3: execCommand insertText
         try {
-            inserted = document.execCommand('insertText', false, job.prompt);
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(inputEl);
+            selection.removeAllRanges();
+            selection.addRange(range);
+            document.execCommand('insertText', false, job.prompt);
         } catch (e) {
-            console.warn('[Kaiz Bridge][Gemini] execCommand insertText failed:', e);
+            /* ignore */
         }
 
-        if (!inserted || !inputEl.innerText.trim()) {
-            inputEl.innerText = job.prompt;
+        // Kỹ thuật 4: DOM innerHTML nếu text vẫn trống
+        if (!filledViaQuill && (!inputEl.innerText || !inputEl.innerText.trim())) {
+            inputEl.innerHTML = `<p>${escapeHtml(job.prompt)}</p>`;
         }
 
-        // Bắn chuỗi event để Angular / Framework nhận diện state
+        // Bắn chuỗi event tổng hợp
         inputEl.dispatchEvent(new Event('beforeinput', { bubbles: true, composed: true }));
-        inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        inputEl.dispatchEvent(
+            new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: job.prompt }),
+        );
         inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
-        console.log('[Kaiz Bridge][Gemini] Đã điền prompt vào ô input.');
-        await new Promise((r) => setTimeout(r, 600));
+        console.log('[Kaiz Bridge][Gemini] Đã hoàn tất nhập prompt vào ô input.');
 
-        // 4. Bấm nút gửi
+        // 4. Bấm nút gửi (Vòng lặp chờ Angular kích hoạt nút trong background tab)
         const sendSelectors = [
             'button.send-button',
             'button[aria-label*="Send" i]',
@@ -260,40 +321,60 @@
             'button[mat-icon-button]',
         ];
 
-        let clicked = false;
-        for (const sel of sendSelectors) {
-            const btn = document.querySelector(sel);
-            if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
-                console.log('[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ, đang click:', sel, btn);
-                btn.click();
-                clicked = true;
-                break;
+        let sendBtn = null;
+        for (let i = 0; i < 30; i++) {
+            for (const sel of sendSelectors) {
+                const btn = document.querySelector(sel);
+                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
+                    sendBtn = btn;
+                    break;
+                }
+            }
+            if (sendBtn) break;
+            await new Promise((r) => setTimeout(r, 100));
+        }
+
+        // Nếu sau 3s Angular vẫn chưa gỡ aria-disabled (do tab ở nền), cưỡng chế mở khóa nút
+        if (!sendBtn) {
+            for (const sel of sendSelectors) {
+                const btn = document.querySelector(sel);
+                if (btn) {
+                    btn.removeAttribute('aria-disabled');
+                    btn.removeAttribute('disabled');
+                    sendBtn = btn;
+                    break;
+                }
             }
         }
 
-        if (!clicked) {
-            console.log('[Kaiz Bridge][Gemini] Thử gửi bằng phím Enter...');
-            inputEl.dispatchEvent(
-                new KeyboardEvent('keydown', {
-                    key: 'Enter',
-                    code: 'Enter',
-                    keyCode: 13,
-                    which: 13,
-                    bubbles: true,
-                    composed: true,
-                }),
-            );
-            inputEl.dispatchEvent(
-                new KeyboardEvent('keyup', {
-                    key: 'Enter',
-                    code: 'Enter',
-                    keyCode: 13,
-                    which: 13,
-                    bubbles: true,
-                    composed: true,
-                }),
-            );
+        if (sendBtn) {
+            console.log('[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ, đang click:', sendBtn);
+            sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            sendBtn.click();
         }
+
+        // Bổ sung phím Enter mô phỏng
+        inputEl.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+        inputEl.dispatchEvent(
+            new KeyboardEvent('keyup', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
 
         // 5. Chờ phản hồi và bắt ảnh mới
         const timeoutMs = 85000;
@@ -301,7 +382,7 @@
         console.log('[Kaiz Bridge][Gemini] Đang lắng nghe ảnh Imagen 3 mới...');
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 1200));
 
             // Kiểm tra thông báo từ chối kiểm duyệt (Safety Refusal)
             const bodyText = document.body.innerText;
@@ -318,7 +399,6 @@
             const currentImages = Array.from(document.querySelectorAll('img'));
             for (const img of currentImages) {
                 const src = img.src || '';
-                // Thẻ ảnh Imagen 3 thường từ googleusercontent, gstatic, hoặc blob
                 const isNew = !existingImages.has(src);
                 const isImageHost =
                     src.includes('googleusercontent.com') ||
@@ -344,11 +424,11 @@
             }
         }
 
-        throw new Error('Hết thời gian chờ (Timeout 85s) nhưng không thấy ảnh mới từ Gemini.');
+        throw new Error('Hết thời gian chờ (Timeout 85s) nhưng không phát hiện ảnh mới từ Gemini Web.');
     }
 
     // =========================================================================
-    // 4. CHATGPT WEB AUTOMATION
+    // 4. CHATGPT WEB AUTOMATION (HỖ TRỢ ĐẦY ĐỦ BACKGROUND TAB)
     // =========================================================================
     async function executeChatGPTJob(job) {
         // 1. Snapshot URL các ảnh hiện có
@@ -359,54 +439,114 @@
         );
         console.log(`[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} ảnh cũ trên trang.`);
 
-        // 2. Tìm ô input nhập prompt
-        const inputEl =
-            document.querySelector('#prompt-textarea') ||
-            document.querySelector('div[contenteditable="true"]#prompt-textarea') ||
-            document.querySelector('textarea');
+        // 2. Chờ tìm ô input nhập prompt
+        let inputEl = null;
+        for (let i = 0; i < 25; i++) {
+            inputEl =
+                document.querySelector('#prompt-textarea') ||
+                document.querySelector('div[contenteditable="true"]#prompt-textarea') ||
+                document.querySelector('textarea');
+            if (inputEl) break;
+            await new Promise((r) => setTimeout(r, 200));
+        }
+
         if (!inputEl) {
             throw new Error('Không tìm thấy ô nhập prompt trên ChatGPT Web.');
         }
 
         // 3. Điền prompt
         inputEl.focus();
+        inputEl.dispatchEvent(new Event('focusin', { bubbles: true }));
+
         if (inputEl.tagName.toLowerCase() === 'textarea') {
             inputEl.value = job.prompt;
             inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         } else {
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(inputEl);
-            selection.removeAllRanges();
-            selection.addRange(range);
-
-            let inserted = false;
+            // Thử Clipboard paste event
             try {
-                inserted = document.execCommand('insertText', false, job.prompt);
-            } catch (e) {
-                console.warn('[Kaiz Bridge][ChatGPT] execCommand failed:', e);
+                const dt = new DataTransfer();
+                dt.setData('text/plain', job.prompt);
+                const pasteEvt = new ClipboardEvent('paste', {
+                    bubbles: true,
+                    cancelable: true,
+                    clipboardData: dt,
+                });
+                inputEl.dispatchEvent(pasteEvt);
+            } catch (pe) {
+                /* ignore */
             }
-            if (!inserted || !inputEl.innerText.trim()) {
+
+            try {
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(inputEl);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                document.execCommand('insertText', false, job.prompt);
+            } catch (e) {
+                /* ignore */
+            }
+
+            if (!inputEl.innerText || !inputEl.innerText.trim()) {
                 inputEl.innerText = job.prompt;
             }
-            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
+            inputEl.dispatchEvent(
+                new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: job.prompt }),
+            );
+            inputEl.dispatchEvent(new Event('change', { bubbles: true }));
         }
 
         await new Promise((r) => setTimeout(r, 600));
 
-        // 4. Bấm nút gửi
-        const sendBtn =
-            document.querySelector('button[data-testid="send-button"]') ||
-            document.querySelector('button[aria-label*="Send" i]') ||
-            document.querySelector('button[aria-label*="Gửi" i]');
-        if (sendBtn && !sendBtn.disabled && sendBtn.getAttribute('aria-disabled') !== 'true') {
-            console.log('[Kaiz Bridge][ChatGPT] Click nút gửi send-button...');
-            sendBtn.click();
-        } else {
-            console.log('[Kaiz Bridge][ChatGPT] Thử gửi bằng Enter...');
-            inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true }));
-            inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+        // 4. Bấm nút gửi (Chờ nút kích hoạt trong background tab)
+        const sendSelectors = [
+            'button[data-testid="send-button"]',
+            'button[aria-label*="Send" i]',
+            'button[aria-label*="Gửi" i]',
+        ];
+
+        let sendBtn = null;
+        for (let i = 0; i < 30; i++) {
+            for (const sel of sendSelectors) {
+                const btn = document.querySelector(sel);
+                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
+                    sendBtn = btn;
+                    break;
+                }
+            }
+            if (sendBtn) break;
+            await new Promise((r) => setTimeout(r, 100));
         }
+
+        if (sendBtn) {
+            console.log('[Kaiz Bridge][ChatGPT] Click nút gửi send-button...');
+            sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            sendBtn.click();
+        }
+
+        // Bổ sung Enter
+        inputEl.dispatchEvent(
+            new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
+        inputEl.dispatchEvent(
+            new KeyboardEvent('keyup', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+            }),
+        );
 
         // 5. Chờ phản hồi và bắt ảnh mới
         const timeoutMs = 85000;
@@ -414,7 +554,7 @@
         console.log('[Kaiz Bridge][ChatGPT] Đang lắng nghe ảnh DALL-E mới...');
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 1500));
+            await new Promise((r) => setTimeout(r, 1200));
 
             // Kiểm tra lỗi kiểm duyệt
             const bodyText = document.body.innerText;
