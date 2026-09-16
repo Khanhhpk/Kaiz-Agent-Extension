@@ -158,7 +158,7 @@ export const searchGoogleTool: ITool = {
                 try {
                     const res = await fetch(bingUrl);
                     if (res.ok) return await res.text();
-                } catch (_e) {
+                } catch {
                     /* ignore */
                 }
                 return '';
@@ -176,12 +176,12 @@ export const searchGoogleTool: ITool = {
                 // Giúp Google nhận diện đây là người thật (đã login) thay vì bot trắng tinh, từ đó bypass trang JS Challenge (Cloudflare-like)
                 const googleRes = await fetch(googleUrl, { credentials: 'include' });
                 if (googleRes.ok) googleHtml = await googleRes.text();
-            } catch (_e) {
+            } catch {
                 try {
                     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
                     const proxyRes = await fetch(proxyUrl);
                     if (proxyRes.ok) googleHtml = await proxyRes.text();
-                } catch (_e2) {
+                } catch {
                     /* ignore */
                 }
             }
@@ -334,18 +334,20 @@ export const searchGoogleTool: ITool = {
                 try {
                     const ddgRes = await fetch(ddgPostUrl, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
                         body: `q=${encodedQuery}`,
                     });
                     if (ddgRes.ok) ddgHtml = await ddgRes.text();
                     else throw new Error('DDG HTML POST Not OK');
-                } catch (_e) {
+                } catch {
                     try {
                         const ddgLiteUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
                         const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgLiteUrl)}`;
                         const proxyRes = await fetch(ddgProxyUrl);
                         if (proxyRes.ok) ddgHtml = await proxyRes.text();
-                    } catch (_e2) {
+                    } catch {
                         /* ignore */
                     }
                 }

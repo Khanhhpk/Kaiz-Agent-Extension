@@ -144,7 +144,9 @@ export class SillyTavernAdapter {
                                     if (data.thinking) reasoning = (reasoning || '') + data.thinking;
 
                                     if (onUpdate) onUpdate(text, reasoning);
-                                } catch (e) {}
+                                } catch {
+                                    /* ignore non-json SSE */
+                                }
                             }
                         }
                     }
@@ -920,7 +922,7 @@ export class SillyTavernAdapter {
             let ST_WorldInfo: any = null;
             try {
                 ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
-            } catch (e) {
+            } catch {
                 console.warn('[KaizAgent] Could not dynamically import world-info.js');
             }
 
@@ -1180,7 +1182,7 @@ export class SillyTavernAdapter {
             let ST_WorldInfo: any = null;
             try {
                 ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
-            } catch (e) {
+            } catch {
                 return '[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).';
             }
 
@@ -1376,7 +1378,9 @@ export class SillyTavernAdapter {
                         if (ctx.eventSource && ctx.eventTypes) {
                             ctx.eventSource.emit(ctx.eventTypes.WORLDINFO_SETTINGS_UPDATED);
                         }
-                    } catch (_) {}
+                    } catch {
+                        /* ignore */
+                    }
                 }
 
                 if (state === 'enable') {

@@ -36,7 +36,7 @@ export const manageTavernHelperScriptTool: ITool = {
             required: ['action'],
         },
     },
-    execute: async (args: any, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (args: any, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const th = (window as any).TavernHelper;
             if (!th) {
@@ -145,7 +145,9 @@ export const manageTavernHelperScriptTool: ITool = {
                         };
                         search(trees);
                         if (found) return s;
-                    } catch (e) {}
+                    } catch {
+                        /* ignore */
+                    }
                 }
                 return null;
             };

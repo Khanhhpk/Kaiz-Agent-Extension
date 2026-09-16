@@ -24,7 +24,7 @@ let extPath = 'third-party/Kaiz-Agent-Extension';
 try {
     if (document.currentScript && (document.currentScript as HTMLScriptElement).src) {
         const match = new URL((document.currentScript as HTMLScriptElement).src).pathname.match(
-            /\/scripts\/extensions\/(.+)\/[^\/]+\.js$/,
+            /\/scripts\/extensions\/(.+)\/[^/]+\.js$/,
         );
         if (match) extPath = match[1];
     } else {
@@ -37,7 +37,7 @@ try {
                 src.toLowerCase().includes('kaiz') &&
                 src.toLowerCase().includes('agent')
             ) {
-                const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+                const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^/]+\.js$/);
                 if (match) {
                     extPath = match[1];
                     break;
@@ -124,7 +124,7 @@ jQuery(async () => {
     }
 
     // Nạp thư viện Lucide Icon
-    if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !window.hasOwnProperty('lucide')) {
+    if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !('lucide' in window)) {
         $('<script>').appendTo('head').attr({ src: 'https://unpkg.com/lucide@latest' });
     }
 

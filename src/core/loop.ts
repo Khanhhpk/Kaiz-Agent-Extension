@@ -169,7 +169,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
             try {
                 const args = JSON.parse(argsStr);
                 tools.push({ name, args, fullMatch: match[0] });
-            } catch (e) {
+            } catch {
                 console.error(`[AgentLoop] Failed to parse JSON for tool ${name}:`, argsStr);
                 // Đẩy lỗi parse vào danh sách thay vì bỏ qua âm thầm
                 tools.push({

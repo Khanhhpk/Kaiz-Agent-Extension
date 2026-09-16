@@ -92,7 +92,7 @@ export class BrowserWindowUI {
                 if (tab && tab.iframe) {
                     try {
                         tab.iframe.contentWindow?.location.reload();
-                    } catch (e) {
+                    } catch {
                         // eslint-disable-next-line no-self-assign
                         tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
                     }
@@ -116,7 +116,7 @@ export class BrowserWindowUI {
                     try {
                         tab.iframe.style.filter = ''; // Xóa hack CSS cũ
                         tab.iframe.contentWindow?.postMessage({ type: 'KAIZ_TOGGLE_DARK_MODE' }, '*');
-                    } catch (e) {
+                    } catch {
                         // Bỏ qua lỗi CORS
                     }
                 }
@@ -447,7 +447,9 @@ export class BrowserWindowUI {
             }
 
             localStorage.setItem('kaiz_web_history', JSON.stringify(history));
-        } catch (e) {}
+        } catch {
+            /* ignore */
+        }
     }
 
     private static renderHistoryModal() {
@@ -479,7 +481,9 @@ export class BrowserWindowUI {
 
                 $list.append($el);
             });
-        } catch (e) {}
+        } catch {
+            /* ignore */
+        }
     }
 
     private static initResizer() {

@@ -36,7 +36,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
             required: ['action'],
         },
     },
-    execute: async (args: Record<string, any>, context: any): Promise<ToolResult> => {
+    execute: async (args: Record<string, any>, _context: any): Promise<ToolResult> => {
         const action = args.action;
         try {
             switch (action) {

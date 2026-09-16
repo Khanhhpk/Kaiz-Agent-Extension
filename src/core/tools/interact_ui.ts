@@ -121,7 +121,9 @@ export const interactUITool: ITool = {
                             }
                         }
                     }
-                } catch (e) {}
+                } catch {
+                    /* ignore */
+                }
 
                 cursor = document.createElement('div');
                 cursor.id = 'kaiz-virtual-cursor';

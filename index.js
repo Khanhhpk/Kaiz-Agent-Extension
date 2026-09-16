@@ -183,7 +183,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    const args = JSON.parse(argsStr);
                    tools.push({ name, args, fullMatch: match[0] });
                }
-               catch (e) {
+               catch {
                    console.error(`[AgentLoop] Failed to parse JSON for tool ${name}:`, argsStr);
                    // Đẩy lỗi parse vào danh sách thay vì bỏ qua âm thầm
                    tools.push({
@@ -1068,7 +1068,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                const screenWidth = $(window).width() || 1920;
                const screenHeight = $(window).height() || 1080;
                let top = btnRect.top - popupHeight / 2 + btnRect.height / 2;
-               let left = 0;
+               let left;
                // Mũi tên (Speech bubble tail)
                const arrow = $('<div class="kaiz-sys-arrow"></div>');
                arrow.css({
@@ -1989,7 +1989,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                                extractedLinks.push({ text, url: absoluteUrl });
                            }
                        }
-                       catch (e) {
+                       catch {
                            // Ignore invalid URLs
                        }
                    }
@@ -2159,7 +2159,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        if (res.ok)
                            return await res.text();
                    }
-                   catch (_e) {
+                   catch {
                        /* ignore */
                    }
                    return '';
@@ -2178,14 +2178,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    if (googleRes.ok)
                        googleHtml = await googleRes.text();
                }
-               catch (_e) {
+               catch {
                    try {
                        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
                        const proxyRes = await fetch(proxyUrl);
                        if (proxyRes.ok)
                            googleHtml = await proxyRes.text();
                    }
-                   catch (_e2) {
+                   catch {
                        /* ignore */
                    }
                }
@@ -2324,7 +2324,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    try {
                        const ddgRes = await fetch(ddgPostUrl, {
                            method: 'POST',
-                           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                           headers: {
+                               'Content-Type': 'application/x-www-form-urlencoded',
+                           },
                            body: `q=${encodedQuery}`,
                        });
                        if (ddgRes.ok)
@@ -2332,7 +2334,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        else
                            throw new Error('DDG HTML POST Not OK');
                    }
-                   catch (_e) {
+                   catch {
                        try {
                            const ddgLiteUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
                            const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgLiteUrl)}`;
@@ -2340,7 +2342,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            if (proxyRes.ok)
                                ddgHtml = await proxyRes.text();
                        }
-                       catch (_e2) {
+                       catch {
                            /* ignore */
                        }
                    }
@@ -2423,7 +2425,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: [],
            },
        },
-       execute: async (args) => {
+       execute: async (_args) => {
            let cursor = document.getElementById('kaiz-virtual-cursor');
            if (cursor) {
                cursor.remove();
@@ -2453,7 +2455,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        }
                    }
                }
-               catch (e) { }
+               catch {
+                   /* ignore */
+               }
                // Spawn mới
                cursor = document.createElement('div');
                cursor.id = 'kaiz-virtual-cursor';
@@ -2583,7 +2587,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            }
                        }
                    }
-                   catch (e) { }
+                   catch {
+                       /* ignore */
+                   }
                    cursor = document.createElement('div');
                    cursor.id = 'kaiz-virtual-cursor';
                    cursor.innerHTML = `<img src="/scripts/extensions/${extPath}/assets/gura_cursor.gif" style="width: 32px; height: 32px; pointer-events: none;" />`;
@@ -2649,7 +2655,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: [],
            },
        },
-       execute: async (args) => {
+       execute: async (_args) => {
            try {
                const interactables = document.querySelectorAll('button, a, input, select, textarea, .interactable, [title], .menu_button, .drawer-toggle, .fa-solid, .fa-regular');
                let counter = 1;
@@ -2702,7 +2708,6 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            el.getAttribute('data-title')?.trim() ||
                            '';
                        const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                       const value = el.value || ''; // Không trim để giữ khoảng trắng hợp lệ
                        let description = text || title || ariaLabel;
                        if (!description && el.tagName === 'INPUT') {
                            description = el.getAttribute('placeholder') || 'Input field';
@@ -3062,7 +3067,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                properties: {},
            },
        },
-       execute: async (args, context) => {
+       execute: async (_args, _context) => {
            try {
                // Sử dụng Function để bypass trình biên dịch TypeScript không nhận dạng được đường dẫn module tương đối của máy chủ
                const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
@@ -3141,7 +3146,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['id'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                if (!args.id) {
                    return { isError: true, content: 'Thiếu tham số bắt buộc: id' };
@@ -3226,7 +3231,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['action'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                const { action, id, scope, data } = args;
                // Bypass TypeScript
@@ -3391,7 +3396,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
        validate: () => {
            return; // Luôn dùng được trên trình duyệt có jQuery
        },
-       execute: async (args, context) => {
+       execute: async (_args, _context) => {
            try {
                const reqHeaders = {
                    'Content-Type': 'application/json',
@@ -3418,7 +3423,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            reqHeaders['X-CSRF-Token'] = token;
                    }
                }
-               catch (e) { }
+               catch {
+                   /* ignore */
+               }
                let namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension', '/Kaiz-Agent-Extension'];
                const extTypes = window.extensionTypes || window.SillyTavern?.getContext?.()?.extensionTypes;
                if (extTypes) {
@@ -3479,7 +3486,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                                }
                            }
                        }
-                       catch (e) { }
+                       catch {
+                           /* ignore */
+                       }
                    }
                    if (updateFound)
                        break;
@@ -3522,7 +3531,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                properties: {},
            },
        },
-       execute: async (args, context) => {
+       execute: async (_args, _context) => {
            try {
                const th = window.TavernHelper;
                if (!th) {
@@ -3613,7 +3622,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['id'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                const th = window.TavernHelper;
                if (!th) {
@@ -3656,7 +3665,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            break;
                        }
                    }
-                   catch (e) { }
+                   catch {
+                       /* ignore */
+                   }
                }
                if (!foundScript) {
                    return { isError: true, content: `Không tìm thấy Script nào với ID: ${id}` };
@@ -3709,7 +3720,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['action'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                const th = window.TavernHelper;
                if (!th) {
@@ -3813,7 +3824,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            if (found)
                                return s;
                        }
-                       catch (e) { }
+                       catch {
+                           /* ignore */
+                       }
                    }
                    return null;
                };
@@ -3990,7 +4003,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        try {
                            tab.iframe.contentWindow?.location.reload();
                        }
-                       catch (e) {
+                       catch {
                            // eslint-disable-next-line no-self-assign
                            tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
                        }
@@ -4015,7 +4028,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            tab.iframe.style.filter = ''; // Xóa hack CSS cũ
                            tab.iframe.contentWindow?.postMessage({ type: 'KAIZ_TOGGLE_DARK_MODE' }, '*');
                        }
-                       catch (e) {
+                       catch {
                            // Bỏ qua lỗi CORS
                        }
                    }
@@ -4302,7 +4315,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                }
                localStorage.setItem('kaiz_web_history', JSON.stringify(history));
            }
-           catch (e) { }
+           catch {
+               /* ignore */
+           }
        }
        static renderHistoryModal() {
            const $ = jQuery;
@@ -4330,7 +4345,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    $list.append($el);
                });
            }
-           catch (e) { }
+           catch {
+               /* ignore */
+           }
        }
        static initResizer() {
            const $ = jQuery;
@@ -4427,7 +4444,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                required: ['action'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            const action = args.action;
            try {
                switch (action) {
@@ -5259,7 +5276,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                                        if (onUpdate)
                                            onUpdate(text, reasoning);
                                    }
-                                   catch (e) { }
+                                   catch {
+                                       /* ignore non-json SSE */
+                                   }
                                }
                            }
                        }
@@ -5987,7 +6006,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                try {
                    ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
                }
-               catch (e) {
+               catch {
                    console.warn('[KaizAgent] Could not dynamically import world-info.js');
                }
                const names = new Set();
@@ -6244,7 +6263,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                try {
                    ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
                }
-               catch (e) {
+               catch {
                    return '[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).';
                }
                if (typeof ST_WorldInfo.loadWorldInfo !== 'function' || typeof ST_WorldInfo.saveWorldInfo !== 'function') {
@@ -6430,7 +6449,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                                ctx.eventSource.emit(ctx.eventTypes.WORLDINFO_SETTINGS_UPDATED);
                            }
                        }
-                       catch (_) { }
+                       catch {
+                           /* ignore */
+                       }
                    }
                    if (state === 'enable') {
                        return index === -1
@@ -8234,7 +8255,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        $corsCheck.html('<i class="fa-solid fa-xmark"></i> Failed').css('color', '#e74c3c');
                    }
                }
-               catch (_e) {
+               catch {
                    $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
                }
                let scriptDetected = false;
@@ -8565,11 +8586,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                else {
                    let html = '';
-                   let totalBytes = 0;
                    filtered.forEach((b) => {
                        const date = new Date(b.timestamp).toLocaleString();
                        const sizeInBytes = new Blob([b.data]).size;
-                       totalBytes += sizeInBytes;
                        const sizeKb = (sizeInBytes / 1024).toFixed(1);
                        const icon = b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
                        html += `
@@ -8620,7 +8639,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                const a = document.createElement('a');
                a.href = url;
                // Format file name
-               const safeName = backup.name.replace(/[\/\\:*?"<>|]/g, '_');
+               const safeName = backup.name.replace(/[/\\:*?"<>|]/g, '_');
                const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
                const extension = backup.type === 'chat' ? 'jsonl' : 'json';
                a.download = `${safeName}_backup_${dateStr}.${extension}`;
@@ -10045,7 +10064,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            }
        }
        stop() {
-           for (const [taskId, intervalId] of this.timers.entries()) {
+           for (const intervalId of this.timers.values()) {
                clearInterval(intervalId);
            }
            this.timers.clear();
@@ -10081,12 +10100,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
            }
        }
-       async addTask(task) {
+       async addTask(_task) {
            // Cập nhật lại toàn bộ list từ DB
            const allTasks = await this.stateManager.db.getAllAutoTasks();
            await this.start(allTasks);
        }
-       async removeTask(taskId) {
+       async removeTask(_taskId) {
            const allTasks = await this.stateManager.db.getAllAutoTasks();
            await this.start(allTasks);
        }
@@ -10106,7 +10125,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                return;
            }
            // Setup History for the run
-           let historyForRun = [];
+           const historyForRun = [];
            if (task.executionMode === 'persist') {
                if (!task.chatId) {
                    // Lần đầu chạy persist -> Tạo chat mới riêng cho auto task này (sử dụng -1 để ẩn khỏi danh sách chat mặc định)
@@ -10117,18 +10136,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                // Load history của task
                const messages = await this.stateManager.db.getMessages(task.chatId);
-               historyForRun = messages.map((m) => ({ role: m.role, content: m.content }));
-           }
-           else {
-               // mode = 'fresh'
-               historyForRun = [];
+               historyForRun.push(...messages.map((m) => ({ role: m.role, content: m.content })));
            }
            // Add prompt as user message
            historyForRun.push({ role: 'user', content: task.prompt });
            // Run agent
            try {
                console.log(`[AutoTaskScheduler] Running AgentLoop for task ${task.id}`);
-               let finalResult = '';
                // Save prompt before run if persist
                if (task.executionMode === 'persist' && task.chatId) {
                    await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
@@ -10482,7 +10496,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            };
            if (idVal) {
                const id = parseInt(idVal, 10);
-               const { createdAt, ...updateData } = taskData;
+               const { createdAt: _createdAt, ...updateData } = taskData;
                await this.stateManager.db.updateAutoTask(id, updateData);
            }
            else {
@@ -10543,7 +10557,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                messages.forEach((msg) => {
                    const isUser = msg.role === 'user';
                    const name = isUser ? 'Prompt' : 'Agent';
-                   let textContent = '';
+                   let textContent;
                    if (typeof msg.content === 'string') {
                        textContent = msg.content;
                    }
@@ -10797,7 +10811,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        async setThemeVariables(variables) {
            const root = document.documentElement;
            const previousValues = {};
-           for (const [name, _value] of Object.entries(variables)) {
+           for (const name of Object.keys(variables)) {
                previousValues[name] = getComputedStyle(root).getPropertyValue(name).trim();
            }
            await this.createSnapshot({
@@ -11344,7 +11358,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
    let extPath = 'third-party/Kaiz-Agent-Extension';
    try {
        if (document.currentScript && document.currentScript.src) {
-           const match = new URL(document.currentScript.src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+           const match = new URL(document.currentScript.src).pathname.match(/\/scripts\/extensions\/(.+)\/[^/]+\.js$/);
            if (match)
                extPath = match[1];
        }
@@ -11356,7 +11370,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    src.includes('index.js') &&
                    src.toLowerCase().includes('kaiz') &&
                    src.toLowerCase().includes('agent')) {
-                   const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+                   const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^/]+\.js$/);
                    if (match) {
                        extPath = match[1];
                        break;
@@ -11438,7 +11452,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
        }
        // Nạp thư viện Lucide Icon
-       if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !window.hasOwnProperty('lucide')) {
+       if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !('lucide' in window)) {
            $('<script>').appendTo('head').attr({ src: 'https://unpkg.com/lucide@latest' });
        }
        // Khởi tạo Core

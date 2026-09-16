@@ -344,7 +344,7 @@ export class AutoTaskModal {
 
         if (idVal) {
             const id = parseInt(idVal, 10);
-            const { createdAt, ...updateData } = taskData;
+            const { createdAt: _createdAt, ...updateData } = taskData;
             await this.stateManager.db.updateAutoTask(id, updateData);
         } else {
             await this.stateManager.db.createAutoTask(taskData);
@@ -417,7 +417,7 @@ export class AutoTaskModal {
                 const isUser = msg.role === 'user';
                 const name = isUser ? 'Prompt' : 'Agent';
 
-                let textContent = '';
+                let textContent: string;
                 if (typeof msg.content === 'string') {
                     textContent = msg.content;
                 } else if (Array.isArray(msg.content)) {

@@ -11,7 +11,7 @@ export const getTavernHelperScriptsTool: ITool = {
             properties: {},
         },
     },
-    execute: async (args: any, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (_args: any, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const th = (window as any).TavernHelper;
             if (!th) {

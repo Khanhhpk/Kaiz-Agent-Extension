@@ -102,7 +102,7 @@ export const scrapeWebpageTool: ITool = {
                             linksSet.add(absoluteUrl);
                             extractedLinks.push({ text, url: absoluteUrl });
                         }
-                    } catch (e) {
+                    } catch {
                         // Ignore invalid URLs
                     }
                 }

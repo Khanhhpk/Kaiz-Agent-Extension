@@ -15,7 +15,7 @@ export const updateAgentExtensionTool: ITool = {
     validate: () => {
         return; // Luôn dùng được trên trình duyệt có jQuery
     },
-    execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (_args: Record<string, any>, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const reqHeaders: Record<string, string> = {
                 'Content-Type': 'application/json',
@@ -37,7 +37,9 @@ export const updateAgentExtensionTool: ITool = {
                     }
                     if (token) reqHeaders['X-CSRF-Token'] = token;
                 }
-            } catch (e) {}
+            } catch {
+                /* ignore */
+            }
 
             let namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension', '/Kaiz-Agent-Extension'];
 
@@ -105,7 +107,9 @@ export const updateAgentExtensionTool: ITool = {
                                 break;
                             }
                         }
-                    } catch (e) {}
+                    } catch {
+                        /* ignore */
+                    }
                 }
                 if (updateFound) break;
             }
