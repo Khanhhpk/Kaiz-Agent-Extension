@@ -7600,6 +7600,24 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                return;
            }
            const settings = ctx.extensionSettings[EXT_NAME];
+           // --- TAB SWITCHING CONTROLLER ---
+           const savedTab = localStorage.getItem('kaiz_active_settings_tab') || 'model';
+           const switchTab = (tabName) => {
+               $('.kaiz-tab-btn').removeClass('active');
+               $(`.kaiz-tab-btn[data-tab="${tabName}"]`).addClass('active');
+               $('.kaiz-tab-pane').removeClass('active');
+               $(`#kaiz-pane-${tabName}`).addClass('active');
+               localStorage.setItem('kaiz_active_settings_tab', tabName);
+               if (window.lucide) {
+                   window.lucide.createIcons();
+               }
+           };
+           $('.kaiz-tab-btn').on('click', function () {
+               const tab = $(this).data('tab');
+               if (tab)
+                   switchTab(tab);
+           });
+           switchTab(savedTab);
            // Gán giá trị mặc định lên UI
            $('#kaiz-custom-url').val(settings.customUrl || '');
            $('#kaiz-custom-key').val(settings.customKey || '');
@@ -7748,12 +7766,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    }
                    const isBlacklisted = !!settings.safeModeBlacklist[name];
                    const $toolItem = $(`
-                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-                        <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} style="margin-top: 3px;" />
-                        <div style="flex: 1;">
-                            <label for="kaiz-safe-tool-${name}" style="font-weight: bold; cursor: pointer; color: ${isBlacklisted ? '#e74c3c' : '#888'}; display: block;">${name}</label>
-                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                    <div class="kaiz-tool-card">
+                        <div class="kaiz-tool-info">
+                            <div class="kaiz-tool-header">
+                                <label for="kaiz-safe-tool-${name}" class="kaiz-tool-name" style="cursor: pointer;">${name}</label>
+                                ${isBlacklisted ? '<span class="kaiz-tool-blacklist-tag">Blacklisted</span>' : ''}
+                            </div>
+                            <div class="kaiz-tool-desc">${desc}</div>
                         </div>
+                        <label class="kaiz-switch">
+                            <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} />
+                            <span class="kaiz-slider"></span>
+                        </label>
                     </div>
                 `);
                    $safeToolsList.append($toolItem);
@@ -7768,8 +7792,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        delete settings.safeModeBlacklist[toolName];
                    }
                    ctx.saveSettingsDebounced();
-                   const $label = $(`label[for="kaiz-safe-tool-${toolName}"]`);
-                   $label.css('color', isChecked ? '#e74c3c' : '#888');
+                   renderSafeTools(String($('#kaiz-safe-tools-search').val() || ''));
                });
            }
            renderSafeTools();
@@ -7895,20 +7918,20 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        qp.icon = 'zap';
                    }
                    const $item = $(`
-                    <div class="kaiz-qp-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <button class="menu_button interactable kaiz-qp-icon-btn" data-index="${index}" style="width: 32px; height: 32px; padding: 0; display: flex; justify-content: center; align-items: center;" title="Choose Icon">
+                    <div class="kaiz-qp-card">
+                        <div class="kaiz-qp-header">
+                            <button class="kaiz-qp-icon-btn interactable" data-index="${index}" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${escapeHtml$2(qp.name || '')}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
-                            <div style="display: flex; gap: 5px;">
-                                <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
-                                <button class="menu_button interactable kaiz-qp-down" data-index="${index}" style="padding: 5px 10px;" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
-                                <button class="menu_button interactable kaiz-qp-del" data-index="${index}" style="padding: 5px 10px; color: #e74c3c;" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$2(qp.name || '')}" placeholder="Name (e.g. Analyze)">
+                            <div class="kaiz-qp-actions">
+                                <button class="kaiz-qp-act-btn interactable kaiz-qp-up" data-index="${index}" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
+                                <button class="kaiz-qp-act-btn interactable kaiz-qp-down" data-index="${index}" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
+                                <button class="kaiz-qp-act-btn interactable del kaiz-qp-del" data-index="${index}" title="Delete"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${escapeHtml$2(qp.prompt || '')}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$2(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -8200,12 +8223,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    }
                    const isEnabled = !settings.disabledTools[name];
                    const $toolItem = $(`
-                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-                        <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} style="margin-top: 3px;" />
-                        <div style="flex: 1;">
-                            <label for="kaiz-tool-toggle-${name}" style="font-weight: bold; cursor: pointer; color: ${isEnabled ? '#fff' : '#888'}; display: block;">${name}</label>
-                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                    <div class="kaiz-tool-card">
+                        <div class="kaiz-tool-info">
+                            <div class="kaiz-tool-header">
+                                <label for="kaiz-tool-toggle-${name}" class="kaiz-tool-name" style="cursor: pointer;">${name}</label>
+                            </div>
+                            <div class="kaiz-tool-desc">${desc}</div>
                         </div>
+                        <label class="kaiz-switch">
+                            <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} />
+                            <span class="kaiz-slider"></span>
+                        </label>
                     </div>
                 `);
                    $toolsList.append($toolItem);
@@ -8221,9 +8249,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        settings.disabledTools[toolName] = true;
                    }
                    ctx.saveSettingsDebounced();
-                   // Đổi màu nhãn
-                   const $label = $(`label[for="kaiz-tool-toggle-${toolName}"]`);
-                   $label.css('color', isChecked ? '#fff' : '#888');
                });
            }
            // Render lần đầu

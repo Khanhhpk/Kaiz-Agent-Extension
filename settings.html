@@ -1,574 +1,655 @@
 <div class="kaiz-agent-settings">
     <div class="inline-drawer">
         <div class="inline-drawer-toggle inline-drawer-header">
-            <b>Kaiz-Agent Settings</b>
+            <div class="kaiz-drawer-brand">
+                <i class="fa-solid fa-brain-circuit"></i>
+                <b>Kaiz-Agent</b>
+                <span class="kaiz-version-pill">v1.0.0</span>
+            </div>
             <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
         </div>
-        <div class="inline-drawer-content" style="padding-top: 10px">
-            <div class="flex-container flexFlowColumn gap-1">
-                <details class="scp-settings-flat-section" open>
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-plug"></i> LLM Connection (Custom Endpoint)
-                    </summary>
 
-                    <div id="kaiz-custom-endpoint-group" style="margin-top: 8px">
-                        <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                            >API URL (OpenAI format)</label
-                        >
-                        <input
-                            id="kaiz-custom-url"
-                            type="text"
-                            class="text_pole"
-                            placeholder="http://localhost:5000/v1/chat/completions"
-                        />
+        <div class="inline-drawer-content">
+            <!-- 1. Quick Toolbar (Phone Mode & Tool Diagnostics) -->
+            <div class="kaiz-quick-toolbar">
+                <div
+                    class="kaiz-quick-item"
+                    title="Kích hoạt chế độ toàn màn hình cho khung chat (Tối ưu điện thoại / màn hình nhỏ)"
+                >
+                    <div class="kaiz-quick-icon"><i class="fa-solid fa-mobile-screen"></i></div>
+                    <div class="kaiz-quick-info">
+                        <span class="kaiz-quick-title">Phone Mode</span>
+                        <span class="kaiz-quick-desc">Full-screen chat</span>
+                    </div>
+                    <label class="kaiz-switch">
+                        <input id="kaiz-phone-mode" type="checkbox" />
+                        <span class="kaiz-slider"></span>
+                    </label>
+                </div>
 
-                        <label style="font-size: 11px; color: #888; display: block; margin-top: 6px; margin-bottom: 4px"
-                            >API Key (optional)</label
-                        >
-                        <input id="kaiz-custom-key" type="password" class="text_pole" placeholder="sk-..." />
+                <button
+                    id="kaiz-checker-btn"
+                    class="kaiz-quick-btn interactable"
+                    title="Kiểm tra trạng thái các Tool và kết nối"
+                >
+                    <i class="fa-solid fa-wrench"></i> Tool Check
+                </button>
+            </div>
 
-                        <div style="display: flex; gap: 6px; align-items: flex-end; margin-top: 6px">
-                            <div style="flex: 1">
-                                <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                                    >Select Model</label
-                                >
-                                <select id="kaiz-custom-model" class="text_pole">
-                                    <option value="">-- Fetch or Type --</option>
-                                </select>
+            <!-- 2. Segmented Navigation Tabs -->
+            <div class="kaiz-settings-tabs" role="tablist">
+                <button class="kaiz-tab-btn active interactable" data-tab="model" role="tab">
+                    <i class="fa-solid fa-bolt"></i> Model
+                </button>
+                <button class="kaiz-tab-btn interactable" data-tab="prompts" role="tab">
+                    <i class="fa-solid fa-brain"></i> Prompts
+                </button>
+                <button class="kaiz-tab-btn interactable" data-tab="tools" role="tab">
+                    <i class="fa-solid fa-screwdriver-wrench"></i> Tools
+                </button>
+                <button class="kaiz-tab-btn interactable" data-tab="flow" role="tab">
+                    <i class="fa-solid fa-sliders"></i> Luồng
+                </button>
+                <button class="kaiz-tab-btn interactable" data-tab="browser" role="tab">
+                    <i class="fa-brands fa-chrome"></i> Browser
+                    <span class="kaiz-tab-badge">Tùy chọn</span>
+                </button>
+            </div>
+
+            <!-- 3. Tab Panes Content -->
+            <div class="kaiz-tab-content">
+                <!-- ================= TAB 1: MODEL & LLM ================= -->
+                <div id="kaiz-pane-model" class="kaiz-tab-pane active" role="tabpanel">
+                    <!-- LLM Connection Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-plug-circle-bolt"></i> LLM Connection (Custom Endpoint)
                             </div>
-                            <button
-                                id="kaiz-fetch-models"
-                                class="menu_button interactable"
-                                style="height: 35px; padding: 0 10px"
-                            >
-                                <i class="fa-solid fa-sync"></i> Fetch
-                            </button>
                         </div>
-                        <label style="font-size: 11px; color: #888; display: block; margin-top: 6px; margin-bottom: 4px"
-                            >Or Type Model Manually</label
-                        >
-                        <input
-                            id="kaiz-custom-model-text"
-                            type="text"
-                            class="text_pole"
-                            placeholder="e.g. gemini-1.5-pro"
-                        />
 
-                        <!-- LLM Generation Parameters -->
-                        <div
-                            style="margin-top: 12px; padding-top: 10px; border-top: 1px solid rgba(255, 255, 255, 0.1)"
-                        >
-                            <span
-                                style="
-                                    font-size: 12px;
-                                    font-weight: bold;
-                                    color: #ccc;
-                                    display: block;
-                                    margin-bottom: 8px;
-                                "
-                            >
-                                <i class="fa-solid fa-sliders"></i> Generation Parameters
-                            </span>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
-                                <div>
-                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                                        >Max Output Tokens</label
+                        <div class="kaiz-card-body">
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-custom-url" class="kaiz-field-label">API URL (OpenAI format)</label>
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-link kaiz-input-icon"></i>
+                                    <input
+                                        id="kaiz-custom-url"
+                                        type="text"
+                                        class="text_pole kaiz-input"
+                                        placeholder="http://localhost:5000/v1/chat/completions"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-custom-key" class="kaiz-field-label">API Key (optional)</label>
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-key kaiz-input-icon"></i>
+                                    <input
+                                        id="kaiz-custom-key"
+                                        type="password"
+                                        class="text_pole kaiz-input"
+                                        placeholder="sk-..."
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-custom-model" class="kaiz-field-label">Select Model</label>
+                                <div class="kaiz-action-row">
+                                    <div class="kaiz-input-wrapper flex-1">
+                                        <i class="fa-solid fa-microchip kaiz-input-icon"></i>
+                                        <select id="kaiz-custom-model" class="text_pole kaiz-select">
+                                            <option value="">-- Fetch or Select --</option>
+                                        </select>
+                                    </div>
+                                    <button
+                                        id="kaiz-fetch-models"
+                                        class="kaiz-btn kaiz-btn-primary interactable"
+                                        title="Lấy danh sách model từ API Endpoint"
                                     >
+                                        <i class="fa-solid fa-sync"></i> Fetch
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-custom-model-text" class="kaiz-field-label"
+                                    >Or Type Model Manually</label
+                                >
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-pen-to-square kaiz-input-icon"></i>
+                                    <input
+                                        id="kaiz-custom-model-text"
+                                        type="text"
+                                        class="text_pole kaiz-input"
+                                        placeholder="e.g. gemini-1.5-pro, claude-3-5-sonnet"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Generation Parameters Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title"><i class="fa-solid fa-sliders"></i> Generation Parameters</div>
+                            <span class="kaiz-card-badge">Sampling</span>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <div class="kaiz-param-grid">
+                                <div class="kaiz-param-cell">
+                                    <div class="kaiz-param-label-row">
+                                        <label for="kaiz-max-tokens" class="kaiz-field-label">Max Tokens</label>
+                                        <span class="kaiz-hint-tag">Default: 65k</span>
+                                    </div>
                                     <input
                                         id="kaiz-max-tokens"
                                         type="number"
-                                        class="text_pole"
+                                        class="text_pole kaiz-input"
                                         min="256"
                                         max="131072"
                                         placeholder="65000"
-                                        title="Số token tối đa bot có thể sinh ra trong 1 bước (Mặc định: 65000)"
+                                        title="Số token tối đa bot có thể sinh ra trong 1 bước"
                                     />
                                 </div>
-                                <div>
-                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                                        >Temperature</label
-                                    >
+
+                                <div class="kaiz-param-cell">
+                                    <div class="kaiz-param-label-row">
+                                        <label for="kaiz-temperature" class="kaiz-field-label">Temperature</label>
+                                        <span class="kaiz-hint-tag">0.0 - 2.0</span>
+                                    </div>
                                     <input
                                         id="kaiz-temperature"
                                         type="number"
-                                        class="text_pole"
+                                        class="text_pole kaiz-input"
                                         step="0.05"
                                         min="0"
                                         max="2"
-                                        placeholder="1"
-                                        title="Độ sáng tạo / ngẫu nhiên của mô hình (Mặc định: 1)"
+                                        placeholder="1.0"
+                                        title="Độ sáng tạo / ngẫu nhiên của mô hình"
                                     />
                                 </div>
-                                <div>
-                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                                        >Top P</label
-                                    >
+
+                                <div class="kaiz-param-cell">
+                                    <div class="kaiz-param-label-row">
+                                        <label for="kaiz-top-p" class="kaiz-field-label">Top P</label>
+                                        <span class="kaiz-hint-tag">0.0 - 1.0</span>
+                                    </div>
                                     <input
                                         id="kaiz-top-p"
                                         type="number"
-                                        class="text_pole"
+                                        class="text_pole kaiz-input"
                                         step="0.01"
                                         min="0"
                                         max="1"
                                         placeholder="0.95"
-                                        title="Nucleus sampling (Mặc định: 0.95)"
+                                        title="Nucleus sampling"
                                     />
                                 </div>
-                                <div>
-                                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                                        >Top K</label
-                                    >
+
+                                <div class="kaiz-param-cell">
+                                    <div class="kaiz-param-label-row">
+                                        <label for="kaiz-top-k" class="kaiz-field-label">Top K</label>
+                                        <span class="kaiz-hint-tag">0: Off</span>
+                                    </div>
                                     <input
                                         id="kaiz-top-k"
                                         type="number"
-                                        class="text_pole"
+                                        class="text_pole kaiz-input"
                                         step="1"
                                         min="0"
                                         max="200"
                                         placeholder="64"
-                                        title="Top K sampling (Mặc định: 64, đặt 0 để tắt)"
+                                        title="Top K sampling (0 để tắt)"
                                     />
                                 </div>
                             </div>
                         </div>
                     </div>
-                </details>
-                <!-- UI Settings -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-desktop"></i> UI Settings
-                    </summary>
-                    <label class="checkbox_label" style="margin-bottom: 8px">
-                        <input id="kaiz-phone-mode" type="checkbox" />
-                        <span>Enable Phone Mode (Full screen chat)</span>
-                    </label>
-                </details>
+                </div>
 
-                <!-- Agent Flow Settings -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-arrows-spin"></i> Agent Flow
-                    </summary>
-                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                        >Max Agent Loops (Auto Tool Execution)</label
-                    >
-                    <input id="kaiz-max-loops" type="number" class="text_pole" min="1" max="20" placeholder="5" />
-                </details>
-
-                <!-- Token Management Section -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-scissors"></i> Token Management
-                    </summary>
-                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px">
-                        Tự động cắt bớt lịch sử cũ khi vượt mức Token (0 hoặc không tick ô nào = Tắt).
-                    </label>
-                    <div class="flex-container flexFlowRow alignItemCenter gap-1" style="margin-bottom: 10px">
-                        <input
-                            id="kaiz-token-safe-limit"
-                            type="number"
-                            class="text_pole"
-                            placeholder="Ví dụ: 600000"
-                            style="width: 150px"
-                        />
-                        <span style="font-size: 12px; color: #aaa">Tokens</span>
-                    </div>
-
-                    <label style="font-size: 12px; font-weight: bold; margin-bottom: 6px; display: block"
-                        >Ưu tiên cắt bớt (từ cũ nhất):</label
-                    >
-                    <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #ccc">
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer">
-                            <input type="checkbox" id="kaiz-trim-agent" /> Cắt bớt tin nhắn của Agent
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer">
-                            <input type="checkbox" id="kaiz-trim-user" /> Cắt bớt tin nhắn của User
-                        </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer">
-                            <input type="checkbox" id="kaiz-trim-tool" /> Cắt bớt kết quả trả về của Tools
-                        </label>
-                    </div>
-                </details>
-
-                <!-- Auto Retry System -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-rotate-right"></i> Auto Retry System
-                    </summary>
-                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                        >Error Keywords (comma separated)</label
-                    >
-                    <input
-                        id="kaiz-retry-keywords"
-                        type="text"
-                        class="text_pole"
-                        placeholder="429, 502, 522, timeout"
-                        style="margin-bottom: 8px"
-                    />
-
-                    <div style="display: flex; gap: 10px">
-                        <div style="flex: 1">
-                            <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                                >Max Retries</label
-                            >
-                            <input
-                                id="kaiz-max-retries"
-                                type="number"
-                                class="text_pole"
-                                min="0"
-                                max="10"
-                                placeholder="3"
-                            />
+                <!-- ================= TAB 2: PROMPTS ================= -->
+                <div id="kaiz-pane-prompts" class="kaiz-tab-pane" role="tabpanel">
+                    <!-- Quick Prompts Studio Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title"><i class="fa-solid fa-bolt"></i> Quick Prompts Studio</div>
                         </div>
-                        <div style="flex: 1">
-                            <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                                >Delay (ms)</label
-                            >
-                            <input
-                                id="kaiz-retry-delay"
-                                type="number"
-                                class="text_pole"
-                                min="1000"
-                                max="60000"
-                                placeholder="3000"
-                            />
-                        </div>
-                    </div>
-                </details>
 
-                <!-- Safe Mode Settings -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-shield-halved"></i> Safe Mode
-                    </summary>
-                    <label class="checkbox_label" style="margin-bottom: 8px">
-                        <input id="kaiz-safe-mode" type="checkbox" />
-                        <span>Enable Safe Mode</span>
-                    </label>
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Quản lý danh sách các lệnh mẫu, prompt gọi nhanh trên thanh công cụ chat.
+                            </p>
 
-                    <div
-                        id="kaiz-safe-mode-group"
-                        style="
-                            display: none;
-                            margin-top: 8px;
-                            padding-left: 10px;
-                            border-left: 2px solid rgba(255, 255, 255, 0.1);
-                        "
-                    >
-                        <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                            >Blacklisted Tools (Require confirmation)</label
-                        >
-                        <input
-                            id="kaiz-safe-tools-search"
-                            type="text"
-                            class="text_pole"
-                            placeholder="Search tool name or description..."
-                            style="margin-bottom: 8px"
-                        />
-                        <div style="display: flex; gap: 10px; margin-bottom: 8px">
-                            <button id="kaiz-safe-tools-blacklist-all" class="menu_button interactable" style="flex: 1">
-                                <i class="fa-solid fa-lock"></i> Blacklist All
-                            </button>
+                            <div id="kaiz-quick-prompts-list" class="kaiz-qp-container">
+                                <!-- Quick Prompts Rendered dynamically via JS -->
+                            </div>
+
                             <button
-                                id="kaiz-safe-tools-unblacklist-all"
-                                class="menu_button interactable"
-                                style="flex: 1"
+                                id="kaiz-add-quick-prompt-btn"
+                                class="kaiz-btn kaiz-btn-primary kaiz-btn-block interactable"
                             >
-                                <i class="fa-solid fa-unlock"></i> Unblacklist All
+                                <i class="fa-solid fa-plus"></i> New Quick Prompt
                             </button>
                         </div>
-                        <div
-                            id="kaiz-safe-tools-list"
-                            style="
-                                max-height: 250px;
-                                overflow-y: auto;
-                                padding: 5px;
-                                border: 1px solid rgba(255, 255, 255, 0.1);
-                                border-radius: 4px;
-                                display: flex;
-                                flex-direction: column;
-                                gap: 8px;
-                            "
-                        >
-                            <!-- Danh sách Tool render ở đây -->
+                    </div>
+
+                    <!-- Core System Prompts Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title"><i class="fa-solid fa-brain"></i> Core System Prompts</div>
+                            <button
+                                id="kaiz-reset-core-prompts"
+                                class="kaiz-btn kaiz-btn-danger-outline interactable"
+                                title="Khôi phục toàn bộ Core Prompts về mặc định"
+                            >
+                                <i class="fa-solid fa-rotate-left"></i> Reset Defaults
+                            </button>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <!-- Prompt Accordion 1: Identity -->
+                            <details class="kaiz-prompt-accordion" open>
+                                <summary class="kaiz-prompt-summary">
+                                    <span class="kaiz-prompt-title">
+                                        <i class="fa-solid fa-id-card"></i> Core Identity & Permissions
+                                    </span>
+                                    <i class="fa-solid fa-chevron-down kaiz-acc-icon"></i>
+                                </summary>
+                                <div class="kaiz-prompt-content">
+                                    <textarea
+                                        id="kaiz-core-identity"
+                                        class="text_pole kaiz-textarea-code"
+                                        rows="4"
+                                        placeholder="[Agent Core Active]..."
+                                    ></textarea>
+                                </div>
+                            </details>
+
+                            <!-- Prompt Accordion 2: Behavior -->
+                            <details class="kaiz-prompt-accordion">
+                                <summary class="kaiz-prompt-summary">
+                                    <span class="kaiz-prompt-title">
+                                        <i class="fa-solid fa-shield-cat"></i> Behavior & Anti-Truncation (No-Fear)
+                                    </span>
+                                    <i class="fa-solid fa-chevron-down kaiz-acc-icon"></i>
+                                </summary>
+                                <div class="kaiz-prompt-content">
+                                    <textarea
+                                        id="kaiz-core-behavior"
+                                        class="text_pole kaiz-textarea-code"
+                                        rows="6"
+                                        placeholder="<nofear>..."
+                                    ></textarea>
+                                </div>
+                            </details>
+
+                            <!-- Prompt Accordion 3: CoT -->
+                            <details class="kaiz-prompt-accordion">
+                                <summary class="kaiz-prompt-summary">
+                                    <span class="kaiz-prompt-title">
+                                        <i class="fa-solid fa-lightbulb"></i> CoT / Reasoning Guidelines
+                                    </span>
+                                    <i class="fa-solid fa-chevron-down kaiz-acc-icon"></i>
+                                </summary>
+                                <div class="kaiz-prompt-content">
+                                    <textarea
+                                        id="kaiz-core-cot-prompt"
+                                        class="text_pole kaiz-textarea-code"
+                                        rows="6"
+                                        placeholder="HƯỚNG DẪN SỬ DỤNG CÔNG CỤ..."
+                                    ></textarea>
+                                </div>
+                            </details>
+
+                            <!-- Prompt Accordion 4: Prefill -->
+                            <details class="kaiz-prompt-accordion">
+                                <summary class="kaiz-prompt-summary">
+                                    <span class="kaiz-prompt-title">
+                                        <i class="fa-solid fa-quote-left"></i> Prefill String
+                                    </span>
+                                    <i class="fa-solid fa-chevron-down kaiz-acc-icon"></i>
+                                </summary>
+                                <div class="kaiz-prompt-content">
+                                    <textarea
+                                        id="kaiz-core-prefill"
+                                        class="text_pole kaiz-textarea-code"
+                                        rows="3"
+                                        placeholder="<agent_cot>..."
+                                    ></textarea>
+                                </div>
+                            </details>
                         </div>
                     </div>
-                </details>
+                </div>
 
-                <!-- Browser Setup Settings -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-brands fa-chrome"></i> Browser Setup
-                    </summary>
-
-                    <label class="checkbox_label" style="margin-bottom: 8px">
-                        <input id="kaiz-enable-browser" type="checkbox" />
-                        <span>Enable Kaiz Browser Feature</span>
-                    </label>
-
-                    <div
-                        style="
-                            font-size: 11px;
-                            color: #888;
-                            background: rgba(0, 0, 0, 0.2);
-                            padding: 8px;
-                            border-radius: 5px;
-                            margin-bottom: 8px;
-                            border-left: 3px solid #3498db;
-                        "
-                    >
-                        <strong>Required Extensions:</strong><br />
-                        1.
-                        <a
-                            href="https://chromewebstore.google.com/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf"
-                            target="_blank"
-                            style="color: #3498db"
-                            >Allow CORS</a
-                        >
-                        (Bypass CORS)<br />
-                        2.
-                        <a
-                            href="https://chromewebstore.google.com/detail/ignore-x-frame-headers/gleekbfjekiniecknbkamfmkohkpodhe"
-                            target="_blank"
-                            style="color: #3498db"
-                            >Ignore X-Frame</a
-                        >
-                        (Allow iframe)<br />
-                        3.
-                        <a
-                            href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo"
-                            target="_blank"
-                            style="color: #3498db"
-                            >Tampermonkey</a
-                        >
-                        (For Script)<br /><br />
-                        <a
-                            href="https://github.com/Khanhhpk/Kaiz-Agent-Extension/raw/beta/userscripts/kaiz-browser-companion.user.js"
-                            target="_blank"
-                            style="
-                                display: inline-block;
-                                padding: 4px 8px;
-                                background: rgba(255, 255, 255, 0.1);
-                                border-radius: 4px;
-                                color: #fff;
-                                text-decoration: none;
-                                margin-top: 4px;
-                            "
-                            ><i class="fa-solid fa-download"></i> Install Companion Script</a
-                        >
-                    </div>
-
-                    <div style="display: flex; flex-direction: column; gap: 8px">
-                        <button id="kaiz-check-browser-reqs" class="menu_button interactable" style="width: 100%">
-                            <i class="fa-solid fa-stethoscope"></i> Check Setup Requirements
-                        </button>
-
-                        <div
-                            id="kaiz-browser-check-results"
-                            style="
-                                display: none;
-                                font-size: 12px;
-                                padding: 8px;
-                                background: rgba(0, 0, 0, 0.2);
-                                border-radius: 5px;
-                                border: 1px solid rgba(255, 255, 255, 0.1);
-                            "
-                        >
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px">
-                                <span>1. CORS Bypass:</span>
-                                <span id="kaiz-check-cors" style="color: #f1c40f"
-                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
-                                >
-                            </div>
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px">
-                                <span>2. X-Frame Bypass:</span>
-                                <span id="kaiz-check-xframe" style="color: #f1c40f"
-                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
-                                >
-                            </div>
-                            <div style="display: flex; justify-content: space-between">
-                                <span>3. Companion Script:</span>
-                                <span id="kaiz-check-script" style="color: #f1c40f"
-                                    ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
-                                >
+                <!-- ================= TAB 3: TOOLS & SAFE MODE ================= -->
+                <div id="kaiz-pane-tools" class="kaiz-tab-pane" role="tabpanel">
+                    <!-- Tools Manager Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-screwdriver-wrench"></i> Tools Manager
                             </div>
                         </div>
-                    </div>
-                </details>
 
-                <!-- Core Prompt Settings -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-brain"></i> Core Prompt Settings
-                    </summary>
+                        <div class="kaiz-card-body">
+                            <div class="kaiz-input-wrapper">
+                                <i class="fa-solid fa-magnifying-glass kaiz-input-icon"></i>
+                                <input
+                                    id="kaiz-tools-search"
+                                    type="text"
+                                    class="text_pole kaiz-input"
+                                    placeholder="Search tool name or description..."
+                                />
+                            </div>
 
-                    <div style="display: flex; justify-content: flex-end; margin-top: 8px; margin-bottom: 4px">
-                        <div
-                            id="kaiz-reset-core-prompts"
-                            class="menu_button interactable"
-                            style="padding: 4px 8px; font-size: 12px; margin: 0"
-                        >
-                            <i class="fa-solid fa-rotate-left"></i> Reset Defaults
+                            <div id="kaiz-tools-list" class="kaiz-list-container">
+                                <!-- Tools rendered dynamically via JS -->
+                            </div>
                         </div>
                     </div>
 
-                    <details>
-                        <summary
-                            style="
-                                font-size: 13px;
-                                color: #ddd;
-                                cursor: pointer;
-                                margin-top: 8px;
-                                margin-bottom: 4px;
-                                user-select: none;
-                                font-weight: bold;
-                            "
-                        >
-                            Core Identity & Permissions
-                        </summary>
-                        <textarea
-                            id="kaiz-core-identity"
-                            class="text_pole"
-                            style="width: 100%; height: 100px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
-                            placeholder="[Agent Core Active]..."
-                        ></textarea>
-                    </details>
+                    <!-- Safe Mode & Permissions Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-shield-halved"></i> Safe Mode & Permissions
+                            </div>
+                            <label class="kaiz-switch">
+                                <input id="kaiz-safe-mode" type="checkbox" />
+                                <span class="kaiz-slider"></span>
+                            </label>
+                        </div>
 
-                    <details>
-                        <summary
-                            style="
-                                font-size: 13px;
-                                color: #ddd;
-                                cursor: pointer;
-                                margin-top: 8px;
-                                margin-bottom: 4px;
-                                user-select: none;
-                                font-weight: bold;
-                            "
-                        >
-                            Behavior & Anti-Truncation Rules (No-Fear)
-                        </summary>
-                        <textarea
-                            id="kaiz-core-behavior"
-                            class="text_pole"
-                            style="width: 100%; height: 150px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
-                            placeholder="<nofear>..."
-                        ></textarea>
-                    </details>
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Bắt buộc người dùng xác nhận trước khi Agent thực thi các tool nhạy cảm.
+                            </p>
 
-                    <details>
-                        <summary
-                            style="
-                                font-size: 13px;
-                                color: #ddd;
-                                cursor: pointer;
-                                margin-top: 8px;
-                                margin-bottom: 4px;
-                                user-select: none;
-                                font-weight: bold;
-                            "
-                        >
-                            CoT / Reasoning Guidelines
-                        </summary>
-                        <textarea
-                            id="kaiz-core-cot-prompt"
-                            class="text_pole"
-                            style="width: 100%; height: 150px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
-                            placeholder="HƯỚNG DẪN SỬ DỤNG CÔNG CỤ..."
-                        ></textarea>
-                    </details>
+                            <div id="kaiz-safe-mode-group" class="kaiz-safe-mode-panel" style="display: none">
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-filter kaiz-input-icon"></i>
+                                    <input
+                                        id="kaiz-safe-tools-search"
+                                        type="text"
+                                        class="text_pole kaiz-input"
+                                        placeholder="Filter blacklisted tools..."
+                                    />
+                                </div>
 
-                    <details>
-                        <summary
-                            style="
-                                font-size: 13px;
-                                color: #ddd;
-                                cursor: pointer;
-                                margin-top: 8px;
-                                margin-bottom: 4px;
-                                user-select: none;
-                                font-weight: bold;
-                            "
-                        >
-                            Prefill String
-                        </summary>
-                        <textarea
-                            id="kaiz-core-prefill"
-                            class="text_pole"
-                            style="width: 100%; height: 80px; resize: vertical; margin-bottom: 8px; margin-top: 4px"
-                            placeholder="<agent_cot>..."
-                        ></textarea>
-                    </details>
-                </details>
+                                <div class="kaiz-btn-group">
+                                    <button
+                                        id="kaiz-safe-tools-blacklist-all"
+                                        class="kaiz-btn kaiz-btn-secondary flex-1 interactable"
+                                    >
+                                        <i class="fa-solid fa-lock"></i> Blacklist All
+                                    </button>
+                                    <button
+                                        id="kaiz-safe-tools-unblacklist-all"
+                                        class="kaiz-btn kaiz-btn-secondary flex-1 interactable"
+                                    >
+                                        <i class="fa-solid fa-unlock"></i> Unblacklist All
+                                    </button>
+                                </div>
 
-                <!-- Quick Prompts Settings -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-bolt"></i> Quick Prompts
-                    </summary>
-                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 8px"
-                        >Quản lý danh sách các lệnh nhanh (Quick Prompts).</label
-                    >
-                    <div
-                        id="kaiz-quick-prompts-list"
-                        style="
-                            display: flex;
-                            flex-direction: column;
-                            gap: 10px;
-                            max-height: 250px;
-                            overflow-y: auto;
-                            padding: 5px;
-                            border: 1px solid rgba(255, 255, 255, 0.1);
-                            border-radius: 4px;
-                        "
-                    >
-                        <!-- List of quick prompts will be injected here -->
+                                <div id="kaiz-safe-tools-list" class="kaiz-list-container">
+                                    <!-- Safe Tools rendered dynamically via JS -->
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div style="margin-top: 10px">
-                        <button id="kaiz-add-quick-prompt-btn" class="menu_button interactable" style="width: 100%">
-                            <i class="fa-solid fa-plus"></i> New Quick Prompt
-                        </button>
-                    </div>
-                </details>
+                </div>
 
-                <!-- Nút Tool Check -->
-                <details class="scp-settings-flat-section" style="margin-top: 15px">
-                    <summary class="scp-settings-flat-title" style="cursor: pointer; user-select: none">
-                        <i class="fa-solid fa-screwdriver-wrench"></i> Tools Manager
-                    </summary>
-                    <label style="font-size: 11px; color: #888; display: block; margin-bottom: 4px"
-                        >Search and toggle tools</label
-                    >
-                    <input
-                        id="kaiz-tools-search"
-                        type="text"
-                        class="text_pole"
-                        placeholder="Search tool name or description..."
-                        style="margin-bottom: 8px"
-                    />
-                    <div
-                        id="kaiz-tools-list"
-                        style="
-                            max-height: 250px;
-                            overflow-y: auto;
-                            padding: 5px;
-                            border: 1px solid rgba(255, 255, 255, 0.1);
-                            border-radius: 4px;
-                            display: flex;
-                            flex-direction: column;
-                            gap: 8px;
-                        "
-                    >
-                        <!-- Danh sách Tool render ở đây -->
-                    </div>
-                </details>
+                <!-- ================= TAB 4: LUỒNG (FLOW & RESILIENCE) ================= -->
+                <div id="kaiz-pane-flow" class="kaiz-tab-pane" role="tabpanel">
+                    <!-- Agent Execution Flow Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-arrows-spin"></i> Agent Flow Control
+                            </div>
+                        </div>
 
-                <div style="margin-top: 15px; margin-bottom: 10px">
-                    <button id="kaiz-checker-btn" class="menu_button interactable">
-                        <i class="fa-solid fa-wrench"></i> Tool Check
-                    </button>
+                        <div class="kaiz-card-body">
+                            <div class="kaiz-form-group">
+                                <div class="kaiz-param-label-row">
+                                    <label for="kaiz-max-loops" class="kaiz-field-label"
+                                        >Max Agent Loops (Auto Execution)</label
+                                    >
+                                    <span class="kaiz-hint-tag">1 - 20 loops</span>
+                                </div>
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-rotate kaiz-input-icon"></i>
+                                    <input
+                                        id="kaiz-max-loops"
+                                        type="number"
+                                        class="text_pole kaiz-input"
+                                        min="1"
+                                        max="20"
+                                        placeholder="5"
+                                        title="Số vòng lặp suy luận và gọi Tool tối đa liên tiếp của Agent"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Token Management Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title"><i class="fa-solid fa-scissors"></i> Token Protection</div>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Tự động cắt bớt lịch sử hội thoại cũ khi tổng tokens vượt quá giới hạn an toàn (Đặt 0 để
+                                tắt).
+                            </p>
+
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-token-safe-limit" class="kaiz-field-label"
+                                    >Token Safe Limit Threshold</label
+                                >
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-database kaiz-input-icon"></i>
+                                    <input
+                                        id="kaiz-token-safe-limit"
+                                        type="number"
+                                        class="text_pole kaiz-input"
+                                        placeholder="600000"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="kaiz-field-label" style="margin-top: 12px; margin-bottom: 8px">
+                                Ưu tiên cắt bớt (từ cũ nhất):
+                            </div>
+                            <div class="kaiz-switch-list">
+                                <label class="kaiz-switch-row">
+                                    <span class="kaiz-switch-label"
+                                        ><i class="fa-solid fa-robot"></i> Cắt bớt tin nhắn của Agent</span
+                                    >
+                                    <span class="kaiz-switch">
+                                        <input type="checkbox" id="kaiz-trim-agent" />
+                                        <span class="kaiz-slider"></span>
+                                    </span>
+                                </label>
+
+                                <label class="kaiz-switch-row">
+                                    <span class="kaiz-switch-label"
+                                        ><i class="fa-solid fa-user"></i> Cắt bớt tin nhắn của User</span
+                                    >
+                                    <span class="kaiz-switch">
+                                        <input type="checkbox" id="kaiz-trim-user" />
+                                        <span class="kaiz-slider"></span>
+                                    </span>
+                                </label>
+
+                                <label class="kaiz-switch-row">
+                                    <span class="kaiz-switch-label"
+                                        ><i class="fa-solid fa-code"></i> Cắt bớt kết quả trả về của Tools</span
+                                    >
+                                    <span class="kaiz-switch">
+                                        <input type="checkbox" id="kaiz-trim-tool" />
+                                        <span class="kaiz-slider"></span>
+                                    </span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Auto Retry Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-rotate-right"></i> Auto Retry Resilience
+                            </div>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-retry-keywords" class="kaiz-field-label"
+                                    >Error Keywords (comma separated)</label
+                                >
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-triangle-exclamation kaiz-input-icon"></i>
+                                    <input
+                                        id="kaiz-retry-keywords"
+                                        type="text"
+                                        class="text_pole kaiz-input"
+                                        placeholder="429, 502, 522, timeout"
+                                    />
+                                </div>
+                            </div>
+
+                            <div class="kaiz-action-row">
+                                <div class="kaiz-form-group flex-1">
+                                    <label for="kaiz-max-retries" class="kaiz-field-label">Max Retries</label>
+                                    <input
+                                        id="kaiz-max-retries"
+                                        type="number"
+                                        class="text_pole kaiz-input"
+                                        min="0"
+                                        max="10"
+                                        placeholder="3"
+                                    />
+                                </div>
+                                <div class="kaiz-form-group flex-1">
+                                    <label for="kaiz-retry-delay" class="kaiz-field-label">Delay (ms)</label>
+                                    <input
+                                        id="kaiz-retry-delay"
+                                        type="number"
+                                        class="text_pole kaiz-input"
+                                        min="1000"
+                                        max="60000"
+                                        placeholder="3000"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= TAB 5: BROWSER (TÙY CHỌN) ================= -->
+                <div id="kaiz-pane-browser" class="kaiz-tab-pane" role="tabpanel">
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-brands fa-chrome"></i> Kaiz Browser Companion
+                            </div>
+                            <label class="kaiz-switch">
+                                <input id="kaiz-enable-browser" type="checkbox" />
+                                <span class="kaiz-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Cho phép Agent duyệt web trực tiếp qua iframe nhúng, tương tác DOM, bấm click và xem nội
+                                dung trang web ngoại vi.
+                            </p>
+
+                            <div class="kaiz-browser-guide-card">
+                                <div class="kaiz-guide-title">
+                                    <i class="fa-solid fa-circle-info"></i> Các tiện ích cần thiết:
+                                </div>
+                                <div class="kaiz-guide-item">
+                                    <span>1. Bypass CORS:</span>
+                                    <a
+                                        href="https://chromewebstore.google.com/detail/allow-cors-access-control/lhobafahddgcelffkeicbaginigeejlf"
+                                        target="_blank"
+                                        class="kaiz-link"
+                                        >Allow CORS Extension <i class="fa-solid fa-arrow-up-right-from-square"></i
+                                    ></a>
+                                </div>
+                                <div class="kaiz-guide-item">
+                                    <span>2. Cho phép nhúng iFrame:</span>
+                                    <a
+                                        href="https://chromewebstore.google.com/detail/ignore-x-frame-headers/gleekbfjekiniecknbkamfmkohkpodhe"
+                                        target="_blank"
+                                        class="kaiz-link"
+                                        >Ignore X-Frame Headers <i class="fa-solid fa-arrow-up-right-from-square"></i
+                                    ></a>
+                                </div>
+                                <div class="kaiz-guide-item">
+                                    <span>3. Trình chạy Userscript:</span>
+                                    <a
+                                        href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo"
+                                        target="_blank"
+                                        class="kaiz-link"
+                                        >Tampermonkey <i class="fa-solid fa-arrow-up-right-from-square"></i
+                                    ></a>
+                                </div>
+
+                                <div class="kaiz-guide-action">
+                                    <a
+                                        href="https://github.com/Khanhhpk/Kaiz-Agent-Extension/raw/beta/userscripts/kaiz-browser-companion.user.js"
+                                        target="_blank"
+                                        class="kaiz-btn kaiz-btn-secondary kaiz-btn-sm"
+                                    >
+                                        <i class="fa-solid fa-download"></i> Cài đặt Kaiz Companion Script
+                                    </a>
+                                </div>
+                            </div>
+
+                            <button
+                                id="kaiz-check-browser-reqs"
+                                class="kaiz-btn kaiz-btn-primary kaiz-btn-block interactable"
+                                style="margin-top: 12px"
+                            >
+                                <i class="fa-solid fa-stethoscope"></i> Check Setup Requirements
+                            </button>
+
+                            <!-- Kết quả kiểm tra -->
+                            <div id="kaiz-browser-check-results" class="kaiz-check-results-panel" style="display: none">
+                                <div class="kaiz-check-row">
+                                    <span>1. CORS Bypass:</span>
+                                    <span id="kaiz-check-cors" class="kaiz-check-status"
+                                        ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
+                                    >
+                                </div>
+                                <div class="kaiz-check-row">
+                                    <span>2. X-Frame Bypass:</span>
+                                    <span id="kaiz-check-xframe" class="kaiz-check-status"
+                                        ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
+                                    >
+                                </div>
+                                <div class="kaiz-check-row">
+                                    <span>3. Companion Script:</span>
+                                    <span id="kaiz-check-script" class="kaiz-check-status"
+                                        ><i class="fa-solid fa-circle-notch fa-spin"></i> Checking</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
+            <!-- End Tab Content -->
         </div>
     </div>
 </div>
