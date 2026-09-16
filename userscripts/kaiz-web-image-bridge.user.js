@@ -190,30 +190,13 @@
         handleIncomingJob(job);
     });
 
-    // 2. Web Worker Keep-Alive & Active Polling (Bí quyết đánh thức tab chạy ngầm không bị Chrome freeze)
-    try {
-        const workerBlob = new Blob(
-            [`setInterval(function() { postMessage('tick'); }, 1000);`],
-            { type: 'application/javascript' },
-        );
-        const worker = new Worker(URL.createObjectURL(workerBlob));
-        worker.onmessage = () => {
-            const pendingJob = GM_getValue('KAIZ_PENDING_JOB');
-            if (pendingJob && pendingJob.id !== lastHandledJobId) {
-                handleIncomingJob(pendingJob);
-            }
-        };
-    } catch (e) {
-        console.warn('[Kaiz Bridge] Keep-alive worker not available, falling back to interval:', e);
-    }
-
-    // 3. Fallback Interval quét bộ nhớ mỗi 1.5s
+    // 2. Định kỳ 1 giây chủ động quét Storage (Chạy bền bỉ trong nền, 100% tương thích CSP của Google)
     setInterval(() => {
         const pendingJob = GM_getValue('KAIZ_PENDING_JOB');
         if (pendingJob && pendingJob.id !== lastHandledJobId) {
             handleIncomingJob(pendingJob);
         }
-    }, 1500);
+    }, 1000);
 
     // =========================================================================
     // 3. GEMINI WEB AUTOMATION (HỖ TRỢ ĐẦY ĐỦ BACKGROUND TAB)
