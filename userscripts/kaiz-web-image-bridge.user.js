@@ -72,7 +72,16 @@
             window.postMessage(
                 {
                     type: 'KAIZ_BRIDGE_HEARTBEAT_UPDATE',
-                    // =========================================================================
+                    payload: newValue,
+                },
+                '*',
+            );
+        });
+
+        return;
+    }
+
+    // =========================================================================
     // 2. CONTEXT: WEB (GEMINI / CHATGPT)
     // =========================================================================
     const CURRENT_TARGET = IS_GEMINI ? 'gemini' : IS_CHATGPT ? 'chatgpt' : 'unknown';
