@@ -10125,7 +10125,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                return;
            }
            // Setup History for the run
-           const historyForRun = [];
+           let historyForRun;
            if (task.executionMode === 'persist') {
                if (!task.chatId) {
                    // Lần đầu chạy persist -> Tạo chat mới riêng cho auto task này (sử dụng -1 để ẩn khỏi danh sách chat mặc định)
@@ -10136,7 +10136,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                // Load history của task
                const messages = await this.stateManager.db.getMessages(task.chatId);
-               historyForRun.push(...messages.map((m) => ({ role: m.role, content: m.content })));
+               historyForRun = messages.map((m) => ({ role: m.role, content: m.content }));
+           }
+           else {
+               historyForRun = [];
            }
            // Add prompt as user message
            historyForRun.push({ role: 'user', content: task.prompt });

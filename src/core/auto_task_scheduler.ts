@@ -127,7 +127,7 @@ export class AutoTaskScheduler {
         }
 
         // Setup History for the run
-        const historyForRun: any[] = [];
+        let historyForRun: any[];
 
         if (task.executionMode === 'persist') {
             if (!task.chatId) {
@@ -140,7 +140,9 @@ export class AutoTaskScheduler {
 
             // Load history của task
             const messages = await this.stateManager.db.getMessages(task.chatId);
-            historyForRun.push(...messages.map((m) => ({ role: m.role, content: m.content })));
+            historyForRun = messages.map((m) => ({ role: m.role, content: m.content }));
+        } else {
+            historyForRun = [];
         }
 
         // Add prompt as user message
