@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.1
+// @version      1.2.2
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -49,7 +49,7 @@
                     timestamp: Date.now(),
                 });
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.1' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.2' }, '*');
             }
         });
 
@@ -64,6 +64,16 @@
                 },
                 '*',
             );
+
+            // Dọn dẹp job đang chờ trong Storage để tránh các tab khác xử lý lại job cũ
+            try {
+                const curPending = GM_getValue('KAIZ_PENDING_JOB');
+                if (curPending && curPending.id === newValue.id) {
+                    GM_setValue('KAIZ_PENDING_JOB', null);
+                }
+            } catch (e) {
+                /* ignore */
+            }
         });
 
         // Lắng nghe nhịp tim (Heartbeat) từ các tab Web
@@ -134,12 +144,22 @@
         });
     };
 
-    let lastHandledJobId = null;
+    // Khóa chống trùng lặp và race condition đa tab / đa trigger
+    const handledJobIds = new Set();
+    let isJobExecuting = false;
 
     // Bộ điều phối thực thi job (Tránh xung đột đa tab & Chạy mượt trong Background Tab)
     async function handleIncomingJob(job) {
         if (!job || !job.id || !job.prompt) return;
-        if (job.id === lastHandledJobId) return;
+
+        // Đã từng xử lý job này rồi -> Bỏ qua tuyệt đối
+        if (handledJobIds.has(job.id)) return;
+
+        // Nếu tab đang bận thực thi 1 job khác -> Bỏ qua để tránh xung đột UI
+        if (isJobExecuting) {
+            console.warn(`[Kaiz Bridge][${CURRENT_TARGET}] Tab đang bận xử lý job khác, bỏ qua:`, job.id);
+            return;
+        }
 
         // Chỉ xử lý nếu target chỉ định đúng nền tảng hiện tại (hoặc 'auto')
         if (job.target !== 'auto' && job.target !== CURRENT_TARGET) {
@@ -151,21 +171,27 @@
             return;
         }
 
-        // Chống xung đột đa tab: Tab nào gán TAB_ID vào claimKey trước sẽ xử lý
+        // Chống xung đột đa tab: Kiểm tra xem đã có tab nào claim job này chưa
         const claimKey = `KAIZ_CLAIM_${job.id}`;
         const existingClaim = GM_getValue(claimKey);
-        if (existingClaim && existingClaim !== TAB_ID) {
+        if (existingClaim) {
+            // Đã có tab khác (hoặc chính tab này) claim job này trước đó
+            handledJobIds.add(job.id);
             return;
         }
 
+        // Đánh dấu ngay lập tức trong memory để chặn các trigger đồng thời (từ setInterval và GM_addValueChangeListener)
+        handledJobIds.add(job.id);
         GM_setValue(claimKey, TAB_ID);
-        // Chờ 60ms để giải quyết race condition giữa các tab
-        await new Promise((r) => setTimeout(r, 60));
+
+        // Chờ 80ms để giải quyết race condition phân xử giữa nhiều tab
+        await new Promise((r) => setTimeout(r, 80));
         if (GM_getValue(claimKey) !== TAB_ID) {
+            console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Job ${job.id} đã được tab khác nhận.`);
             return;
         }
 
-        lastHandledJobId = job.id;
+        isJobExecuting = true;
         console.log(`[Kaiz Bridge][${CURRENT_TARGET}] 🚀 Bắt đầu thực thi job:`, job.id, job.prompt);
 
         try {
@@ -182,18 +208,23 @@
                 error: err.message || 'Lỗi không xác định khi tự động hóa giao diện web.',
                 timestamp: Date.now(),
             });
+        } finally {
+            isJobExecuting = false;
         }
     }
 
     // 1. Lắng nghe qua GM_addValueChangeListener
     GM_addValueChangeListener('KAIZ_PENDING_JOB', (name, oldValue, job) => {
-        handleIncomingJob(job);
+        if (job && !handledJobIds.has(job.id)) {
+            handleIncomingJob(job);
+        }
     });
 
     // 2. Định kỳ 1 giây chủ động quét Storage (Chạy bền bỉ trong nền, 100% tương thích CSP của Google)
     setInterval(() => {
+        if (isJobExecuting) return;
         const pendingJob = GM_getValue('KAIZ_PENDING_JOB');
-        if (pendingJob && pendingJob.id !== lastHandledJobId) {
+        if (pendingJob && !handledJobIds.has(pendingJob.id)) {
             handleIncomingJob(pendingJob);
         }
     }, 1000);
@@ -235,7 +266,7 @@
 
         console.log('[Kaiz Bridge][Gemini] Tìm thấy inputEl:', inputEl);
 
-        // 3. Điền prompt với đa tầng kỹ thuật (Đảm bảo Quill & Angular nhận diện text và chuyển Mic -> Gửi)
+        // 3. Điền prompt an toàn (Đảm bảo Quill & Angular nhận diện text và chuyển Mic -> Gửi)
         inputEl.focus();
         inputEl.dispatchEvent(new Event('focusin', { bubbles: true }));
 
@@ -245,6 +276,8 @@
             pEl = document.createElement('p');
             inputEl.appendChild(pEl);
         }
+
+        let textSet = false;
 
         // Kỹ thuật 1: Truy cập trực tiếp Quill qua unsafeWindow hoặc DOM property (nếu có)
         try {
@@ -257,54 +290,58 @@
             if (q && typeof q.setText === 'function') {
                 q.setText('', 'user');
                 q.insertText(0, job.prompt, 'user');
-                console.log('[Kaiz Bridge][Gemini] Đã nạp text trực tiếp qua Quill instance (source: user).');
+                textSet = true;
+                console.log('[Kaiz Bridge][Gemini] Đã nạp text trực tiếp qua Quill instance.');
             }
         } catch (qe) {
             console.warn('[Kaiz Bridge][Gemini] Quill direct API error:', qe);
         }
 
-        // Kỹ thuật 2: Clipboard Paste Event (Quill xử lý paste tự động tạo Delta và phát sinh event user-input)
-        try {
-            const dt = new DataTransfer();
-            dt.setData('text/plain', job.prompt);
-            const pasteEvt = new ClipboardEvent('paste', {
-                bubbles: true,
-                cancelable: true,
-                composed: true,
-                clipboardData: dt,
-            });
-            inputEl.dispatchEvent(pasteEvt);
-            if (pEl && pEl !== inputEl) {
-                pEl.dispatchEvent(pasteEvt);
+        // Kỹ thuật 2: Clipboard Paste Event (nếu Quill API không có)
+        if (!textSet) {
+            try {
+                const dt = new DataTransfer();
+                dt.setData('text/plain', job.prompt);
+                const pasteEvt = new ClipboardEvent('paste', {
+                    bubbles: true,
+                    cancelable: true,
+                    composed: true,
+                    clipboardData: dt,
+                });
+                inputEl.dispatchEvent(pasteEvt);
+                textSet = true;
+                console.log('[Kaiz Bridge][Gemini] Đã nạp text qua ClipboardEvent paste.');
+            } catch (pe) {
+                console.warn('[Kaiz Bridge][Gemini] Paste event fallback error:', pe);
             }
-            console.log('[Kaiz Bridge][Gemini] Đã bắn ClipboardEvent paste với DataTransfer.');
-        } catch (pe) {
-            console.warn('[Kaiz Bridge][Gemini] Paste event fallback error:', pe);
         }
 
-        // Kỹ thuật 3: Native Selection & execCommand
-        try {
-            const targetNode = pEl || inputEl;
-            const selection = window.getSelection();
-            const range = document.createRange();
-            range.selectNodeContents(targetNode);
-            selection.removeAllRanges();
-            selection.addRange(range);
-            document.execCommand('insertText', false, job.prompt);
-        } catch (e) {
-            console.warn('[Kaiz Bridge][Gemini] execCommand insertText failed:', e);
+        // Kỹ thuật 3: Native Selection & execCommand (nếu text vẫn chưa được điền)
+        if (!inputEl.textContent || !inputEl.textContent.trim()) {
+            try {
+                const targetNode = pEl || inputEl;
+                const selection = window.getSelection();
+                const range = document.createRange();
+                range.selectNodeContents(targetNode);
+                selection.removeAllRanges();
+                selection.addRange(range);
+                document.execCommand('insertText', false, job.prompt);
+                console.log('[Kaiz Bridge][Gemini] Đã nạp text qua execCommand insertText.');
+            } catch (e) {
+                console.warn('[Kaiz Bridge][Gemini] execCommand insertText failed:', e);
+            }
         }
 
-        // Kỹ thuật 4: DOM Fallback (bảo toàn thẻ <p> để không phá vỡ mô hình của Quill)
-        if (pEl) {
-            if (!pEl.textContent || !pEl.textContent.trim()) {
+        // Kỹ thuật 4: DOM Fallback
+        if (!inputEl.textContent || !inputEl.textContent.trim()) {
+            if (pEl) {
                 pEl.textContent = job.prompt;
+            } else {
+                inputEl.innerText = job.prompt;
             }
-        } else if (!inputEl.innerText || !inputEl.innerText.trim()) {
-            inputEl.innerText = job.prompt;
         }
 
-        // Kỹ thuật 5: Bắn chuỗi InputEvent và KeyboardEvent chuẩn
+        // Kỹ thuật 5: Bắn chuỗi InputEvent và ChangeEvent để Angular digest cycle nhận diện
         const inputEventProps = {
             bubbles: true,
             cancelable: true,
@@ -314,40 +351,18 @@
         };
 
         try {
-            inputEl.dispatchEvent(new InputEvent('beforeinput', inputEventProps));
             inputEl.dispatchEvent(new InputEvent('input', inputEventProps));
         } catch (ie) {
-            inputEl.dispatchEvent(new Event('beforeinput', { bubbles: true, composed: true }));
             inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         }
 
-        if (pEl && pEl !== inputEl) {
-            try {
-                pEl.dispatchEvent(new InputEvent('input', inputEventProps));
-            } catch (e) {
-                /* ignore */
-            }
-        }
-
         inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-        inputEl.dispatchEvent(new KeyboardEvent('keydown', { key: 'Unidentified', bubbles: true, composed: true }));
-        inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Unidentified', bubbles: true, composed: true }));
-
-        const rich = document.querySelector('rich-textarea');
-        if (rich && rich !== inputEl) {
-            try {
-                rich.dispatchEvent(new InputEvent('input', inputEventProps));
-            } catch (e) {
-                rich.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
-            }
-            rich.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
-        }
 
         console.log('[Kaiz Bridge][Gemini] Đã hoàn tất nhập prompt vào ô input.');
         // Chờ Angular digest cycle cập nhật trạng thái ô nhập và đổi nút Mic sang nút Gửi
         await new Promise((r) => setTimeout(r, 600));
 
-        // 4. Tìm và bấm nút gửi
+        // 4. Tìm và bấm nút gửi DUY NHẤT 1 LẦN (Chống spam request)
         const sendSelectors = [
             'button.send-button',
             '.send-button-container button',
@@ -383,43 +398,33 @@
         }
 
         if (sendBtn) {
-            console.log('[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ, đang click:', sendBtn);
+            console.log('[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ, click nút gửi duy nhất 1 lần:', sendBtn);
             sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.click();
         } else {
-            console.log('[Kaiz Bridge][Gemini] Nút gửi chưa kích hoạt, kích hoạt gửi bằng phím Enter...');
-        }
+            console.log('[Kaiz Bridge][Gemini] Nút gửi chưa kích hoạt, gửi duy nhất 1 lần qua phím Enter trên ô input...');
+            const enterDown = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+            });
+            const enterUp = new KeyboardEvent('keyup', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+            });
 
-        // Bổ sung Enter Event mô phỏng để đảm bảo lệnh luôn được gửi đi
-        const enterDown = new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-        });
-        const enterUp = new KeyboardEvent('keyup', {
-            key: 'Enter',
-            code: 'Enter',
-            keyCode: 13,
-            which: 13,
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-        });
-
-        inputEl.dispatchEvent(enterDown);
-        inputEl.dispatchEvent(enterUp);
-        if (pEl && pEl !== inputEl) {
-            pEl.dispatchEvent(enterDown);
-            pEl.dispatchEvent(enterUp);
-        }
-        if (rich && rich !== inputEl) {
-            rich.dispatchEvent(enterDown);
-            rich.dispatchEvent(enterUp);
+            inputEl.dispatchEvent(enterDown);
+            inputEl.dispatchEvent(enterUp);
         }
 
         // 5. Chờ phản hồi và bắt ảnh mới
@@ -452,11 +457,42 @@
                     src.includes('blob:') ||
                     src.includes('data:image');
                 const isNotAvatar = !src.includes('avatar') && !src.includes('profile') && !src.includes('logo');
-                const isLoaded = img.complete && img.naturalWidth >= 200;
+                const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
 
                 if (src && isNew && isImageHost && isNotAvatar && isLoaded) {
                     console.log('[Kaiz Bridge][Gemini] 🎉 TÌM THẤY ẢNH MỚI HỢP LỆ:', src.substring(0, 100));
-                    const base64 = await fetchImageAsBase64(src);
+
+                    let base64 = null;
+                    // Trích xuất tức thì qua canvas nếu ảnh đã load hoàn chỉnh
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth || img.width;
+                        canvas.height = img.naturalHeight || img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        const dataUrl = canvas.toDataURL('image/png');
+                        if (dataUrl && dataUrl.startsWith('data:image')) {
+                            base64 = dataUrl;
+                        }
+                    } catch (canvasErr) {
+                        // CORS tainted, tiếp tục với fetch/GM_xmlhttpRequest
+                    }
+
+                    if (!base64) {
+                        if (src.startsWith('blob:')) {
+                            try {
+                                const blob = await fetch(src).then((r) => r.blob());
+                                base64 = await blobToBase64(blob);
+                            } catch (e) {
+                                console.warn('[Kaiz Bridge][Gemini] fetch blob error:', e);
+                            }
+                        }
+                    }
+
+                    if (!base64) {
+                        base64 = await fetchImageAsBase64(src);
+                    }
+
                     GM_setValue('KAIZ_JOB_RESULT', {
                         id: job.id,
                         status: 'success',
@@ -566,33 +602,33 @@
         }
 
         if (sendBtn) {
-            console.log('[Kaiz Bridge][ChatGPT] Click nút gửi send-button...');
+            console.log('[Kaiz Bridge][ChatGPT] Click nút gửi send-button duy nhất 1 lần...');
             sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
             sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
             sendBtn.click();
+        } else {
+            console.log('[Kaiz Bridge][ChatGPT] Nút gửi chưa kích hoạt, gửi duy nhất 1 lần qua phím Enter...');
+            inputEl.dispatchEvent(
+                new KeyboardEvent('keydown', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true,
+                    cancelable: true,
+                }),
+            );
+            inputEl.dispatchEvent(
+                new KeyboardEvent('keyup', {
+                    key: 'Enter',
+                    code: 'Enter',
+                    keyCode: 13,
+                    which: 13,
+                    bubbles: true,
+                    cancelable: true,
+                }),
+            );
         }
-
-        // Bổ sung Enter
-        inputEl.dispatchEvent(
-            new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true,
-                cancelable: true,
-            }),
-        );
-        inputEl.dispatchEvent(
-            new KeyboardEvent('keyup', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true,
-                cancelable: true,
-            }),
-        );
 
         // 5. Chờ phản hồi và bắt ảnh mới
         const timeoutMs = 85000;
@@ -618,11 +654,41 @@
                 const src = img.src || '';
                 const isNew = !existingImages.has(src);
                 const isOAI = src.includes('oaiusercontent.com') || src.includes('files.oaiusercontent');
-                const isLoaded = img.complete && img.naturalWidth >= 200;
+                const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
 
                 if (src && isNew && isOAI && isLoaded) {
                     console.log('[Kaiz Bridge][ChatGPT] 🎉 TÌM THẤY ẢNH MỚI:', src.substring(0, 100));
-                    const base64 = await fetchImageAsBase64(src);
+
+                    let base64 = null;
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = img.naturalWidth || img.width;
+                        canvas.height = img.naturalHeight || img.height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0);
+                        const dataUrl = canvas.toDataURL('image/png');
+                        if (dataUrl && dataUrl.startsWith('data:image')) {
+                            base64 = dataUrl;
+                        }
+                    } catch (canvasErr) {
+                        // CORS tainted
+                    }
+
+                    if (!base64) {
+                        if (src.startsWith('blob:')) {
+                            try {
+                                const blob = await fetch(src).then((r) => r.blob());
+                                base64 = await blobToBase64(blob);
+                            } catch (e) {
+                                console.warn('[Kaiz Bridge][ChatGPT] fetch blob error:', e);
+                            }
+                        }
+                    }
+
+                    if (!base64) {
+                        base64 = await fetchImageAsBase64(src);
+                    }
+
                     GM_setValue('KAIZ_JOB_RESULT', {
                         id: job.id,
                         status: 'success',

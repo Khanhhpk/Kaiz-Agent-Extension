@@ -5186,7 +5186,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        static async requestImage(req) {
            this.init();
            const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-           const timeoutMs = req.timeoutMs || 75000;
+           const timeoutMs = req.timeoutMs || 90000;
            const target = req.target || 'auto';
            // Cảnh báo sớm nếu tab tương ứng chưa mở
            if (target === 'gemini' && !this.status.geminiOnline) {
