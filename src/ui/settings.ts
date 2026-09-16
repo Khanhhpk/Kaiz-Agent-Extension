@@ -141,6 +141,19 @@ export class SettingsUI {
                 if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
                     win.draggable('enable');
                 }
+                const savedSize = localStorage.getItem('kaiz_win_size');
+                if (savedSize) {
+                    try {
+                        const parsed = JSON.parse(savedSize);
+                        if (parsed.width && parsed.height) {
+                            const clampedW = Math.max(360, Math.min(parsed.width, window.innerWidth - 20));
+                            const clampedH = Math.max(420, Math.min(parsed.height, window.innerHeight - 20));
+                            win.css({ width: `${clampedW}px`, height: `${clampedH}px` });
+                        }
+                    } catch {
+                        // ignore
+                    }
+                }
                 if (isOpen) {
                     dialogEl.close();
                     dialogEl.show();

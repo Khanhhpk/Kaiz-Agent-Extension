@@ -76,7 +76,7 @@ jQuery(async () => {
             safeMode: false,
             safeModeBlacklist: {},
             quickPrompts: [],
-            enableBrowser: true,
+            enableBrowser: false,
         };
     } else {
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
@@ -113,7 +113,7 @@ jQuery(async () => {
             ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
         }
         if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
-            ctx.extensionSettings[EXT_NAME].enableBrowser = true;
+            ctx.extensionSettings[EXT_NAME].enableBrowser = false;
         }
     }
 

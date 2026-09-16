@@ -7698,6 +7698,20 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
                        win.draggable('enable');
                    }
+                   const savedSize = localStorage.getItem('kaiz_win_size');
+                   if (savedSize) {
+                       try {
+                           const parsed = JSON.parse(savedSize);
+                           if (parsed.width && parsed.height) {
+                               const clampedW = Math.max(360, Math.min(parsed.width, window.innerWidth - 20));
+                               const clampedH = Math.max(420, Math.min(parsed.height, window.innerHeight - 20));
+                               win.css({ width: `${clampedW}px`, height: `${clampedH}px` });
+                           }
+                       }
+                       catch {
+                           // ignore
+                       }
+                   }
                    if (isOpen) {
                        dialogEl.close();
                        dialogEl.show();
@@ -8688,14 +8702,40 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            const btn = $('#kaiz-floating-btn');
            const win = $('#kaiz-chat-window');
            const closeBtn = $('#kaiz-chat-close');
+           const toolsBtn = $('#kaiz-chat-tools-btn');
+           const toolsMenu = $('#kaiz-chat-tools-menu');
            const ctx = SillyTavern.getContext();
            const settings = ctx.extensionSettings['kaiz_agent'] || {};
            if (settings.enableBrowser === false) {
                $('#kaiz-chat-browser-btn').hide();
            }
-           // --- Bổ sung nút và khung Log Request ---
-           closeBtn.before('<i id="kaiz-chat-backup-btn" class="fa-solid fa-save interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Backup Manager"></i>');
-           closeBtn.before('<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>');
+           // --- Tools Menu Logic ---
+           toolsBtn.on('click', (e) => {
+               e.stopPropagation();
+               toolsMenu.toggle();
+               toolsBtn.toggleClass('active', toolsMenu.is(':visible'));
+           });
+           $(document)
+               .off('click.kaiz_tools_menu')
+               .on('click.kaiz_tools_menu', (e) => {
+               if (!$(e.target).closest('#kaiz-chat-tools-btn').length &&
+                   !$(e.target).closest('#kaiz-chat-tools-menu').length) {
+                   toolsMenu.hide();
+                   toolsBtn.removeClass('active');
+               }
+           });
+           toolsMenu.on('click', '.kaiz-menu-item', () => {
+               toolsMenu.hide();
+               toolsBtn.removeClass('active');
+           });
+           $(document)
+               .off('keydown.kaiz_tools_menu')
+               .on('keydown.kaiz_tools_menu', (e) => {
+               if (e.key === 'Escape' && toolsMenu.is(':visible')) {
+                   toolsMenu.hide();
+                   toolsBtn.removeClass('active');
+               }
+           });
            const logBtn = $('#kaiz-chat-log-btn');
            const backupBtn = $('#kaiz-chat-backup-btn');
            if ($('#kaiz-log-modal').length === 0) {
@@ -9027,6 +9067,76 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    }
                }, 100);
            });
+           // --- Floating Window Resize Logic ---
+           const resizer = $('#kaiz-window-resizer');
+           const restoreSavedWinSize = () => {
+               if (win.hasClass('kaiz-phone-mode') || win.hasClass('kaiz-browser-mode'))
+                   return;
+               const savedSize = localStorage.getItem('kaiz_win_size');
+               if (savedSize) {
+                   try {
+                       const parsed = JSON.parse(savedSize);
+                       if (parsed.width && parsed.height) {
+                           const clampedW = Math.max(360, Math.min(parsed.width, window.innerWidth - 20));
+                           const clampedH = Math.max(420, Math.min(parsed.height, window.innerHeight - 20));
+                           win.css({ width: `${clampedW}px`, height: `${clampedH}px` });
+                       }
+                   }
+                   catch {
+                       // ignore
+                   }
+               }
+           };
+           restoreSavedWinSize();
+           let isResizingWin = false;
+           resizer.on('mousedown', (e) => {
+               if (win.hasClass('kaiz-phone-mode') || win.hasClass('kaiz-browser-mode'))
+                   return;
+               e.preventDefault();
+               e.stopPropagation();
+               isResizingWin = true;
+               resizer.addClass('resizing');
+               $('body').css({ 'user-select': 'none', cursor: 'se-resize' });
+               const rect = win[0].getBoundingClientRect();
+               // Anchor left and top explicitly so resizing bottom-right expands outwards smoothly
+               win.css({
+                   left: `${rect.left}px`,
+                   top: `${rect.top}px`,
+                   right: 'auto',
+                   bottom: 'auto',
+               });
+               const startX = e.clientX;
+               const startY = e.clientY;
+               const startWidth = rect.width;
+               const startHeight = rect.height;
+               $(document)
+                   .off('.kaiz_resizing')
+                   .on('mousemove.kaiz_resizing', (ev) => {
+                   if (!isResizingWin)
+                       return;
+                   const minWidth = 360;
+                   const minHeight = 420;
+                   const maxWidth = Math.max(minWidth, window.innerWidth - rect.left - 10);
+                   const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - 10);
+                   const newWidth = Math.max(minWidth, Math.min(startWidth + (ev.clientX - startX), maxWidth));
+                   const newHeight = Math.max(minHeight, Math.min(startHeight + (ev.clientY - startY), maxHeight));
+                   win.css({ width: `${newWidth}px`, height: `${newHeight}px` });
+               })
+                   .on('mouseup.kaiz_resizing', () => {
+                   if (!isResizingWin)
+                       return;
+                   isResizingWin = false;
+                   resizer.removeClass('resizing');
+                   $('body').css({ 'user-select': '', cursor: '' });
+                   $(document).off('.kaiz_resizing');
+                   const finalWidth = Math.round(win.outerWidth() || 550);
+                   const finalHeight = Math.round(win.outerHeight() || 600);
+                   localStorage.setItem('kaiz_win_size', JSON.stringify({ width: finalWidth, height: finalHeight }));
+                   const pos = ensureInBounds(win);
+                   if (pos)
+                       localStorage.setItem('kaiz_win_pos', JSON.stringify(pos));
+               });
+           });
            // ------------------
            // Sidebar elements
            const menuBtn = $('#kaiz-chat-menu-btn');
@@ -9266,6 +9376,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                else {
                    dialogEl.close();
+                   toolsMenu.hide();
+                   toolsBtn.removeClass('active');
                    if (isSidebarOpen)
                        toggleSidebar();
                }
@@ -9273,6 +9385,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            closeBtn.on('click', () => {
                const dialogEl = win[0];
                dialogEl.close();
+               toolsMenu.hide();
+               toolsBtn.removeClass('active');
                if (isSidebarOpen)
                    toggleSidebar(); // Đóng luôn sidebar
            });
@@ -9292,6 +9406,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
                        win.draggable('enable');
                    }
+                   restoreSavedWinSize();
                }
            };
            // Khởi tạo phone mode ban đầu
@@ -11408,7 +11523,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                safeMode: false,
                safeModeBlacklist: {},
                quickPrompts: [],
-               enableBrowser: true,
+               enableBrowser: false,
            };
        }
        else {
@@ -11446,7 +11561,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
            }
            if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
-               ctx.extensionSettings[EXT_NAME].enableBrowser = true;
+               ctx.extensionSettings[EXT_NAME].enableBrowser = false;
            }
        }
        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
