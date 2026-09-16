@@ -1277,99 +1277,72 @@
 
 /* 2. Segmented Navigation Tabs */
 .kaiz-settings-tabs {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 5px;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
-    padding: 5px;
-    margin-bottom: 12px;
+    display: grid !important;
+    grid-template-columns: repeat(6, 1fr) !important;
+    gap: 6px !important;
+    background: rgba(0, 0, 0, 0.25) !important;
+    border: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-radius: 10px !important;
+    padding: 6px !important;
+    margin-bottom: 12px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
 }
 
 .kaiz-tab-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 7px 6px;
-    font-size: 11.5px;
-    font-weight: 500;
-    color: #94a3b8;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 7px;
-    cursor: pointer;
-    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-    white-space: nowrap;
-    outline: none;
-    box-sizing: border-box;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 6px !important;
+    padding: 8px 6px !important;
+    font-size: 11.5px !important;
+    font-weight: 500 !important;
+    color: #94a3b8 !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 7px !important;
+    cursor: pointer !important;
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    white-space: nowrap !important;
+    outline: none !important;
+    box-sizing: border-box !important;
+    min-width: 0 !important;
 }
 
 .kaiz-tab-btn:hover {
-    color: #f8fafc;
-    background: rgba(255, 255, 255, 0.05);
+    color: #f8fafc !important;
+    background: rgba(255, 255, 255, 0.05) !important;
 }
 
 .kaiz-tab-btn.active {
-    color: #ffffff;
-    background: rgba(99, 102, 241, 0.25);
-    border-color: rgba(99, 102, 241, 0.45);
-    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2);
+    color: #ffffff !important;
+    background: rgba(99, 102, 241, 0.25) !important;
+    border-color: rgba(99, 102, 241, 0.45) !important;
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2) !important;
 }
 
 /* Distribution: 3 on row 1 (each span 2 = 1/3), 2 on row 2 (each span 3 = 1/2) */
 .kaiz-tab-btn[data-tab='model'],
 .kaiz-tab-btn[data-tab='prompts'],
 .kaiz-tab-btn[data-tab='tools'] {
-    grid-column: span 2;
+    grid-column: span 2 !important;
 }
 
 .kaiz-tab-btn[data-tab='flow'],
 .kaiz-tab-btn[data-tab='browser'] {
-    grid-column: span 3;
+    grid-column: span 3 !important;
 }
 
 .kaiz-tab-badge {
-    font-size: 8.5px;
-    padding: 1px 5px;
-    border-radius: 999px;
-    background: rgba(251, 191, 36, 0.15);
-    color: #fbbf24;
-    border: 1px solid rgba(251, 191, 36, 0.3);
-    font-weight: 600;
-    flex-shrink: 0;
-    line-height: 1.2;
-}
-
-/* Wide screen (>= 580px): all 5 fit evenly on 1 single row */
-@media (min-width: 580px) {
-    .kaiz-settings-tabs {
-        grid-template-columns: repeat(5, 1fr);
-    }
-    .kaiz-tab-btn[data-tab='model'],
-    .kaiz-tab-btn[data-tab='prompts'],
-    .kaiz-tab-btn[data-tab='tools'],
-    .kaiz-tab-btn[data-tab='flow'],
-    .kaiz-tab-btn[data-tab='browser'] {
-        grid-column: span 1;
-    }
-}
-
-/* Ultra small screens (< 320px): 2 - 2 - 1 */
-@media (max-width: 320px) {
-    .kaiz-settings-tabs {
-        grid-template-columns: repeat(2, 1fr);
-    }
-    .kaiz-tab-btn[data-tab='model'],
-    .kaiz-tab-btn[data-tab='prompts'],
-    .kaiz-tab-btn[data-tab='tools'],
-    .kaiz-tab-btn[data-tab='flow'] {
-        grid-column: span 1;
-    }
-    .kaiz-tab-btn[data-tab='browser'] {
-        grid-column: span 2;
-    }
+    font-size: 8.5px !important;
+    padding: 1px 5px !important;
+    border-radius: 999px !important;
+    background: rgba(251, 191, 36, 0.15) !important;
+    color: #fbbf24 !important;
+    border: 1px solid rgba(251, 191, 36, 0.3) !important;
+    font-weight: 600 !important;
+    flex-shrink: 0 !important;
+    line-height: 1.2 !important;
 }
 
 /* 3. Tab Panes */

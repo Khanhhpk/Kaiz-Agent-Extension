@@ -11591,7 +11591,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        }
        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
        const cssPath = `/scripts/extensions/${extPath}/style.css?v=${Date.now()}`;
-       if (!$(`link[href^="/scripts/extensions/${extPath}/style.css"]`).length) {
+       const existingCss = $(`link[href*="/scripts/extensions/${extPath}/style.css"]`);
+       if (existingCss.length) {
+           existingCss.attr('href', cssPath);
+       }
+       else {
            $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
        }
        // Nạp thư viện Lucide Icon
