@@ -35,7 +35,7 @@ export class WebImageBridge {
         this.isInitialized = true;
 
         window.addEventListener('message', (event) => {
-            if (event.source !== window || !event.data) return;
+            if (!event.data || !event.data.type) return;
 
             const { type, payload } = event.data;
 
@@ -59,6 +59,7 @@ export class WebImageBridge {
 
             // 3. Nhận kết quả vẽ ảnh từ Web
             if (type === 'KAIZ_BRIDGE_IMAGE_RESPONSE' && payload) {
+                console.log('[WebImageBridge] Nhận kết quả ảnh từ Userscript:', payload.id, payload.status);
                 const job = this.pendingJobs.get(payload.id);
                 if (job) {
                     clearTimeout(job.timer);
@@ -121,6 +122,7 @@ export class WebImageBridge {
 
             this.pendingJobs.set(jobId, { resolve, reject, timer });
 
+            console.log('[WebImageBridge] 🚀 Gửi job sang Userscript:', jobId, target, req.prompt);
             window.postMessage(
                 {
                     type: 'KAIZ_BRIDGE_IMAGE_REQUEST',

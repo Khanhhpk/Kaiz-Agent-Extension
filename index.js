@@ -5128,7 +5128,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                return;
            this.isInitialized = true;
            window.addEventListener('message', (event) => {
-               if (event.source !== window || !event.data)
+               if (!event.data || !event.data.type)
                    return;
                const { type, payload } = event.data;
                // 1. Nhận PONG từ Userscript
@@ -5150,6 +5150,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                }
                // 3. Nhận kết quả vẽ ảnh từ Web
                if (type === 'KAIZ_BRIDGE_IMAGE_RESPONSE' && payload) {
+                   console.log('[WebImageBridge] Nhận kết quả ảnh từ Userscript:', payload.id, payload.status);
                    const job = this.pendingJobs.get(payload.id);
                    if (job) {
                        clearTimeout(job.timer);
@@ -5200,6 +5201,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    reject(new Error(`Hết thời gian chờ (${Math.round(timeoutMs / 1000)}s). Vui lòng đảm bảo bạn đã mở 1 tab Gemini Web (gemini.google.com) hoặc ChatGPT Web (chatgpt.com) và đã cài đặt Userscript Kaiz Bridge.`));
                }, timeoutMs);
                this.pendingJobs.set(jobId, { resolve, reject, timer });
+               console.log('[WebImageBridge] 🚀 Gửi job sang Userscript:', jobId, target, req.prompt);
                window.postMessage({
                    type: 'KAIZ_BRIDGE_IMAGE_REQUEST',
                    payload: {
@@ -11865,7 +11867,24 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                WebImageBridge.init();
                if (typeof ctx.registerSlashCommand === 'function') {
                    ctx.registerSlashCommand('draw', async (args, value) => {
-                       const prompt = (value || '').trim();
+                       console.log('[Kaiz Slash /draw] raw args:', args, 'raw value:', value);
+                       let prompt = '';
+                       if (typeof value === 'string' && value.trim()) {
+                           prompt = value.trim();
+                       }
+                       else if (typeof args === 'string' && args.trim()) {
+                           prompt = args.trim();
+                       }
+                       else if (args && typeof args === 'object') {
+                           if (typeof args.text === 'string')
+                               prompt = args.text.trim();
+                           else if (typeof args.prompt === 'string')
+                               prompt = args.prompt.trim();
+                           else if (typeof args.unnamed === 'string')
+                               prompt = args.unnamed.trim();
+                           else if (Array.isArray(args._))
+                               prompt = args._.join(' ').trim();
+                       }
                        if (!prompt) {
                            if (typeof toastr !== 'undefined') {
                                toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw a cute cat)');

@@ -186,7 +186,19 @@ jQuery(async () => {
                 ctx.registerSlashCommand(
                     'draw',
                     async (args: any, value: string) => {
-                        const prompt = (value || '').trim();
+                        console.log('[Kaiz Slash /draw] raw args:', args, 'raw value:', value);
+                        let prompt = '';
+                        if (typeof value === 'string' && value.trim()) {
+                            prompt = value.trim();
+                        } else if (typeof args === 'string' && args.trim()) {
+                            prompt = args.trim();
+                        } else if (args && typeof args === 'object') {
+                            if (typeof args.text === 'string') prompt = args.text.trim();
+                            else if (typeof args.prompt === 'string') prompt = args.prompt.trim();
+                            else if (typeof args.unnamed === 'string') prompt = args.unnamed.trim();
+                            else if (Array.isArray(args._)) prompt = args._.join(' ').trim();
+                        }
+
                         if (!prompt) {
                             if (typeof toastr !== 'undefined') {
                                 toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw a cute cat)');
