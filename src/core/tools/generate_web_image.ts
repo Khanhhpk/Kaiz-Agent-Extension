@@ -50,12 +50,58 @@ export const generateWebImageTool: ITool = {
                 .replace(/>/g, '&gt;');
             const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic;">🎨 ${safePrompt}</div></div>`;
 
+            // Dán trực tiếp bức ảnh vào chính văn SillyTavern chat
+            let messageSent = false;
+            try {
+                const ctx =
+                    typeof (globalThis as any).SillyTavern !== 'undefined'
+                        ? (globalThis as any).SillyTavern.getContext()
+                        : ((globalThis as any).window?.SillyTavern?.getContext?.() || null);
+
+                if (ctx) {
+                    if (typeof ctx.sendSystemMessage === 'function') {
+                        try {
+                            ctx.sendSystemMessage('generic', markdownImage);
+                            messageSent = true;
+                        } catch (err) {
+                            try {
+                                ctx.sendSystemMessage(markdownImage);
+                                messageSent = true;
+                            } catch (e2) {
+                                /* ignore */
+                            }
+                        }
+                    }
+
+                    if (!messageSent && typeof ctx.addOneMessage === 'function') {
+                        ctx.addOneMessage({
+                            is_user: false,
+                            is_system: true,
+                            name: 'Web Image Bridge',
+                            mes: markdownImage,
+                            send_date: Date.now(),
+                        });
+                        if (typeof ctx.saveChat === 'function') {
+                            ctx.saveChat();
+                        }
+                        if (typeof ctx.scrollChatToBottom === 'function') {
+                            ctx.scrollChatToBottom();
+                        }
+                        messageSent = true;
+                    }
+                }
+            } catch (postErr) {
+                console.warn('[Tool: generate_web_image] Lỗi khi dán ảnh vào chính văn chat:', postErr);
+            }
+
+            // QUAN TRỌNG: Tuyệt đối KHÔNG trả chuỗi Base64 hàng triệu ký tự về cho LLM
+            // Trả chuỗi gọn nhẹ để LLM tiếp tục mạch hội thoại mà không bị lỗi tràn 1 triệu token (HTTP 400)
             return {
                 content: JSON.stringify({
                     success: true,
-                    message: 'Đã sinh ảnh thành công từ Web.',
-                    markdown: markdownImage,
-                    preview_length: base64.length,
+                    message: 'Đã sinh ảnh thành công và nhúng trực tiếp bức ảnh vào khung chat chính cho người dùng xem.',
+                    prompt: prompt,
+                    posted_to_chat: messageSent,
                 }),
                 isError: false,
             };

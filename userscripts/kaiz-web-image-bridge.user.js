@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.2
+// @version      1.2.3
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -48,8 +48,10 @@
                     prompt: job.prompt,
                     timestamp: Date.now(),
                 });
+                // Phát xung Kickstart tức thì để đánh thức tab Web chạy ngầm
+                GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.2' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.3' }, '*');
             }
         });
 
@@ -99,6 +101,102 @@
 
     const TAB_ID = 'tab_' + Math.random().toString(36).substring(2, 9);
     console.log(`[Kaiz Bridge] 🌐 Web Adapter active for: ${CURRENT_TARGET} (Tab ID: ${TAB_ID})`);
+
+    // =========================================================================
+    // HỆ THỐNG CHỐNG SLEEP & KICKSTART LIÊN TỤC TRONG BACKGROUND TAB
+    // =========================================================================
+
+    // 1. Visibility Spoofing: Đánh lừa trình duyệt và Angular luôn thấy tab ở trạng thái Visible & Focused
+    try {
+        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+        const setProp = (target, prop, val) => {
+            try {
+                Object.defineProperty(target, prop, { get: () => val, configurable: true });
+            } catch (e) {}
+        };
+
+        setProp(document, 'hidden', false);
+        setProp(document, 'visibilityState', 'visible');
+        setProp(document, 'webkitVisibilityState', 'visible');
+
+        if (win && win.document) {
+            setProp(win.document, 'hidden', false);
+            setProp(win.document, 'visibilityState', 'visible');
+            setProp(win.document, 'webkitVisibilityState', 'visible');
+        }
+
+        // Chặn sự kiện visibilitychange khi nó cố báo hiệu tab đã bị ẩn
+        const preventHide = (e) => {
+            if (document.visibilityState === 'hidden' || (e && e.target && e.target.hidden)) {
+                e.stopImmediatePropagation();
+            }
+        };
+        window.addEventListener('visibilitychange', preventHide, true);
+        if (win) win.addEventListener('visibilitychange', preventHide, true);
+    } catch (e) {
+        console.warn('[Kaiz Bridge] Visibility spoofing error:', e);
+    }
+
+    // 2. Silent Web Audio Keep-Alive: Cơ chế vàng trong Chromium để miễn trừ bóp nghẹt tài nguyên tab
+    let silentAudioCtx = null;
+    const initSilentAudioKeepAlive = () => {
+        try {
+            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            const AudioCtxClass = win.AudioContext || win.webkitAudioContext;
+            if (!AudioCtxClass) return;
+
+            const startAudio = () => {
+                try {
+                    if (silentAudioCtx && silentAudioCtx.state === 'running') return;
+                    silentAudioCtx = new AudioCtxClass();
+                    const osc = silentAudioCtx.createOscillator();
+                    const gain = silentAudioCtx.createGain();
+                    gain.gain.value = 0.00001; // Hoàn toàn không nghe thấy tiếng (silent)
+                    osc.connect(gain);
+                    gain.connect(silentAudioCtx.destination);
+                    osc.start();
+                    console.log('[Kaiz Bridge] 🔊 Silent Audio Keep-Alive activated.');
+                } catch (e) {
+                    /* ignore */
+                }
+            };
+
+            ['click', 'keydown', 'mousedown', 'pointerdown', 'touchstart'].forEach((evt) => {
+                window.addEventListener(evt, startAudio, { once: true, capture: true });
+                if (win) win.addEventListener(evt, startAudio, { once: true, capture: true });
+            });
+
+            startAudio();
+        } catch (e) {
+            /* ignore */
+        }
+    };
+    initSilentAudioKeepAlive();
+
+    // 3. Hàm Kickstart: Đánh thức tab và kích hoạt lại các vòng lặp sự kiện
+    const kickstartTab = () => {
+        try {
+            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+            window.focus();
+            if (win) win.focus();
+            window.dispatchEvent(new Event('focus'));
+            document.dispatchEvent(new Event('focus'));
+            window.dispatchEvent(new Event('visibilitychange'));
+            document.dispatchEvent(new Event('visibilitychange'));
+
+            if (silentAudioCtx && silentAudioCtx.state === 'suspended') {
+                silentAudioCtx.resume().catch(() => {});
+            }
+        } catch (e) {
+            /* ignore */
+        }
+    };
+
+    // Lắng nghe xung Kickstart từ SillyTavern để đánh thức tab ngay lập tức
+    GM_addValueChangeListener('KAIZ_KICKSTART_PULSE', () => {
+        console.log(`[Kaiz Bridge][${CURRENT_TARGET}] ⚡ Nhận xung Kickstart từ SillyTavern! Đánh thức tab...`);
+        kickstartTab();
+    });
 
     // Phát nhịp tim mỗi 3 giây để SillyTavern nhận diện tab đang mở
     setInterval(() => {
@@ -151,6 +249,9 @@
     // Bộ điều phối thực thi job (Tránh xung đột đa tab & Chạy mượt trong Background Tab)
     async function handleIncomingJob(job) {
         if (!job || !job.id || !job.prompt) return;
+
+        // Kickstart đánh thức tab ngay khi có job tới
+        kickstartTab();
 
         // Đã từng xử lý job này rồi -> Bỏ qua tuyệt đối
         if (handledJobIds.has(job.id)) return;
