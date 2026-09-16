@@ -40,6 +40,7 @@ import { listWorkspacesTool, switchWorkspaceTool, createWorkspaceTool } from './
 import { stThemeManagerTool } from './st_theme_manager';
 import { stCSSManagerTool } from './st_css_manager';
 import { stInjectElementTool } from './st_inject_element';
+import { generateWebImageTool } from './generate_web_image';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -88,4 +89,5 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(stThemeManagerTool);
     registry.registerTool(stCSSManagerTool);
     registry.registerTool(stInjectElementTool);
+    registry.registerTool(generateWebImageTool);
 }

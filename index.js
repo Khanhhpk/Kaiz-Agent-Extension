@@ -5115,6 +5115,162 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        },
    };
 
+   class WebImageBridge {
+       static pendingJobs = new Map();
+       static status = {
+           userscriptInstalled: false,
+           geminiOnline: false,
+           chatgptOnline: false,
+       };
+       static isInitialized = false;
+       static init() {
+           if (this.isInitialized)
+               return;
+           this.isInitialized = true;
+           window.addEventListener('message', (event) => {
+               if (event.source !== window || !event.data)
+                   return;
+               const { type, payload } = event.data;
+               // 1. Nhận PONG từ Userscript
+               if (type === 'KAIZ_BRIDGE_PONG') {
+                   this.status.userscriptInstalled = true;
+               }
+               // 2. Nhận Heartbeat từ tab Web
+               if (type === 'KAIZ_BRIDGE_HEARTBEAT_UPDATE' && payload) {
+                   this.status.userscriptInstalled = true;
+                   const now = Date.now();
+                   if (payload.target === 'gemini') {
+                       this.status.geminiOnline = true;
+                       this.status.lastGeminiSeen = now;
+                   }
+                   else if (payload.target === 'chatgpt') {
+                       this.status.chatgptOnline = true;
+                       this.status.lastChatgptSeen = now;
+                   }
+               }
+               // 3. Nhận kết quả vẽ ảnh từ Web
+               if (type === 'KAIZ_BRIDGE_IMAGE_RESPONSE' && payload) {
+                   const job = this.pendingJobs.get(payload.id);
+                   if (job) {
+                       clearTimeout(job.timer);
+                       this.pendingJobs.delete(payload.id);
+                       if (payload.status === 'success' && payload.base64) {
+                           job.resolve(payload.base64);
+                       }
+                       else {
+                           job.reject(new Error(payload.error || 'Lỗi không xác định khi sinh ảnh từ Web.'));
+                       }
+                   }
+               }
+           });
+           // Ping kiểm tra Userscript mỗi 5s và kiểm tra offline
+           setInterval(() => {
+               window.postMessage({ type: 'KAIZ_BRIDGE_PING' }, '*');
+               const now = Date.now();
+               // Nếu quá 10s không thấy heartbeat thì đánh dấu offline
+               if (this.status.lastGeminiSeen && now - this.status.lastGeminiSeen > 10000) {
+                   this.status.geminiOnline = false;
+               }
+               if (this.status.lastChatgptSeen && now - this.status.lastChatgptSeen > 10000) {
+                   this.status.chatgptOnline = false;
+               }
+           }, 5000);
+           // Ping ngay lần đầu
+           window.postMessage({ type: 'KAIZ_BRIDGE_PING' }, '*');
+           console.log('[WebImageBridge] Initialized.');
+       }
+       static getStatus() {
+           return { ...this.status };
+       }
+       static async requestImage(req) {
+           this.init();
+           const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+           const timeoutMs = req.timeoutMs || 75000;
+           const target = req.target || 'auto';
+           // Cảnh báo sớm nếu tab tương ứng chưa mở
+           if (target === 'gemini' && !this.status.geminiOnline) {
+               console.warn('[WebImageBridge] Cảnh báo: Tab Gemini Web có thể chưa mở.');
+           }
+           else if (target === 'chatgpt' && !this.status.chatgptOnline) {
+               console.warn('[WebImageBridge] Cảnh báo: Tab ChatGPT Web có thể chưa mở.');
+           }
+           return new Promise((resolve, reject) => {
+               const timer = setTimeout(() => {
+                   this.pendingJobs.delete(jobId);
+                   reject(new Error(`Hết thời gian chờ (${Math.round(timeoutMs / 1000)}s). Vui lòng đảm bảo bạn đã mở 1 tab Gemini Web (gemini.google.com) hoặc ChatGPT Web (chatgpt.com) và đã cài đặt Userscript Kaiz Bridge.`));
+               }, timeoutMs);
+               this.pendingJobs.set(jobId, { resolve, reject, timer });
+               window.postMessage({
+                   type: 'KAIZ_BRIDGE_IMAGE_REQUEST',
+                   payload: {
+                       id: jobId,
+                       target: target,
+                       prompt: req.prompt,
+                   },
+               }, '*');
+           });
+       }
+   }
+
+   const generateWebImageTool = {
+       schema: {
+           name: 'generate_web_image',
+           description: 'CÔNG CỤ SINH ẢNH MINH HỌA WEB (Gemini Imagen 3 / ChatGPT DALL-E 3). Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt bằng tiếng Anh thật chi tiết, giàu tính mô tả (ánh sáng, phong cách nghệ thuật, góc máy, chi tiết nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
+           parameters: {
+               type: 'object',
+               properties: {
+                   prompt: {
+                       type: 'string',
+                       description: 'Câu lệnh prompt mô tả bức ảnh chi tiết bằng tiếng Anh (ví dụ: "cinematic anime illustration of a silver-haired knight resting under a blooming cherry blossom tree at sunset, soft volumetric lighting, highly detailed, 8k resolution").',
+                   },
+                   target: {
+                       type: 'string',
+                       enum: ['gemini', 'chatgpt', 'auto'],
+                       description: 'Nền tảng sinh ảnh mong muốn: "gemini" (Imagen 3 - nhanh, miễn phí) hoặc "chatgpt" (DALL-E 3 / GPT-4o). Mặc định là "auto".',
+                   },
+               },
+               required: ['prompt'],
+           },
+       },
+       execute: async (args) => {
+           try {
+               const prompt = args.prompt;
+               if (!prompt || typeof prompt !== 'string') {
+                   return {
+                       content: JSON.stringify({ error: "Tham số 'prompt' là bắt buộc." }),
+                       isError: true,
+                   };
+               }
+               const target = args.target || 'auto';
+               console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, prompt);
+               const base64 = await WebImageBridge.requestImage({
+                   prompt,
+                   target,
+                   timeoutMs: 80000,
+               });
+               const markdownImage = `\n\n![Generated Image](${base64})\n\n`;
+               return {
+                   content: JSON.stringify({
+                       success: true,
+                       message: 'Đã sinh ảnh thành công từ Web.',
+                       markdown: markdownImage,
+                       preview_length: base64.length,
+                   }),
+                   isError: false,
+               };
+           }
+           catch (err) {
+               console.error('[Tool: generate_web_image] Thất bại:', err);
+               return {
+                   content: JSON.stringify({
+                       error: err.message || 'Lỗi không xác định khi sinh ảnh từ Web.',
+                   }),
+                   isError: true,
+               };
+           }
+       },
+   };
+
    /**
     * Đăng ký tất cả các tools mặc định vào Registry
     */
@@ -5161,6 +5317,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        registry.registerTool(stThemeManagerTool);
        registry.registerTool(stCSSManagerTool);
        registry.registerTool(stInjectElementTool);
+       registry.registerTool(generateWebImageTool);
    }
 
    /**
@@ -8346,6 +8503,69 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                }, 2000);
            });
            // --- END BROWSER SETUP LOGIC ---
+           // --- WEB IMAGE BRIDGE LOGIC ---
+           $('#kaiz-enable-web-image-bridge').prop('checked', !!settings.webImageBridgeEnabled);
+           $('#kaiz-enable-web-image-bridge').on('change', function () {
+               settings.webImageBridgeEnabled = !!this.checked;
+               ctx.saveSettingsDebounced();
+               if (settings.webImageBridgeEnabled) {
+                   delete settings.disabledTools['generate_web_image'];
+               }
+               else {
+                   settings.disabledTools['generate_web_image'] = true;
+               }
+               renderTools();
+           });
+           $('#kaiz-web-image-provider').val(settings.webImageProvider || 'auto');
+           $('#kaiz-web-image-provider').on('change', function () {
+               settings.webImageProvider = this.value || 'auto';
+               ctx.saveSettingsDebounced();
+           });
+           const updateBridgeStatusUI = () => {
+               const status = WebImageBridge.getStatus();
+               const $userScriptStatus = $('#kaiz-bridge-status-userscript');
+               const $geminiStatus = $('#kaiz-bridge-status-gemini');
+               const $chatgptStatus = $('#kaiz-bridge-status-chatgpt');
+               if (status.userscriptInstalled) {
+                   $userScriptStatus
+                       .removeClass('badge-neutral badge-danger')
+                       .addClass('badge-success')
+                       .html('<i class="fa-solid fa-circle-check"></i> Đã cài đặt');
+               }
+               else {
+                   $userScriptStatus
+                       .removeClass('badge-success')
+                       .addClass('badge-neutral')
+                       .html('<i class="fa-solid fa-circle-question"></i> Đang kiểm tra...');
+               }
+               if (status.geminiOnline) {
+                   $geminiStatus
+                       .removeClass('badge-danger')
+                       .addClass('badge-success')
+                       .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+               }
+               else {
+                   $geminiStatus
+                       .removeClass('badge-success')
+                       .addClass('badge-danger')
+                       .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+               }
+               if (status.chatgptOnline) {
+                   $chatgptStatus
+                       .removeClass('badge-danger')
+                       .addClass('badge-success')
+                       .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+               }
+               else {
+                   $chatgptStatus
+                       .removeClass('badge-success')
+                       .addClass('badge-danger')
+                       .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+               }
+           };
+           setInterval(updateBridgeStatusUI, 2500);
+           updateBridgeStatusUI();
+           // --- END WEB IMAGE BRIDGE LOGIC ---
            // Lắng nghe chọn từ Dropdown -> Cập nhật Input
            $('#kaiz-custom-model').on('change', function () {
                if (this.value) {
@@ -11549,6 +11769,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                safeModeBlacklist: {},
                quickPrompts: [],
                enableBrowser: false,
+               webImageBridgeEnabled: true,
+               webImageProvider: 'auto',
            };
        }
        else {
@@ -11587,6 +11809,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            }
            if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
                ctx.extensionSettings[EXT_NAME].enableBrowser = false;
+           }
+           if (ctx.extensionSettings[EXT_NAME].webImageBridgeEnabled === undefined) {
+               ctx.extensionSettings[EXT_NAME].webImageBridgeEnabled = true;
+           }
+           if (ctx.extensionSettings[EXT_NAME].webImageProvider === undefined) {
+               ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
            }
        }
        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
@@ -11633,6 +11861,46 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                // Bắt đầu Auto Tasks sau khi DB đã init
                const allTasks = await stateManager.db.getAllAutoTasks();
                await autoTaskScheduler.start(allTasks);
+               // Khởi tạo Web Image Bridge & Slash Command /draw
+               WebImageBridge.init();
+               if (typeof ctx.registerSlashCommand === 'function') {
+                   ctx.registerSlashCommand('draw', async (args, value) => {
+                       const prompt = (value || '').trim();
+                       if (!prompt) {
+                           if (typeof toastr !== 'undefined') {
+                               toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw a cute cat)');
+                           }
+                           return;
+                       }
+                       if (typeof toastr !== 'undefined') {
+                           toastr.info('Đang gửi prompt vẽ ảnh sang Web (Gemini/ChatGPT)...');
+                       }
+                       try {
+                           const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
+                           const base64 = await WebImageBridge.requestImage({ prompt, target });
+                           const markdown = `\n\n![Draw: ${prompt}](${base64})\n\n`;
+                           if (typeof ctx.sendSystemMessage === 'function') {
+                               ctx.sendSystemMessage(markdown);
+                           }
+                           else if (typeof ctx.addOneMessage === 'function') {
+                               ctx.addOneMessage({
+                                   is_user: false,
+                                   name: 'Web Image Bridge',
+                                   mes: markdown,
+                                   send_date: Date.now(),
+                               });
+                           }
+                           if (typeof toastr !== 'undefined') {
+                               toastr.success('Đã vẽ ảnh thành công!');
+                           }
+                       }
+                       catch (e) {
+                           if (typeof toastr !== 'undefined') {
+                               toastr.error(`Vẽ ảnh thất bại: ${e.message}`);
+                           }
+                       }
+                   }, [], '<mô_tả_ảnh>', 'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Imagen 3 / ChatGPT DALL-E 3)', true);
+               }
            }
            else {
                console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');

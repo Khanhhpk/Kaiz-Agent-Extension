@@ -15,6 +15,7 @@ import { initThemeManagerTool } from './core/tools/st_theme_manager';
 import { initCSSManagerTool } from './core/tools/st_css_manager';
 import { initInjectElementTool } from './core/tools/st_inject_element';
 import { UICustomizationModal } from './ui/ui_customization_modal';
+import { WebImageBridge } from './core/web_image_bridge';
 
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
@@ -51,6 +52,7 @@ try {
 
 declare const jQuery: any;
 declare const SillyTavern: any;
+declare const toastr: any;
 
 jQuery(async () => {
     console.log('[KaizAgent] Initializing extension core...');
@@ -77,6 +79,8 @@ jQuery(async () => {
             safeModeBlacklist: {},
             quickPrompts: [],
             enableBrowser: false,
+            webImageBridgeEnabled: true,
+            webImageProvider: 'auto',
         };
     } else {
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
@@ -114,6 +118,12 @@ jQuery(async () => {
         }
         if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
             ctx.extensionSettings[EXT_NAME].enableBrowser = false;
+        }
+        if (ctx.extensionSettings[EXT_NAME].webImageBridgeEnabled === undefined) {
+            ctx.extensionSettings[EXT_NAME].webImageBridgeEnabled = true;
+        }
+        if (ctx.extensionSettings[EXT_NAME].webImageProvider === undefined) {
+            ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
         }
     }
 
@@ -169,6 +179,53 @@ jQuery(async () => {
             // Bắt đầu Auto Tasks sau khi DB đã init
             const allTasks = await stateManager.db.getAllAutoTasks();
             await autoTaskScheduler.start(allTasks);
+
+            // Khởi tạo Web Image Bridge & Slash Command /draw
+            WebImageBridge.init();
+            if (typeof ctx.registerSlashCommand === 'function') {
+                ctx.registerSlashCommand(
+                    'draw',
+                    async (args: any, value: string) => {
+                        const prompt = (value || '').trim();
+                        if (!prompt) {
+                            if (typeof toastr !== 'undefined') {
+                                toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw a cute cat)');
+                            }
+                            return;
+                        }
+                        if (typeof toastr !== 'undefined') {
+                            toastr.info('Đang gửi prompt vẽ ảnh sang Web (Gemini/ChatGPT)...');
+                        }
+                        try {
+                            const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
+                            const base64 = await WebImageBridge.requestImage({ prompt, target });
+                            const markdown = `\n\n![Draw: ${prompt}](${base64})\n\n`;
+
+                            if (typeof ctx.sendSystemMessage === 'function') {
+                                ctx.sendSystemMessage(markdown);
+                            } else if (typeof ctx.addOneMessage === 'function') {
+                                ctx.addOneMessage({
+                                    is_user: false,
+                                    name: 'Web Image Bridge',
+                                    mes: markdown,
+                                    send_date: Date.now(),
+                                });
+                            }
+                            if (typeof toastr !== 'undefined') {
+                                toastr.success('Đã vẽ ảnh thành công!');
+                            }
+                        } catch (e: any) {
+                            if (typeof toastr !== 'undefined') {
+                                toastr.error(`Vẽ ảnh thất bại: ${e.message}`);
+                            }
+                        }
+                    },
+                    [],
+                    '<mô_tả_ảnh>',
+                    'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Imagen 3 / ChatGPT DALL-E 3)',
+                    true,
+                );
+            }
         } else {
             console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');
         }
