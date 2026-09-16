@@ -16,7 +16,7 @@ export const getRegexInfoTool: ITool = {
             required: ['id'],
         },
     },
-    execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (args: Record<string, any>, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             if (!args.id) {
                 return { isError: true, content: 'Thiếu tham số bắt buộc: id' };

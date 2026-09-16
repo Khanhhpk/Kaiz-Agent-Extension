@@ -183,7 +183,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    const args = JSON.parse(argsStr);
                    tools.push({ name, args, fullMatch: match[0] });
                }
-               catch (e) {
+               catch {
                    console.error(`[AgentLoop] Failed to parse JSON for tool ${name}:`, argsStr);
                    // Đẩy lỗi parse vào danh sách thay vì bỏ qua âm thầm
                    tools.push({
@@ -1068,7 +1068,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                const screenWidth = $(window).width() || 1920;
                const screenHeight = $(window).height() || 1080;
                let top = btnRect.top - popupHeight / 2 + btnRect.height / 2;
-               let left = 0;
+               let left;
                // Mũi tên (Speech bubble tail)
                const arrow = $('<div class="kaiz-sys-arrow"></div>');
                arrow.css({
@@ -1989,7 +1989,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                                extractedLinks.push({ text, url: absoluteUrl });
                            }
                        }
-                       catch (e) {
+                       catch {
                            // Ignore invalid URLs
                        }
                    }
@@ -2159,7 +2159,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        if (res.ok)
                            return await res.text();
                    }
-                   catch (_e) {
+                   catch {
                        /* ignore */
                    }
                    return '';
@@ -2178,14 +2178,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    if (googleRes.ok)
                        googleHtml = await googleRes.text();
                }
-               catch (_e) {
+               catch {
                    try {
                        const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(googleUrl)}`;
                        const proxyRes = await fetch(proxyUrl);
                        if (proxyRes.ok)
                            googleHtml = await proxyRes.text();
                    }
-                   catch (_e2) {
+                   catch {
                        /* ignore */
                    }
                }
@@ -2324,7 +2324,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    try {
                        const ddgRes = await fetch(ddgPostUrl, {
                            method: 'POST',
-                           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                           headers: {
+                               'Content-Type': 'application/x-www-form-urlencoded',
+                           },
                            body: `q=${encodedQuery}`,
                        });
                        if (ddgRes.ok)
@@ -2332,7 +2334,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        else
                            throw new Error('DDG HTML POST Not OK');
                    }
-                   catch (_e) {
+                   catch {
                        try {
                            const ddgLiteUrl = `https://lite.duckduckgo.com/lite/?q=${encodedQuery}`;
                            const ddgProxyUrl = `https://corsproxy.io/?${encodeURIComponent(ddgLiteUrl)}`;
@@ -2340,7 +2342,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            if (proxyRes.ok)
                                ddgHtml = await proxyRes.text();
                        }
-                       catch (_e2) {
+                       catch {
                            /* ignore */
                        }
                    }
@@ -2423,7 +2425,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: [],
            },
        },
-       execute: async (args) => {
+       execute: async (_args) => {
            let cursor = document.getElementById('kaiz-virtual-cursor');
            if (cursor) {
                cursor.remove();
@@ -2453,7 +2455,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        }
                    }
                }
-               catch (e) { }
+               catch {
+                   /* ignore */
+               }
                // Spawn mới
                cursor = document.createElement('div');
                cursor.id = 'kaiz-virtual-cursor';
@@ -2583,7 +2587,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            }
                        }
                    }
-                   catch (e) { }
+                   catch {
+                       /* ignore */
+                   }
                    cursor = document.createElement('div');
                    cursor.id = 'kaiz-virtual-cursor';
                    cursor.innerHTML = `<img src="/scripts/extensions/${extPath}/assets/gura_cursor.gif" style="width: 32px; height: 32px; pointer-events: none;" />`;
@@ -2649,7 +2655,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: [],
            },
        },
-       execute: async (args) => {
+       execute: async (_args) => {
            try {
                const interactables = document.querySelectorAll('button, a, input, select, textarea, .interactable, [title], .menu_button, .drawer-toggle, .fa-solid, .fa-regular');
                let counter = 1;
@@ -2702,7 +2708,6 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            el.getAttribute('data-title')?.trim() ||
                            '';
                        const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                       const value = el.value || ''; // Không trim để giữ khoảng trắng hợp lệ
                        let description = text || title || ariaLabel;
                        if (!description && el.tagName === 'INPUT') {
                            description = el.getAttribute('placeholder') || 'Input field';
@@ -3062,7 +3067,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                properties: {},
            },
        },
-       execute: async (args, context) => {
+       execute: async (_args, _context) => {
            try {
                // Sử dụng Function để bypass trình biên dịch TypeScript không nhận dạng được đường dẫn module tương đối của máy chủ
                const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
@@ -3141,7 +3146,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['id'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                if (!args.id) {
                    return { isError: true, content: 'Thiếu tham số bắt buộc: id' };
@@ -3226,7 +3231,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['action'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                const { action, id, scope, data } = args;
                // Bypass TypeScript
@@ -3391,7 +3396,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
        validate: () => {
            return; // Luôn dùng được trên trình duyệt có jQuery
        },
-       execute: async (args, context) => {
+       execute: async (_args, _context) => {
            try {
                const reqHeaders = {
                    'Content-Type': 'application/json',
@@ -3418,7 +3423,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            reqHeaders['X-CSRF-Token'] = token;
                    }
                }
-               catch (e) { }
+               catch {
+                   /* ignore */
+               }
                let namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension', '/Kaiz-Agent-Extension'];
                const extTypes = window.extensionTypes || window.SillyTavern?.getContext?.()?.extensionTypes;
                if (extTypes) {
@@ -3479,7 +3486,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                                }
                            }
                        }
-                       catch (e) { }
+                       catch {
+                           /* ignore */
+                       }
                    }
                    if (updateFound)
                        break;
@@ -3522,7 +3531,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                properties: {},
            },
        },
-       execute: async (args, context) => {
+       execute: async (_args, _context) => {
            try {
                const th = window.TavernHelper;
                if (!th) {
@@ -3613,7 +3622,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['id'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                const th = window.TavernHelper;
                if (!th) {
@@ -3656,7 +3665,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            break;
                        }
                    }
-                   catch (e) { }
+                   catch {
+                       /* ignore */
+                   }
                }
                if (!foundScript) {
                    return { isError: true, content: `Không tìm thấy Script nào với ID: ${id}` };
@@ -3709,7 +3720,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                required: ['action'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            try {
                const th = window.TavernHelper;
                if (!th) {
@@ -3813,7 +3824,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            if (found)
                                return s;
                        }
-                       catch (e) { }
+                       catch {
+                           /* ignore */
+                       }
                    }
                    return null;
                };
@@ -3990,7 +4003,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                        try {
                            tab.iframe.contentWindow?.location.reload();
                        }
-                       catch (e) {
+                       catch {
                            // eslint-disable-next-line no-self-assign
                            tab.iframe.src = tab.iframe.src; // Fallback for cross-origin
                        }
@@ -4015,7 +4028,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                            tab.iframe.style.filter = ''; // Xóa hack CSS cũ
                            tab.iframe.contentWindow?.postMessage({ type: 'KAIZ_TOGGLE_DARK_MODE' }, '*');
                        }
-                       catch (e) {
+                       catch {
                            // Bỏ qua lỗi CORS
                        }
                    }
@@ -4302,7 +4315,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                }
                localStorage.setItem('kaiz_web_history', JSON.stringify(history));
            }
-           catch (e) { }
+           catch {
+               /* ignore */
+           }
        }
        static renderHistoryModal() {
            const $ = jQuery;
@@ -4330,7 +4345,9 @@ CÁC CÔNG CỤ HIỆN CÓ:
                    $list.append($el);
                });
            }
-           catch (e) { }
+           catch {
+               /* ignore */
+           }
        }
        static initResizer() {
            const $ = jQuery;
@@ -4427,7 +4444,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                required: ['action'],
            },
        },
-       execute: async (args, context) => {
+       execute: async (args, _context) => {
            const action = args.action;
            try {
                switch (action) {
@@ -5259,7 +5276,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                                        if (onUpdate)
                                            onUpdate(text, reasoning);
                                    }
-                                   catch (e) { }
+                                   catch {
+                                       /* ignore non-json SSE */
+                                   }
                                }
                            }
                        }
@@ -5987,7 +6006,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                try {
                    ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
                }
-               catch (e) {
+               catch {
                    console.warn('[KaizAgent] Could not dynamically import world-info.js');
                }
                const names = new Set();
@@ -6244,7 +6263,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                try {
                    ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
                }
-               catch (e) {
+               catch {
                    return '[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).';
                }
                if (typeof ST_WorldInfo.loadWorldInfo !== 'function' || typeof ST_WorldInfo.saveWorldInfo !== 'function') {
@@ -6430,7 +6449,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                                ctx.eventSource.emit(ctx.eventTypes.WORLDINFO_SETTINGS_UPDATED);
                            }
                        }
-                       catch (_) { }
+                       catch {
+                           /* ignore */
+                       }
                    }
                    if (state === 'enable') {
                        return index === -1
@@ -7579,6 +7600,24 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                return;
            }
            const settings = ctx.extensionSettings[EXT_NAME];
+           // --- TAB SWITCHING CONTROLLER ---
+           const savedTab = localStorage.getItem('kaiz_active_settings_tab') || 'model';
+           const switchTab = (tabName) => {
+               $('.kaiz-tab-btn').removeClass('active');
+               $(`.kaiz-tab-btn[data-tab="${tabName}"]`).addClass('active');
+               $('.kaiz-tab-pane').removeClass('active');
+               $(`#kaiz-pane-${tabName}`).addClass('active');
+               localStorage.setItem('kaiz_active_settings_tab', tabName);
+               if (window.lucide) {
+                   window.lucide.createIcons();
+               }
+           };
+           $('.kaiz-tab-btn').on('click', function () {
+               const tab = $(this).data('tab');
+               if (tab)
+                   switchTab(tab);
+           });
+           switchTab(savedTab);
            // Gán giá trị mặc định lên UI
            $('#kaiz-custom-url').val(settings.customUrl || '');
            $('#kaiz-custom-key').val(settings.customKey || '');
@@ -7677,6 +7716,20 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
                        win.draggable('enable');
                    }
+                   const savedSize = localStorage.getItem('kaiz_win_size');
+                   if (savedSize) {
+                       try {
+                           const parsed = JSON.parse(savedSize);
+                           if (parsed.width && parsed.height) {
+                               const clampedW = Math.max(360, Math.min(parsed.width, window.innerWidth - 20));
+                               const clampedH = Math.max(420, Math.min(parsed.height, window.innerHeight - 20));
+                               win.css({ width: `${clampedW}px`, height: `${clampedH}px` });
+                           }
+                       }
+                       catch {
+                           // ignore
+                       }
+                   }
                    if (isOpen) {
                        dialogEl.close();
                        dialogEl.show();
@@ -7713,12 +7766,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    }
                    const isBlacklisted = !!settings.safeModeBlacklist[name];
                    const $toolItem = $(`
-                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-                        <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} style="margin-top: 3px;" />
-                        <div style="flex: 1;">
-                            <label for="kaiz-safe-tool-${name}" style="font-weight: bold; cursor: pointer; color: ${isBlacklisted ? '#e74c3c' : '#888'}; display: block;">${name}</label>
-                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                    <div class="kaiz-tool-card">
+                        <div class="kaiz-tool-info">
+                            <div class="kaiz-tool-header">
+                                <label for="kaiz-safe-tool-${name}" class="kaiz-tool-name" style="cursor: pointer;">${name}</label>
+                                ${isBlacklisted ? '<span class="kaiz-tool-blacklist-tag">Blacklisted</span>' : ''}
+                            </div>
+                            <div class="kaiz-tool-desc">${desc}</div>
                         </div>
+                        <label class="kaiz-switch">
+                            <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} />
+                            <span class="kaiz-slider"></span>
+                        </label>
                     </div>
                 `);
                    $safeToolsList.append($toolItem);
@@ -7733,8 +7792,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        delete settings.safeModeBlacklist[toolName];
                    }
                    ctx.saveSettingsDebounced();
-                   const $label = $(`label[for="kaiz-safe-tool-${toolName}"]`);
-                   $label.css('color', isChecked ? '#e74c3c' : '#888');
+                   renderSafeTools(String($('#kaiz-safe-tools-search').val() || ''));
                });
            }
            renderSafeTools();
@@ -7860,20 +7918,20 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        qp.icon = 'zap';
                    }
                    const $item = $(`
-                    <div class="kaiz-qp-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <button class="menu_button interactable kaiz-qp-icon-btn" data-index="${index}" style="width: 32px; height: 32px; padding: 0; display: flex; justify-content: center; align-items: center;" title="Choose Icon">
+                    <div class="kaiz-qp-card">
+                        <div class="kaiz-qp-header">
+                            <button class="kaiz-qp-icon-btn interactable" data-index="${index}" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${escapeHtml$2(qp.name || '')}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
-                            <div style="display: flex; gap: 5px;">
-                                <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
-                                <button class="menu_button interactable kaiz-qp-down" data-index="${index}" style="padding: 5px 10px;" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
-                                <button class="menu_button interactable kaiz-qp-del" data-index="${index}" style="padding: 5px 10px; color: #e74c3c;" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$2(qp.name || '')}" placeholder="Name (e.g. Analyze)">
+                            <div class="kaiz-qp-actions">
+                                <button class="kaiz-qp-act-btn interactable kaiz-qp-up" data-index="${index}" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
+                                <button class="kaiz-qp-act-btn interactable kaiz-qp-down" data-index="${index}" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
+                                <button class="kaiz-qp-act-btn interactable del kaiz-qp-del" data-index="${index}" title="Delete"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${escapeHtml$2(qp.prompt || '')}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$2(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -8165,12 +8223,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    }
                    const isEnabled = !settings.disabledTools[name];
                    const $toolItem = $(`
-                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-                        <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} style="margin-top: 3px;" />
-                        <div style="flex: 1;">
-                            <label for="kaiz-tool-toggle-${name}" style="font-weight: bold; cursor: pointer; color: ${isEnabled ? '#fff' : '#888'}; display: block;">${name}</label>
-                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                    <div class="kaiz-tool-card">
+                        <div class="kaiz-tool-info">
+                            <div class="kaiz-tool-header">
+                                <label for="kaiz-tool-toggle-${name}" class="kaiz-tool-name" style="cursor: pointer;">${name}</label>
+                            </div>
+                            <div class="kaiz-tool-desc">${desc}</div>
                         </div>
+                        <label class="kaiz-switch">
+                            <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} />
+                            <span class="kaiz-slider"></span>
+                        </label>
                     </div>
                 `);
                    $toolsList.append($toolItem);
@@ -8186,9 +8249,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        settings.disabledTools[toolName] = true;
                    }
                    ctx.saveSettingsDebounced();
-                   // Đổi màu nhãn
-                   const $label = $(`label[for="kaiz-tool-toggle-${toolName}"]`);
-                   $label.css('color', isChecked ? '#fff' : '#888');
                });
            }
            // Render lần đầu
@@ -8234,7 +8294,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        $corsCheck.html('<i class="fa-solid fa-xmark"></i> Failed').css('color', '#e74c3c');
                    }
                }
-               catch (_e) {
+               catch {
                    $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
                }
                let scriptDetected = false;
@@ -8565,11 +8625,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                else {
                    let html = '';
-                   let totalBytes = 0;
                    filtered.forEach((b) => {
                        const date = new Date(b.timestamp).toLocaleString();
                        const sizeInBytes = new Blob([b.data]).size;
-                       totalBytes += sizeInBytes;
                        const sizeKb = (sizeInBytes / 1024).toFixed(1);
                        const icon = b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
                        html += `
@@ -8620,7 +8678,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                const a = document.createElement('a');
                a.href = url;
                // Format file name
-               const safeName = backup.name.replace(/[\/\\:*?"<>|]/g, '_');
+               const safeName = backup.name.replace(/[/\\:*?"<>|]/g, '_');
                const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
                const extension = backup.type === 'chat' ? 'jsonl' : 'json';
                a.download = `${safeName}_backup_${dateStr}.${extension}`;
@@ -8669,14 +8727,40 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            const btn = $('#kaiz-floating-btn');
            const win = $('#kaiz-chat-window');
            const closeBtn = $('#kaiz-chat-close');
+           const toolsBtn = $('#kaiz-chat-tools-btn');
+           const toolsMenu = $('#kaiz-chat-tools-menu');
            const ctx = SillyTavern.getContext();
            const settings = ctx.extensionSettings['kaiz_agent'] || {};
            if (settings.enableBrowser === false) {
                $('#kaiz-chat-browser-btn').hide();
            }
-           // --- Bổ sung nút và khung Log Request ---
-           closeBtn.before('<i id="kaiz-chat-backup-btn" class="fa-solid fa-save interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Backup Manager"></i>');
-           closeBtn.before('<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>');
+           // --- Tools Menu Logic ---
+           toolsBtn.on('click', (e) => {
+               e.stopPropagation();
+               toolsMenu.toggle();
+               toolsBtn.toggleClass('active', toolsMenu.is(':visible'));
+           });
+           $(document)
+               .off('click.kaiz_tools_menu')
+               .on('click.kaiz_tools_menu', (e) => {
+               if (!$(e.target).closest('#kaiz-chat-tools-btn').length &&
+                   !$(e.target).closest('#kaiz-chat-tools-menu').length) {
+                   toolsMenu.hide();
+                   toolsBtn.removeClass('active');
+               }
+           });
+           toolsMenu.on('click', '.kaiz-menu-item', () => {
+               toolsMenu.hide();
+               toolsBtn.removeClass('active');
+           });
+           $(document)
+               .off('keydown.kaiz_tools_menu')
+               .on('keydown.kaiz_tools_menu', (e) => {
+               if (e.key === 'Escape' && toolsMenu.is(':visible')) {
+                   toolsMenu.hide();
+                   toolsBtn.removeClass('active');
+               }
+           });
            const logBtn = $('#kaiz-chat-log-btn');
            const backupBtn = $('#kaiz-chat-backup-btn');
            if ($('#kaiz-log-modal').length === 0) {
@@ -9008,6 +9092,76 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    }
                }, 100);
            });
+           // --- Floating Window Resize Logic ---
+           const resizer = $('#kaiz-window-resizer');
+           const restoreSavedWinSize = () => {
+               if (win.hasClass('kaiz-phone-mode') || win.hasClass('kaiz-browser-mode'))
+                   return;
+               const savedSize = localStorage.getItem('kaiz_win_size');
+               if (savedSize) {
+                   try {
+                       const parsed = JSON.parse(savedSize);
+                       if (parsed.width && parsed.height) {
+                           const clampedW = Math.max(360, Math.min(parsed.width, window.innerWidth - 20));
+                           const clampedH = Math.max(420, Math.min(parsed.height, window.innerHeight - 20));
+                           win.css({ width: `${clampedW}px`, height: `${clampedH}px` });
+                       }
+                   }
+                   catch {
+                       // ignore
+                   }
+               }
+           };
+           restoreSavedWinSize();
+           let isResizingWin = false;
+           resizer.on('mousedown', (e) => {
+               if (win.hasClass('kaiz-phone-mode') || win.hasClass('kaiz-browser-mode'))
+                   return;
+               e.preventDefault();
+               e.stopPropagation();
+               isResizingWin = true;
+               resizer.addClass('resizing');
+               $('body').css({ 'user-select': 'none', cursor: 'se-resize' });
+               const rect = win[0].getBoundingClientRect();
+               // Anchor left and top explicitly so resizing bottom-right expands outwards smoothly
+               win.css({
+                   left: `${rect.left}px`,
+                   top: `${rect.top}px`,
+                   right: 'auto',
+                   bottom: 'auto',
+               });
+               const startX = e.clientX;
+               const startY = e.clientY;
+               const startWidth = rect.width;
+               const startHeight = rect.height;
+               $(document)
+                   .off('.kaiz_resizing')
+                   .on('mousemove.kaiz_resizing', (ev) => {
+                   if (!isResizingWin)
+                       return;
+                   const minWidth = 360;
+                   const minHeight = 420;
+                   const maxWidth = Math.max(minWidth, window.innerWidth - rect.left - 10);
+                   const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - 10);
+                   const newWidth = Math.max(minWidth, Math.min(startWidth + (ev.clientX - startX), maxWidth));
+                   const newHeight = Math.max(minHeight, Math.min(startHeight + (ev.clientY - startY), maxHeight));
+                   win.css({ width: `${newWidth}px`, height: `${newHeight}px` });
+               })
+                   .on('mouseup.kaiz_resizing', () => {
+                   if (!isResizingWin)
+                       return;
+                   isResizingWin = false;
+                   resizer.removeClass('resizing');
+                   $('body').css({ 'user-select': '', cursor: '' });
+                   $(document).off('.kaiz_resizing');
+                   const finalWidth = Math.round(win.outerWidth() || 550);
+                   const finalHeight = Math.round(win.outerHeight() || 600);
+                   localStorage.setItem('kaiz_win_size', JSON.stringify({ width: finalWidth, height: finalHeight }));
+                   const pos = ensureInBounds(win);
+                   if (pos)
+                       localStorage.setItem('kaiz_win_pos', JSON.stringify(pos));
+               });
+           });
            // ------------------
            // Sidebar elements
            const menuBtn = $('#kaiz-chat-menu-btn');
@@ -9247,6 +9401,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
                else {
                    dialogEl.close();
+                   toolsMenu.hide();
+                   toolsBtn.removeClass('active');
                    if (isSidebarOpen)
                        toggleSidebar();
                }
@@ -9254,6 +9410,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            closeBtn.on('click', () => {
                const dialogEl = win[0];
                dialogEl.close();
+               toolsMenu.hide();
+               toolsBtn.removeClass('active');
                if (isSidebarOpen)
                    toggleSidebar(); // Đóng luôn sidebar
            });
@@ -9273,6 +9431,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    if (typeof $.fn.draggable === 'function' && win.hasClass('ui-draggable')) {
                        win.draggable('enable');
                    }
+                   restoreSavedWinSize();
                }
            };
            // Khởi tạo phone mode ban đầu
@@ -9435,7 +9594,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            // Hàm tiện ích format tin nhắn
            const formatMessage = (text, isFinal) => {
                let html = text || '';
-               const detailsTag = isFinal ? '<details class="kaiz-cot-block">' : '<details open class="kaiz-cot-block">';
+               const detailsTag = '<details class="kaiz-cot-block">';
                const closeIndex = html.indexOf('</agent_cot>');
                if (closeIndex !== -1) {
                    const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
@@ -9448,9 +9607,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    }
                }
                else if (!isFinal) {
-                   // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
+                   // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT (giữ đóng gọn gàng)
                    const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                   html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                   html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                }
                else {
                    // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
@@ -10045,7 +10204,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            }
        }
        stop() {
-           for (const [taskId, intervalId] of this.timers.entries()) {
+           for (const intervalId of this.timers.values()) {
                clearInterval(intervalId);
            }
            this.timers.clear();
@@ -10081,12 +10240,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
            }
        }
-       async addTask(task) {
+       async addTask(_task) {
            // Cập nhật lại toàn bộ list từ DB
            const allTasks = await this.stateManager.db.getAllAutoTasks();
            await this.start(allTasks);
        }
-       async removeTask(taskId) {
+       async removeTask(_taskId) {
            const allTasks = await this.stateManager.db.getAllAutoTasks();
            await this.start(allTasks);
        }
@@ -10106,7 +10265,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                return;
            }
            // Setup History for the run
-           let historyForRun = [];
+           let historyForRun;
            if (task.executionMode === 'persist') {
                if (!task.chatId) {
                    // Lần đầu chạy persist -> Tạo chat mới riêng cho auto task này (sử dụng -1 để ẩn khỏi danh sách chat mặc định)
@@ -10120,7 +10279,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                historyForRun = messages.map((m) => ({ role: m.role, content: m.content }));
            }
            else {
-               // mode = 'fresh'
                historyForRun = [];
            }
            // Add prompt as user message
@@ -10128,7 +10286,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            // Run agent
            try {
                console.log(`[AutoTaskScheduler] Running AgentLoop for task ${task.id}`);
-               let finalResult = '';
                // Save prompt before run if persist
                if (task.executionMode === 'persist' && task.chatId) {
                    await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);
@@ -10482,7 +10639,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            };
            if (idVal) {
                const id = parseInt(idVal, 10);
-               const { createdAt, ...updateData } = taskData;
+               const { createdAt: _createdAt, ...updateData } = taskData;
                await this.stateManager.db.updateAutoTask(id, updateData);
            }
            else {
@@ -10543,7 +10700,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                messages.forEach((msg) => {
                    const isUser = msg.role === 'user';
                    const name = isUser ? 'Prompt' : 'Agent';
-                   let textContent = '';
+                   let textContent;
                    if (typeof msg.content === 'string') {
                        textContent = msg.content;
                    }
@@ -10797,7 +10954,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        async setThemeVariables(variables) {
            const root = document.documentElement;
            const previousValues = {};
-           for (const [name, _value] of Object.entries(variables)) {
+           for (const name of Object.keys(variables)) {
                previousValues[name] = getComputedStyle(root).getPropertyValue(name).trim();
            }
            await this.createSnapshot({
@@ -11344,7 +11501,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
    let extPath = 'third-party/Kaiz-Agent-Extension';
    try {
        if (document.currentScript && document.currentScript.src) {
-           const match = new URL(document.currentScript.src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+           const match = new URL(document.currentScript.src).pathname.match(/\/scripts\/extensions\/(.+)\/[^/]+\.js$/);
            if (match)
                extPath = match[1];
        }
@@ -11356,7 +11513,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                    src.includes('index.js') &&
                    src.toLowerCase().includes('kaiz') &&
                    src.toLowerCase().includes('agent')) {
-                   const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+                   const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^/]+\.js$/);
                    if (match) {
                        extPath = match[1];
                        break;
@@ -11391,7 +11548,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                safeMode: false,
                safeModeBlacklist: {},
                quickPrompts: [],
-               enableBrowser: true,
+               enableBrowser: false,
            };
        }
        else {
@@ -11429,16 +11586,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
            }
            if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
-               ctx.extensionSettings[EXT_NAME].enableBrowser = true;
+               ctx.extensionSettings[EXT_NAME].enableBrowser = false;
            }
        }
        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
        const cssPath = `/scripts/extensions/${extPath}/style.css?v=${Date.now()}`;
-       if (!$(`link[href^="/scripts/extensions/${extPath}/style.css"]`).length) {
+       const existingCss = $(`link[href*="/scripts/extensions/${extPath}/style.css"]`);
+       if (existingCss.length) {
+           existingCss.attr('href', cssPath);
+       }
+       else {
            $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
        }
        // Nạp thư viện Lucide Icon
-       if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !window.hasOwnProperty('lucide')) {
+       if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !('lucide' in window)) {
            $('<script>').appendTo('head').attr({ src: 'https://unpkg.com/lucide@latest' });
        }
        // Khởi tạo Core

@@ -1,5 +1,4 @@
 import { ITool, ToolResult } from '../tool_registry';
-import { SillyTavernAdapter } from '../../adapters/st_adapter';
 
 declare const jQuery: any;
 declare const window: any;
@@ -97,7 +96,7 @@ export const sendSystemMessageTool: ITool = {
             const screenHeight = $(window).height() || 1080;
 
             let top = btnRect.top - popupHeight / 2 + btnRect.height / 2;
-            let left = 0;
+            let left: number;
 
             // Mũi tên (Speech bubble tail)
             const arrow = $('<div class="kaiz-sys-arrow"></div>');

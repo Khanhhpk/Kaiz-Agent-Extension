@@ -1,4 +1,4 @@
-import { KaizDB, BackupEntry } from '../core/db';
+import { KaizDB } from '../core/db';
 declare const jQuery: any;
 const $ = jQuery;
 
@@ -163,11 +163,9 @@ export class BackupModal {
                 );
             } else {
                 let html = '';
-                let totalBytes = 0;
                 filtered.forEach((b: any) => {
                     const date = new Date(b.timestamp).toLocaleString();
                     const sizeInBytes = new Blob([b.data]).size;
-                    totalBytes += sizeInBytes;
                     const sizeKb = (sizeInBytes / 1024).toFixed(1);
 
                     const icon =
@@ -223,7 +221,7 @@ export class BackupModal {
             a.href = url;
 
             // Format file name
-            const safeName = backup.name.replace(/[\/\\:*?"<>|]/g, '_');
+            const safeName = backup.name.replace(/[/\\:*?"<>|]/g, '_');
             const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
             const extension = backup.type === 'chat' ? 'jsonl' : 'json';
             a.download = `${safeName}_backup_${dateStr}.${extension}`;

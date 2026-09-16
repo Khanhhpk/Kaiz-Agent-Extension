@@ -58,7 +58,7 @@ export class AutoTaskScheduler {
     }
 
     public stop() {
-        for (const [taskId, intervalId] of this.timers.entries()) {
+        for (const intervalId of this.timers.values()) {
             clearInterval(intervalId);
         }
         this.timers.clear();
@@ -98,13 +98,13 @@ export class AutoTaskScheduler {
         }
     }
 
-    public async addTask(task: AutoTask) {
+    public async addTask(_task: AutoTask) {
         // Cập nhật lại toàn bộ list từ DB
         const allTasks = await this.stateManager.db.getAllAutoTasks();
         await this.start(allTasks);
     }
 
-    public async removeTask(taskId: number) {
+    public async removeTask(_taskId: number) {
         const allTasks = await this.stateManager.db.getAllAutoTasks();
         await this.start(allTasks);
     }
@@ -127,7 +127,7 @@ export class AutoTaskScheduler {
         }
 
         // Setup History for the run
-        let historyForRun: any[] = [];
+        let historyForRun: any[];
 
         if (task.executionMode === 'persist') {
             if (!task.chatId) {
@@ -142,7 +142,6 @@ export class AutoTaskScheduler {
             const messages = await this.stateManager.db.getMessages(task.chatId);
             historyForRun = messages.map((m) => ({ role: m.role, content: m.content }));
         } else {
-            // mode = 'fresh'
             historyForRun = [];
         }
 
@@ -152,7 +151,6 @@ export class AutoTaskScheduler {
         // Run agent
         try {
             console.log(`[AutoTaskScheduler] Running AgentLoop for task ${task.id}`);
-            let finalResult = '';
             // Save prompt before run if persist
             if (task.executionMode === 'persist' && task.chatId) {
                 await this.stateManager.db.addMessage(task.chatId, 'user', task.prompt);

@@ -47,7 +47,7 @@ export const manageRegexTool: ITool = {
             required: ['action'],
         },
     },
-    execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (args: Record<string, any>, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const { action, id, scope, data } = args;
 

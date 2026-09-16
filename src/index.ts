@@ -24,7 +24,7 @@ let extPath = 'third-party/Kaiz-Agent-Extension';
 try {
     if (document.currentScript && (document.currentScript as HTMLScriptElement).src) {
         const match = new URL((document.currentScript as HTMLScriptElement).src).pathname.match(
-            /\/scripts\/extensions\/(.+)\/[^\/]+\.js$/,
+            /\/scripts\/extensions\/(.+)\/[^/]+\.js$/,
         );
         if (match) extPath = match[1];
     } else {
@@ -37,7 +37,7 @@ try {
                 src.toLowerCase().includes('kaiz') &&
                 src.toLowerCase().includes('agent')
             ) {
-                const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^\/]+\.js$/);
+                const match = new URL(src).pathname.match(/\/scripts\/extensions\/(.+)\/[^/]+\.js$/);
                 if (match) {
                     extPath = match[1];
                     break;
@@ -76,7 +76,7 @@ jQuery(async () => {
             safeMode: false,
             safeModeBlacklist: {},
             quickPrompts: [],
-            enableBrowser: true,
+            enableBrowser: false,
         };
     } else {
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
@@ -113,18 +113,21 @@ jQuery(async () => {
             ctx.extensionSettings[EXT_NAME].retryDelay = 3000;
         }
         if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
-            ctx.extensionSettings[EXT_NAME].enableBrowser = true;
+            ctx.extensionSettings[EXT_NAME].enableBrowser = false;
         }
     }
 
     // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
     const cssPath = `/scripts/extensions/${extPath}/style.css?v=${Date.now()}`;
-    if (!$(`link[href^="/scripts/extensions/${extPath}/style.css"]`).length) {
+    const existingCss = $(`link[href*="/scripts/extensions/${extPath}/style.css"]`);
+    if (existingCss.length) {
+        existingCss.attr('href', cssPath);
+    } else {
         $('<link>').appendTo('head').attr({ type: 'text/css', rel: 'stylesheet', href: cssPath });
     }
 
     // Nạp thư viện Lucide Icon
-    if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !window.hasOwnProperty('lucide')) {
+    if (!$('script[src="https://unpkg.com/lucide@latest"]').length && !('lucide' in window)) {
         $('<script>').appendTo('head').attr({ src: 'https://unpkg.com/lucide@latest' });
     }
 

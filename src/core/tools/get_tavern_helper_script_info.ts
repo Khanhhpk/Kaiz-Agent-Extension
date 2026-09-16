@@ -17,7 +17,7 @@ export const getTavernHelperScriptInfoTool: ITool = {
             required: ['id'],
         },
     },
-    execute: async (args: any, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (args: any, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const th = (window as any).TavernHelper;
             if (!th) {
@@ -60,7 +60,9 @@ export const getTavernHelperScriptInfoTool: ITool = {
                         foundScope = scope;
                         break;
                     }
-                } catch (e) {}
+                } catch {
+                    /* ignore */
+                }
             }
 
             if (!foundScript) {

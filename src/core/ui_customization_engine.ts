@@ -211,7 +211,7 @@ export class UICustomizationEngine {
         const root = document.documentElement;
         const previousValues: Record<string, string> = {};
 
-        for (const [name, _value] of Object.entries(variables)) {
+        for (const name of Object.keys(variables)) {
             previousValues[name] = getComputedStyle(root).getPropertyValue(name).trim();
         }
 

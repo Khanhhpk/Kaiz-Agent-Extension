@@ -11,7 +11,7 @@ export const scanUITool: ITool = {
             required: [],
         },
     },
-    execute: async (args: any) => {
+    execute: async (_args: any) => {
         try {
             const interactables = document.querySelectorAll(
                 'button, a, input, select, textarea, .interactable, [title], .menu_button, .drawer-toggle, .fa-solid, .fa-regular',
@@ -85,7 +85,6 @@ export const scanUITool: ITool = {
                         el.getAttribute('data-title')?.trim() ||
                         '';
                     const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                    const value = (el as HTMLInputElement).value || ''; // Không trim để giữ khoảng trắng hợp lệ
                     let description = text || title || ariaLabel;
 
                     if (!description && el.tagName === 'INPUT') {

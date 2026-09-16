@@ -10,7 +10,7 @@ export const toggleVirtualCursorTool: ITool = {
             required: [],
         },
     },
-    execute: async (args: any) => {
+    execute: async (_args: any) => {
         let cursor = document.getElementById('kaiz-virtual-cursor');
         if (cursor) {
             cursor.remove();
@@ -40,7 +40,9 @@ export const toggleVirtualCursorTool: ITool = {
                         }
                     }
                 }
-            } catch (e) {}
+            } catch {
+                /* ignore */
+            }
 
             // Spawn mới
             cursor = document.createElement('div');

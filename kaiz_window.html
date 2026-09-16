@@ -122,31 +122,69 @@
                 >
             </div>
             <div class="kaiz-header-actions">
-                <i
-                    id="kaiz-auto-task-btn"
-                    class="fa-solid fa-clock-rotate-left interactable"
-                    style="cursor: pointer; margin-right: 8px"
-                    title="Quản lý Auto Tasks"
-                ></i>
-                <i
-                    id="kaiz-chat-browser-btn"
-                    class="fa-solid fa-globe interactable"
-                    style="cursor: pointer; margin-right: 8px"
-                    title="Mở trình duyệt"
-                ></i>
-                <i
-                    id="kaiz-chat-ui-custom-btn"
-                    class="fa-solid fa-palette interactable"
-                    style="cursor: pointer; margin-right: 8px"
-                    title="UI Customization & Rollback"
-                ></i>
-                <i
-                    id="kaiz-chat-settings-btn"
-                    class="fa-solid fa-gear interactable"
-                    style="cursor: pointer; margin-right: 8px"
-                    title="Persona & Memory"
-                ></i>
-                <i id="kaiz-chat-close" class="fa-solid fa-xmark interactable" style="cursor: pointer"></i>
+                <button
+                    type="button"
+                    id="kaiz-chat-tools-btn"
+                    class="kaiz-header-btn interactable"
+                    title="Menu tiện ích"
+                >
+                    <i class="fa-solid fa-ellipsis-vertical"></i>
+                </button>
+                <button
+                    type="button"
+                    id="kaiz-chat-close"
+                    class="kaiz-header-btn kaiz-close-btn interactable"
+                    title="Đóng cửa sổ"
+                >
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+
+                <!-- Tools Dropdown Menu -->
+                <div id="kaiz-chat-tools-menu" class="kaiz-header-menu-dropdown" style="display: none">
+                    <div id="kaiz-chat-browser-btn" class="kaiz-menu-item interactable" title="Mở trình duyệt">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-globe"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Trình duyệt web</span>
+                            <span class="kaiz-menu-item-desc">Mở chế độ split-screen</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-chat-settings-btn" class="kaiz-menu-item interactable" title="Persona & Memory">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-gear"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Persona & Bộ nhớ</span>
+                            <span class="kaiz-menu-item-desc">Cấu hình prompt và memory</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-auto-task-btn" class="kaiz-menu-item interactable" title="Quản lý Auto Tasks">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Tác vụ tự động</span>
+                            <span class="kaiz-menu-item-desc">Lập lịch trình chạy định kỳ</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-chat-ui-custom-btn" class="kaiz-menu-item interactable" title="Tùy biến Giao diện">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-palette"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Tùy biến Giao diện</span>
+                            <span class="kaiz-menu-item-desc">Tùy chỉnh CSS/DOM & phục hồi</span>
+                        </div>
+                    </div>
+                    <div class="kaiz-menu-divider"></div>
+                    <div id="kaiz-chat-backup-btn" class="kaiz-menu-item interactable" title="Backup Manager">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-floppy-disk"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Sao lưu & Khôi phục</span>
+                            <span class="kaiz-menu-item-desc">Quản lý backup dữ liệu Agent</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-chat-log-btn" class="kaiz-menu-item interactable" title="Request Logs">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-scroll"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Nhật ký Request</span>
+                            <span class="kaiz-menu-item-desc">Xem payload gửi và nhận</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -294,6 +332,12 @@
                 </div>
             </div>
         </div>
+    </div>
+    <!-- Resizer handle cho floating window -->
+    <div id="kaiz-window-resizer" class="kaiz-window-resizer interactable" title="Kéo để thay đổi kích cỡ">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 2L2 8M9 5L5 9M9 8L8 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
     </div>
 </dialog>
 
