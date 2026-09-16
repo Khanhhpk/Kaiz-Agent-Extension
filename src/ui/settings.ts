@@ -918,6 +918,7 @@ export class SettingsUI {
         };
 
         setInterval(updateBridgeStatusUI, 2500);
+        window.postMessage({ type: 'KAIZ_BRIDGE_PING' }, '*');
         updateBridgeStatusUI();
         // --- END WEB IMAGE BRIDGE LOGIC ---
 

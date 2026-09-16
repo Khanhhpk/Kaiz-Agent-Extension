@@ -48,12 +48,16 @@ export class WebImageBridge {
             if (type === 'KAIZ_BRIDGE_HEARTBEAT_UPDATE' && payload) {
                 this.status.userscriptInstalled = true;
                 const now = Date.now();
-                if (payload.target === 'gemini') {
-                    this.status.geminiOnline = true;
-                    this.status.lastGeminiSeen = now;
-                } else if (payload.target === 'chatgpt') {
-                    this.status.chatgptOnline = true;
-                    this.status.lastChatgptSeen = now;
+                const hbTime = typeof payload.timestamp === 'number' ? payload.timestamp : now;
+                // Nếu heartbeat còn mới trong vòng 75s thì công nhận online
+                if (now - hbTime < 75000) {
+                    if (payload.target === 'gemini') {
+                        this.status.geminiOnline = true;
+                        this.status.lastGeminiSeen = hbTime;
+                    } else if (payload.target === 'chatgpt') {
+                        this.status.chatgptOnline = true;
+                        this.status.lastChatgptSeen = hbTime;
+                    }
                 }
             }
 
@@ -75,14 +79,14 @@ export class WebImageBridge {
         });
 
         // Ping kiểm tra Userscript mỗi 5s và kiểm tra offline
+        // Lưu ý: Đặt ngưỡng 75s vì Chromium có cơ chế Intensive Wake Up Throttling giảm chu kỳ timer của tab chạy ngầm xuống 60s
         setInterval(() => {
             window.postMessage({ type: 'KAIZ_BRIDGE_PING' }, '*');
             const now = Date.now();
-            // Nếu quá 10s không thấy heartbeat thì đánh dấu offline
-            if (this.status.lastGeminiSeen && now - this.status.lastGeminiSeen > 10000) {
+            if (this.status.lastGeminiSeen && now - this.status.lastGeminiSeen > 75000) {
                 this.status.geminiOnline = false;
             }
-            if (this.status.lastChatgptSeen && now - this.status.lastChatgptSeen > 10000) {
+            if (this.status.lastChatgptSeen && now - this.status.lastChatgptSeen > 75000) {
                 this.status.chatgptOnline = false;
             }
         }, 5000);

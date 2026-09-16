@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.3
+// @version      1.2.4
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -34,8 +34,36 @@
     if (IS_ST) {
         console.log('[Kaiz Bridge] Userscript loaded on SillyTavern (Top-level window).');
 
+        const sendHeartbeatUpdate = (hb) => {
+            if (!hb || !hb.target) return;
+            window.postMessage(
+                {
+                    type: 'KAIZ_BRIDGE_HEARTBEAT_UPDATE',
+                    payload: hb,
+                },
+                '*',
+            );
+        };
+
+        const checkAllHeartbeats = () => {
+            try {
+                const geminiHb = GM_getValue('KAIZ_HEARTBEAT_gemini') || GM_getValue('KAIZ_HEARTBEAT');
+                if (geminiHb && geminiHb.target === 'gemini') {
+                    sendHeartbeatUpdate(geminiHb);
+                }
+                const chatgptHb = GM_getValue('KAIZ_HEARTBEAT_chatgpt');
+                if (chatgptHb && chatgptHb.target === 'chatgpt') {
+                    sendHeartbeatUpdate(chatgptHb);
+                }
+            } catch (e) {
+                /* ignore */
+            }
+        };
+
+        // Quét ngay heartbeat trong Storage khi vừa tải SillyTavern
+        checkAllHeartbeats();
+
         // Lắng nghe yêu cầu vẽ ảnh từ SillyTavern Extension qua postMessage
-        // Lưu ý: Không kiểm tra event.source !== window vì sandbox của Tampermonkey
         window.addEventListener('message', (event) => {
             if (!event.data) return;
 
@@ -48,10 +76,13 @@
                     prompt: job.prompt,
                     timestamp: Date.now(),
                 });
-                // Phát xung Kickstart tức thì để đánh thức tab Web chạy ngầm
+                // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.3' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.4' }, '*');
+                checkAllHeartbeats();
+                // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
+                GM_setValue('KAIZ_PING_PULSE', Date.now());
             }
         });
 
@@ -79,15 +110,14 @@
         });
 
         // Lắng nghe nhịp tim (Heartbeat) từ các tab Web
+        GM_addValueChangeListener('KAIZ_HEARTBEAT_gemini', (name, oldValue, newValue) => {
+            if (newValue) sendHeartbeatUpdate(newValue);
+        });
+        GM_addValueChangeListener('KAIZ_HEARTBEAT_chatgpt', (name, oldValue, newValue) => {
+            if (newValue) sendHeartbeatUpdate(newValue);
+        });
         GM_addValueChangeListener('KAIZ_HEARTBEAT', (name, oldValue, newValue) => {
-            if (!newValue) return;
-            window.postMessage(
-                {
-                    type: 'KAIZ_BRIDGE_HEARTBEAT_UPDATE',
-                    payload: newValue,
-                },
-                '*',
-            );
+            if (newValue) sendHeartbeatUpdate(newValue);
         });
 
         return;
@@ -137,75 +167,51 @@
         console.warn('[Kaiz Bridge] Visibility spoofing error:', e);
     }
 
-    // 2. Silent Web Audio Keep-Alive: Cơ chế vàng trong Chromium để miễn trừ bóp nghẹt tài nguyên tab
-    let silentAudioCtx = null;
-    const initSilentAudioKeepAlive = () => {
-        try {
-            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-            const AudioCtxClass = win.AudioContext || win.webkitAudioContext;
-            if (!AudioCtxClass) return;
-
-            const startAudio = () => {
-                try {
-                    if (silentAudioCtx && silentAudioCtx.state === 'running') return;
-                    silentAudioCtx = new AudioCtxClass();
-                    const osc = silentAudioCtx.createOscillator();
-                    const gain = silentAudioCtx.createGain();
-                    gain.gain.value = 0.00001; // Hoàn toàn không nghe thấy tiếng (silent)
-                    osc.connect(gain);
-                    gain.connect(silentAudioCtx.destination);
-                    osc.start();
-                    console.log('[Kaiz Bridge] 🔊 Silent Audio Keep-Alive activated.');
-                } catch (e) {
-                    /* ignore */
-                }
-            };
-
-            ['click', 'keydown', 'mousedown', 'pointerdown', 'touchstart'].forEach((evt) => {
-                window.addEventListener(evt, startAudio, { once: true, capture: true });
-                if (win) win.addEventListener(evt, startAudio, { once: true, capture: true });
-            });
-
-            startAudio();
-        } catch (e) {
-            /* ignore */
-        }
-    };
-    initSilentAudioKeepAlive();
-
-    // 3. Hàm Kickstart: Đánh thức tab và kích hoạt lại các vòng lặp sự kiện
+    // 2. Hàm Kickstart: Đánh thức nội bộ DOM và kích hoạt lại các vòng lặp sự kiện
+    // TUYỆT ĐỐI KHÔNG gọi window.focus() hay win.focus() để tránh nhảy tab trình duyệt từ SillyTavern sang Web!
     const kickstartTab = () => {
         try {
-            const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-            window.focus();
-            if (win) win.focus();
             window.dispatchEvent(new Event('focus'));
             document.dispatchEvent(new Event('focus'));
             window.dispatchEvent(new Event('visibilitychange'));
             document.dispatchEvent(new Event('visibilitychange'));
-
-            if (silentAudioCtx && silentAudioCtx.state === 'suspended') {
-                silentAudioCtx.resume().catch(() => {});
-            }
         } catch (e) {
             /* ignore */
         }
     };
 
-    // Lắng nghe xung Kickstart từ SillyTavern để đánh thức tab ngay lập tức
-    GM_addValueChangeListener('KAIZ_KICKSTART_PULSE', () => {
-        console.log(`[Kaiz Bridge][${CURRENT_TARGET}] ⚡ Nhận xung Kickstart từ SillyTavern! Đánh thức tab...`);
-        kickstartTab();
+    // 3. Hàm gửi Heartbeat (lưu theo từng nền tảng riêng biệt để không ghi đè lẫn nhau)
+    const sendHeartbeat = () => {
+        try {
+            const hbData = {
+                target: CURRENT_TARGET,
+                title: document.title,
+                timestamp: Date.now(),
+            };
+            GM_setValue(`KAIZ_HEARTBEAT_${CURRENT_TARGET}`, hbData);
+            GM_setValue('KAIZ_HEARTBEAT', hbData); // backward compatibility
+        } catch (e) {
+            /* ignore */
+        }
+    };
+
+    // Phát nhịp tim ngay khi tab mở
+    sendHeartbeat();
+
+    // Phát nhịp tim định kỳ
+    setInterval(sendHeartbeat, 3000);
+
+    // Lắng nghe xung Ping Pulse từ SillyTavern (phản hồi tức thì ngay cả khi tab chạy ngầm qua extension event)
+    GM_addValueChangeListener('KAIZ_PING_PULSE', () => {
+        sendHeartbeat();
     });
 
-    // Phát nhịp tim mỗi 3 giây để SillyTavern nhận diện tab đang mở
-    setInterval(() => {
-        GM_setValue('KAIZ_HEARTBEAT', {
-            target: CURRENT_TARGET,
-            title: document.title,
-            timestamp: Date.now(),
-        });
-    }, 3000);
+    // Lắng nghe xung Kickstart từ SillyTavern để đánh thức tab ngầm khi có yêu cầu vẽ ảnh mới (chạy ngầm, không nhảy tab)
+    GM_addValueChangeListener('KAIZ_KICKSTART_PULSE', () => {
+        console.log(`[Kaiz Bridge][${CURRENT_TARGET}] ⚡ Nhận xung Kickstart từ SillyTavern (chạy ngầm, không nhảy tab).`);
+        kickstartTab();
+        sendHeartbeat();
+    });
 
     // Chuyển đổi Blob ảnh sang Base64
     const blobToBase64 = (blob) => {
@@ -368,7 +374,11 @@
         console.log('[Kaiz Bridge][Gemini] Tìm thấy inputEl:', inputEl);
 
         // 3. Điền prompt an toàn (Đảm bảo Quill & Angular nhận diện text và chuyển Mic -> Gửi)
-        inputEl.focus();
+        try {
+            inputEl.focus({ preventScroll: true });
+        } catch (e) {
+            inputEl.focus();
+        }
         inputEl.dispatchEvent(new Event('focusin', { bubbles: true }));
 
         // Xác định node <p> bên trong editor của Quill để bảo toàn cấu trúc DOM
@@ -638,7 +648,11 @@
         }
 
         // 3. Điền prompt
-        inputEl.focus();
+        try {
+            inputEl.focus({ preventScroll: true });
+        } catch (e) {
+            inputEl.focus();
+        }
         inputEl.dispatchEvent(new Event('focusin', { bubbles: true }));
 
         if (inputEl.tagName.toLowerCase() === 'textarea') {
