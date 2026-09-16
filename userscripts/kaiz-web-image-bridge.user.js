@@ -299,74 +299,72 @@
         inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
 
         console.log('[Kaiz Bridge][Gemini] Đã hoàn tất nhập prompt vào ô input.');
+        // Cho Angular và framework 600ms để chạy digest cycle và cập nhật trạng thái nút gửi
+        await new Promise((r) => setTimeout(r, 600));
 
-        // 4. Bấm nút gửi (Vòng lặp chờ Angular kích hoạt nút trong background tab)
+        // 4. Bấm nút gửi (Khoanh vùng tìm kiếm trong khu vực ô nhập để tránh bắt nhầm nút Menu/Mic)
+        const inputArea =
+            inputEl.closest('.input-area-container') ||
+            inputEl.closest('.input-area') ||
+            inputEl.closest('form') ||
+            document.querySelector('.send-button-container')?.parentElement ||
+            document;
+
         const sendSelectors = [
             'button.send-button',
-            'button[aria-label*="Send" i]',
+            '.send-button-container button',
             'button[aria-label*="Gửi" i]',
+            'button[aria-label*="Send" i]',
             'button[aria-label*="Submit" i]',
             'button[data-test-id="send-button"]',
-            'div[role="button"][aria-label*="Send" i]',
             'div[role="button"][aria-label*="Gửi" i]',
-            '.send-button-container button',
-            'button[mat-icon-button]',
+            'div[role="button"][aria-label*="Send" i]',
         ];
 
         let sendBtn = null;
-        for (let i = 0; i < 30; i++) {
+        for (let i = 0; i < 25; i++) {
             for (const sel of sendSelectors) {
-                const btn = document.querySelector(sel);
+                const btn = inputArea.querySelector(sel) || document.querySelector(sel);
                 if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
-                    sendBtn = btn;
-                    break;
+                    const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    const isExcluded =
+                        label.includes('mic') ||
+                        label.includes('menu') ||
+                        label.includes('tệp') ||
+                        label.includes('file') ||
+                        label.includes('thêm') ||
+                        label.includes('add');
+                    if (!isExcluded) {
+                        sendBtn = btn;
+                        break;
+                    }
                 }
             }
             if (sendBtn) break;
-            await new Promise((r) => setTimeout(r, 100));
-        }
-
-        // Nếu sau 3s Angular vẫn chưa gỡ aria-disabled (do tab ở nền), cưỡng chế mở khóa nút
-        if (!sendBtn) {
-            for (const sel of sendSelectors) {
-                const btn = document.querySelector(sel);
-                if (btn) {
-                    btn.removeAttribute('aria-disabled');
-                    btn.removeAttribute('disabled');
-                    sendBtn = btn;
-                    break;
-                }
-            }
+            await new Promise((r) => setTimeout(r, 150));
         }
 
         if (sendBtn) {
             console.log('[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ, đang click:', sendBtn);
-            sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-            sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
             sendBtn.click();
+        } else {
+            console.log('[Kaiz Bridge][Gemini] Không tìm thấy nút gửi enabled, thử kích hoạt bằng phím Enter...');
+            const enterEvt = new KeyboardEvent('keydown', {
+                key: 'Enter',
+                code: 'Enter',
+                keyCode: 13,
+                which: 13,
+                bubbles: true,
+                cancelable: true,
+                composed: true,
+            });
+            inputEl.dispatchEvent(enterEvt);
+            inputEl.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true }));
+            const rich = document.querySelector('rich-textarea');
+            if (rich && rich !== inputEl) {
+                rich.dispatchEvent(enterEvt);
+            }
         }
-
-        // Bổ sung phím Enter mô phỏng
-        inputEl.dispatchEvent(
-            new KeyboardEvent('keydown', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true,
-                cancelable: true,
-            }),
-        );
-        inputEl.dispatchEvent(
-            new KeyboardEvent('keyup', {
-                key: 'Enter',
-                code: 'Enter',
-                keyCode: 13,
-                which: 13,
-                bubbles: true,
-                cancelable: true,
-            }),
-        );
 
         // 5. Chờ phản hồi và bắt ảnh mới
         const timeoutMs = 85000;
