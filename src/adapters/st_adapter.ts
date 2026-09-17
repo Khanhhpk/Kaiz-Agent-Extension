@@ -260,29 +260,100 @@ export class SillyTavernAdapter {
     }
 
     /**
-     * Lấy lịch sử đoạn chat hiện tại (bỏ qua những tin nhắn ẩn)
+     * Lấy lịch sử đoạn chat hiện tại (bỏ qua những tin nhắn ẩn, tin hệ thống, và kết quả vẽ ảnh)
+     * Duyệt ngược từ cuối mảng để đảm bảo luôn lấy đủ `depth` tin nhắn hội thoại thật
      */
     public getChatContext(depth: number = 20) {
-        const ctx = SillyTavern.getContext();
-        if (!ctx.chat) return [];
+        const liveCtx =
+            typeof (globalThis as any).SillyTavern !== 'undefined'
+                ? (globalThis as any).SillyTavern.getContext()
+                : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
 
-        const total = ctx.chat.length;
-        const startIndex = Math.max(0, total - depth);
-        const slice = ctx.chat.slice(startIndex);
+        const chatArray = liveCtx?.chat || (window as any).chat;
+        const char = liveCtx?.characters?.[liveCtx?.characterId];
+        const charName =
+            char?.name ||
+            char?.data?.name ||
+            (liveCtx?.name2 && liveCtx.name2 !== 'SillyTavern System' ? liveCtx.name2 : '') ||
+            'Character';
+        const userName = liveCtx?.name1 || 'User';
 
-        // H3: Track raw index trong slice (không phải filtered index) để chatIndex chính xác
         const result: any[] = [];
-        for (let i = 0; i < slice.length; i++) {
-            const m = slice[i];
-            if (m.is_system || m.is_hidden || (m.extra && m.extra.is_hidden)) continue;
-            result.push({
-                role: m.is_user ? 'user' : 'assistant',
-                name: m.is_user ? ctx.name1 || 'User' : m.name || ctx.name2 || 'Character',
-                content: typeof m.mes === 'string' ? m.mes : '',
-                chatIndex: startIndex + i, // index thật trong ctx.chat, không bị lệch bởi filter
-            });
+
+        if (Array.isArray(chatArray) && chatArray.length > 0) {
+            // Duyệt ngược từ tin nhắn mới nhất về trước để không bị nghẽn bởi các tin hệ thống ở cuối
+            for (let i = chatArray.length - 1; i >= 0 && result.length < depth; i--) {
+                const m = chatArray[i];
+                if (!m) continue;
+
+                // Bỏ qua tin nhắn hệ thống, tin ẩn
+                if (m.is_system || m.is_hidden || (m.extra && m.extra.is_hidden)) continue;
+
+                const rawMes = typeof m.mes === 'string' ? m.mes : '';
+                // Bỏ qua nếu tin nhắn chỉ chứa card ảnh kaiz hoặc HTML/ảnh rỗng
+                const stripped = rawMes
+                    .replace(/<div class="kaiz-draw-result"[\s\S]*?<\/div>\s*<\/div>/gi, '')
+                    .replace(/<img[^>]*>/gi, '')
+                    .replace(/!\[.*?\]\(.*?\)/gi, '')
+                    .trim();
+
+                if (!stripped) continue;
+
+                // Bỏ qua tin nhắn nếu chỉ là lệnh slash command
+                if (stripped.startsWith('/') && stripped.length < 100 && !stripped.includes('\n')) continue;
+
+                const msgName = m.is_user ? userName : m.name || charName;
+
+                result.push({
+                    role: m.is_user ? 'user' : 'assistant',
+                    name: msgName,
+                    content: stripped,
+                    chatIndex: i,
+                });
+            }
         }
-        return result;
+
+        // Fallback DOM: Nếu mảng trong bộ nhớ không có nhưng trên giao diện chat SillyTavern đang hiển thị tin nhắn
+        if (result.length === 0) {
+            const $ = (window as any).$;
+            if ($) {
+                const $messages = $('#chat .mes');
+                if ($messages && $messages.length > 0) {
+                    for (let i = $messages.length - 1; i >= 0 && result.length < depth; i--) {
+                        const $el = $($messages[i]);
+                        if ($el.attr('is_system') === 'true' || $el.hasClass('system_mes')) continue;
+                        if (
+                            $el.find('.kaiz-draw-result').length &&
+                            !$el
+                                .find('.mes_text')
+                                .text()
+                                .replace(/🎨\s*PROMPT[\s\S]*/, '')
+                                .trim()
+                        )
+                            continue;
+
+                        const isUser = $el.attr('is_user') === 'true';
+                        const msgName = $el.attr('ch_name') || (isUser ? userName : charName);
+
+                        const textEl = $el.find('.mes_text').clone();
+                        textEl.find('.kaiz-draw-result').remove();
+                        const cleanText = textEl.text().trim();
+                        if (!cleanText) continue;
+                        if (cleanText.startsWith('/') && cleanText.length < 100 && !cleanText.includes('\n')) continue;
+
+                        result.push({
+                            role: isUser ? 'user' : 'assistant',
+                            name: msgName,
+                            content: cleanText,
+                            chatIndex: i,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Đảo ngược lại để trả về mảng theo thứ tự thời gian từ cũ đến mới
+        return result.reverse();
     }
 
     /**

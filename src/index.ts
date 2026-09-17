@@ -299,46 +299,36 @@ jQuery(async () => {
                             else if (Array.isArray(args._)) extraInstructions = args._.join(' ').trim();
                         }
 
-                        // 1. Lấy ngữ cảnh tin nhắn gần nhất theo cấu hình viewContextDepth
-                        const extSettings = ctx.extensionSettings?.[EXT_NAME] || {};
+                        // 1. Lấy context và settings thời gian thực
+                        const liveCtx =
+                            typeof (globalThis as any).SillyTavern !== 'undefined'
+                                ? (globalThis as any).SillyTavern.getContext()
+                                : (globalThis as any).window?.SillyTavern?.getContext?.() || ctx;
+                        const extSettings =
+                            liveCtx?.extensionSettings?.[EXT_NAME] || ctx.extensionSettings?.[EXT_NAME] || {};
                         const depth =
                             typeof extSettings.viewContextDepth === 'number' && extSettings.viewContextDepth > 0
                                 ? extSettings.viewContextDepth
                                 : 5;
-                        let chatHistory = adapter.getChatContext(depth);
-                        if (!chatHistory || chatHistory.length === 0) {
-                            if (Array.isArray(ctx.chat) && ctx.chat.length > 0) {
-                                for (let i = ctx.chat.length - 1; i >= 0; i--) {
-                                    const m = ctx.chat[i];
-                                    if (typeof m.mes === 'string' && m.mes.trim() && !m.is_hidden) {
-                                        chatHistory = [
-                                            {
-                                                role: m.is_user ? 'user' : 'assistant',
-                                                name: m.is_user
-                                                    ? ctx.name1 || 'User'
-                                                    : m.name || ctx.name2 || 'Character',
-                                                content: m.mes,
-                                            },
-                                        ];
-                                        break;
-                                    }
-                                }
-                            }
-                        }
+
+                        console.log('[Kaiz Slash /view] Configured depth:', depth);
+                        const chatHistory = adapter.getChatContext(depth);
+                        console.log(
+                            '[Kaiz Slash /view] Retrieved chat history:',
+                            chatHistory?.length,
+                            'messages',
+                            chatHistory,
+                        );
 
                         if (!chatHistory || chatHistory.length === 0) {
                             if (typeof toastr !== 'undefined') {
-                                toastr.warning('Không tìm thấy tin nhắn nào trong hội thoại để minh họa.');
+                                toastr.warning('Không tìm thấy tin nhắn hội thoại nào trong phòng chat để minh họa.');
                             }
                             return;
                         }
 
                         const latestMsg = chatHistory[chatHistory.length - 1];
-                        const cleanContent = (latestMsg?.content || '')
-                            .replace(/<div class="kaiz-draw-result"[\s\S]*?<\/div>\s*<\/div>/gi, '')
-                            .replace(/<img[^>]*>/gi, '')
-                            .replace(/!\[.*?\]\(.*?\)/gi, '')
-                            .trim();
+                        const cleanContent = (latestMsg?.content || '').trim();
 
                         if (!cleanContent) {
                             if (typeof toastr !== 'undefined') {
@@ -367,6 +357,8 @@ jQuery(async () => {
                                 userMessage += `\n\n[YÊU CẦU / PHONG CÁCH BỔ SUNG TỪ NGƯỜI DÙNG]:\n${extraInstructions}`;
                             }
                             userMessage += `\n\nHãy tạo ra câu prompt chi tiết nhất để vẽ ảnh minh họa cho phân cảnh trên:`;
+
+                            console.log('[Kaiz Slash /view] Full User Message payload sent to LLM:\n', userMessage);
 
                             const messages: Message[] = [
                                 { role: 'system', content: systemPrompt },
