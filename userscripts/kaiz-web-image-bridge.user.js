@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.4
+// @version      1.2.7
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -10,6 +10,8 @@
 // @match        https://chatgpt.com/*
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_deleteValue
+// @grant        GM_listValues
 // @grant        GM_addValueChangeListener
 // @grant        GM_xmlhttpRequest
 // @noframes
@@ -60,8 +62,31 @@
             }
         };
 
-        // Quét ngay heartbeat trong Storage khi vừa tải SillyTavern
+        // Quét dọn các key KAIZ_CLAIM_ cũ trong Storage để giải phóng rác tích tụ
+        const cleanupOldStorage = () => {
+            try {
+                if (typeof GM_listValues !== 'function' || typeof GM_deleteValue !== 'function') return;
+                const keys = GM_listValues();
+                const now = Date.now();
+                for (const key of keys) {
+                    if (typeof key === 'string' && key.startsWith('KAIZ_CLAIM_')) {
+                        // Key dạng KAIZ_CLAIM_job_1789571611961_p8exd
+                        const parts = key.split('_');
+                        const ts = parts[3] ? parseInt(parts[3], 10) : (parts[2] ? parseInt(parts[2], 10) : 0);
+                        // Cũ hơn 90 giây hoặc key không xác định được timestamp -> xóa sạch rác
+                        if (!ts || isNaN(ts) || now - ts > 90000) {
+                            GM_deleteValue(key);
+                        }
+                    }
+                }
+            } catch (e) {
+                /* ignore */
+            }
+        };
+
+        // Quét ngay heartbeat và dọn rác trong Storage khi vừa tải SillyTavern
         checkAllHeartbeats();
+        cleanupOldStorage();
 
         // Lắng nghe yêu cầu vẽ ảnh từ SillyTavern Extension qua postMessage
         window.addEventListener('message', (event) => {
@@ -79,8 +104,9 @@
                 // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.4' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.7' }, '*');
                 checkAllHeartbeats();
+                cleanupOldStorage();
                 // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
                 GM_setValue('KAIZ_PING_PULSE', Date.now());
             }
@@ -89,6 +115,7 @@
         // Lắng nghe kết quả từ Web trả về qua GM_addValueChangeListener
         GM_addValueChangeListener('KAIZ_JOB_RESULT', (name, oldValue, newValue) => {
             if (!newValue || !newValue.id) return;
+            if (newValue.cleared) return; // Bỏ qua sự kiện đã dọn dẹp bộ nhớ
             console.log('[Kaiz Bridge][ST] 📦 Nhận kết quả từ Web:', newValue.id, newValue.status);
             window.postMessage(
                 {
@@ -98,15 +125,38 @@
                 '*',
             );
 
-            // Dọn dẹp job đang chờ trong Storage để tránh các tab khác xử lý lại job cũ
+            // Dọn dẹp job đang chờ và claimKey trong Storage để tránh các tab khác xử lý lại job cũ và chống rác bộ nhớ
             try {
                 const curPending = GM_getValue('KAIZ_PENDING_JOB');
                 if (curPending && curPending.id === newValue.id) {
                     GM_setValue('KAIZ_PENDING_JOB', null);
                 }
+                if (typeof GM_deleteValue === 'function') {
+                    GM_deleteValue(`KAIZ_CLAIM_${newValue.id}`);
+                }
             } catch (e) {
                 /* ignore */
             }
+
+            cleanupOldStorage();
+
+            // Sau 10s dọn bớt chuỗi Base64 ảnh nặng (~1.7MB) trong Storage sau khi SillyTavern đã tiếp nhận hoàn chỉnh
+            setTimeout(() => {
+                try {
+                    const curRes = GM_getValue('KAIZ_JOB_RESULT');
+                    if (curRes && curRes.id === newValue.id && !curRes.cleared) {
+                        GM_setValue('KAIZ_JOB_RESULT', {
+                            id: curRes.id,
+                            status: curRes.status,
+                            provider: curRes.provider,
+                            timestamp: curRes.timestamp,
+                            cleared: true,
+                        });
+                    }
+                } catch (e) {
+                    /* ignore */
+                }
+            }, 10000);
         });
 
         // Lắng nghe nhịp tim (Heartbeat) từ các tab Web
@@ -317,6 +367,16 @@
             });
         } finally {
             isJobExecuting = false;
+            // Dọn dẹp claimKey sau 30 giây để tránh tích tụ rác Storage trên trình duyệt
+            setTimeout(() => {
+                try {
+                    if (typeof GM_deleteValue === 'function') {
+                        GM_deleteValue(claimKey);
+                    }
+                } catch (e) {
+                    /* ignore */
+                }
+            }, 30000);
         }
     }
 
@@ -538,26 +598,43 @@
             inputEl.dispatchEvent(enterUp);
         }
 
-        // 5. Chờ phản hồi và bắt ảnh mới
+        // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT CANCEL (LIFECYCLE STATE MACHINE)
         const timeoutMs = 85000;
         const startTime = Date.now();
-        console.log('[Kaiz Bridge][Gemini] Đang lắng nghe ảnh Imagen 3 mới...');
+        console.log('[Kaiz Bridge][Gemini] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Cancel xuất hiện...');
 
-        while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 1200));
-
-            // Kiểm tra thông báo từ chối kiểm duyệt (Safety Refusal)
-            const bodyText = document.body.innerText;
-            if (
-                bodyText.includes("I can't create that image") ||
-                bodyText.includes("I can't generate that image") ||
-                bodyText.includes('safety guidelines') ||
-                bodyText.includes('chính sách an toàn')
-            ) {
-                throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
+        // Hàm nhận diện Gemini đang trong trạng thái sinh phản hồi / tạo ảnh
+        const isGeminiGenerating = () => {
+            const stopSelectors = [
+                'button[aria-label*="Stop" i]',
+                'button[aria-label*="Dừng" i]',
+                'button[aria-label*="Cancel" i]',
+                'button[aria-label*="Hủy" i]',
+                'button.stop-button',
+                'button[data-test-id="stop-button"]',
+                '.send-button-container button[aria-label*="stop" i]',
+                '.send-button-container button[aria-label*="dừng" i]',
+            ];
+            for (const sel of stopSelectors) {
+                const btn = document.querySelector(sel);
+                if (btn && btn.offsetParent !== null) return true;
             }
 
-            // Quét các thẻ img trên trang
+            // Kiểm tra icon Stop trong nút bấm
+            const stopIcon = document.querySelector(
+                'mat-icon[fonticon="stop"], mat-icon[data-mat-icon-name="stop"], mat-icon[data-mat-icon-name="stop_circle"], svg.stop-icon',
+            );
+            if (stopIcon && stopIcon.offsetParent !== null) return true;
+
+            // Kiểm tra hiệu ứng loading / progress bar
+            const loader = document.querySelector('mat-progress-bar, .loading-indicator, bard-loading-indicator');
+            if (loader && loader.offsetParent !== null) return true;
+
+            return false;
+        };
+
+        // Hàm tìm ảnh mới hợp lệ trên trang
+        const findNewValidImage = () => {
             const currentImages = Array.from(document.querySelectorAll('img'));
             for (const img of currentImages) {
                 const src = img.src || '';
@@ -571,48 +648,136 @@
                 const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
 
                 if (src && isNew && isImageHost && isNotAvatar && isLoaded) {
-                    console.log('[Kaiz Bridge][Gemini] 🎉 TÌM THẤY ẢNH MỚI HỢP LỆ:', src.substring(0, 100));
+                    return img;
+                }
+            }
+            return null;
+        };
 
-                    let base64 = null;
-                    // Trích xuất tức thì qua canvas nếu ảnh đã load hoàn chỉnh
-                    try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.naturalWidth || img.width;
-                        canvas.height = img.naturalHeight || img.height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        const dataUrl = canvas.toDataURL('image/png');
-                        if (dataUrl && dataUrl.startsWith('data:image')) {
-                            base64 = dataUrl;
-                        }
-                    } catch (canvasErr) {
-                        // CORS tainted, tiếp tục với fetch/GM_xmlhttpRequest
+        // Hàm trích xuất ảnh và gửi Base64 về SillyTavern
+        const deliverImageResult = async (img) => {
+            console.log('[Kaiz Bridge][Gemini] 🎉 Xử lý trích xuất ảnh:', (img.src || '').substring(0, 100));
+            let base64 = null;
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const dataUrl = canvas.toDataURL('image/png');
+                if (dataUrl && dataUrl.startsWith('data:image')) {
+                    base64 = dataUrl;
+                }
+            } catch (canvasErr) {
+                // CORS tainted, tiếp tục với fetch/GM_xmlhttpRequest
+            }
+
+            if (!base64 && img.src.startsWith('blob:')) {
+                try {
+                    const blob = await fetch(img.src).then((r) => r.blob());
+                    base64 = await blobToBase64(blob);
+                } catch (e) {
+                    console.warn('[Kaiz Bridge][Gemini] fetch blob error:', e);
+                }
+            }
+
+            if (!base64) {
+                base64 = await fetchImageAsBase64(img.src);
+            }
+
+            GM_setValue('KAIZ_JOB_RESULT', {
+                id: job.id,
+                status: 'success',
+                provider: 'gemini',
+                base64: base64,
+                timestamp: Date.now(),
+            });
+            console.log('[Kaiz Bridge][Gemini] Đã gửi kết quả Base64 về SillyTavern!');
+        };
+
+        // =========================================================================
+        // GIAI ĐOẠN 1: CHỜ NÚT CANCEL XUẤT HIỆN (Khởi động tiến trình)
+        // Không dùng buffer thời gian cứng; kiên nhẫn chờ nút cancel hiện ra dù mạng lag
+        // =========================================================================
+        let hasStarted = false;
+        const phase1MaxWait = 25000; // Tối đa 25s cho mạng chậm
+        const phase1Start = Date.now();
+
+        while (Date.now() - phase1Start < phase1MaxWait) {
+            // Trường hợp cực nhanh: ảnh mới đã có sẵn
+            const earlyImg = findNewValidImage();
+            if (earlyImg) {
+                console.log('[Kaiz Bridge][Gemini] 🎉 Bắt được ảnh ngay trong Phase 1!');
+                await deliverImageResult(earlyImg);
+                return;
+            }
+
+            // Nút Cancel đã xuất hiện -> Khởi động thành công!
+            if (isGeminiGenerating()) {
+                hasStarted = true;
+                console.log('[Kaiz Bridge][Gemini] 🟢 Nút Cancel đã xuất hiện! Chuyển sang Phase 2: Theo dõi tiến trình.');
+                break;
+            }
+
+            // Bắt nhanh Safety keywords nếu Gemini từ chối tức thì
+            const bodyText = document.body.innerText;
+            if (
+                bodyText.includes("I can't create that image") ||
+                bodyText.includes("I can't generate that image") ||
+                bodyText.includes('safety guidelines') ||
+                bodyText.includes('chính sách an toàn')
+            ) {
+                throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
+            }
+
+            await new Promise((r) => setTimeout(r, 400));
+        }
+
+        if (!hasStarted) {
+            const lastCheckImg = findNewValidImage();
+            if (lastCheckImg) {
+                await deliverImageResult(lastCheckImg);
+                return;
+            }
+            throw new Error('Không phát hiện Gemini bắt đầu tạo ảnh sau 25s (nút Cancel không xuất hiện, có thể do lỗi mạng hoặc prompt chưa gửi được).');
+        }
+
+        // =========================================================================
+        // GIAI ĐOẠN 2: THEO DÕI NÚT CANCEL CHO TỚI KHI BIẾN MẤT (Hoàn tất hoặc từ chối)
+        // =========================================================================
+        console.log('[Kaiz Bridge][Gemini] ⏳ Đang theo dõi tiến trình tạo ảnh...');
+        let finishedCheckCount = 0;
+
+        while (Date.now() - startTime < timeoutMs) {
+            await new Promise((r) => setTimeout(r, 800));
+
+            // ƯU TIÊN 1: Bắt ngay ảnh mới ngay khi vừa tải xong
+            const newImg = findNewValidImage();
+            if (newImg) {
+                await deliverImageResult(newImg);
+                return;
+            }
+
+            // ƯU TIÊN 2: Kiểm tra trạng thái nút Cancel
+            const isGen = isGeminiGenerating();
+            if (isGen) {
+                finishedCheckCount = 0; // Nút vẫn còn -> reset bộ đếm
+            } else {
+                // Nút Cancel đã biến mất!
+                // Debounce 2 nhịp liên tiếp (~1.6s) để tránh lỗi re-render / chớp tắt của UI Angular
+                finishedCheckCount++;
+                if (finishedCheckCount >= 2) {
+                    console.log('[Kaiz Bridge][Gemini] ⚠️ Nút Cancel đã biến mất. Quét ảnh lần cuối...');
+                    await new Promise((r) => setTimeout(r, 1200));
+
+                    const finalImg = findNewValidImage();
+                    if (finalImg) {
+                        await deliverImageResult(finalImg);
+                        return;
                     }
 
-                    if (!base64) {
-                        if (src.startsWith('blob:')) {
-                            try {
-                                const blob = await fetch(src).then((r) => r.blob());
-                                base64 = await blobToBase64(blob);
-                            } catch (e) {
-                                console.warn('[Kaiz Bridge][Gemini] fetch blob error:', e);
-                            }
-                        }
-                    }
-
-                    if (!base64) {
-                        base64 = await fetchImageAsBase64(src);
-                    }
-
-                    GM_setValue('KAIZ_JOB_RESULT', {
-                        id: job.id,
-                        status: 'success',
-                        provider: 'gemini',
-                        base64: base64,
-                        timestamp: Date.now(),
-                    });
-                    console.log('[Kaiz Bridge][Gemini] Đã gửi kết quả Base64 về SillyTavern!');
-                    return;
+                    // Nút cancel biến mất mà không hề có ảnh mới -> Gemini kết thúc nhưng từ chối / lỗi!
+                    throw new Error('Gemini đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt hoặc không thực thi lệnh vẽ).');
                 }
             }
         }
@@ -745,15 +910,91 @@
             );
         }
 
-        // 5. Chờ phản hồi và bắt ảnh mới
+        // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT CANCEL (LIFECYCLE STATE MACHINE)
         const timeoutMs = 85000;
         const startTime = Date.now();
-        console.log('[Kaiz Bridge][ChatGPT] Đang lắng nghe ảnh DALL-E mới...');
+        console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Stop xuất hiện...');
 
-        while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 1200));
+        const isChatGPTGenerating = () => {
+            const stopBtn = document.querySelector(
+                'button[data-testid="stop-button"], button[aria-label*="Stop" i], button[aria-label*="Dừng" i]',
+            );
+            return !!(stopBtn && stopBtn.offsetParent !== null);
+        };
 
-            // Kiểm tra lỗi kiểm duyệt
+        const findNewValidChatGPTImage = () => {
+            const currentImages = Array.from(document.querySelectorAll('img'));
+            for (const img of currentImages) {
+                const src = img.src || '';
+                const isNew = !existingImages.has(src);
+                const isOAI = src.includes('oaiusercontent.com') || src.includes('files.oaiusercontent');
+                const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
+
+                if (src && isNew && isOAI && isLoaded) {
+                    return img;
+                }
+            }
+            return null;
+        };
+
+        const deliverChatGPTImageResult = async (img) => {
+            console.log('[Kaiz Bridge][ChatGPT] 🎉 Xử lý trích xuất ảnh:', (img.src || '').substring(0, 100));
+            let base64 = null;
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth || img.width;
+                canvas.height = img.naturalHeight || img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const dataUrl = canvas.toDataURL('image/png');
+                if (dataUrl && dataUrl.startsWith('data:image')) {
+                    base64 = dataUrl;
+                }
+            } catch (canvasErr) {
+                // CORS tainted
+            }
+
+            if (!base64 && img.src.startsWith('blob:')) {
+                try {
+                    const blob = await fetch(img.src).then((r) => r.blob());
+                    base64 = await blobToBase64(blob);
+                } catch (e) {
+                    console.warn('[Kaiz Bridge][ChatGPT] fetch blob error:', e);
+                }
+            }
+
+            if (!base64) {
+                base64 = await fetchImageAsBase64(img.src);
+            }
+
+            GM_setValue('KAIZ_JOB_RESULT', {
+                id: job.id,
+                status: 'success',
+                provider: 'chatgpt',
+                base64: base64,
+                timestamp: Date.now(),
+            });
+            console.log('[Kaiz Bridge][ChatGPT] Đã gửi kết quả Base64 về SillyTavern!');
+        };
+
+        // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN
+        let hasStarted = false;
+        const phase1MaxWait = 25000;
+        const phase1Start = Date.now();
+
+        while (Date.now() - phase1Start < phase1MaxWait) {
+            const earlyImg = findNewValidChatGPTImage();
+            if (earlyImg) {
+                await deliverChatGPTImageResult(earlyImg);
+                return;
+            }
+
+            if (isChatGPTGenerating()) {
+                hasStarted = true;
+                console.log('[Kaiz Bridge][ChatGPT] 🟢 Nút Stop đã xuất hiện! Chuyển sang Phase 2: Theo dõi.');
+                break;
+            }
+
             const bodyText = document.body.innerText;
             if (
                 bodyText.includes('I cannot generate that image') ||
@@ -763,56 +1004,47 @@
                 throw new Error('ChatGPT từ chối vẽ ảnh do vi phạm chính sách nội dung.');
             }
 
-            // Quét các thẻ img trên trang
-            const currentImages = Array.from(document.querySelectorAll('img'));
-            for (const img of currentImages) {
-                const src = img.src || '';
-                const isNew = !existingImages.has(src);
-                const isOAI = src.includes('oaiusercontent.com') || src.includes('files.oaiusercontent');
-                const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
+            await new Promise((r) => setTimeout(r, 400));
+        }
 
-                if (src && isNew && isOAI && isLoaded) {
-                    console.log('[Kaiz Bridge][ChatGPT] 🎉 TÌM THẤY ẢNH MỚI:', src.substring(0, 100));
+        if (!hasStarted) {
+            const lastCheckImg = findNewValidChatGPTImage();
+            if (lastCheckImg) {
+                await deliverChatGPTImageResult(lastCheckImg);
+                return;
+            }
+            throw new Error('Không phát hiện ChatGPT bắt đầu tạo ảnh sau 25s (nút Stop không xuất hiện, có thể do mạng chậm hoặc prompt chưa gửi).');
+        }
 
-                    let base64 = null;
-                    try {
-                        const canvas = document.createElement('canvas');
-                        canvas.width = img.naturalWidth || img.width;
-                        canvas.height = img.naturalHeight || img.height;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0);
-                        const dataUrl = canvas.toDataURL('image/png');
-                        if (dataUrl && dataUrl.startsWith('data:image')) {
-                            base64 = dataUrl;
-                        }
-                    } catch (canvasErr) {
-                        // CORS tainted
+        // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI NÚT STOP BIẾN MẤT
+        console.log('[Kaiz Bridge][ChatGPT] ⏳ Đang theo dõi tiến trình tạo ảnh...');
+        let finishedCheckCount = 0;
+
+        while (Date.now() - startTime < timeoutMs) {
+            await new Promise((r) => setTimeout(r, 800));
+
+            const newImg = findNewValidChatGPTImage();
+            if (newImg) {
+                await deliverChatGPTImageResult(newImg);
+                return;
+            }
+
+            const isGen = isChatGPTGenerating();
+            if (isGen) {
+                finishedCheckCount = 0;
+            } else {
+                finishedCheckCount++;
+                if (finishedCheckCount >= 2) {
+                    console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất. Quét ảnh lần cuối...');
+                    await new Promise((r) => setTimeout(r, 1200));
+
+                    const finalImg = findNewValidChatGPTImage();
+                    if (finalImg) {
+                        await deliverChatGPTImageResult(finalImg);
+                        return;
                     }
 
-                    if (!base64) {
-                        if (src.startsWith('blob:')) {
-                            try {
-                                const blob = await fetch(src).then((r) => r.blob());
-                                base64 = await blobToBase64(blob);
-                            } catch (e) {
-                                console.warn('[Kaiz Bridge][ChatGPT] fetch blob error:', e);
-                            }
-                        }
-                    }
-
-                    if (!base64) {
-                        base64 = await fetchImageAsBase64(src);
-                    }
-
-                    GM_setValue('KAIZ_JOB_RESULT', {
-                        id: job.id,
-                        status: 'success',
-                        provider: 'chatgpt',
-                        base64: base64,
-                        timestamp: Date.now(),
-                    });
-                    console.log('[Kaiz Bridge][ChatGPT] Đã gửi kết quả Base64 về SillyTavern!');
-                    return;
+                    throw new Error('ChatGPT đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt nội dung hoặc chỉ trả lời văn bản).');
                 }
             }
         }
