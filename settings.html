@@ -646,6 +646,125 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- CARD 2: WEB IMAGE BRIDGE (GEMINI & CHATGPT) -->
+                    <div class="kaiz-settings-card" style="margin-top: 14px">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-palette"></i> Web Image Bridge (Gemini / ChatGPT)
+                            </div>
+                            <label class="kaiz-switch">
+                                <input id="kaiz-enable-web-image-bridge" type="checkbox" />
+                                <span class="kaiz-slider"></span>
+                            </label>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Kết nối trực tiếp SillyTavern với tab Gemini Web hoặc ChatGPT Web để vẽ ảnh chất lượng cao mà không tốn chi phí API.
+                            </p>
+
+                            <!-- Nền tảng mặc định -->
+                            <div class="kaiz-form-group" style="margin-bottom: 12px">
+                                <label class="kaiz-label" for="kaiz-web-image-provider"
+                                    >Nền tảng sinh ảnh ưu tiên:</label
+                                >
+                                <select id="kaiz-web-image-provider" class="kaiz-select interactable">
+                                    <option value="auto">Tự động (Ưu tiên tab đang mở)</option>
+                                    <option value="gemini">Gemini Web (Nhanh, Đẹp, Miễn phí)</option>
+                                    <option value="chatgpt">ChatGPT Web</option>
+                                </select>
+                            </div>
+
+                            <!-- Custom Prompt & Vị trí ghép -->
+                            <div class="kaiz-form-group" style="margin-bottom: 12px">
+                                <label class="kaiz-label" for="kaiz-web-image-custom-prompt">
+                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Custom Prompt cố định (Style / Bổ trợ):
+                                </label>
+                                <textarea
+                                    id="kaiz-web-image-custom-prompt"
+                                    class="kaiz-input interactable"
+                                    rows="2"
+                                    placeholder="vd: masterpiece, best quality, cinematic lighting, highly detailed, 8k"
+                                    style="resize: vertical; font-size: 0.85em; width: 100%; box-sizing: border-box;"
+                                ></textarea>
+                                <span class="kaiz-help-text" style="font-size: 0.8em; opacity: 0.75; display: block; margin-top: 4px;">
+                                    Tự động merge vào mọi câu lệnh vẽ ảnh (/draw và Agent tool). Để trống nếu không dùng.
+                                </span>
+                            </div>
+
+                            <div class="kaiz-form-group" style="margin-bottom: 12px">
+                                <label class="kaiz-label" for="kaiz-web-image-custom-prompt-pos">
+                                    <i class="fa-solid fa-arrows-left-right"></i> Vị trí ghép Custom Prompt:
+                                </label>
+                                <select id="kaiz-web-image-custom-prompt-pos" class="kaiz-select interactable">
+                                    <option value="suffix">Tách đoạn riêng ở CUỐI prompt (Suffix - Khuyên dùng)</option>
+                                    <option value="prefix">Tách đoạn riêng ở ĐẦU prompt (Prefix)</option>
+                                </select>
+                            </div>
+
+                            <!-- Trạng thái kết nối thời gian thực -->
+                            <div
+                                class="kaiz-bridge-status-card"
+                                style="
+                                    background: rgba(0, 0, 0, 0.25);
+                                    border-radius: 8px;
+                                    padding: 12px;
+                                    margin-bottom: 12px;
+                                    border: 1px solid rgba(255, 255, 255, 0.08);
+                                "
+                            >
+                                <div style="font-weight: 600; margin-bottom: 8px; font-size: 0.9em; opacity: 0.9">
+                                    <i class="fa-solid fa-signal"></i> Trạng thái kết nối Tab thời gian thực:
+                                </div>
+                                <div style="display: flex; flex-direction: column; gap: 8px; font-size: 0.85em">
+                                    <div style="display: flex; justify-content: space-between; align-items: center">
+                                        <span>Userscript Bridge:</span>
+                                        <span id="kaiz-bridge-status-userscript" class="kaiz-status-pill badge-neutral"
+                                            ><i class="fa-solid fa-circle-question"></i> Đang kiểm tra...</span
+                                        >
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center">
+                                        <span>Gemini Web (gemini.google.com):</span>
+                                        <span id="kaiz-bridge-status-gemini" class="kaiz-status-pill badge-danger"
+                                            ><i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab</span
+                                        >
+                                    </div>
+                                    <div style="display: flex; justify-content: space-between; align-items: center">
+                                        <span>ChatGPT Web (chatgpt.com):</span>
+                                        <span id="kaiz-bridge-status-chatgpt" class="kaiz-status-pill badge-danger"
+                                            ><i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab</span
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Hướng dẫn & Tải Userscript -->
+                            <div class="kaiz-browser-guide-card">
+                                <div class="kaiz-guide-title">
+                                    <i class="fa-solid fa-circle-info"></i> Hướng dẫn kích hoạt & sử dụng:
+                                </div>
+                                <p style="font-size: 0.82em; line-height: 1.45; opacity: 0.85; margin-bottom: 8px">
+                                    1. Cài đặt tiện ích <b>Tampermonkey</b> trên trình duyệt của bạn.<br />
+                                    2. Cài đặt script <b>Kaiz Web Image Bridge</b>.<br />
+                                    3. Mở sẵn 1 tab <code>gemini.google.com</code> hoặc <code>chatgpt.com</code> (đã
+                                    đăng nhập).<br />
+                                    4. Trong khung chat SillyTavern, gõ <code>/draw &lt;mô tả&gt;</code> hoặc để Agent
+                                    tự động vẽ ảnh!
+                                </p>
+                                <div class="kaiz-guide-action">
+                                    <a
+                                        href="https://github.com/Khanhhpk/Kaiz-Agent-Extension/raw/beta/userscripts/kaiz-web-image-bridge.user.js"
+                                        target="_blank"
+                                        class="kaiz-btn kaiz-btn-secondary kaiz-btn-sm"
+                                        title="Bấm để cài đặt script vào Tampermonkey"
+                                    >
+                                        <i class="fa-solid fa-download"></i> Cài đặt Web Image Bridge Script
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
             <!-- End Tab Content -->

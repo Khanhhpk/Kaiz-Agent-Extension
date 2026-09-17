@@ -15,6 +15,8 @@ import { initThemeManagerTool } from './core/tools/st_theme_manager';
 import { initCSSManagerTool } from './core/tools/st_css_manager';
 import { initInjectElementTool } from './core/tools/st_inject_element';
 import { UICustomizationModal } from './ui/ui_customization_modal';
+import { WebImageBridge } from './core/web_image_bridge';
+import { ImageGalleryModal } from './ui/image_gallery_modal';
 
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
@@ -51,6 +53,7 @@ try {
 
 declare const jQuery: any;
 declare const SillyTavern: any;
+declare const toastr: any;
 
 jQuery(async () => {
     console.log('[KaizAgent] Initializing extension core...');
@@ -77,6 +80,10 @@ jQuery(async () => {
             safeModeBlacklist: {},
             quickPrompts: [],
             enableBrowser: false,
+            webImageBridgeEnabled: true,
+            webImageProvider: 'auto',
+            customImagePrompt: '',
+            customImagePromptPosition: 'suffix',
         };
     } else {
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
@@ -114,6 +121,18 @@ jQuery(async () => {
         }
         if (ctx.extensionSettings[EXT_NAME].enableBrowser === undefined) {
             ctx.extensionSettings[EXT_NAME].enableBrowser = false;
+        }
+        if (ctx.extensionSettings[EXT_NAME].webImageBridgeEnabled === undefined) {
+            ctx.extensionSettings[EXT_NAME].webImageBridgeEnabled = true;
+        }
+        if (ctx.extensionSettings[EXT_NAME].webImageProvider === undefined) {
+            ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
+        }
+        if (ctx.extensionSettings[EXT_NAME].customImagePrompt === undefined) {
+            ctx.extensionSettings[EXT_NAME].customImagePrompt = '';
+        }
+        if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === undefined) {
+            ctx.extensionSettings[EXT_NAME].customImagePromptPosition = 'suffix';
         }
     }
 
@@ -164,11 +183,113 @@ jQuery(async () => {
             initCSSManagerTool(uiEngine);
             initInjectElementTool(uiEngine);
             new UICustomizationModal(stateManager.db, uiEngine);
-            console.log('[KaizAgent] UI Customization Engine initialized.');
+            new ImageGalleryModal(stateManager.db);
+            console.log('[KaizAgent] UI Customization Engine & Image Gallery initialized.');
 
             // Bắt đầu Auto Tasks sau khi DB đã init
             const allTasks = await stateManager.db.getAllAutoTasks();
             await autoTaskScheduler.start(allTasks);
+
+            // Khởi tạo Web Image Bridge & Slash Command /draw
+            WebImageBridge.init();
+            if (typeof ctx.registerSlashCommand === 'function') {
+                ctx.registerSlashCommand(
+                    'draw',
+                    async (args: any, value: string) => {
+                        console.log('[Kaiz Slash /draw] raw args:', args, 'raw value:', value);
+                        let prompt = '';
+                        if (typeof value === 'string' && value.trim()) {
+                            prompt = value.trim();
+                        } else if (typeof args === 'string' && args.trim()) {
+                            prompt = args.trim();
+                        } else if (args && typeof args === 'object') {
+                            if (typeof args.text === 'string') prompt = args.text.trim();
+                            else if (typeof args.prompt === 'string') prompt = args.prompt.trim();
+                            else if (typeof args.unnamed === 'string') prompt = args.unnamed.trim();
+                            else if (Array.isArray(args._)) prompt = args._.join(' ').trim();
+                        }
+
+                        if (!prompt) {
+                            if (typeof toastr !== 'undefined') {
+                                toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw a cute cat)');
+                            }
+                            return;
+                        }
+                        const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
+                        if (typeof toastr !== 'undefined') {
+                            toastr.info('Đang gửi prompt vẽ ảnh sang Web (Gemini/ChatGPT)...');
+                        }
+                        try {
+                            const target = WebImageBridge.getConfiguredProvider();
+                            const startDraw = Date.now();
+                            const base64 = await WebImageBridge.requestImage({ prompt: finalPrompt, target });
+                            const durationMs = Date.now() - startDraw;
+                            const actualProvider = WebImageBridge.getLastDeliveredProvider();
+
+                            await WebImageBridge.saveImageToGallery({
+                                prompt: finalPrompt,
+                                base64,
+                                provider: actualProvider,
+                                durationMs,
+                            });
+                            const safePrompt = finalPrompt
+                                .replace(/&/g, '&amp;')
+                                .replace(/"/g, '&quot;')
+                                .replace(/</g, '&lt;')
+                                .replace(/>/g, '&gt;');
+                            const durationText = `${(durationMs / 1000).toFixed(1)}s`;
+                            const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${actualProvider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
+
+                            let messageSent = false;
+                            if (typeof ctx.sendSystemMessage === 'function') {
+                                try {
+                                    ctx.sendSystemMessage('generic', imageHtml);
+                                    messageSent = true;
+                                } catch (err) {
+                                    console.warn('[Kaiz /draw] sendSystemMessage(generic) error:', err);
+                                    try {
+                                        ctx.sendSystemMessage(imageHtml);
+                                        messageSent = true;
+                                    } catch (e2) {
+                                        console.warn('[Kaiz /draw] sendSystemMessage(imageHtml) error:', e2);
+                                    }
+                                }
+                            }
+
+                            if (!messageSent && typeof ctx.addOneMessage === 'function') {
+                                ctx.addOneMessage({
+                                    is_user: false,
+                                    is_system: true,
+                                    name: 'Web Image Bridge',
+                                    mes: imageHtml,
+                                    send_date: Date.now(),
+                                });
+                                if (typeof ctx.saveChat === 'function') {
+                                    ctx.saveChat();
+                                }
+                                if (typeof ctx.scrollChatToBottom === 'function') {
+                                    ctx.scrollChatToBottom();
+                                }
+                                messageSent = true;
+                            }
+
+                            if (typeof toastr !== 'undefined') {
+                                toastr.success('Đã vẽ ảnh thành công!');
+                            }
+                            return imageHtml;
+                        } catch (e: any) {
+                            if (typeof toastr !== 'undefined') {
+                                toastr.error(`Vẽ ảnh thất bại: ${e.message}`);
+                            }
+                            return `[Error] ${e.message}`;
+                        }
+                    },
+                    [],
+                    '<mô_tả_ảnh>',
+                    'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Web / ChatGPT Web)',
+                    true,
+                );
+            }
         } else {
             console.error('[KaizAgent] renderExtensionTemplateAsync returned empty for kaiz_window.');
         }

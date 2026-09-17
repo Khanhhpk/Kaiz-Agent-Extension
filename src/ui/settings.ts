@@ -4,6 +4,7 @@ declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
 import { BrowserWindowUI } from './browser_window';
+import { WebImageBridge } from '../core/web_image_bridge';
 import {
     DEFAULT_CORE_IDENTITY,
     DEFAULT_CORE_BEHAVIOR,
@@ -853,6 +854,85 @@ export class SettingsUI {
             }, 2000);
         });
         // --- END BROWSER SETUP LOGIC ---
+
+        // --- WEB IMAGE BRIDGE LOGIC ---
+        $('#kaiz-enable-web-image-bridge').prop('checked', !!settings.webImageBridgeEnabled);
+        $('#kaiz-enable-web-image-bridge').on('change', function (this: HTMLInputElement) {
+            settings.webImageBridgeEnabled = !!this.checked;
+            ctx.saveSettingsDebounced();
+            if (settings.webImageBridgeEnabled) {
+                delete settings.disabledTools['generate_web_image'];
+            } else {
+                settings.disabledTools['generate_web_image'] = true;
+            }
+            renderTools();
+        });
+
+        $('#kaiz-web-image-provider').val(settings.webImageProvider || 'auto');
+        $('#kaiz-web-image-provider').on('change', function (this: HTMLSelectElement) {
+            settings.webImageProvider = this.value || 'auto';
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-custom-prompt').val(settings.customImagePrompt || '');
+        $('#kaiz-web-image-custom-prompt').on('input', function (this: HTMLTextAreaElement) {
+            settings.customImagePrompt = this.value;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-custom-prompt-pos').val(settings.customImagePromptPosition || 'suffix');
+        $('#kaiz-web-image-custom-prompt-pos').on('change', function (this: HTMLSelectElement) {
+            settings.customImagePromptPosition = this.value || 'suffix';
+            ctx.saveSettingsDebounced();
+        });
+
+        const updateBridgeStatusUI = () => {
+            const status = WebImageBridge.getStatus();
+            const $userScriptStatus = $('#kaiz-bridge-status-userscript');
+            const $geminiStatus = $('#kaiz-bridge-status-gemini');
+            const $chatgptStatus = $('#kaiz-bridge-status-chatgpt');
+
+            if (status.userscriptInstalled) {
+                $userScriptStatus
+                    .removeClass('badge-neutral badge-danger')
+                    .addClass('badge-success')
+                    .html('<i class="fa-solid fa-circle-check"></i> Đã cài đặt');
+            } else {
+                $userScriptStatus
+                    .removeClass('badge-success')
+                    .addClass('badge-neutral')
+                    .html('<i class="fa-solid fa-circle-question"></i> Đang kiểm tra...');
+            }
+
+            if (status.geminiOnline) {
+                $geminiStatus
+                    .removeClass('badge-danger')
+                    .addClass('badge-success')
+                    .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+            } else {
+                $geminiStatus
+                    .removeClass('badge-success')
+                    .addClass('badge-danger')
+                    .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+            }
+
+            if (status.chatgptOnline) {
+                $chatgptStatus
+                    .removeClass('badge-danger')
+                    .addClass('badge-success')
+                    .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+            } else {
+                $chatgptStatus
+                    .removeClass('badge-success')
+                    .addClass('badge-danger')
+                    .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+            }
+        };
+
+        setInterval(updateBridgeStatusUI, 2500);
+        window.postMessage({ type: 'KAIZ_BRIDGE_PING' }, '*');
+        updateBridgeStatusUI();
+        // --- END WEB IMAGE BRIDGE LOGIC ---
 
         // Lắng nghe chọn từ Dropdown -> Cập nhật Input
         $('#kaiz-custom-model').on('change', function (this: HTMLSelectElement) {
