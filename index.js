@@ -6056,7 +6056,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            return 'auto';
        }
        /**
-        * Tự động ghép Custom Prompt (Prefix hoặc Suffix) từ cấu hình người dùng
+        * Tự động ghép Custom Prompt (Prefix và Suffix) từ cấu hình người dùng
         */
        static mergeCustomPrompt(basePrompt) {
            try {
@@ -6064,21 +6064,27 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    ? globalThis.SillyTavern.getContext()
                    : globalThis.window?.SillyTavern?.getContext?.() || null;
                const settings = ctx?.extensionSettings?.['kaiz_agent'];
-               const customPrompt = (settings?.customImagePrompt || '').trim();
-               const position = settings?.customImagePromptPosition || 'suffix';
+               let prefix = (settings?.customImagePrefix ?? '').trim();
+               let suffix = (settings?.customImageSuffix ?? '').trim();
+               // Migration / fallback nếu người dùng còn cấu hình cũ
+               if (!prefix && !suffix && settings?.customImagePrompt) {
+                   const legacy = (settings.customImagePrompt || '').trim();
+                   if (settings?.customImagePromptPosition === 'prefix') {
+                       prefix = legacy;
+                   }
+                   else {
+                       suffix = legacy;
+                   }
+               }
                const rawBase = (basePrompt || '').trim();
-               if (!customPrompt)
-                   return rawBase;
-               if (!rawBase)
-                   return customPrompt;
-               let combined = '';
-               if (position === 'prefix') {
-                   combined = `${customPrompt}\n\n${rawBase}`;
-               }
-               else {
-                   combined = `${rawBase}\n\n${customPrompt}`;
-               }
-               return combined.trim();
+               const parts = [];
+               if (prefix)
+                   parts.push(prefix);
+               if (rawBase)
+                   parts.push(rawBase);
+               if (suffix)
+                   parts.push(suffix);
+               return parts.join('\n\n').trim();
            }
            catch (_e) {
                return basePrompt;
@@ -6112,13 +6118,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
    const generateWebImageTool = {
        schema: {
            name: 'generate_web_image',
-           description: 'CÔNG CỤ SINH ẢNH MINH HỌA WEB. Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt bằng tiếng Anh thật chi tiết, giàu tính mô tả (ánh sáng, phong cách nghệ thuật, góc máy, chi tiết nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
+           description: 'CÔNG CỤ SINH ẢNH MINH HỌA WEB. Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt mô tả bức ảnh thật chi tiết, giàu tính tạo hình (bối cảnh, góc máy, ánh sáng, phong cách nghệ thuật, biểu cảm nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
            parameters: {
                type: 'object',
                properties: {
                    prompt: {
                        type: 'string',
-                       description: 'Câu lệnh prompt mô tả bức ảnh chi tiết bằng tiếng Anh (ví dụ: "cinematic anime illustration of a silver-haired knight resting under a blooming cherry blossom tree at sunset, soft volumetric lighting, highly detailed, 8k resolution").',
+                       description: 'Câu lệnh prompt mô tả chi tiết bức ảnh cần vẽ.',
                    },
                },
                required: ['prompt'],
@@ -8761,14 +8767,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                settings.webImageProvider = this.value || 'auto';
                ctx.saveSettingsDebounced();
            });
-           $('#kaiz-web-image-custom-prompt').val(settings.customImagePrompt || '');
-           $('#kaiz-web-image-custom-prompt').on('input', function () {
-               settings.customImagePrompt = this.value;
+           $('#kaiz-web-image-custom-prefix').val(settings.customImagePrefix || '');
+           $('#kaiz-web-image-custom-prefix').on('input', function () {
+               settings.customImagePrefix = this.value;
                ctx.saveSettingsDebounced();
            });
-           $('#kaiz-web-image-custom-prompt-pos').val(settings.customImagePromptPosition || 'suffix');
-           $('#kaiz-web-image-custom-prompt-pos').on('change', function () {
-               settings.customImagePromptPosition = this.value || 'suffix';
+           $('#kaiz-web-image-custom-suffix').val(settings.customImageSuffix || '');
+           $('#kaiz-web-image-custom-suffix').on('input', function () {
+               settings.customImageSuffix = this.value;
                ctx.saveSettingsDebounced();
            });
            const updateBridgeStatusUI = () => {
@@ -12383,8 +12389,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                enableBrowser: false,
                webImageBridgeEnabled: true,
                webImageProvider: 'auto',
-               customImagePrompt: '',
-               customImagePromptPosition: 'suffix',
+               customImagePrefix: '',
+               customImageSuffix: '',
            };
        }
        else {
@@ -12430,11 +12436,21 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            if (ctx.extensionSettings[EXT_NAME].webImageProvider === undefined) {
                ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
            }
-           if (ctx.extensionSettings[EXT_NAME].customImagePrompt === undefined) {
-               ctx.extensionSettings[EXT_NAME].customImagePrompt = '';
+           if (ctx.extensionSettings[EXT_NAME].customImagePrefix === undefined) {
+               if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === 'prefix' && ctx.extensionSettings[EXT_NAME].customImagePrompt) {
+                   ctx.extensionSettings[EXT_NAME].customImagePrefix = ctx.extensionSettings[EXT_NAME].customImagePrompt;
+               }
+               else {
+                   ctx.extensionSettings[EXT_NAME].customImagePrefix = '';
+               }
            }
-           if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === undefined) {
-               ctx.extensionSettings[EXT_NAME].customImagePromptPosition = 'suffix';
+           if (ctx.extensionSettings[EXT_NAME].customImageSuffix === undefined) {
+               if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition !== 'prefix' && ctx.extensionSettings[EXT_NAME].customImagePrompt) {
+                   ctx.extensionSettings[EXT_NAME].customImageSuffix = ctx.extensionSettings[EXT_NAME].customImagePrompt;
+               }
+               else {
+                   ctx.extensionSettings[EXT_NAME].customImageSuffix = '';
+               }
            }
        }
        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
@@ -12506,7 +12522,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                        }
                        if (!prompt) {
                            if (typeof toastr !== 'undefined') {
-                               toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw a cute cat)');
+                               toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw một chú mèo đáng yêu)');
                            }
                            return;
                        }

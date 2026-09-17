@@ -82,8 +82,8 @@ jQuery(async () => {
             enableBrowser: false,
             webImageBridgeEnabled: true,
             webImageProvider: 'auto',
-            customImagePrompt: '',
-            customImagePromptPosition: 'suffix',
+            customImagePrefix: '',
+            customImageSuffix: '',
         };
     } else {
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
@@ -128,11 +128,19 @@ jQuery(async () => {
         if (ctx.extensionSettings[EXT_NAME].webImageProvider === undefined) {
             ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
         }
-        if (ctx.extensionSettings[EXT_NAME].customImagePrompt === undefined) {
-            ctx.extensionSettings[EXT_NAME].customImagePrompt = '';
+        if (ctx.extensionSettings[EXT_NAME].customImagePrefix === undefined) {
+            if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === 'prefix' && ctx.extensionSettings[EXT_NAME].customImagePrompt) {
+                ctx.extensionSettings[EXT_NAME].customImagePrefix = ctx.extensionSettings[EXT_NAME].customImagePrompt;
+            } else {
+                ctx.extensionSettings[EXT_NAME].customImagePrefix = '';
+            }
         }
-        if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === undefined) {
-            ctx.extensionSettings[EXT_NAME].customImagePromptPosition = 'suffix';
+        if (ctx.extensionSettings[EXT_NAME].customImageSuffix === undefined) {
+            if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition !== 'prefix' && ctx.extensionSettings[EXT_NAME].customImagePrompt) {
+                ctx.extensionSettings[EXT_NAME].customImageSuffix = ctx.extensionSettings[EXT_NAME].customImagePrompt;
+            } else {
+                ctx.extensionSettings[EXT_NAME].customImageSuffix = '';
+            }
         }
     }
 
@@ -211,7 +219,7 @@ jQuery(async () => {
 
                         if (!prompt) {
                             if (typeof toastr !== 'undefined') {
-                                toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw a cute cat)');
+                                toastr.warning('Vui lòng nhập mô tả ảnh sau lệnh /draw (VD: /draw một chú mèo đáng yêu)');
                             }
                             return;
                         }

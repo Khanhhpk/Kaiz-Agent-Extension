@@ -676,31 +676,37 @@
                                 </select>
                             </div>
 
-                            <!-- Custom Prompt & Vị trí ghép -->
+                            <!-- Custom Prompt Prefix & Suffix -->
                             <div class="kaiz-form-group" style="margin-bottom: 12px">
-                                <label class="kaiz-label" for="kaiz-web-image-custom-prompt">
-                                    <i class="fa-solid fa-wand-magic-sparkles"></i> Custom Prompt cố định (Style / Bổ trợ):
+                                <label class="kaiz-label" for="kaiz-web-image-custom-prefix">
+                                    <i class="fa-solid fa-angles-up"></i> Custom Prompt Tiền tố (Prefix):
                                 </label>
                                 <textarea
-                                    id="kaiz-web-image-custom-prompt"
+                                    id="kaiz-web-image-custom-prefix"
                                     class="kaiz-input interactable"
                                     rows="2"
-                                    placeholder="vd: masterpiece, best quality, cinematic lighting, highly detailed, 8k"
+                                    placeholder="vd: masterpiece, best quality, 2d, anime style... (tự động gắn vào ĐẦU prompt)"
                                     style="resize: vertical; font-size: 0.85em; width: 100%; box-sizing: border-box;"
                                 ></textarea>
                                 <span class="kaiz-help-text" style="font-size: 0.8em; opacity: 0.75; display: block; margin-top: 4px;">
-                                    Tự động merge vào mọi câu lệnh vẽ ảnh (/draw và Agent tool). Để trống nếu không dùng.
+                                    Tự động ghép vào ĐẦU câu lệnh vẽ ảnh (/draw và Agent tool). Để trống nếu không dùng.
                                 </span>
                             </div>
 
                             <div class="kaiz-form-group" style="margin-bottom: 12px">
-                                <label class="kaiz-label" for="kaiz-web-image-custom-prompt-pos">
-                                    <i class="fa-solid fa-arrows-left-right"></i> Vị trí ghép Custom Prompt:
+                                <label class="kaiz-label" for="kaiz-web-image-custom-suffix">
+                                    <i class="fa-solid fa-angles-down"></i> Custom Prompt Hậu tố (Suffix):
                                 </label>
-                                <select id="kaiz-web-image-custom-prompt-pos" class="kaiz-select interactable">
-                                    <option value="suffix">Tách đoạn riêng ở CUỐI prompt (Suffix - Khuyên dùng)</option>
-                                    <option value="prefix">Tách đoạn riêng ở ĐẦU prompt (Prefix)</option>
-                                </select>
+                                <textarea
+                                    id="kaiz-web-image-custom-suffix"
+                                    class="kaiz-input interactable"
+                                    rows="2"
+                                    placeholder="vd: clean lineart, highly detailed, soft volumetric lighting, 8k... (tự động gắn vào CUỐI prompt)"
+                                    style="resize: vertical; font-size: 0.85em; width: 100%; box-sizing: border-box;"
+                                ></textarea>
+                                <span class="kaiz-help-text" style="font-size: 0.8em; opacity: 0.75; display: block; margin-top: 4px;">
+                                    Tự động ghép vào CUỐI câu lệnh vẽ ảnh (/draw và Agent tool). Để trống nếu không dùng.
+                                </span>
                             </div>
 
                             <!-- Trạng thái kết nối thời gian thực -->

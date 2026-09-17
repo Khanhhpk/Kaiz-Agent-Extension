@@ -188,7 +188,7 @@ export class WebImageBridge {
     }
 
     /**
-     * Tự động ghép Custom Prompt (Prefix hoặc Suffix) từ cấu hình người dùng
+     * Tự động ghép Custom Prompt (Prefix và Suffix) từ cấu hình người dùng
      */
     public static mergeCustomPrompt(basePrompt: string): string {
         try {
@@ -197,20 +197,27 @@ export class WebImageBridge {
                     ? (globalThis as any).SillyTavern.getContext()
                     : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
             const settings = ctx?.extensionSettings?.['kaiz_agent'];
-            const customPrompt = (settings?.customImagePrompt || '').trim();
-            const position = settings?.customImagePromptPosition || 'suffix';
+            
+            let prefix = (settings?.customImagePrefix ?? '').trim();
+            let suffix = (settings?.customImageSuffix ?? '').trim();
+
+            // Migration / fallback nếu người dùng còn cấu hình cũ
+            if (!prefix && !suffix && settings?.customImagePrompt) {
+                const legacy = (settings.customImagePrompt || '').trim();
+                if (settings?.customImagePromptPosition === 'prefix') {
+                    prefix = legacy;
+                } else {
+                    suffix = legacy;
+                }
+            }
 
             const rawBase = (basePrompt || '').trim();
-            if (!customPrompt) return rawBase;
-            if (!rawBase) return customPrompt;
+            const parts: string[] = [];
+            if (prefix) parts.push(prefix);
+            if (rawBase) parts.push(rawBase);
+            if (suffix) parts.push(suffix);
 
-            let combined = '';
-            if (position === 'prefix') {
-                combined = `${customPrompt}\n\n${rawBase}`;
-            } else {
-                combined = `${rawBase}\n\n${customPrompt}`;
-            }
-            return combined.trim();
+            return parts.join('\n\n').trim();
         } catch (_e) {
             return basePrompt;
         }
