@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.12
+// @version      1.2.13
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -104,7 +104,7 @@
                 // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.12' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.13' }, '*');
                 checkAllHeartbeats();
                 cleanupOldStorage();
                 // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
@@ -327,6 +327,12 @@
                 if (el.scrollHeight > el.clientHeight) {
                     el.scrollTop = el.scrollHeight;
                 }
+            }
+
+            // Cuộn tin nhắn cuối của assistant vào tầm nhìn
+            const lastAssistantMsg = document.querySelector('[data-message-author-role="assistant"]:last-of-type, article:last-of-type');
+            if (lastAssistantMsg && typeof lastAssistantMsg.scrollIntoView === 'function') {
+                lastAssistantMsg.scrollIntoView({ behavior: 'instant', block: 'end' });
             }
         } catch (e) {
             /* ignore */
@@ -902,11 +908,11 @@
     async function executeChatGPTJob(job) {
         // 1. Snapshot URL các ảnh hiện có
         const existingImages = new Set(
-            Array.from(document.querySelectorAll('img'))
-                .map((img) => img.src)
+            Array.from(document.querySelectorAll('img, a[download], a[href*="backend-api/estuary"], a[href*="oaiusercontent"]'))
+                .map((el) => el.currentSrc || el.src || el.href || el.getAttribute('src') || el.getAttribute('href'))
                 .filter(Boolean),
         );
-        console.log(`[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} ảnh cũ trên trang.`);
+        console.log(`[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} ảnh/tài nguyên cũ trên trang.`);
 
         // 2. Chờ tìm ô input nhập prompt (ProseMirror #prompt-textarea hoặc textarea)
         let inputEl = null;
@@ -1096,62 +1102,27 @@
             ];
             for (const sel of stopSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && btn.offsetParent !== null) return true;
+                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
+                    return true;
+                }
             }
-            // Kiểm tra trạng thái streaming / đang sinh phản hồi của ChatGPT
-            const streaming = document.querySelector('.result-streaming, div[class*="streaming"]');
-            if (streaming && streaming.offsetParent !== null) return true;
+            // Kiểm tra trạng thái streaming / thinking của ChatGPT
+            const streaming = document.querySelector('.result-streaming, div[class*="streaming"], div[class*="result-thinking"]');
+            if (streaming) return true;
             return false;
-        };
-
-        // Hàm chờ ảnh tải và decode hoàn chỉnh (tránh race condition khi browser tải ảnh 1536px từ network)
-        const waitForImageToLoad = (img, maxWaitMs = 25000) => {
-            return new Promise((resolve) => {
-                if (img.complete && img.naturalWidth > 100) {
-                    return resolve(true);
-                }
-
-                let timer = null;
-                const onDone = () => {
-                    cleanup();
-                    resolve(true);
-                };
-                const onError = (e) => {
-                    console.warn('[Kaiz Bridge][ChatGPT] img load error:', e);
-                    cleanup();
-                    resolve(false);
-                };
-                const cleanup = () => {
-                    img.removeEventListener('load', onDone);
-                    img.removeEventListener('error', onError);
-                    if (timer) clearTimeout(timer);
-                };
-
-                img.addEventListener('load', onDone);
-                img.addEventListener('error', onError);
-                timer = setTimeout(() => {
-                    cleanup();
-                    resolve(img.complete && img.naturalWidth > 100);
-                }, maxWaitMs);
-
-                // Thử decode() nếu browser hỗ trợ
-                if (typeof img.decode === 'function') {
-                    img.decode().then(onDone).catch(() => {});
-                }
-            });
         };
 
         // Hàm tìm ứng viên ảnh mới sinh từ ChatGPT (tìm từ dưới lên trên)
         const findChatGPTImageCandidate = () => {
+            // 1. Quét tất cả thẻ img từ dưới lên trên (ảnh mới nhất luôn ở tin nhắn dưới cùng)
             const currentImages = Array.from(document.querySelectorAll('img'));
-            // Quét ngược từ ảnh cuối cùng lên trên (ảnh mới nhất luôn ở tin nhắn dưới cùng)
             for (let i = currentImages.length - 1; i >= 0; i--) {
                 const img = currentImages[i];
-                const src = img.src || '';
+                const src = img.currentSrc || img.src || img.getAttribute('src') || '';
                 if (!src) continue;
                 if (existingImages.has(src)) continue;
 
-                // 1. Nhận diện URL ảnh đặc trưng của ChatGPT
+                // Nhận diện URL ảnh đặc trưng của ChatGPT
                 const isEstuary = src.includes('backend-api/estuary/content') || src.includes('estuary/content');
                 const isOAI =
                     src.includes('oaiusercontent.com') ||
@@ -1161,23 +1132,39 @@
                 const isBlobOrData = src.startsWith('blob:') || src.startsWith('data:image');
                 const isChatGPTPattern = isEstuary || isOAI || isBlobOrData;
 
-                // 2. Nhận diện alt text
+                // Nhận diện alt text
                 const alt = (img.alt || '').toLowerCase();
-                const isGeneratedAlt = alt.includes('generated image') || alt.includes('dall');
+                const isGeneratedAlt = alt.includes('generated image') || alt.includes('dall') || alt.includes('image');
 
-                // 3. Vị trí trong tin nhắn trả lời của assistant
-                const isInAssistantMsg = !!(img.closest && img.closest('[data-message-author-role="assistant"], article, .markdown'));
+                // Vị trí trong tin nhắn trả lời của assistant
+                const isInAssistantMsg = !!(img.closest && img.closest('[data-message-author-role="assistant"], article, .markdown, div[class*="agent-turn"]'));
 
-                // 4. Loại trừ avatar (chỉ loại trừ nếu kích thước hiển thị rõ ràng <= 64px)
-                const isTinyAvatar =
-                    (img.width > 0 && img.width <= 64) ||
-                    (img.naturalWidth > 0 && img.naturalWidth <= 64) ||
-                    (img.clientHeight > 0 && img.clientHeight <= 64);
+                // Loại trừ avatar
+                const isAvatar =
+                    alt.includes('avatar') ||
+                    alt === 'chatgpt' ||
+                    alt === 'user' ||
+                    (img.getAttribute('data-testid') || '').includes('avatar') ||
+                    ((img.width > 0 && img.width <= 64) || (img.naturalWidth > 0 && img.naturalWidth <= 64) || (img.clientHeight > 0 && img.clientHeight <= 64));
 
-                if ((isChatGPTPattern || isGeneratedAlt || isInAssistantMsg) && !isTinyAvatar) {
-                    return img;
+                if (!isAvatar && (isChatGPTPattern || isGeneratedAlt || isInAssistantMsg)) {
+                    return { el: img, src: src };
                 }
             }
+
+            // 2. Dự phòng: Quét các thẻ a có link tải về trỏ tới estuary / oaiusercontent
+            const downloadLinks = Array.from(
+                document.querySelectorAll('a[href*="backend-api/estuary"], a[href*="oaiusercontent"], a[download]'),
+            );
+            for (let i = downloadLinks.length - 1; i >= 0; i--) {
+                const a = downloadLinks[i];
+                const href = a.href || a.getAttribute('href') || '';
+                if (!href || existingImages.has(href)) continue;
+                if (href.includes('estuary') || href.includes('oaiusercontent')) {
+                    return { el: a, src: href };
+                }
+            }
+
             return null;
         };
 
@@ -1208,55 +1195,64 @@
             return false;
         };
 
-        const deliverChatGPTImageResult = async (img) => {
-            console.log('[Kaiz Bridge][ChatGPT] 🎉 Xử lý trích xuất ảnh:', (img.src || '').substring(0, 100));
-            // Đảm bảo ảnh đã tải xong hoàn chỉnh
-            await waitForImageToLoad(img, 25000);
-
+        const deliverChatGPTImageResult = async (candidate) => {
+            const src = candidate.src || candidate.currentSrc || (candidate.getAttribute && candidate.getAttribute('src')) || '';
+            console.log('[Kaiz Bridge][ChatGPT] 🎉 Xử lý trích xuất ảnh:', src.substring(0, 100));
             let base64 = null;
 
-            // 1. Thử trích xuất qua Canvas
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width || 1024;
-                canvas.height = img.naturalHeight || img.height || 1024;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const dataUrl = canvas.toDataURL('image/png');
-                if (dataUrl && dataUrl.startsWith('data:image/png') && dataUrl.length > 1000) {
-                    base64 = dataUrl;
-                    console.log('[Kaiz Bridge][ChatGPT] ✅ Trích xuất Base64 thành công qua Canvas!');
-                }
-            } catch (canvasErr) {
-                console.log('[Kaiz Bridge][ChatGPT] Canvas không khả dụng (CORS), chuyển sang fetch:', canvasErr.message);
-            }
-
-            // 2. Thử fetch trực tiếp trong page context với session credentials (cực chuẩn cho chatgpt.com/backend-api/estuary)
-            if (!base64 && img.src) {
+            // Kỹ thuật 1 (Tối ưu nhất cho Background Tab): Fetch trực tiếp qua network với credentials
+            // Chạy ngầm 100% độc lập, không phụ thuộc vào GPU rasterization hay canvas
+            if (src && !src.startsWith('data:')) {
                 try {
-                    console.log('[Kaiz Bridge][ChatGPT] Đang tải blob ảnh qua page context fetch...');
-                    const res = await fetch(img.src, { credentials: 'include' });
+                    console.log('[Kaiz Bridge][ChatGPT] 🚀 Đang tải blob ảnh trực tiếp qua fetch credentials...');
+                    const res = await fetch(src, { credentials: 'include' });
                     if (res.ok) {
                         const blob = await res.blob();
-                        base64 = await blobToBase64(blob);
-                        console.log('[Kaiz Bridge][ChatGPT] ✅ Fetch ảnh blob thành công qua page context!');
+                        if (blob && blob.size > 2000) {
+                            base64 = await blobToBase64(blob);
+                            console.log(`[Kaiz Bridge][ChatGPT] ✅ Tải ảnh thành công qua fetch (${Math.round(blob.size / 1024)} KB)!`);
+                        }
                     } else {
-                        console.warn('[Kaiz Bridge][ChatGPT] Page fetch HTTP status:', res.status);
+                        console.warn('[Kaiz Bridge][ChatGPT] Fetch status:', res.status);
                     }
-                } catch (e) {
-                    console.warn('[Kaiz Bridge][ChatGPT] fetch blob error:', e);
+                } catch (fetchErr) {
+                    console.warn('[Kaiz Bridge][ChatGPT] Fetch error:', fetchErr);
                 }
             }
 
-            // 3. Fallback GM_xmlhttpRequest
-            if (!base64 && img.src) {
+            // Kỹ thuật 2: Fallback GM_xmlhttpRequest (Bypass CORS, CSP và tab throttling)
+            if (!base64 && src && !src.startsWith('data:')) {
                 try {
                     console.log('[Kaiz Bridge][ChatGPT] Đang tải ảnh qua GM_xmlhttpRequest fallback...');
-                    base64 = await fetchImageAsBase64(img.src);
+                    base64 = await fetchImageAsBase64(src);
                     console.log('[Kaiz Bridge][ChatGPT] ✅ GM_xmlhttpRequest tải ảnh thành công!');
                 } catch (e) {
                     console.warn('[Kaiz Bridge][ChatGPT] GM_xmlhttpRequest error:', e);
                 }
+            }
+
+            // Kỹ thuật 3: Fallback Canvas (chỉ dùng nếu src là data:image hoặc fetch thất bại và element là img)
+            if (!base64 && candidate.el && candidate.el.tagName && candidate.el.tagName.toLowerCase() === 'img') {
+                try {
+                    const img = candidate.el;
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width || 1024;
+                    canvas.height = img.naturalHeight || img.height || 1024;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    if (dataUrl && dataUrl.startsWith('data:image/png') && dataUrl.length > 1000) {
+                        base64 = dataUrl;
+                        console.log('[Kaiz Bridge][ChatGPT] ✅ Trích xuất Base64 thành công qua Canvas!');
+                    }
+                } catch (canvasErr) {
+                    console.log('[Kaiz Bridge][ChatGPT] Canvas fallback không khả dụng:', canvasErr.message);
+                }
+            }
+
+            // Kỹ thuật 4: Nếu src là data:image sẵn
+            if (!base64 && src.startsWith('data:image')) {
+                base64 = src;
             }
 
             if (!base64) {
@@ -1273,14 +1269,15 @@
             console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi kết quả Base64 về SillyTavern thành công!');
         };
 
-        // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN
+        // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN HOẶC ẢNH XUẤT HIỆN SỚM
         let hasStarted = false;
         const phase1MaxWait = 25000;
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
             const earlyImg = findChatGPTImageCandidate();
-            if (earlyImg && earlyImg.complete && earlyImg.naturalWidth > 100) {
+            if (earlyImg && earlyImg.src) {
+                console.log('[Kaiz Bridge][ChatGPT] 🎯 Phát hiện ảnh sớm trong Phase 1! Trích xuất ngay...');
                 await deliverChatGPTImageResult(earlyImg);
                 return;
             }
@@ -1300,14 +1297,14 @@
 
         if (!hasStarted) {
             const lastCheckImg = findChatGPTImageCandidate();
-            if (lastCheckImg) {
+            if (lastCheckImg && lastCheckImg.src) {
                 await deliverChatGPTImageResult(lastCheckImg);
                 return;
             }
             throw new Error('Không phát hiện ChatGPT bắt đầu tạo ảnh sau 25s (nút Stop không xuất hiện, có thể do mạng chậm hoặc prompt chưa gửi).');
         }
 
-        // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI NÚT STOP BIẾN MẤT VÀ ẢNH XUẤT HIỆN
+        // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI ẢNH XUẤT HIỆN HOẶC KẾT THÚC
         console.log('[Kaiz Bridge][ChatGPT] ⏳ Đang theo dõi tiến trình tạo ảnh...');
         let finishedCheckCount = 0;
 
@@ -1317,39 +1314,40 @@
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
 
-            // Bắt ngay nếu ảnh đã hoàn thành sớm
-            const candidateEarly = findChatGPTImageCandidate();
-            if (candidateEarly && candidateEarly.complete && candidateEarly.naturalWidth > 100) {
-                console.log('[Kaiz Bridge][ChatGPT] 🎯 Ảnh đã xuất hiện và tải xong ngay trong Phase 2!');
-                await deliverChatGPTImageResult(candidateEarly);
+            // 1. Kiểm tra ngay nếu ảnh đã xuất hiện trong DOM (bất kể browser đã render xong bitmap hay chưa)
+            const candidate = findChatGPTImageCandidate();
+            if (candidate && candidate.src) {
+                console.log('[Kaiz Bridge][ChatGPT] 🎯 Bắt được ảnh trong Phase 2! Trích xuất ngay trong nền...');
+                await deliverChatGPTImageResult(candidate);
                 return;
             }
 
-            // Kiểm tra nếu ChatGPT trả lời từ chối giữa chừng
+            // 2. Kiểm tra nếu ChatGPT từ chối
             if (checkChatGPTRefusal()) {
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
 
+            // 3. Theo dõi vòng đời nút Stop
             const isGen = isChatGPTGenerating();
             if (isGen) {
                 finishedCheckCount = 0;
             } else {
                 finishedCheckCount++;
-                if (finishedCheckCount >= 2) {
-                    console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất. Đang chờ ảnh xuất hiện và tải hoàn tất...');
+                // Chờ ít nhất 3 nhịp (~2.4s) xác nhận nút Stop thực sự không còn
+                if (finishedCheckCount >= 3) {
+                    console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất. Đang chờ ảnh xuất hiện...');
 
-                    // Kiên nhẫn chờ thẻ ảnh xuất hiện và hoàn tất tải (tối đa 25s)
+                    // Kiên nhẫn chờ thẻ ảnh xuất hiện thêm tối đa 25s
                     const waitStart = Date.now();
                     while (Date.now() - waitStart < 25000) {
                         wakeUpBackgroundRendering();
                         const finalCandidate = findChatGPTImageCandidate();
-                        if (finalCandidate) {
-                            console.log('[Kaiz Bridge][ChatGPT] 🖼️ Đã phát hiện thẻ ảnh, đang chờ tải xong file...');
-                            await waitForImageToLoad(finalCandidate, 25000);
+                        if (finalCandidate && finalCandidate.src) {
+                            console.log('[Kaiz Bridge][ChatGPT] 🖼️ Đã phát hiện thẻ ảnh, trích xuất ngay...');
                             await deliverChatGPTImageResult(finalCandidate);
                             return;
                         }
-                        await new Promise((r) => setTimeout(r, 800));
+                        await new Promise((r) => setTimeout(r, 600));
                     }
 
                     throw new Error('ChatGPT đã kết thúc phản hồi nhưng không phát hiện ảnh mới (bị từ chối kiểm duyệt nội dung hoặc chỉ trả lời văn bản).');
