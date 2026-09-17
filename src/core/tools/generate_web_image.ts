@@ -5,14 +5,13 @@ export const generateWebImageTool: ITool = {
     schema: {
         name: 'generate_web_image',
         description:
-            'CÔNG CỤ SINH ẢNH MINH HỌA WEB. Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt bằng tiếng Anh thật chi tiết, giàu tính mô tả (ánh sáng, phong cách nghệ thuật, góc máy, chi tiết nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
+            'CÔNG CỤ SINH ẢNH MINH HỌA WEB. Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt mô tả bức ảnh thật chi tiết, giàu tính tạo hình (bối cảnh, góc máy, ánh sáng, phong cách nghệ thuật, biểu cảm nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
         parameters: {
             type: 'object',
             properties: {
                 prompt: {
                     type: 'string',
-                    description:
-                        'Câu lệnh prompt mô tả bức ảnh chi tiết bằng tiếng Anh (ví dụ: "cinematic anime illustration of a silver-haired knight resting under a blooming cherry blossom tree at sunset, soft volumetric lighting, highly detailed, 8k resolution").',
+                    description: 'Câu lệnh prompt mô tả chi tiết bức ảnh cần vẽ.',
                 },
             },
             required: ['prompt'],

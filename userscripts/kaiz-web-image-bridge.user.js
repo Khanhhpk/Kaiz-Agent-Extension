@@ -72,7 +72,7 @@
                     if (typeof key === 'string' && key.startsWith('KAIZ_CLAIM_')) {
                         // Key dạng KAIZ_CLAIM_job_1789571611961_p8exd
                         const parts = key.split('_');
-                        const ts = parts[3] ? parseInt(parts[3], 10) : (parts[2] ? parseInt(parts[2], 10) : 0);
+                        const ts = parts[3] ? parseInt(parts[3], 10) : parts[2] ? parseInt(parts[2], 10) : 0;
                         // Cũ hơn 200 giây hoặc key không xác định được timestamp -> xóa sạch rác
                         if (!ts || isNaN(ts) || now - ts > 200000) {
                             GM_deleteValue(key);
@@ -284,11 +284,15 @@
             if (item) {
                 item.cancel();
                 if (item.nativeId) {
-                    try { nativeCAF(item.nativeId); } catch (e) {}
+                    try {
+                        nativeCAF(item.nativeId);
+                    } catch (e) {}
                 }
                 rafCallbacks.delete(id);
             } else {
-                try { nativeCAF(id); } catch (e) {}
+                try {
+                    nativeCAF(id);
+                } catch (e) {}
             }
         };
     } catch (e) {
@@ -330,7 +334,9 @@
             }
 
             // Cuộn tin nhắn cuối của assistant vào tầm nhìn
-            const lastAssistantMsg = document.querySelector('[data-message-author-role="assistant"]:last-of-type, article:last-of-type');
+            const lastAssistantMsg = document.querySelector(
+                '[data-message-author-role="assistant"]:last-of-type, article:last-of-type',
+            );
             if (lastAssistantMsg && typeof lastAssistantMsg.scrollIntoView === 'function') {
                 lastAssistantMsg.scrollIntoView({ behavior: 'instant', block: 'end' });
             }
@@ -367,7 +373,9 @@
 
     // Lắng nghe xung Kickstart từ SillyTavern để đánh thức tab ngầm khi có yêu cầu vẽ ảnh mới (chạy ngầm, không nhảy tab)
     GM_addValueChangeListener('KAIZ_KICKSTART_PULSE', () => {
-        console.log(`[Kaiz Bridge][${CURRENT_TARGET}] ⚡ Nhận xung Kickstart từ SillyTavern (chạy ngầm, không nhảy tab).`);
+        console.log(
+            `[Kaiz Bridge][${CURRENT_TARGET}] ⚡ Nhận xung Kickstart từ SillyTavern (chạy ngầm, không nhảy tab).`,
+        );
         kickstartTab();
         sendHeartbeat();
     });
@@ -689,7 +697,9 @@
             sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.click();
         } else {
-            console.log('[Kaiz Bridge][Gemini] Nút gửi chưa kích hoạt, gửi duy nhất 1 lần qua phím Enter trên ô input...');
+            console.log(
+                '[Kaiz Bridge][Gemini] Nút gửi chưa kích hoạt, gửi duy nhất 1 lần qua phím Enter trên ô input...',
+            );
             const enterDown = new KeyboardEvent('keydown', {
                 key: 'Enter',
                 code: 'Enter',
@@ -833,7 +843,9 @@
             // Nút Cancel đã xuất hiện -> Khởi động thành công!
             if (isGeminiGenerating()) {
                 hasStarted = true;
-                console.log('[Kaiz Bridge][Gemini] 🟢 Nút Cancel đã xuất hiện! Chuyển sang Phase 2: Theo dõi tiến trình.');
+                console.log(
+                    '[Kaiz Bridge][Gemini] 🟢 Nút Cancel đã xuất hiện! Chuyển sang Phase 2: Theo dõi tiến trình.',
+                );
                 break;
             }
 
@@ -857,7 +869,9 @@
                 await deliverImageResult(lastCheckImg);
                 return;
             }
-            throw new Error('Không phát hiện Gemini bắt đầu tạo ảnh sau 25s (nút Cancel không xuất hiện, có thể do lỗi mạng hoặc prompt chưa gửi được).');
+            throw new Error(
+                'Không phát hiện Gemini bắt đầu tạo ảnh sau 25s (nút Cancel không xuất hiện, có thể do lỗi mạng hoặc prompt chưa gửi được).',
+            );
         }
 
         // =========================================================================
@@ -895,7 +909,9 @@
                     }
 
                     // Nút cancel biến mất mà không hề có ảnh mới -> Gemini kết thúc nhưng từ chối / lỗi!
-                    throw new Error('Gemini đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt hoặc không thực thi lệnh vẽ).');
+                    throw new Error(
+                        'Gemini đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt hoặc không thực thi lệnh vẽ).',
+                    );
                 }
             }
         }
@@ -909,7 +925,11 @@
     async function executeChatGPTJob(job) {
         // 1. Snapshot URL các ảnh hiện có
         const existingImages = new Set(
-            Array.from(document.querySelectorAll('img, a[download], a[href*="backend-api/estuary"], a[href*="oaiusercontent"]'))
+            Array.from(
+                document.querySelectorAll(
+                    'img, a[download], a[href*="backend-api/estuary"], a[href*="oaiusercontent"]',
+                ),
+            )
                 .map((el) => el.currentSrc || el.src || el.href || el.getAttribute('src') || el.getAttribute('href'))
                 .filter(Boolean),
         );
@@ -1033,7 +1053,12 @@
         for (let i = 0; i < 30; i++) {
             for (const sel of sendSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && (btn.offsetParent !== null || btn.isConnected)) {
+                if (
+                    btn &&
+                    !btn.disabled &&
+                    btn.getAttribute('aria-disabled') !== 'true' &&
+                    (btn.offsetParent !== null || btn.isConnected)
+                ) {
                     const label = (btn.getAttribute('aria-label') || '').toLowerCase();
                     const testId = (btn.getAttribute('data-testid') || '').toLowerCase();
                     const isExcluded =
@@ -1108,7 +1133,9 @@
                 }
             }
             // Kiểm tra trạng thái streaming / thinking của ChatGPT
-            const streaming = document.querySelector('.result-streaming, div[class*="streaming"], div[class*="result-thinking"]');
+            const streaming = document.querySelector(
+                '.result-streaming, div[class*="streaming"], div[class*="result-thinking"]',
+            );
             if (streaming) return true;
             return false;
         };
@@ -1155,7 +1182,11 @@
 
                     // Nhận diện alt text
                     const alt = (img.alt || '').toLowerCase();
-                    const isGeneratedAlt = alt.includes('generated image') || alt.includes('dall') || alt.includes('image') || alt.includes('ảnh');
+                    const isGeneratedAlt =
+                        alt.includes('generated image') ||
+                        alt.includes('dall') ||
+                        alt.includes('image') ||
+                        alt.includes('ảnh');
 
                     // Loại trừ avatar
                     const isAvatar =
@@ -1163,7 +1194,9 @@
                         alt === 'chatgpt' ||
                         alt === 'user' ||
                         (img.getAttribute('data-testid') || '').includes('avatar') ||
-                        ((img.width > 0 && img.width <= 64) || (img.naturalWidth > 0 && img.naturalWidth <= 64) || (img.clientHeight > 0 && img.clientHeight <= 64));
+                        (img.width > 0 && img.width <= 64) ||
+                        (img.naturalWidth > 0 && img.naturalWidth <= 64) ||
+                        (img.clientHeight > 0 && img.clientHeight <= 64);
 
                     if (!isAvatar && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg))) {
                         return { el: img, src: src };
@@ -1241,7 +1274,11 @@
         };
 
         const deliverChatGPTImageResult = async (candidate) => {
-            const src = candidate.src || candidate.currentSrc || (candidate.getAttribute && candidate.getAttribute('src')) || '';
+            const src =
+                candidate.src ||
+                candidate.currentSrc ||
+                (candidate.getAttribute && candidate.getAttribute('src')) ||
+                '';
             console.log('[Kaiz Bridge][ChatGPT] 🎉 Xử lý trích xuất ảnh:', src.substring(0, 100));
             let base64 = null;
 
@@ -1255,7 +1292,9 @@
                         const blob = await res.blob();
                         if (blob && blob.size > 2000) {
                             base64 = await blobToBase64(blob);
-                            console.log(`[Kaiz Bridge][ChatGPT] ✅ Tải ảnh thành công qua fetch (${Math.round(blob.size / 1024)} KB)!`);
+                            console.log(
+                                `[Kaiz Bridge][ChatGPT] ✅ Tải ảnh thành công qua fetch (${Math.round(blob.size / 1024)} KB)!`,
+                            );
                         }
                     } else {
                         console.warn('[Kaiz Bridge][ChatGPT] Fetch status:', res.status);
@@ -1350,7 +1389,9 @@
             if (checkChatGPTRefusal()) {
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
-            throw new Error('Không phát hiện ChatGPT bắt đầu tạo ảnh sau 30s (nút Stop không xuất hiện, có thể do mạng chậm hoặc prompt chưa gửi).');
+            throw new Error(
+                'Không phát hiện ChatGPT bắt đầu tạo ảnh sau 30s (nút Stop không xuất hiện, có thể do mạng chậm hoặc prompt chưa gửi).',
+            );
         }
 
         // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI ẢNH XUẤT HIỆN HOẶC KẾT THÚC (Tối ưu chu kỳ quét 300ms)
@@ -1402,7 +1443,9 @@
                     const isStillLoading = isImageStillLoadingOrRendering();
 
                     if (isStillLoading) {
-                        console.log('[Kaiz Bridge][ChatGPT] 🖼️ Phát hiện placeholder đang tải ảnh DALL-E. Kiên nhẫn chờ tối đa 18s...');
+                        console.log(
+                            '[Kaiz Bridge][ChatGPT] 🖼️ Phát hiện placeholder đang tải ảnh DALL-E. Kiên nhẫn chờ tối đa 18s...',
+                        );
                         const waitStart = Date.now();
                         // Chờ tối đa 18s (thay vì 40s mù quáng)
                         while (Date.now() - waitStart < 18000) {
@@ -1431,7 +1474,9 @@
                         }
                     }
 
-                    throw new Error('ChatGPT đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt nội dung hoặc chỉ trả lời văn bản).');
+                    throw new Error(
+                        'ChatGPT đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt nội dung hoặc chỉ trả lời văn bản).',
+                    );
                 }
             }
         }
