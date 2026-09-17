@@ -81,6 +81,14 @@ export class WebImageBridge {
                     } else {
                         job.reject(new Error(payload.error || 'Lỗi không xác định khi sinh ảnh từ Web.'));
                     }
+                } else if (payload.status === 'success' && payload.base64) {
+                    // Cứu cánh khi ảnh về trễ sau khi đã timeout: Vẫn lưu vào Image Gallery để người dùng không mất ảnh
+                    console.log('[WebImageBridge] 💾 Ảnh về trễ sau khi đã timeout, tự động lưu vào Gallery:', payload.id);
+                    this.saveImageToGallery({
+                        prompt: 'Ảnh từ Web Image Bridge (về trễ sau timeout)',
+                        base64: payload.base64,
+                        provider: payload.provider || 'chatgpt',
+                    }).catch((e) => console.warn('[WebImageBridge] Lỗi lưu ảnh trễ vào Gallery:', e));
                 }
             }
         });
@@ -115,7 +123,7 @@ export class WebImageBridge {
         this.init();
 
         const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-        const timeoutMs = req.timeoutMs || 90000;
+        const timeoutMs = req.timeoutMs || 150000;
         const target = req.target || 'auto';
 
         // Cảnh báo sớm nếu tab tương ứng chưa mở

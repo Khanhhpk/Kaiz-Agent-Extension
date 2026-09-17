@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.13
+// @version      1.2.14
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -73,8 +73,8 @@
                         // Key dạng KAIZ_CLAIM_job_1789571611961_p8exd
                         const parts = key.split('_');
                         const ts = parts[3] ? parseInt(parts[3], 10) : (parts[2] ? parseInt(parts[2], 10) : 0);
-                        // Cũ hơn 90 giây hoặc key không xác định được timestamp -> xóa sạch rác
-                        if (!ts || isNaN(ts) || now - ts > 90000) {
+                        // Cũ hơn 200 giây hoặc key không xác định được timestamp -> xóa sạch rác
+                        if (!ts || isNaN(ts) || now - ts > 200000) {
                             GM_deleteValue(key);
                         }
                     }
@@ -1032,7 +1032,7 @@
         for (let i = 0; i < 30; i++) {
             for (const sel of sendSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && btn.offsetParent !== null) {
+                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && (btn.offsetParent !== null || btn.isConnected)) {
                     const label = (btn.getAttribute('aria-label') || '').toLowerCase();
                     const testId = (btn.getAttribute('data-testid') || '').toLowerCase();
                     const isExcluded =
@@ -1088,7 +1088,7 @@
         }
 
         // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT STOP (LIFECYCLE STATE MACHINE)
-        const timeoutMs = 85000;
+        const timeoutMs = 150000;
         const startTime = Date.now();
         console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Stop xuất hiện...');
 

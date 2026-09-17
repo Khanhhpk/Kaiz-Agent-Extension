@@ -5976,6 +5976,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                            job.reject(new Error(payload.error || 'Lỗi không xác định khi sinh ảnh từ Web.'));
                        }
                    }
+                   else if (payload.status === 'success' && payload.base64) {
+                       // Cứu cánh khi ảnh về trễ sau khi đã timeout: Vẫn lưu vào Image Gallery để người dùng không mất ảnh
+                       console.log('[WebImageBridge] 💾 Ảnh về trễ sau khi đã timeout, tự động lưu vào Gallery:', payload.id);
+                       this.saveImageToGallery({
+                           prompt: 'Ảnh từ Web Image Bridge (về trễ sau timeout)',
+                           base64: payload.base64,
+                           provider: payload.provider || 'chatgpt',
+                       }).catch((e) => console.warn('[WebImageBridge] Lỗi lưu ảnh trễ vào Gallery:', e));
+                   }
                }
            });
            // Ping kiểm tra Userscript mỗi 5s và kiểm tra offline
@@ -6003,7 +6012,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        static async requestImage(req) {
            this.init();
            const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-           const timeoutMs = req.timeoutMs || 90000;
+           const timeoutMs = req.timeoutMs || 150000;
            const target = req.target || 'auto';
            // Cảnh báo sớm nếu tab tương ứng chưa mở
            if (target === 'gemini' && !this.status.geminiOnline) {
@@ -6127,7 +6136,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                const base64 = await WebImageBridge.requestImage({
                    prompt: finalPrompt,
                    target,
-                   timeoutMs: 80000,
+                   timeoutMs: 150000,
                });
                // Tự động lưu vào Image Gallery
                await WebImageBridge.saveImageToGallery({

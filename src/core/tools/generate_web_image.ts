@@ -35,7 +35,7 @@ export const generateWebImageTool: ITool = {
             const base64 = await WebImageBridge.requestImage({
                 prompt: finalPrompt,
                 target,
-                timeoutMs: 80000,
+                timeoutMs: 150000,
             });
 
             // Tự động lưu vào Image Gallery
