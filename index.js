@@ -54,6 +54,16 @@ LƯU Ý VỀ CÔNG CỤ:
 </tool_call>
 - Không được đưa ra kết quả cuối cùng bên ngoài thẻ nếu vừa gọi tool. Hãy đợi hệ thống trả về kết quả qua <tool_result>.
 - Nếu KHÔNG dùng công cụ, hãy cứ trả lời bình thường như một trợ lý (sau khi đã đóng thẻ </agent_cot>).`;
+   const DEFAULT_VIEW_SYSTEM_PROMPT = `Bạn là chuyên gia Prompt Engineer hàng đầu thế giới về tạo ảnh nghệ thuật (Midjourney, DALL-E 3, Imagen 3, Stable Diffusion).
+Nhiệm vụ: Phân tích ngữ cảnh truyện/hội thoại và ĐẶC BIỆT TẬP TRUNG vào tin nhắn mới nhất để sáng tạo một câu prompt tạo ảnh (Image Generation Prompt) cực kỳ chi tiết, sống động nhằm minh họa cho khoảnh khắc đó.
+
+QUY TẮC BẮT BUỘC:
+1. Xác định nhân vật trung tâm trong cảnh: miêu tả rõ ràng ngoại hình, biểu cảm gương mặt sống động, trang phục, tư thế và hành động cụ thể đang diễn ra.
+2. Bối cảnh không gian & Chi tiết xung quanh: môi trường, địa điểm, thời điểm (ban ngày, hoàng hôn, ban đêm), thời tiết, các chi tiết nền tạo chiều sâu.
+3. Phong cách nghệ thuật, ánh sáng & Góc máy: góc nhìn máy quay (close-up, medium shot, cinematic wide shot), hiệu ứng ánh sáng (volumetric lighting, warm rim light, bokeh), chất liệu nghệ thuật (highly detailed anime illustration hoặc cinematic photography).
+4. ĐỊNH DẠNG ĐẦU RA:
+- CHỈ TRẢ VỀ DUY NHẤT ĐOẠN TEXT PROMPT MÔ TẢ BỨC ẢNH.
+- TUYỆT ĐỐI KHÔNG kèm lời chào, KHÔNG giải thích, KHÔNG có thẻ định dạng hay markdown (không code block, không dấu ngoặc kép bọc ngoài).`;
 
    const FORCE_ABORT_MSG = '⚠️ Agent đã bị CƯỠNG CHẾ DỪNG KHẨN CẤP (Force Abort) bởi người dùng. Bạn có thể đã bị kẹt ở một bước hoặc lặp lại một hành động quá lâu. Vui lòng dừng lại, xem xét lại bối cảnh và đợi lệnh mới.';
    const SOFT_ABORT_MSG = 'Agent đã bị người dùng dừng lại (Soft Abort). Người dùng muốn dừng tiến trình hiện tại. Hãy chờ chỉ thị tiếp theo.';
@@ -6113,6 +6123,63 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                console.warn('[WebImageBridge] Không thể lưu ảnh vào Gallery:', err);
            }
        }
+       /**
+        * Dán ảnh và thông tin prompt trực tiếp vào khung chat SillyTavern
+        */
+       static postImageToChat(data) {
+           const { base64, prompt, durationMs = 0 } = data;
+           const provider = data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider || 'WEB';
+           const safePrompt = (prompt || '')
+               .replace(/&/g, '&amp;')
+               .replace(/"/g, '&quot;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;');
+           const durationText = `${(durationMs / 1000).toFixed(1)}s`;
+           const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${provider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
+           let messageSent = false;
+           try {
+               const ctx = typeof globalThis.SillyTavern !== 'undefined'
+                   ? globalThis.SillyTavern.getContext()
+                   : globalThis.window?.SillyTavern?.getContext?.() || null;
+               if (ctx) {
+                   if (typeof ctx.sendSystemMessage === 'function') {
+                       try {
+                           ctx.sendSystemMessage('generic', imageHtml);
+                           messageSent = true;
+                       }
+                       catch (_err) {
+                           try {
+                               ctx.sendSystemMessage(imageHtml);
+                               messageSent = true;
+                           }
+                           catch (_e2) {
+                               /* ignore */
+                           }
+                       }
+                   }
+                   if (!messageSent && typeof ctx.addOneMessage === 'function') {
+                       ctx.addOneMessage({
+                           is_user: false,
+                           is_system: true,
+                           name: 'Web Image Bridge',
+                           mes: imageHtml,
+                           send_date: Date.now(),
+                       });
+                       if (typeof ctx.saveChat === 'function') {
+                           ctx.saveChat();
+                       }
+                       if (typeof ctx.scrollChatToBottom === 'function') {
+                           ctx.scrollChatToBottom();
+                       }
+                       messageSent = true;
+                   }
+               }
+           }
+           catch (postErr) {
+               console.warn('[WebImageBridge] Lỗi khi dán ảnh vào chính văn chat:', postErr);
+           }
+           return { messageSent, imageHtml };
+       }
    }
 
    const generateWebImageTool = {
@@ -6157,56 +6224,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    provider: actualProvider,
                    durationMs,
                });
-               const safePrompt = finalPrompt
-                   .replace(/&/g, '&amp;')
-                   .replace(/"/g, '&quot;')
-                   .replace(/</g, '&lt;')
-                   .replace(/>/g, '&gt;');
-               const durationText = `${(durationMs / 1000).toFixed(1)}s`;
-               const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${actualProvider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
                // Dán trực tiếp bức ảnh vào chính văn SillyTavern chat
-               let messageSent = false;
-               try {
-                   const ctx = typeof globalThis.SillyTavern !== 'undefined'
-                       ? globalThis.SillyTavern.getContext()
-                       : globalThis.window?.SillyTavern?.getContext?.() || null;
-                   if (ctx) {
-                       if (typeof ctx.sendSystemMessage === 'function') {
-                           try {
-                               ctx.sendSystemMessage('generic', markdownImage);
-                               messageSent = true;
-                           }
-                           catch (_err) {
-                               try {
-                                   ctx.sendSystemMessage(markdownImage);
-                                   messageSent = true;
-                               }
-                               catch (_e2) {
-                                   /* ignore */
-                               }
-                           }
-                       }
-                       if (!messageSent && typeof ctx.addOneMessage === 'function') {
-                           ctx.addOneMessage({
-                               is_user: false,
-                               is_system: true,
-                               name: 'Web Image Bridge',
-                               mes: markdownImage,
-                               send_date: Date.now(),
-                           });
-                           if (typeof ctx.saveChat === 'function') {
-                               ctx.saveChat();
-                           }
-                           if (typeof ctx.scrollChatToBottom === 'function') {
-                               ctx.scrollChatToBottom();
-                           }
-                           messageSent = true;
-                       }
-                   }
-               }
-               catch (postErr) {
-                   console.warn('[Tool: generate_web_image] Lỗi khi dán ảnh vào chính văn chat:', postErr);
-               }
+               const { messageSent } = WebImageBridge.postImageToChat({
+                   base64,
+                   prompt: finalPrompt,
+                   durationMs,
+                   provider: actualProvider,
+               });
                // QUAN TRỌNG: Tuyệt đối KHÔNG trả chuỗi Base64 hàng triệu ký tự về cho LLM
                // Trả chuỗi gọn nhẹ để LLM tiếp tục mạch hội thoại mà không bị lỗi tràn 1 triệu token (HTTP 400)
                return {
@@ -8776,6 +8800,25 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            $('#kaiz-web-image-custom-suffix').on('input', function () {
                settings.customImageSuffix = this.value;
                ctx.saveSettingsDebounced();
+           });
+           $('#kaiz-web-image-view-depth').val(settings.viewContextDepth ?? 5);
+           $('#kaiz-web-image-view-depth').on('input change', function () {
+               const val = parseInt(this.value, 10);
+               settings.viewContextDepth = !isNaN(val) && val > 0 ? val : 5;
+               ctx.saveSettingsDebounced();
+           });
+           $('#kaiz-web-image-view-prompt').val(settings.viewSystemPrompt || DEFAULT_VIEW_SYSTEM_PROMPT);
+           $('#kaiz-web-image-view-prompt').on('input', function () {
+               settings.viewSystemPrompt = this.value;
+               ctx.saveSettingsDebounced();
+           });
+           $('#kaiz-reset-view-prompt').on('click', () => {
+               $('#kaiz-web-image-view-prompt').val(DEFAULT_VIEW_SYSTEM_PROMPT);
+               settings.viewSystemPrompt = DEFAULT_VIEW_SYSTEM_PROMPT;
+               ctx.saveSettingsDebounced();
+               if (typeof toastr !== 'undefined') {
+                   toastr.success('Đã khôi phục prompt lõi của lệnh /view về mặc định.');
+               }
            });
            const updateBridgeStatusUI = () => {
                const status = WebImageBridge.getStatus();
@@ -12391,6 +12434,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                webImageProvider: 'auto',
                customImagePrefix: '',
                customImageSuffix: '',
+               viewContextDepth: 5,
+               viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
            };
        }
        else {
@@ -12453,6 +12498,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                else {
                    ctx.extensionSettings[EXT_NAME].customImageSuffix = '';
                }
+           }
+           if (ctx.extensionSettings[EXT_NAME].viewContextDepth === undefined) {
+               ctx.extensionSettings[EXT_NAME].viewContextDepth = 5;
+           }
+           if (ctx.extensionSettings[EXT_NAME].viewSystemPrompt === undefined) {
+               ctx.extensionSettings[EXT_NAME].viewSystemPrompt = DEFAULT_VIEW_SYSTEM_PROMPT;
            }
        }
        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
@@ -12544,46 +12595,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                                provider: actualProvider,
                                durationMs,
                            });
-                           const safePrompt = finalPrompt
-                               .replace(/&/g, '&amp;')
-                               .replace(/"/g, '&quot;')
-                               .replace(/</g, '&lt;')
-                               .replace(/>/g, '&gt;');
-                           const durationText = `${(durationMs / 1000).toFixed(1)}s`;
-                           const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${actualProvider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
-                           let messageSent = false;
-                           if (typeof ctx.sendSystemMessage === 'function') {
-                               try {
-                                   ctx.sendSystemMessage('generic', imageHtml);
-                                   messageSent = true;
-                               }
-                               catch (err) {
-                                   console.warn('[Kaiz /draw] sendSystemMessage(generic) error:', err);
-                                   try {
-                                       ctx.sendSystemMessage(imageHtml);
-                                       messageSent = true;
-                                   }
-                                   catch (e2) {
-                                       console.warn('[Kaiz /draw] sendSystemMessage(imageHtml) error:', e2);
-                                   }
-                               }
-                           }
-                           if (!messageSent && typeof ctx.addOneMessage === 'function') {
-                               ctx.addOneMessage({
-                                   is_user: false,
-                                   is_system: true,
-                                   name: 'Web Image Bridge',
-                                   mes: imageHtml,
-                                   send_date: Date.now(),
-                               });
-                               if (typeof ctx.saveChat === 'function') {
-                                   ctx.saveChat();
-                               }
-                               if (typeof ctx.scrollChatToBottom === 'function') {
-                                   ctx.scrollChatToBottom();
-                               }
-                               messageSent = true;
-                           }
+                           const { imageHtml } = WebImageBridge.postImageToChat({
+                               base64,
+                               prompt: finalPrompt,
+                               durationMs,
+                               provider: actualProvider,
+                           });
                            if (typeof toastr !== 'undefined') {
                                toastr.success('Đã vẽ ảnh thành công!');
                            }
@@ -12596,6 +12613,143 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                            return `[Error] ${e.message}`;
                        }
                    }, [], '<mô_tả_ảnh>', 'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Web / ChatGPT Web)', true);
+                   // Slash Command /view: Tự động phân tích tin nhắn mới nhất qua Agent LLM để tạo prompt và vẽ ảnh
+                   ctx.registerSlashCommand('view', async (args, value) => {
+                       console.log('[Kaiz Slash /view] raw args:', args, 'raw value:', value);
+                       let extraInstructions = '';
+                       if (typeof value === 'string' && value.trim()) {
+                           extraInstructions = value.trim();
+                       }
+                       else if (typeof args === 'string' && args.trim()) {
+                           extraInstructions = args.trim();
+                       }
+                       else if (args && typeof args === 'object') {
+                           if (typeof args.text === 'string')
+                               extraInstructions = args.text.trim();
+                           else if (typeof args.prompt === 'string')
+                               extraInstructions = args.prompt.trim();
+                           else if (typeof args.unnamed === 'string')
+                               extraInstructions = args.unnamed.trim();
+                           else if (Array.isArray(args._))
+                               extraInstructions = args._.join(' ').trim();
+                       }
+                       // 1. Lấy ngữ cảnh tin nhắn gần nhất theo cấu hình viewContextDepth
+                       const extSettings = ctx.extensionSettings?.[EXT_NAME] || {};
+                       const depth = typeof extSettings.viewContextDepth === 'number' && extSettings.viewContextDepth > 0
+                           ? extSettings.viewContextDepth
+                           : 5;
+                       let chatHistory = adapter.getChatContext(depth);
+                       if (!chatHistory || chatHistory.length === 0) {
+                           if (Array.isArray(ctx.chat) && ctx.chat.length > 0) {
+                               for (let i = ctx.chat.length - 1; i >= 0; i--) {
+                                   const m = ctx.chat[i];
+                                   if (typeof m.mes === 'string' && m.mes.trim() && !m.is_hidden) {
+                                       chatHistory = [
+                                           {
+                                               role: m.is_user ? 'user' : 'assistant',
+                                               name: m.is_user
+                                                   ? ctx.name1 || 'User'
+                                                   : m.name || ctx.name2 || 'Character',
+                                               content: m.mes,
+                                           },
+                                       ];
+                                       break;
+                                   }
+                               }
+                           }
+                       }
+                       if (!chatHistory || chatHistory.length === 0) {
+                           if (typeof toastr !== 'undefined') {
+                               toastr.warning('Không tìm thấy tin nhắn nào trong hội thoại để minh họa.');
+                           }
+                           return;
+                       }
+                       const latestMsg = chatHistory[chatHistory.length - 1];
+                       const cleanContent = (latestMsg?.content || '')
+                           .replace(/<div class="kaiz-draw-result"[\s\S]*?<\/div>\s*<\/div>/gi, '')
+                           .replace(/<img[^>]*>/gi, '')
+                           .replace(/!\[.*?\]\(.*?\)/gi, '')
+                           .trim();
+                       if (!cleanContent) {
+                           if (typeof toastr !== 'undefined') {
+                               toastr.warning('Tin nhắn gần nhất không có nội dung văn bản để vẽ ảnh.');
+                           }
+                           return;
+                       }
+                       if (typeof toastr !== 'undefined') {
+                           toastr.info('Đang dùng Agent phân tích tin nhắn mới nhất để tạo prompt vẽ ảnh...');
+                       }
+                       try {
+                           const contextSnippet = chatHistory
+                               .map((m) => `${m.name || (m.role === 'user' ? 'User' : 'Character')}: ${m.content}`)
+                               .join('\n\n');
+                           const systemPrompt = (extSettings.viewSystemPrompt && extSettings.viewSystemPrompt.trim()) ||
+                               DEFAULT_VIEW_SYSTEM_PROMPT;
+                           let userMessage = `NGỮ CẢNH ĐOẠN CHAT:\n${contextSnippet}\n\n[TIN NHẮN TRỌNG TÂM CẦN MINH HỌA]:\n${latestMsg.name}: ${cleanContent}`;
+                           if (extraInstructions) {
+                               userMessage += `\n\n[YÊU CẦU / PHONG CÁCH BỔ SUNG TỪ NGƯỜI DÙNG]:\n${extraInstructions}`;
+                           }
+                           userMessage += `\n\nHãy tạo ra câu prompt chi tiết nhất để vẽ ảnh minh họa cho phân cảnh trên:`;
+                           const messages = [
+                               { role: 'system', content: systemPrompt },
+                               { role: 'user', content: userMessage },
+                           ];
+                           const result = await adapter.generateCompletion(messages, 600, false);
+                           let generatedPrompt = (result?.text || '').trim();
+                           // Loại bỏ CoT / thinking nếu có
+                           generatedPrompt = generatedPrompt
+                               .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
+                               .replace(/<agent_cot>[\s\S]*?(?:<\/agent_cot>|$)/gi, '')
+                               .trim();
+                           // Bỏ dấu ngoặc kép bọc ngoài nếu model sinh ra
+                           if ((generatedPrompt.startsWith('"') && generatedPrompt.endsWith('"')) ||
+                               (generatedPrompt.startsWith('`') && generatedPrompt.endsWith('`'))) {
+                               generatedPrompt = generatedPrompt.slice(1, -1).trim();
+                           }
+                           if (!generatedPrompt) {
+                               throw new Error('Agent không trả về nội dung prompt hợp lệ.');
+                           }
+                           console.log('[Kaiz Slash /view] Generated Prompt từ Agent:', generatedPrompt);
+                           if (typeof toastr !== 'undefined') {
+                               const preview = generatedPrompt.length > 80
+                                   ? generatedPrompt.slice(0, 80) + '...'
+                                   : generatedPrompt;
+                               toastr.info(`Đã tạo prompt: "${preview}". Đang gửi yêu cầu vẽ ảnh sang Web Bridge...`);
+                           }
+                           // 2. Ghép Prefix/Suffix cấu hình và gửi vẽ ảnh
+                           const finalPrompt = WebImageBridge.mergeCustomPrompt(generatedPrompt);
+                           const target = WebImageBridge.getConfiguredProvider();
+                           const startDraw = Date.now();
+                           const base64 = await WebImageBridge.requestImage({ prompt: finalPrompt, target });
+                           const durationMs = Date.now() - startDraw;
+                           const actualProvider = WebImageBridge.getLastDeliveredProvider();
+                           // Lưu vào gallery
+                           await WebImageBridge.saveImageToGallery({
+                               prompt: finalPrompt,
+                               base64,
+                               provider: actualProvider,
+                               durationMs,
+                           });
+                           // Dán ảnh vào chat
+                           const { imageHtml } = WebImageBridge.postImageToChat({
+                               base64,
+                               prompt: finalPrompt,
+                               durationMs,
+                               provider: actualProvider,
+                           });
+                           if (typeof toastr !== 'undefined') {
+                               toastr.success(`Đã vẽ ảnh thành công (${(durationMs / 1000).toFixed(1)}s)!`);
+                           }
+                           return imageHtml;
+                       }
+                       catch (e) {
+                           console.error('[Kaiz Slash /view] Thất bại:', e);
+                           if (typeof toastr !== 'undefined') {
+                               toastr.error(`Lỗi tạo ảnh /view: ${e.message || 'Không xác định'}`);
+                           }
+                           return `[Error] ${e.message}`;
+                       }
+                   }, [], '<ghi_chú_tùy_chọn>', 'Tự động đọc tin nhắn mới nhất, dùng API của Agent tạo prompt chi tiết và vẽ ảnh minh họa', true);
                }
            }
            else {

@@ -250,4 +250,68 @@ export class WebImageBridge {
             console.warn('[WebImageBridge] Không thể lưu ảnh vào Gallery:', err);
         }
     }
+
+    /**
+     * Dán ảnh và thông tin prompt trực tiếp vào khung chat SillyTavern
+     */
+    public static postImageToChat(data: { base64: string; prompt: string; durationMs?: number; provider?: string }): {
+        messageSent: boolean;
+        imageHtml: string;
+    } {
+        const { base64, prompt, durationMs = 0 } = data;
+        const provider =
+            data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider || 'WEB';
+        const safePrompt = (prompt || '')
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        const durationText = `${(durationMs / 1000).toFixed(1)}s`;
+        const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${provider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
+
+        let messageSent = false;
+        try {
+            const ctx =
+                typeof (globalThis as any).SillyTavern !== 'undefined'
+                    ? (globalThis as any).SillyTavern.getContext()
+                    : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
+
+            if (ctx) {
+                if (typeof ctx.sendSystemMessage === 'function') {
+                    try {
+                        ctx.sendSystemMessage('generic', imageHtml);
+                        messageSent = true;
+                    } catch (_err) {
+                        try {
+                            ctx.sendSystemMessage(imageHtml);
+                            messageSent = true;
+                        } catch (_e2) {
+                            /* ignore */
+                        }
+                    }
+                }
+
+                if (!messageSent && typeof ctx.addOneMessage === 'function') {
+                    ctx.addOneMessage({
+                        is_user: false,
+                        is_system: true,
+                        name: 'Web Image Bridge',
+                        mes: imageHtml,
+                        send_date: Date.now(),
+                    });
+                    if (typeof ctx.saveChat === 'function') {
+                        ctx.saveChat();
+                    }
+                    if (typeof ctx.scrollChatToBottom === 'function') {
+                        ctx.scrollChatToBottom();
+                    }
+                    messageSent = true;
+                }
+            }
+        } catch (postErr) {
+            console.warn('[WebImageBridge] Lỗi khi dán ảnh vào chính văn chat:', postErr);
+        }
+
+        return { messageSent, imageHtml };
+    }
 }
