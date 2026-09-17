@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.9
+// @version      1.2.10
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -104,7 +104,7 @@
                 // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.9' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.10' }, '*');
                 checkAllHeartbeats();
                 cleanupOldStorage();
                 // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
@@ -1007,11 +1007,17 @@
                 const src = img.src || '';
                 const isNew = !existingImages.has(src);
                 const isImageHost =
+                    src.includes('backend-api/estuary/content') ||
+                    src.includes('estuary/content') ||
+                    src.includes('chatgpt.com/backend-api') ||
                     src.includes('oaiusercontent.com') ||
                     src.includes('files.oaiusercontent') ||
                     src.includes('openai.com') ||
+                    src.includes('oaistatic.com') ||
                     src.startsWith('blob:') ||
-                    src.startsWith('data:image');
+                    src.startsWith('data:image') ||
+                    (img.alt && img.alt.toLowerCase().includes('generated image')) ||
+                    (img.closest && img.closest('[data-message-author-role="assistant"]'));
                 const isNotAvatar =
                     !src.includes('avatar') &&
                     !src.includes('profile') &&
@@ -1072,10 +1078,14 @@
                 // CORS tainted
             }
 
-            if (!base64 && img.src.startsWith('blob:')) {
+            // Thử fetch trực tiếp trong page context với session credentials (cực chuẩn cho chatgpt.com/backend-api/estuary)
+            if (!base64) {
                 try {
-                    const blob = await fetch(img.src).then((r) => r.blob());
-                    base64 = await blobToBase64(blob);
+                    const res = await fetch(img.src, { credentials: 'include' });
+                    if (res.ok) {
+                        const blob = await res.blob();
+                        base64 = await blobToBase64(blob);
+                    }
                 } catch (e) {
                     console.warn('[Kaiz Bridge][ChatGPT] fetch blob error:', e);
                 }
