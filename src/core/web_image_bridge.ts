@@ -197,7 +197,7 @@ export class WebImageBridge {
                     ? (globalThis as any).SillyTavern.getContext()
                     : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
             const settings = ctx?.extensionSettings?.['kaiz_agent'];
-            
+
             let prefix = (settings?.customImagePrefix ?? '').trim();
             let suffix = (settings?.customImageSuffix ?? '').trim();
 

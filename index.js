@@ -12437,7 +12437,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
            }
            if (ctx.extensionSettings[EXT_NAME].customImagePrefix === undefined) {
-               if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === 'prefix' && ctx.extensionSettings[EXT_NAME].customImagePrompt) {
+               if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === 'prefix' &&
+                   ctx.extensionSettings[EXT_NAME].customImagePrompt) {
                    ctx.extensionSettings[EXT_NAME].customImagePrefix = ctx.extensionSettings[EXT_NAME].customImagePrompt;
                }
                else {
@@ -12445,7 +12446,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                }
            }
            if (ctx.extensionSettings[EXT_NAME].customImageSuffix === undefined) {
-               if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition !== 'prefix' && ctx.extensionSettings[EXT_NAME].customImagePrompt) {
+               if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition !== 'prefix' &&
+                   ctx.extensionSettings[EXT_NAME].customImagePrompt) {
                    ctx.extensionSettings[EXT_NAME].customImageSuffix = ctx.extensionSettings[EXT_NAME].customImagePrompt;
                }
                else {

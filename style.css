@@ -2105,7 +2105,9 @@
 .kaiz-gallery-card.is-selected {
     border-color: #00c9ff !important;
     background: rgba(0, 201, 255, 0.08) !important;
-    box-shadow: 0 0 0 1px #00c9ff, 0 4px 14px rgba(0, 201, 255, 0.25) !important;
+    box-shadow:
+        0 0 0 1px #00c9ff,
+        0 4px 14px rgba(0, 201, 255, 0.25) !important;
 }
 
 .kaiz-gallery-card-thumb {
@@ -2240,4 +2242,3 @@
     color: #f87171;
     background: rgba(239, 68, 68, 0.2);
 }
-
