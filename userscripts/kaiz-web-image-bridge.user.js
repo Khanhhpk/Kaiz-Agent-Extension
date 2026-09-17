@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.11
+// @version      1.2.12
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -104,7 +104,7 @@
                 // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.11' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.12' }, '*');
                 checkAllHeartbeats();
                 cleanupOldStorage();
                 // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
@@ -183,10 +183,10 @@
     console.log(`[Kaiz Bridge] 🌐 Web Adapter active for: ${CURRENT_TARGET} (Tab ID: ${TAB_ID})`);
 
     // =========================================================================
-    // HỆ THỐNG CHỐNG SLEEP & KICKSTART LIÊN TỤC TRONG BACKGROUND TAB
+    // HỆ THỐNG CHỐNG SLEEP, UNFREEZE RENDER & KICKSTART LIÊN TỤC TRONG BACKGROUND TAB
     // =========================================================================
 
-    // 1. Visibility Spoofing: Đánh lừa trình duyệt và Angular luôn thấy tab ở trạng thái Visible & Focused
+    // 1. Visibility & Focus Spoofing: Đánh lừa trình duyệt và React luôn thấy tab ở trạng thái Active & Focused
     try {
         const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
         const setProp = (target, prop, val) => {
@@ -199,10 +199,21 @@
         setProp(document, 'visibilityState', 'visible');
         setProp(document, 'webkitVisibilityState', 'visible');
 
+        try {
+            document.hasFocus = () => true;
+            Document.prototype.hasFocus = () => true;
+        } catch (e) {}
+
         if (win && win.document) {
             setProp(win.document, 'hidden', false);
             setProp(win.document, 'visibilityState', 'visible');
             setProp(win.document, 'webkitVisibilityState', 'visible');
+            try {
+                win.document.hasFocus = () => true;
+                if (win.Document && win.Document.prototype) {
+                    win.Document.prototype.hasFocus = () => true;
+                }
+            } catch (e) {}
         }
 
         // Chặn sự kiện visibilitychange khi nó cố báo hiệu tab đã bị ẩn
@@ -217,7 +228,74 @@
         console.warn('[Kaiz Bridge] Visibility spoofing error:', e);
     }
 
-    // 2. Hàm Kickstart: Đánh thức nội bộ DOM và kích hoạt lại các vòng lặp sự kiện
+    // 2. Chống đóng băng requestAnimationFrame trong Background Tab
+    // Trình duyệt Chromium tự động dừng 100% requestAnimationFrame khi tab ở chế độ nền (background tab).
+    // React 18 / Next.js / animation transition mask của ChatGPT sẽ bị đứng hình chờ người dùng click tab mới chịu render ảnh!
+    // Bằng cách proxy rAF kèm timeout fallback 25ms, React sẽ render mượt mà ngay cả khi tab hoàn toàn chạy ngầm!
+    try {
+        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+        const nativeRAF = (win.requestAnimationFrame || window.requestAnimationFrame).bind(win);
+        const nativeCAF = (win.cancelAnimationFrame || window.cancelAnimationFrame).bind(win);
+
+        const rafCallbacks = new Map();
+        let nextRafId = 100000;
+
+        win.requestAnimationFrame = function (cb) {
+            const id = ++nextRafId;
+            let called = false;
+
+            const wrappedCb = (time) => {
+                if (!called) {
+                    called = true;
+                    rafCallbacks.delete(id);
+                    try {
+                        cb(time);
+                    } catch (err) {
+                        /* ignore callback errors */
+                    }
+                }
+            };
+
+            let nativeId = null;
+            try {
+                nativeId = nativeRAF(wrappedCb);
+            } catch (e) {}
+
+            // Nếu Chromium đóng băng native rAF (tab ngầm), kích hoạt fallback sau 25ms
+            const timerId = setTimeout(() => {
+                if (!called) {
+                    wrappedCb(performance.now());
+                }
+            }, 25);
+
+            rafCallbacks.set(id, {
+                nativeId,
+                timerId,
+                cancel: () => {
+                    called = true;
+                    clearTimeout(timerId);
+                },
+            });
+            return id;
+        };
+
+        win.cancelAnimationFrame = function (id) {
+            const item = rafCallbacks.get(id);
+            if (item) {
+                item.cancel();
+                if (item.nativeId) {
+                    try { nativeCAF(item.nativeId); } catch (e) {}
+                }
+                rafCallbacks.delete(id);
+            } else {
+                try { nativeCAF(id); } catch (e) {}
+            }
+        };
+    } catch (e) {
+        console.warn('[Kaiz Bridge] requestAnimationFrame unfreezer error:', e);
+    }
+
+    // 3. Hàm Kickstart & Đánh thức Rendering nền (Chống lazy loading / IntersectionObserver bị treo)
     // TUYỆT ĐỐI KHÔNG gọi window.focus() hay win.focus() để tránh nhảy tab trình duyệt từ SillyTavern sang Web!
     const kickstartTab = () => {
         try {
@@ -225,6 +303,31 @@
             document.dispatchEvent(new Event('focus'));
             window.dispatchEvent(new Event('visibilitychange'));
             document.dispatchEvent(new Event('visibilitychange'));
+        } catch (e) {
+            /* ignore */
+        }
+    };
+
+    const wakeUpBackgroundRendering = () => {
+        try {
+            kickstartTab();
+
+            // Ép tất cả ảnh lazy chuyển sang eager để không bị treo bởi IntersectionObserver của Chromium
+            const lazyImages = document.querySelectorAll('img[loading="lazy"]');
+            for (const img of lazyImages) {
+                img.loading = 'eager';
+            }
+
+            // Tự động cuộn xuống đáy để kích hoạt trigger IntersectionObserver và mount tin nhắn mới
+            window.scrollTo(0, document.body.scrollHeight);
+            const scrollContainers = document.querySelectorAll(
+                '[class*="react-scroll-to-bottom"], main, div[role="presentation"], div[class*="overflow-y-auto"]',
+            );
+            for (const el of scrollContainers) {
+                if (el.scrollHeight > el.clientHeight) {
+                    el.scrollTop = el.scrollHeight;
+                }
+            }
         } catch (e) {
             /* ignore */
         }
@@ -1211,6 +1314,9 @@
         while (Date.now() - startTime < timeoutMs) {
             await new Promise((r) => setTimeout(r, 800));
 
+            // Đánh thức rendering liên tục trong background tab mỗi nhịp
+            wakeUpBackgroundRendering();
+
             // Bắt ngay nếu ảnh đã hoàn thành sớm
             const candidateEarly = findChatGPTImageCandidate();
             if (candidateEarly && candidateEarly.complete && candidateEarly.naturalWidth > 100) {
@@ -1235,6 +1341,7 @@
                     // Kiên nhẫn chờ thẻ ảnh xuất hiện và hoàn tất tải (tối đa 25s)
                     const waitStart = Date.now();
                     while (Date.now() - waitStart < 25000) {
+                        wakeUpBackgroundRendering();
                         const finalCandidate = findChatGPTImageCandidate();
                         if (finalCandidate) {
                             console.log('[Kaiz Bridge][ChatGPT] 🖼️ Đã phát hiện thẻ ảnh, đang chờ tải xong file...');
