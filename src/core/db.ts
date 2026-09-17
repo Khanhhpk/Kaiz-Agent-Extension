@@ -92,6 +92,7 @@ export interface GalleryImage {
     base64: string;
     timestamp: number;
     provider: string;
+    durationMs?: number;
 }
 
 export class KaizDB {

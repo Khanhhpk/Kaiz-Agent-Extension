@@ -226,6 +226,7 @@ export class ImageGalleryModal {
             const dateStr = this.formatDate(img.timestamp);
             const safePrompt = this.escapeHtml(img.prompt);
             const providerLabel = (img.provider || 'gemini').toUpperCase();
+            const durationStr = img.durationMs ? `${(img.durationMs / 1000).toFixed(1)}s` : '';
 
             const card = $(`
                 <div class="kaiz-gallery-card ${isSelected ? 'is-selected' : ''}" data-id="${img.id}">
@@ -234,12 +235,12 @@ export class ImageGalleryModal {
                         <div class="kaiz-gallery-card-checkbox ${isSelected ? 'checked' : ''}" title="Chọn ảnh">
                             <i class="fa-solid fa-check"></i>
                         </div>
-                        <div class="kaiz-gallery-provider-tag">${providerLabel}</div>
+                        <div class="kaiz-gallery-provider-tag">${providerLabel}${durationStr ? ` • ${durationStr}` : ''}</div>
                     </div>
                     <div class="kaiz-gallery-card-info">
                         <div class="kaiz-gallery-card-prompt" title="${safePrompt}">${safePrompt}</div>
                         <div class="kaiz-gallery-card-footer">
-                            <span class="kaiz-gallery-card-date">${dateStr}</span>
+                            <span class="kaiz-gallery-card-date">${dateStr}${durationStr ? ` <span title="Thời gian tạo ảnh: ${durationStr}" style="opacity: 0.85; margin-left: 5px;"><i class="fa-solid fa-stopwatch" style="font-size: 10px;"></i> ${durationStr}</span>` : ''}</span>
                             <div class="kaiz-gallery-card-actions">
                                 <button class="kaiz-card-action-btn copy-btn" title="Sao chép prompt">
                                     <i class="fa-regular fa-copy"></i>
@@ -335,6 +336,12 @@ export class ImageGalleryModal {
         $('#kaiz-preview-prompt-text').text(img.prompt);
         $('#kaiz-preview-date').text(this.formatDate(img.timestamp, true));
         $('#kaiz-preview-provider-badge').text((img.provider || 'gemini').toUpperCase());
+        if (img.durationMs && img.durationMs > 0) {
+            $('#kaiz-preview-duration-text').text(`${(img.durationMs / 1000).toFixed(1)}s`);
+            $('#kaiz-preview-duration-badge').show();
+        } else {
+            $('#kaiz-preview-duration-badge').hide();
+        }
 
         const previewModal = $('#kaiz-gallery-preview-modal')[0] as HTMLDialogElement;
         if (previewModal) {

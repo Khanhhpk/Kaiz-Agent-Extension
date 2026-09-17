@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.14
+// @version      1.2.15
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -807,6 +807,7 @@
                 status: 'success',
                 provider: 'gemini',
                 base64: base64,
+                durationMs: Date.now() - startTime,
                 timestamp: Date.now(),
             });
             console.log('[Kaiz Bridge][Gemini] Đã gửi kết quả Base64 về SillyTavern!');
@@ -1264,6 +1265,7 @@
                 status: 'success',
                 provider: 'chatgpt',
                 base64: base64,
+                durationMs: Date.now() - startTime,
                 timestamp: Date.now(),
             });
             console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi kết quả Base64 về SillyTavern thành công!');

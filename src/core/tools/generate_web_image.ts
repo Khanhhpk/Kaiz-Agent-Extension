@@ -32,17 +32,21 @@ export const generateWebImageTool: ITool = {
             const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
             console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, finalPrompt);
 
+            const startGen = Date.now();
             const base64 = await WebImageBridge.requestImage({
                 prompt: finalPrompt,
                 target,
                 timeoutMs: 150000,
             });
+            const durationMs = Date.now() - startGen;
+            const actualProvider = WebImageBridge.getLastDeliveredProvider();
 
             // Tự động lưu vào Image Gallery
             await WebImageBridge.saveImageToGallery({
                 prompt: finalPrompt,
                 base64,
-                provider: target,
+                provider: actualProvider,
+                durationMs,
             });
 
             const safePrompt = finalPrompt
@@ -50,7 +54,8 @@ export const generateWebImageTool: ITool = {
                 .replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
-            const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;">🎨 ${safePrompt}</div></div>`;
+            const durationText = `${(durationMs / 1000).toFixed(1)}s`;
+            const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${actualProvider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
 
             // Dán trực tiếp bức ảnh vào chính văn SillyTavern chat
             let messageSent = false;

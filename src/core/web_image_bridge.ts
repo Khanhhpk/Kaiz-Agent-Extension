@@ -21,6 +21,7 @@ export class WebImageBridge {
             resolve: (base64: string) => void;
             reject: (err: Error) => void;
             timer: ReturnType<typeof setTimeout>;
+            startTime: number;
         }
     >();
 
@@ -31,6 +32,7 @@ export class WebImageBridge {
     };
 
     private static lastDeliveredProvider: 'gemini' | 'chatgpt' = 'gemini';
+    private static lastDeliveredDuration: number = 0;
 
     private static isInitialized = false;
 
@@ -76,6 +78,12 @@ export class WebImageBridge {
                     clearTimeout(job.timer);
                     this.pendingJobs.delete(payload.id);
 
+                    const durationMs =
+                        typeof payload.durationMs === 'number' && payload.durationMs > 0
+                            ? payload.durationMs
+                            : Date.now() - job.startTime;
+                    this.lastDeliveredDuration = durationMs;
+
                     if (payload.status === 'success' && payload.base64) {
                         job.resolve(payload.base64);
                     } else {
@@ -111,12 +119,17 @@ export class WebImageBridge {
         return this.lastDeliveredProvider;
     }
 
+    public static getLastDeliveredDuration(): number {
+        return this.lastDeliveredDuration;
+    }
+
     public static async requestImage(req: IWebImageJobRequest): Promise<string> {
         this.init();
 
         const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
         const timeoutMs = req.timeoutMs || 150000;
         const target = req.target || 'auto';
+        const startTime = Date.now();
 
         // Cảnh báo sớm nếu tab tương ứng chưa mở
         if (target === 'gemini' && !this.status.geminiOnline) {
@@ -135,7 +148,7 @@ export class WebImageBridge {
                 );
             }, timeoutMs);
 
-            this.pendingJobs.set(jobId, { resolve, reject, timer });
+            this.pendingJobs.set(jobId, { resolve, reject, timer, startTime });
 
             console.log('[WebImageBridge] 🚀 Gửi job sang Userscript:', jobId, target, req.prompt);
             window.postMessage(
@@ -205,17 +218,21 @@ export class WebImageBridge {
         prompt: string;
         base64: string;
         provider: string;
+        durationMs?: number;
     }): Promise<void> {
         try {
             const providerName =
                 data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider;
+            const duration = data.durationMs || this.lastDeliveredDuration || 0;
             await KaizDB.getInstance().addGalleryImage({
                 prompt: data.prompt,
                 base64: data.base64,
                 timestamp: Date.now(),
                 provider: providerName,
+                durationMs: duration > 0 ? duration : undefined,
             });
-            console.log(`[WebImageBridge] Đã lưu ảnh (${providerName}) vào Image Gallery thành công.`);
+            const durationLabel = duration > 0 ? ` (${(duration / 1000).toFixed(1)}s)` : '';
+            console.log(`[WebImageBridge] Đã lưu ảnh (${providerName}${durationLabel}) vào Image Gallery thành công.`);
             // Bắn custom event để Gallery UI nếu đang mở thì tự động cập nhật
             window.dispatchEvent(new CustomEvent('kaiz_gallery_updated'));
         } catch (err) {

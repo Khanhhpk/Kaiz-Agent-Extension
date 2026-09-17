@@ -5929,6 +5929,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            chatgptOnline: false,
        };
        static lastDeliveredProvider = 'gemini';
+       static lastDeliveredDuration = 0;
        static isInitialized = false;
        static init() {
            if (this.isInitialized)
@@ -5969,6 +5970,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    if (job) {
                        clearTimeout(job.timer);
                        this.pendingJobs.delete(payload.id);
+                       const durationMs = typeof payload.durationMs === 'number' && payload.durationMs > 0
+                           ? payload.durationMs
+                           : Date.now() - job.startTime;
+                       this.lastDeliveredDuration = durationMs;
                        if (payload.status === 'success' && payload.base64) {
                            job.resolve(payload.base64);
                        }
@@ -6000,11 +6005,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        static getLastDeliveredProvider() {
            return this.lastDeliveredProvider;
        }
+       static getLastDeliveredDuration() {
+           return this.lastDeliveredDuration;
+       }
        static async requestImage(req) {
            this.init();
            const jobId = `job_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
            const timeoutMs = req.timeoutMs || 150000;
            const target = req.target || 'auto';
+           const startTime = Date.now();
            // Cảnh báo sớm nếu tab tương ứng chưa mở
            if (target === 'gemini' && !this.status.geminiOnline) {
                console.warn('[WebImageBridge] Cảnh báo: Tab Gemini Web có thể chưa mở.');
@@ -6017,7 +6026,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    this.pendingJobs.delete(jobId);
                    reject(new Error(`Hết thời gian chờ (${Math.round(timeoutMs / 1000)}s). Vui lòng đảm bảo bạn đã mở 1 tab Gemini Web (gemini.google.com) hoặc ChatGPT Web (chatgpt.com) và đã cài đặt Userscript Kaiz Bridge.`));
                }, timeoutMs);
-               this.pendingJobs.set(jobId, { resolve, reject, timer });
+               this.pendingJobs.set(jobId, { resolve, reject, timer, startTime });
                console.log('[WebImageBridge] 🚀 Gửi job sang Userscript:', jobId, target, req.prompt);
                window.postMessage({
                    type: 'KAIZ_BRIDGE_IMAGE_REQUEST',
@@ -6081,13 +6090,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        static async saveImageToGallery(data) {
            try {
                const providerName = data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider;
+               const duration = data.durationMs || this.lastDeliveredDuration || 0;
                await KaizDB.getInstance().addGalleryImage({
                    prompt: data.prompt,
                    base64: data.base64,
                    timestamp: Date.now(),
                    provider: providerName,
+                   durationMs: duration > 0 ? duration : undefined,
                });
-               console.log(`[WebImageBridge] Đã lưu ảnh (${providerName}) vào Image Gallery thành công.`);
+               const durationLabel = duration > 0 ? ` (${(duration / 1000).toFixed(1)}s)` : '';
+               console.log(`[WebImageBridge] Đã lưu ảnh (${providerName}${durationLabel}) vào Image Gallery thành công.`);
                // Bắn custom event để Gallery UI nếu đang mở thì tự động cập nhật
                window.dispatchEvent(new CustomEvent('kaiz_gallery_updated'));
            }
@@ -6124,23 +6136,28 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                const target = WebImageBridge.getConfiguredProvider();
                const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
                console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, finalPrompt);
+               const startGen = Date.now();
                const base64 = await WebImageBridge.requestImage({
                    prompt: finalPrompt,
                    target,
                    timeoutMs: 150000,
                });
+               const durationMs = Date.now() - startGen;
+               const actualProvider = WebImageBridge.getLastDeliveredProvider();
                // Tự động lưu vào Image Gallery
                await WebImageBridge.saveImageToGallery({
                    prompt: finalPrompt,
                    base64,
-                   provider: target,
+                   provider: actualProvider,
+                   durationMs,
                });
                const safePrompt = finalPrompt
                    .replace(/&/g, '&amp;')
                    .replace(/"/g, '&quot;')
                    .replace(/</g, '&lt;')
                    .replace(/>/g, '&gt;');
-               const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;">🎨 ${safePrompt}</div></div>`;
+               const durationText = `${(durationMs / 1000).toFixed(1)}s`;
+               const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${actualProvider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
                // Dán trực tiếp bức ảnh vào chính văn SillyTavern chat
                let messageSent = false;
                try {
@@ -12156,6 +12173,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                const dateStr = this.formatDate(img.timestamp);
                const safePrompt = this.escapeHtml(img.prompt);
                const providerLabel = (img.provider || 'gemini').toUpperCase();
+               const durationStr = img.durationMs ? `${(img.durationMs / 1000).toFixed(1)}s` : '';
                const card = $(`
                 <div class="kaiz-gallery-card ${isSelected ? 'is-selected' : ''}" data-id="${img.id}">
                     <div class="kaiz-gallery-card-thumb">
@@ -12163,12 +12181,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         <div class="kaiz-gallery-card-checkbox ${isSelected ? 'checked' : ''}" title="Chọn ảnh">
                             <i class="fa-solid fa-check"></i>
                         </div>
-                        <div class="kaiz-gallery-provider-tag">${providerLabel}</div>
+                        <div class="kaiz-gallery-provider-tag">${providerLabel}${durationStr ? ` • ${durationStr}` : ''}</div>
                     </div>
                     <div class="kaiz-gallery-card-info">
                         <div class="kaiz-gallery-card-prompt" title="${safePrompt}">${safePrompt}</div>
                         <div class="kaiz-gallery-card-footer">
-                            <span class="kaiz-gallery-card-date">${dateStr}</span>
+                            <span class="kaiz-gallery-card-date">${dateStr}${durationStr ? ` <span title="Thời gian tạo ảnh: ${durationStr}" style="opacity: 0.85; margin-left: 5px;"><i class="fa-solid fa-stopwatch" style="font-size: 10px;"></i> ${durationStr}</span>` : ''}</span>
                             <div class="kaiz-gallery-card-actions">
                                 <button class="kaiz-card-action-btn copy-btn" title="Sao chép prompt">
                                     <i class="fa-regular fa-copy"></i>
@@ -12262,6 +12280,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            $('#kaiz-preview-prompt-text').text(img.prompt);
            $('#kaiz-preview-date').text(this.formatDate(img.timestamp, true));
            $('#kaiz-preview-provider-badge').text((img.provider || 'gemini').toUpperCase());
+           if (img.durationMs && img.durationMs > 0) {
+               $('#kaiz-preview-duration-text').text(`${(img.durationMs / 1000).toFixed(1)}s`);
+               $('#kaiz-preview-duration-badge').show();
+           }
+           else {
+               $('#kaiz-preview-duration-badge').hide();
+           }
            const previewModal = $('#kaiz-gallery-preview-modal')[0];
            if (previewModal) {
                previewModal.showModal();
@@ -12493,14 +12518,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                        }
                        try {
                            const target = WebImageBridge.getConfiguredProvider();
+                           const startDraw = Date.now();
                            const base64 = await WebImageBridge.requestImage({ prompt: finalPrompt, target });
-                           await WebImageBridge.saveImageToGallery({ prompt: finalPrompt, base64, provider: target });
+                           const durationMs = Date.now() - startDraw;
+                           const actualProvider = WebImageBridge.getLastDeliveredProvider();
+                           await WebImageBridge.saveImageToGallery({
+                               prompt: finalPrompt,
+                               base64,
+                               provider: actualProvider,
+                               durationMs,
+                           });
                            const safePrompt = finalPrompt
                                .replace(/&/g, '&amp;')
                                .replace(/"/g, '&quot;')
                                .replace(/</g, '&lt;')
                                .replace(/>/g, '&gt;');
-                           const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;">🎨 ${safePrompt}</div></div>`;
+                           const durationText = `${(durationMs / 1000).toFixed(1)}s`;
+                           const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;"><div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 11px; opacity: 0.85;"><span>🎨 <b>PROMPT</b></span><span><i class="fa-solid fa-stopwatch"></i> ${durationText} • ${actualProvider.toUpperCase()}</span></div>${safePrompt}</div></div>`;
                            let messageSent = false;
                            if (typeof ctx.sendSystemMessage === 'function') {
                                try {
