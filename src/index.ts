@@ -365,13 +365,16 @@ jQuery(async () => {
                                 { role: 'user', content: userMessage },
                             ];
 
-                            const result = await adapter.generateCompletion(messages, 600, false);
+                            const effMaxTokens =
+                                typeof extSettings.maxTokens === 'number' && extSettings.maxTokens > 0
+                                    ? extSettings.maxTokens
+                                    : 65000;
+                            const result = await adapter.generateCompletion(messages, effMaxTokens, false);
                             let generatedPrompt = (result?.text || '').trim();
 
                             // Loại bỏ CoT / thinking nếu có
                             generatedPrompt = generatedPrompt
-                                .replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '')
-                                .replace(/<agent_cot>[\s\S]*?(?:<\/agent_cot>|$)/gi, '')
+                                .replace(/<(?:think|thinking|thought|agent_cot)>[\s\S]*?(?:<\/(?:think|thinking|thought|agent_cot)>|$)/gi, '')
                                 .trim();
 
                             // Bỏ dấu ngoặc kép bọc ngoài nếu model sinh ra
