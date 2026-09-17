@@ -69,7 +69,12 @@ export class WebImageBridge {
 
             // 3. Nhận kết quả vẽ ảnh từ Web
             if (type === 'KAIZ_BRIDGE_IMAGE_RESPONSE' && payload) {
-                console.log('[WebImageBridge] Nhận kết quả ảnh từ Userscript:', payload.id, payload.status, payload.provider);
+                console.log(
+                    '[WebImageBridge] Nhận kết quả ảnh từ Userscript:',
+                    payload.id,
+                    payload.status,
+                    payload.provider,
+                );
                 if (payload.provider === 'chatgpt' || payload.provider === 'gemini') {
                     this.lastDeliveredProvider = payload.provider;
                 }
@@ -173,10 +178,10 @@ export class WebImageBridge {
             const ctx =
                 typeof (globalThis as any).SillyTavern !== 'undefined'
                     ? (globalThis as any).SillyTavern.getContext()
-                    : ((globalThis as any).window?.SillyTavern?.getContext?.() || null);
+                    : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
             const prov = ctx?.extensionSettings?.['kaiz_agent']?.webImageProvider;
             if (prov === 'gemini' || prov === 'chatgpt') return prov;
-        } catch (e) {
+        } catch (_e) {
             /* ignore */
         }
         return 'auto';
@@ -190,7 +195,7 @@ export class WebImageBridge {
             const ctx =
                 typeof (globalThis as any).SillyTavern !== 'undefined'
                     ? (globalThis as any).SillyTavern.getContext()
-                    : ((globalThis as any).window?.SillyTavern?.getContext?.() || null);
+                    : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
             const settings = ctx?.extensionSettings?.['kaiz_agent'];
             const customPrompt = (settings?.customImagePrompt || '').trim();
             const position = settings?.customImagePromptPosition || 'suffix';
@@ -206,7 +211,7 @@ export class WebImageBridge {
                 combined = `${rawBase}\n\n${customPrompt}`;
             }
             return combined.trim();
-        } catch (e) {
+        } catch (_e) {
             return basePrompt;
         }
     }
@@ -221,8 +226,7 @@ export class WebImageBridge {
         durationMs?: number;
     }): Promise<void> {
         try {
-            const providerName =
-                data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider;
+            const providerName = data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider;
             const duration = data.durationMs || this.lastDeliveredDuration || 0;
             await KaizDB.getInstance().addGalleryImage({
                 prompt: data.prompt,

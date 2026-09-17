@@ -52,9 +52,7 @@ export class ImageGalleryModal {
                 if (!query) {
                     this.filteredImages = [...this.images];
                 } else {
-                    this.filteredImages = this.images.filter((img) =>
-                        (img.prompt || '').toLowerCase().includes(query),
-                    );
+                    this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
                 }
                 this.currentLimit = this.displayLimit;
                 this.renderGrid();
@@ -130,7 +128,7 @@ export class ImageGalleryModal {
                     try {
                         await navigator.clipboard.writeText(this.currentPreviewImage.prompt);
                         if (typeof toastr !== 'undefined') toastr.success('Đã sao chép prompt!');
-                    } catch (e) {
+                    } catch (_e) {
                         if (typeof toastr !== 'undefined') toastr.info('Không thể tự động sao chép prompt.');
                     }
                 }
@@ -175,9 +173,7 @@ export class ImageGalleryModal {
         if (!query) {
             this.filteredImages = [...this.images];
         } else {
-            this.filteredImages = this.images.filter((img) =>
-                (img.prompt || '').toLowerCase().includes(query),
-            );
+            this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
         }
         this.currentLimit = this.displayLimit;
         this.updateSelectionUI();
@@ -352,9 +348,7 @@ export class ImageGalleryModal {
     private downloadImage(img: GalleryImage): void {
         const a = document.createElement('a');
         a.href = img.base64;
-        const cleanPrompt = (img.prompt || 'kaiz_image')
-            .replace(/[^a-zA-Z0-9]/g, '_')
-            .substring(0, 25);
+        const cleanPrompt = (img.prompt || 'kaiz_image').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 25);
         a.download = `${cleanPrompt}_${img.timestamp || Date.now()}.png`;
         document.body.appendChild(a);
         a.click();

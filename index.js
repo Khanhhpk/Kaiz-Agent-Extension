@@ -5849,11 +5849,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        }
        // --- IMAGE GALLERY (DB v6) ---
        async addGalleryImage(image) {
-           return new Promise(async (resolve, reject) => {
-               if (!this.db)
-                   await this.init().catch(reject);
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
+           if (!this.db)
+               await this.init();
+           if (!this.db)
+               throw new Error('DB not initialized');
+           return new Promise((resolve, reject) => {
                const transaction = this.db.transaction(['gallery_images'], 'readwrite');
                const store = transaction.objectStore('gallery_images');
                const request = store.add(image);
@@ -5862,11 +5862,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            });
        }
        async getAllGalleryImages() {
-           return new Promise(async (resolve, reject) => {
-               if (!this.db)
-                   await this.init().catch(reject);
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
+           if (!this.db)
+               await this.init();
+           if (!this.db)
+               throw new Error('DB not initialized');
+           return new Promise((resolve, reject) => {
                const transaction = this.db.transaction(['gallery_images'], 'readonly');
                const store = transaction.objectStore('gallery_images');
                const request = store.getAll();
@@ -5879,11 +5879,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            });
        }
        async deleteGalleryImage(id) {
-           return new Promise(async (resolve, reject) => {
-               if (!this.db)
-                   await this.init().catch(reject);
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
+           if (!this.db)
+               await this.init();
+           if (!this.db)
+               throw new Error('DB not initialized');
+           return new Promise((resolve, reject) => {
                const transaction = this.db.transaction(['gallery_images'], 'readwrite');
                const store = transaction.objectStore('gallery_images');
                const request = store.delete(id);
@@ -5894,11 +5894,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        async deleteMultipleGalleryImages(ids) {
            if (!ids || ids.length === 0)
                return;
-           return new Promise(async (resolve, reject) => {
-               if (!this.db)
-                   await this.init().catch(reject);
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
+           if (!this.db)
+               await this.init();
+           if (!this.db)
+               throw new Error('DB not initialized');
+           return new Promise((resolve, reject) => {
                const transaction = this.db.transaction(['gallery_images'], 'readwrite');
                const store = transaction.objectStore('gallery_images');
                ids.forEach((id) => store.delete(id));
@@ -5907,11 +5907,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            });
        }
        async clearAllGalleryImages() {
-           return new Promise(async (resolve, reject) => {
-               if (!this.db)
-                   await this.init().catch(reject);
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
+           if (!this.db)
+               await this.init();
+           if (!this.db)
+               throw new Error('DB not initialized');
+           return new Promise((resolve, reject) => {
                const transaction = this.db.transaction(['gallery_images'], 'readwrite');
                const store = transaction.objectStore('gallery_images');
                const request = store.clear();
@@ -6045,12 +6045,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            try {
                const ctx = typeof globalThis.SillyTavern !== 'undefined'
                    ? globalThis.SillyTavern.getContext()
-                   : (globalThis.window?.SillyTavern?.getContext?.() || null);
+                   : globalThis.window?.SillyTavern?.getContext?.() || null;
                const prov = ctx?.extensionSettings?.['kaiz_agent']?.webImageProvider;
                if (prov === 'gemini' || prov === 'chatgpt')
                    return prov;
            }
-           catch (e) {
+           catch (_e) {
                /* ignore */
            }
            return 'auto';
@@ -6062,7 +6062,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            try {
                const ctx = typeof globalThis.SillyTavern !== 'undefined'
                    ? globalThis.SillyTavern.getContext()
-                   : (globalThis.window?.SillyTavern?.getContext?.() || null);
+                   : globalThis.window?.SillyTavern?.getContext?.() || null;
                const settings = ctx?.extensionSettings?.['kaiz_agent'];
                const customPrompt = (settings?.customImagePrompt || '').trim();
                const position = settings?.customImagePromptPosition || 'suffix';
@@ -6080,7 +6080,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                }
                return combined.trim();
            }
-           catch (e) {
+           catch (_e) {
                return basePrompt;
            }
        }
@@ -6163,19 +6163,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                try {
                    const ctx = typeof globalThis.SillyTavern !== 'undefined'
                        ? globalThis.SillyTavern.getContext()
-                       : (globalThis.window?.SillyTavern?.getContext?.() || null);
+                       : globalThis.window?.SillyTavern?.getContext?.() || null;
                    if (ctx) {
                        if (typeof ctx.sendSystemMessage === 'function') {
                            try {
                                ctx.sendSystemMessage('generic', markdownImage);
                                messageSent = true;
                            }
-                           catch (err) {
+                           catch (_err) {
                                try {
                                    ctx.sendSystemMessage(markdownImage);
                                    messageSent = true;
                                }
-                               catch (e2) {
+                               catch (_e2) {
                                    /* ignore */
                                }
                            }
@@ -12085,7 +12085,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                        if (typeof toastr !== 'undefined')
                            toastr.success('Đã sao chép prompt!');
                    }
-                   catch (e) {
+                   catch (_e) {
                        if (typeof toastr !== 'undefined')
                            toastr.info('Không thể tự động sao chép prompt.');
                    }
@@ -12295,9 +12295,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        downloadImage(img) {
            const a = document.createElement('a');
            a.href = img.base64;
-           const cleanPrompt = (img.prompt || 'kaiz_image')
-               .replace(/[^a-zA-Z0-9]/g, '_')
-               .substring(0, 25);
+           const cleanPrompt = (img.prompt || 'kaiz_image').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 25);
            a.download = `${cleanPrompt}_${img.timestamp || Date.now()}.png`;
            document.body.appendChild(a);
            a.click();

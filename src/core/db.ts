@@ -898,10 +898,10 @@ export class KaizDB {
     // --- IMAGE GALLERY (DB v6) ---
 
     public async addGalleryImage(image: Omit<GalleryImage, 'id'>): Promise<number> {
-        return new Promise(async (resolve, reject) => {
-            if (!this.db) await this.init().catch(reject);
-            if (!this.db) return reject(new Error('DB not initialized'));
-            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
             const store = transaction.objectStore('gallery_images');
 
             const request = store.add(image);
@@ -911,10 +911,10 @@ export class KaizDB {
     }
 
     public async getAllGalleryImages(): Promise<GalleryImage[]> {
-        return new Promise(async (resolve, reject) => {
-            if (!this.db) await this.init().catch(reject);
-            if (!this.db) return reject(new Error('DB not initialized'));
-            const transaction = this.db.transaction(['gallery_images'], 'readonly');
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readonly');
             const store = transaction.objectStore('gallery_images');
 
             const request = store.getAll();
@@ -928,10 +928,10 @@ export class KaizDB {
     }
 
     public async deleteGalleryImage(id: number): Promise<void> {
-        return new Promise(async (resolve, reject) => {
-            if (!this.db) await this.init().catch(reject);
-            if (!this.db) return reject(new Error('DB not initialized'));
-            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
             const store = transaction.objectStore('gallery_images');
 
             const request = store.delete(id);
@@ -942,10 +942,10 @@ export class KaizDB {
 
     public async deleteMultipleGalleryImages(ids: number[]): Promise<void> {
         if (!ids || ids.length === 0) return;
-        return new Promise(async (resolve, reject) => {
-            if (!this.db) await this.init().catch(reject);
-            if (!this.db) return reject(new Error('DB not initialized'));
-            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
             const store = transaction.objectStore('gallery_images');
 
             ids.forEach((id) => store.delete(id));
@@ -955,10 +955,10 @@ export class KaizDB {
     }
 
     public async clearAllGalleryImages(): Promise<void> {
-        return new Promise(async (resolve, reject) => {
-            if (!this.db) await this.init().catch(reject);
-            if (!this.db) return reject(new Error('DB not initialized'));
-            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
             const store = transaction.objectStore('gallery_images');
 
             const request = store.clear();

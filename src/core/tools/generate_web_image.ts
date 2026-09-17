@@ -63,18 +63,18 @@ export const generateWebImageTool: ITool = {
                 const ctx =
                     typeof (globalThis as any).SillyTavern !== 'undefined'
                         ? (globalThis as any).SillyTavern.getContext()
-                        : ((globalThis as any).window?.SillyTavern?.getContext?.() || null);
+                        : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
 
                 if (ctx) {
                     if (typeof ctx.sendSystemMessage === 'function') {
                         try {
                             ctx.sendSystemMessage('generic', markdownImage);
                             messageSent = true;
-                        } catch (err) {
+                        } catch (_err) {
                             try {
                                 ctx.sendSystemMessage(markdownImage);
                                 messageSent = true;
-                            } catch (e2) {
+                            } catch (_e2) {
                                 /* ignore */
                             }
                         }
@@ -106,7 +106,8 @@ export const generateWebImageTool: ITool = {
             return {
                 content: JSON.stringify({
                     success: true,
-                    message: 'Đã sinh ảnh thành công và nhúng trực tiếp bức ảnh vào khung chat chính cho người dùng xem.',
+                    message:
+                        'Đã sinh ảnh thành công và nhúng trực tiếp bức ảnh vào khung chat chính cho người dùng xem.',
                     prompt: finalPrompt,
                     posted_to_chat: messageSent,
                 }),
