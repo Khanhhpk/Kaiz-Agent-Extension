@@ -874,6 +874,18 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
         });
 
+        $('#kaiz-web-image-custom-prompt').val(settings.customImagePrompt || '');
+        $('#kaiz-web-image-custom-prompt').on('input', function (this: HTMLTextAreaElement) {
+            settings.customImagePrompt = this.value;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-custom-prompt-pos').val(settings.customImagePromptPosition || 'suffix');
+        $('#kaiz-web-image-custom-prompt-pos').on('change', function (this: HTMLSelectElement) {
+            settings.customImagePromptPosition = this.value || 'suffix';
+            ctx.saveSettingsDebounced();
+        });
+
         const updateBridgeStatusUI = () => {
             const status = WebImageBridge.getStatus();
             const $userScriptStatus = $('#kaiz-bridge-status-userscript');

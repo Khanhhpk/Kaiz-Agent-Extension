@@ -1,3 +1,5 @@
+import { KaizDB } from './db';
+
 export interface IWebImageJobRequest {
     prompt: string;
     target?: 'gemini' | 'chatgpt' | 'auto';
@@ -139,5 +141,57 @@ export class WebImageBridge {
                 '*',
             );
         });
+    }
+
+    /**
+     * Tự động ghép Custom Prompt (Prefix hoặc Suffix) từ cấu hình người dùng
+     */
+    public static mergeCustomPrompt(basePrompt: string): string {
+        try {
+            const ctx =
+                typeof (globalThis as any).SillyTavern !== 'undefined'
+                    ? (globalThis as any).SillyTavern.getContext()
+                    : ((globalThis as any).window?.SillyTavern?.getContext?.() || null);
+            const settings = ctx?.extensionSettings?.['kaiz_agent'];
+            const customPrompt = (settings?.customImagePrompt || '').trim();
+            const position = settings?.customImagePromptPosition || 'suffix';
+
+            const rawBase = (basePrompt || '').trim();
+            if (!customPrompt) return rawBase;
+            if (!rawBase) return customPrompt;
+
+            let combined = '';
+            if (position === 'prefix') {
+                combined = `${customPrompt}\n\n${rawBase}`;
+            } else {
+                combined = `${rawBase}\n\n${customPrompt}`;
+            }
+            return combined.trim();
+        } catch (e) {
+            return basePrompt;
+        }
+    }
+
+    /**
+     * Tự động lưu ảnh sinh ra vào IndexedDB Image Gallery
+     */
+    public static async saveImageToGallery(data: {
+        prompt: string;
+        base64: string;
+        provider: string;
+    }): Promise<void> {
+        try {
+            await KaizDB.getInstance().addGalleryImage({
+                prompt: data.prompt,
+                base64: data.base64,
+                timestamp: Date.now(),
+                provider: data.provider || 'gemini',
+            });
+            console.log('[WebImageBridge] Đã lưu ảnh vào Image Gallery thành công.');
+            // Bắn custom event để Gallery UI nếu đang mở thì tự động cập nhật
+            window.dispatchEvent(new CustomEvent('kaiz_gallery_updated'));
+        } catch (err) {
+            console.warn('[WebImageBridge] Không thể lưu ảnh vào Gallery:', err);
+        }
     }
 }

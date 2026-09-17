@@ -169,6 +169,13 @@
                             <span class="kaiz-menu-item-desc">Tùy chỉnh CSS/DOM & phục hồi</span>
                         </div>
                     </div>
+                    <div id="kaiz-chat-gallery-btn" class="kaiz-menu-item interactable" title="Thư viện ảnh">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-images"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Thư viện ảnh</span>
+                            <span class="kaiz-menu-item-desc">Bộ sưu tập ảnh AI đã tạo</span>
+                        </div>
+                    </div>
                     <div class="kaiz-menu-divider"></div>
                     <div id="kaiz-chat-backup-btn" class="kaiz-menu-item interactable" title="Backup Manager">
                         <div class="kaiz-menu-item-icon"><i class="fa-solid fa-floppy-disk"></i></div>
@@ -922,5 +929,188 @@
         "
     >
         <!-- Theme Items sẽ được inject vào đây -->
+    </div>
+</dialog>
+
+<!-- Image Gallery Modal -->
+<dialog
+    id="kaiz-gallery-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(18, 22, 32, 0.96);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        color: #e0e0e0;
+        padding: 16px;
+        width: 820px;
+        max-width: 95vw;
+        max-height: 88vh;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+    "
+>
+    <!-- Header -->
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+            flex-shrink: 0;
+        "
+    >
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <h3 style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                <i class="fa-solid fa-images" style="color: #00c9ff;"></i> Thư viện ảnh (Image Gallery)
+            </h3>
+            <span id="kaiz-gallery-total-badge" class="kaiz-status-pill badge-neutral" style="font-size: 11px; padding: 2px 8px;">
+                0 ảnh
+            </span>
+        </div>
+        <i
+            id="kaiz-gallery-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 18px; opacity: 0.8;"
+            title="Đóng"
+        ></i>
+    </div>
+
+    <!-- Toolbar / Actions Bar -->
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        "
+    >
+        <!-- Left: Search & Select controls -->
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px;">
+            <div style="position: relative; flex: 1; max-width: 280px;">
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; opacity: 0.5;"></i>
+                <input
+                    type="text"
+                    id="kaiz-gallery-search"
+                    class="text_pole interactable"
+                    placeholder="Tìm theo prompt..."
+                    style="width: 100%; box-sizing: border-box; padding-left: 28px; padding-top: 5px; padding-bottom: 5px; font-size: 12px; border-radius: 6px; background: rgba(0,0,0,0.3);"
+                />
+            </div>
+            <button id="kaiz-gallery-select-all-btn" class="menu_button interactable" style="font-size: 12px; padding: 5px 10px; white-space: nowrap;">
+                <i class="fa-regular fa-square-check"></i> Chọn tất cả
+            </button>
+        </div>
+
+        <!-- Right: Action Buttons -->
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <button
+                id="kaiz-gallery-delete-selected-btn"
+                class="menu_button interactable"
+                style="font-size: 12px; padding: 5px 12px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.4); display: none;"
+                title="Xóa các ảnh đã chọn"
+            >
+                <i class="fa-solid fa-trash-can"></i> Xóa đã chọn (<span id="kaiz-gallery-selected-count">0</span>)
+            </button>
+            <button
+                id="kaiz-gallery-delete-all-btn"
+                class="menu_button interactable"
+                style="font-size: 12px; padding: 5px 10px; opacity: 0.75;"
+                title="Xóa toàn bộ thư viện ảnh"
+            >
+                <i class="fa-solid fa-fire"></i> Xóa tất cả
+            </button>
+        </div>
+    </div>
+
+    <!-- Gallery Grid Container -->
+    <div
+        id="kaiz-gallery-grid-wrapper"
+        style="
+            flex: 1;
+            min-height: 250px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding-right: 4px;
+        "
+    >
+        <div id="kaiz-gallery-grid" class="kaiz-gallery-grid">
+            <!-- Dynamic Gallery Cards rendered here -->
+        </div>
+        <div id="kaiz-gallery-empty" style="display: none; text-align: center; padding: 50px 20px; opacity: 0.6;">
+            <i class="fa-regular fa-images" style="font-size: 42px; margin-bottom: 12px; display: block; opacity: 0.4;"></i>
+            <div style="font-size: 14px;">Chưa có bức ảnh nào trong thư viện.</div>
+            <div style="font-size: 12px; margin-top: 4px; opacity: 0.8;">Hãy dùng lệnh <code>/draw &lt;mô tả&gt;</code> hoặc để Agent vẽ ảnh minh họa!</div>
+        </div>
+    </div>
+</dialog>
+
+<!-- Image Lightbox Preview Modal -->
+<dialog
+    id="kaiz-gallery-preview-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(14, 18, 26, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        color: #eee;
+        padding: 16px;
+        width: 720px;
+        max-width: 95vw;
+        max-height: 92vh;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8);
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+    "
+>
+    <!-- Preview Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span id="kaiz-preview-provider-badge" class="kaiz-status-pill badge-neutral" style="font-size: 11px;">PROVIDER</span>
+            <span id="kaiz-preview-date" style="font-size: 12px; opacity: 0.7;"></span>
+        </div>
+        <i id="kaiz-gallery-preview-close" class="fa-solid fa-xmark interactable" style="cursor: pointer; font-size: 18px;" title="Đóng"></i>
+    </div>
+
+    <!-- Image View -->
+    <div style="flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.3); border-radius: 8px; overflow: hidden; margin-bottom: 12px;">
+        <img id="kaiz-preview-img" src="" alt="Preview" style="max-width: 100%; max-height: 55vh; object-fit: contain; border-radius: 6px; box-shadow: 0 4px 15px rgba(0,0,0,0.5);" />
+    </div>
+
+    <!-- Prompt Box -->
+    <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 10px; margin-bottom: 12px; flex-shrink: 0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.7;">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Prompt tạo ảnh:
+            </span>
+            <button id="kaiz-preview-copy-prompt-btn" class="menu_button interactable" style="font-size: 11px; padding: 3px 8px;">
+                <i class="fa-regular fa-copy"></i> Sao chép
+            </button>
+        </div>
+        <div id="kaiz-preview-prompt-text" style="font-size: 13px; line-height: 1.45; word-break: break-word; max-height: 100px; overflow-y: auto; user-select: text; white-space: pre-wrap;"></div>
+    </div>
+
+    <!-- Preview Footer Actions -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+        <button id="kaiz-preview-delete-btn" class="menu_button interactable" style="color: #ff6b6b; border-color: rgba(255, 107, 107, 0.4); font-size: 12px; padding: 6px 12px;">
+            <i class="fa-solid fa-trash-can"></i> Xóa ảnh này
+        </button>
+        <div style="display: flex; gap: 8px;">
+            <button id="kaiz-preview-download-btn" class="menu_button interactable" style="font-size: 12px; padding: 6px 14px; background: rgba(0, 201, 255, 0.15); border-color: #00c9ff;">
+                <i class="fa-solid fa-download"></i> Tải ảnh về máy
+            </button>
+            <button id="kaiz-preview-close-btn" class="menu_button interactable" style="font-size: 12px; padding: 6px 14px;">
+                Đóng
+            </button>
+        </div>
     </div>
 </dialog>

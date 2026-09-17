@@ -86,10 +86,33 @@ export interface ThemeReference {
     addedAt: number;
 }
 
+export interface GalleryImage {
+    id?: number;
+    prompt: string;
+    base64: string;
+    timestamp: number;
+    provider: string;
+}
+
 export class KaizDB {
+    private static instance: KaizDB | null = null;
+
+    public static getInstance(): KaizDB {
+        if (!KaizDB.instance) {
+            KaizDB.instance = new KaizDB();
+        }
+        return KaizDB.instance;
+    }
+
     private dbName = 'KaizAgentDB';
-    private dbVersion = 5;
+    private dbVersion = 6;
     private db: IDBDatabase | null = null;
+
+    constructor() {
+        if (!KaizDB.instance) {
+            KaizDB.instance = this;
+        }
+    }
 
     public async init(): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -146,6 +169,15 @@ export class KaizDB {
                         autoIncrement: true,
                     });
                     themeStore.createIndex('name', 'name', { unique: false });
+                }
+
+                // --- GALLERY IMAGES (DB v6) ---
+                if (!db.objectStoreNames.contains('gallery_images')) {
+                    const galleryStore = db.createObjectStore('gallery_images', {
+                        keyPath: 'id',
+                        autoIncrement: true,
+                    });
+                    galleryStore.createIndex('timestamp', 'timestamp', { unique: false });
                 }
             };
 
@@ -855,6 +887,78 @@ export class KaizDB {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
             const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- IMAGE GALLERY (DB v6) ---
+
+    public async addGalleryImage(image: Omit<GalleryImage, 'id'>): Promise<number> {
+        return new Promise(async (resolve, reject) => {
+            if (!this.db) await this.init().catch(reject);
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
+
+            const request = store.add(image);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllGalleryImages(): Promise<GalleryImage[]> {
+        return new Promise(async (resolve, reject) => {
+            if (!this.db) await this.init().catch(reject);
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['gallery_images'], 'readonly');
+            const store = transaction.objectStore('gallery_images');
+
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const results = (request.result as GalleryImage[]) || [];
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteGalleryImage(id: number): Promise<void> {
+        return new Promise(async (resolve, reject) => {
+            if (!this.db) await this.init().catch(reject);
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteMultipleGalleryImages(ids: number[]): Promise<void> {
+        if (!ids || ids.length === 0) return;
+        return new Promise(async (resolve, reject) => {
+            if (!this.db) await this.init().catch(reject);
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
+
+            ids.forEach((id) => store.delete(id));
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
+    public async clearAllGalleryImages(): Promise<void> {
+        return new Promise(async (resolve, reject) => {
+            if (!this.db) await this.init().catch(reject);
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
 
             const request = store.clear();
             request.onsuccess = () => resolve();

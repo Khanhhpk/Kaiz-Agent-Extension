@@ -16,6 +16,7 @@ import { initCSSManagerTool } from './core/tools/st_css_manager';
 import { initInjectElementTool } from './core/tools/st_inject_element';
 import { UICustomizationModal } from './ui/ui_customization_modal';
 import { WebImageBridge } from './core/web_image_bridge';
+import { ImageGalleryModal } from './ui/image_gallery_modal';
 
 const EXT_NAME = 'kaiz_agent';
 console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
@@ -81,6 +82,8 @@ jQuery(async () => {
             enableBrowser: false,
             webImageBridgeEnabled: true,
             webImageProvider: 'auto',
+            customImagePrompt: '',
+            customImagePromptPosition: 'suffix',
         };
     } else {
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
@@ -124,6 +127,12 @@ jQuery(async () => {
         }
         if (ctx.extensionSettings[EXT_NAME].webImageProvider === undefined) {
             ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
+        }
+        if (ctx.extensionSettings[EXT_NAME].customImagePrompt === undefined) {
+            ctx.extensionSettings[EXT_NAME].customImagePrompt = '';
+        }
+        if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === undefined) {
+            ctx.extensionSettings[EXT_NAME].customImagePromptPosition = 'suffix';
         }
     }
 
@@ -174,7 +183,8 @@ jQuery(async () => {
             initCSSManagerTool(uiEngine);
             initInjectElementTool(uiEngine);
             new UICustomizationModal(stateManager.db, uiEngine);
-            console.log('[KaizAgent] UI Customization Engine initialized.');
+            new ImageGalleryModal(stateManager.db);
+            console.log('[KaizAgent] UI Customization Engine & Image Gallery initialized.');
 
             // Bắt đầu Auto Tasks sau khi DB đã init
             const allTasks = await stateManager.db.getAllAutoTasks();
@@ -205,18 +215,20 @@ jQuery(async () => {
                             }
                             return;
                         }
+                        const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
                         if (typeof toastr !== 'undefined') {
                             toastr.info('Đang gửi prompt vẽ ảnh sang Web (Gemini/ChatGPT)...');
                         }
                         try {
                             const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
-                            const base64 = await WebImageBridge.requestImage({ prompt, target });
-                            const safePrompt = prompt
+                            const base64 = await WebImageBridge.requestImage({ prompt: finalPrompt, target });
+                            await WebImageBridge.saveImageToGallery({ prompt: finalPrompt, base64, provider: target });
+                            const safePrompt = finalPrompt
                                 .replace(/&/g, '&amp;')
                                 .replace(/"/g, '&quot;')
                                 .replace(/</g, '&lt;')
                                 .replace(/>/g, '&gt;');
-                            const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic;">🎨 ${safePrompt}</div></div>`;
+                            const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;">🎨 ${safePrompt}</div></div>`;
 
                             let messageSent = false;
                             if (typeof ctx.sendSystemMessage === 'function') {

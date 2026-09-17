@@ -5115,6 +5115,812 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        },
    };
 
+   class KaizDB {
+       static instance = null;
+       static getInstance() {
+           if (!KaizDB.instance) {
+               KaizDB.instance = new KaizDB();
+           }
+           return KaizDB.instance;
+       }
+       dbName = 'KaizAgentDB';
+       dbVersion = 6;
+       db = null;
+       constructor() {
+           if (!KaizDB.instance) {
+               KaizDB.instance = this;
+           }
+       }
+       async init() {
+           return new Promise((resolve, reject) => {
+               const request = indexedDB.open(this.dbName, this.dbVersion);
+               request.onupgradeneeded = (event) => {
+                   const db = event.target.result;
+                   if (!db.objectStoreNames.contains('workspaces')) {
+                       const wsStore = db.createObjectStore('workspaces', { keyPath: 'id', autoIncrement: true });
+                       wsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                   }
+                   if (!db.objectStoreNames.contains('chats')) {
+                       const chatStore = db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
+                       chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                       chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                   }
+                   else if (event.oldVersion < 3) {
+                       const txn = event.target.transaction;
+                       const chatStore = txn.objectStore('chats');
+                       if (!chatStore.indexNames.contains('workspaceId')) {
+                           chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                       }
+                   }
+                   if (!db.objectStoreNames.contains('messages')) {
+                       const msgStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
+                       msgStore.createIndex('chatId', 'chatId', { unique: false });
+                       msgStore.createIndex('timestamp', 'timestamp', { unique: false });
+                   }
+                   if (!db.objectStoreNames.contains('backups')) {
+                       const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
+                       backupStore.createIndex('type', 'type', { unique: false });
+                       backupStore.createIndex('timestamp', 'timestamp', { unique: false });
+                   }
+                   // --- AUTO TASKS (DB v4) ---
+                   if (!db.objectStoreNames.contains('autoTasks')) {
+                       db.createObjectStore('autoTasks', { keyPath: 'id', autoIncrement: true });
+                   }
+                   // --- UI CUSTOMIZATION (DB v5) ---
+                   if (!db.objectStoreNames.contains('kaiz_ui_snapshots')) {
+                       const snapStore = db.createObjectStore('kaiz_ui_snapshots', { keyPath: 'id', autoIncrement: true });
+                       snapStore.createIndex('snapshotId', 'snapshotId', { unique: true });
+                       snapStore.createIndex('timestamp', 'timestamp', { unique: false });
+                       snapStore.createIndex('applied', 'applied', { unique: false });
+                   }
+                   if (!db.objectStoreNames.contains('kaiz_theme_library')) {
+                       const themeStore = db.createObjectStore('kaiz_theme_library', {
+                           keyPath: 'id',
+                           autoIncrement: true,
+                       });
+                       themeStore.createIndex('name', 'name', { unique: false });
+                   }
+                   // --- GALLERY IMAGES (DB v6) ---
+                   if (!db.objectStoreNames.contains('gallery_images')) {
+                       const galleryStore = db.createObjectStore('gallery_images', {
+                           keyPath: 'id',
+                           autoIncrement: true,
+                       });
+                       galleryStore.createIndex('timestamp', 'timestamp', { unique: false });
+                   }
+               };
+               request.onsuccess = async (event) => {
+                   this.db = event.target.result;
+                   await this.ensureSystemWorkspaces();
+                   resolve();
+               };
+               request.onerror = (event) => {
+                   console.error('[KaizDB] Error opening DB', event);
+                   reject(event.target.error);
+               };
+           });
+       }
+       async ensureSystemWorkspaces() {
+           const workspaces = await this.getAllWorkspaces();
+           const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
+           const roleplayPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
+           const roleplayTools = [
+               'get_char_info',
+               'get_chat_history',
+               'get_lorebook_info',
+               'get_user_persona',
+               'manage_user_input',
+           ];
+           if (!roleplayWs) {
+               await this.createSystemWorkspace('roleplay', 'Roleplay & Story', roleplayPrompt, roleplayTools);
+           }
+           const modderWs = workspaces.find((w) => w.systemId === 'modder');
+           const modderPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
+           const modderTools = [
+               'get_chat_history',
+               'get_char_info',
+               'list_characters',
+               'edit_character_card',
+               'get_lorebook_info',
+               'manage_lorebook_entry',
+               'manage_worldbook',
+               'get_regex_list',
+               'get_regex_info',
+               'manage_regex',
+               'get_tavern_helper_scripts',
+               'get_tavern_helper_script_info',
+               'manage_tavern_helper_script',
+               'get_user_persona',
+               'edit_user_persona',
+               'manage_chat_text',
+               'manage_backup',
+           ];
+           if (!modderWs) {
+               await this.createSystemWorkspace('modder', 'Modding & Editor', modderPrompt, modderTools);
+           }
+           const uiDesignerWs = workspaces.find((w) => w.systemId === 'ui_designer');
+           const uiDesignerPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+           const uiDesignerTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
+           if (!uiDesignerWs) {
+               await this.createSystemWorkspace('ui_designer', 'UI & Theme Designer', uiDesignerPrompt, uiDesignerTools);
+           }
+       }
+       async createSystemWorkspace(systemId, name, systemPrompt, toolNames) {
+           const toolsConfig = {};
+           toolNames.forEach((t) => (toolsConfig[t] = true));
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['workspaces'], 'readwrite');
+               const store = transaction.objectStore('workspaces');
+               const now = Date.now();
+               const ws = {
+                   systemId,
+                   name,
+                   systemPrompt,
+                   toolsConfig,
+                   createdAt: now,
+                   updatedAt: now,
+               };
+               const request = store.add(ws);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- WORKSPACES ---
+       async createWorkspace(name) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['workspaces'], 'readwrite');
+               const store = transaction.objectStore('workspaces');
+               const now = Date.now();
+               const ws = { name, systemPrompt: '', toolsConfig: {}, createdAt: now, updatedAt: now };
+               const request = store.add(ws);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async updateWorkspace(id, data) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['workspaces'], 'readwrite');
+               const store = transaction.objectStore('workspaces');
+               const getReq = store.get(id);
+               getReq.onsuccess = () => {
+                   const ws = getReq.result;
+                   if (!ws)
+                       return reject(new Error('Workspace not found'));
+                   Object.assign(ws, data);
+                   ws.updatedAt = Date.now();
+                   const putReq = store.put(ws);
+                   putReq.onsuccess = () => resolve();
+                   putReq.onerror = () => reject(putReq.error);
+               };
+               getReq.onerror = () => reject(getReq.error);
+           });
+       }
+       async getAllWorkspaces() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['workspaces'], 'readonly');
+               const store = transaction.objectStore('workspaces');
+               const index = store.index('updatedAt');
+               const workspaces = [];
+               const request = index.openCursor(null, 'prev');
+               request.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       workspaces.push(cursor.value);
+                       cursor.continue();
+                   }
+                   else {
+                       resolve(workspaces);
+                   }
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async deleteWorkspace(id) {
+           if (!this.db)
+               throw new Error('DB not initialized');
+           // Check if it's a system workspace
+           const workspaces = await this.getAllWorkspaces();
+           const ws = workspaces.find((w) => w.id === id);
+           if (ws && ws.systemId) {
+               throw new Error('Cannot delete a system workspace');
+           }
+           // Bước 1: Lấy danh sách chat trong workspace này
+           const chatsToDelete = await this.getAllChats(id);
+           // Bước 2: Xóa từng chat (và messages đi kèm)
+           for (const chat of chatsToDelete) {
+               if (chat.id) {
+                   await this.deleteChat(chat.id).catch(console.error);
+               }
+           }
+           // Bước 3: Xóa bản ghi workspace trong db
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['workspaces'], 'readwrite');
+               const store = transaction.objectStore('workspaces');
+               const req = store.delete(id);
+               req.onsuccess = () => resolve();
+               req.onerror = () => reject(req.error);
+           });
+       }
+       async resetSystemWorkspace(id) {
+           const workspaces = await this.getAllWorkspaces();
+           const ws = workspaces.find((w) => w.id === id);
+           if (!ws || !ws.systemId)
+               return;
+           let defaultName = '';
+           let defaultPrompt = '';
+           let defaultTools = [];
+           if (ws.systemId === 'roleplay') {
+               defaultName = 'Roleplay & Story';
+               defaultPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
+               defaultTools = [
+                   'get_char_info',
+                   'get_chat_history',
+                   'get_lorebook_info',
+                   'get_user_persona',
+                   'manage_user_input',
+               ];
+           }
+           else if (ws.systemId === 'modder') {
+               defaultName = 'Modding & Editor';
+               defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
+               defaultTools = [
+                   'get_chat_history',
+                   'get_char_info',
+                   'list_characters',
+                   'edit_character_card',
+                   'get_lorebook_info',
+                   'manage_lorebook_entry',
+                   'manage_worldbook',
+                   'get_regex_list',
+                   'get_regex_info',
+                   'manage_regex',
+                   'get_tavern_helper_scripts',
+                   'get_tavern_helper_script_info',
+                   'manage_tavern_helper_script',
+                   'get_user_persona',
+                   'edit_user_persona',
+                   'manage_chat_text',
+                   'manage_backup',
+               ];
+           }
+           else if (ws.systemId === 'ui_designer') {
+               defaultName = 'UI & Theme Designer';
+               defaultPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+               defaultTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
+           }
+           const toolsConfig = {};
+           defaultTools.forEach((t) => (toolsConfig[t] = true));
+           return this.updateWorkspace(id, {
+               name: defaultName,
+               systemPrompt: defaultPrompt,
+               toolsConfig,
+           });
+       }
+       // --- CHATS ---
+       async createChat(name, workspaceId = null) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['chats'], 'readwrite');
+               const store = transaction.objectStore('chats');
+               const now = Date.now();
+               const chat = { name, workspaceId, createdAt: now, updatedAt: now };
+               const request = store.add(chat);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async updateChatName(id, name) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['chats'], 'readwrite');
+               const store = transaction.objectStore('chats');
+               const getReq = store.get(id);
+               getReq.onsuccess = () => {
+                   const chat = getReq.result;
+                   if (!chat)
+                       return reject(new Error('Chat not found'));
+                   chat.name = name;
+                   chat.updatedAt = Date.now();
+                   const putReq = store.put(chat);
+                   putReq.onsuccess = () => resolve();
+                   putReq.onerror = () => reject(putReq.error);
+               };
+               getReq.onerror = () => reject(getReq.error);
+           });
+       }
+       async updateChatTimestamp(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['chats'], 'readwrite');
+               const store = transaction.objectStore('chats');
+               const getReq = store.get(id);
+               getReq.onsuccess = () => {
+                   const chat = getReq.result;
+                   if (!chat)
+                       return resolve(); // Bỏ qua nếu ko tìm thấy
+                   chat.updatedAt = Date.now();
+                   const putReq = store.put(chat);
+                   putReq.onsuccess = () => resolve();
+                   putReq.onerror = () => reject(putReq.error);
+               };
+               getReq.onerror = () => reject(getReq.error);
+           });
+       }
+       async getAllChats(workspaceId = null) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['chats'], 'readonly');
+               const store = transaction.objectStore('chats');
+               const index = store.index('updatedAt');
+               const chats = [];
+               const request = index.openCursor(null, 'prev');
+               request.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       const chat = cursor.value;
+                       const cWorkspaceId = chat.workspaceId ?? null;
+                       if (cWorkspaceId === workspaceId) {
+                           chats.push(chat);
+                       }
+                       cursor.continue();
+                   }
+                   else {
+                       resolve(chats);
+                   }
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async deleteChat(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['chats', 'messages'], 'readwrite');
+               const chatStore = transaction.objectStore('chats');
+               const msgStore = transaction.objectStore('messages');
+               chatStore.delete(id);
+               // Xóa message thuộc chat này
+               const msgIndex = msgStore.index('chatId');
+               const req = msgIndex.openCursor(IDBKeyRange.only(id));
+               req.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       cursor.delete();
+                       cursor.continue();
+                   }
+               };
+               req.onerror = () => reject(req.error);
+               transaction.oncomplete = () => resolve();
+               transaction.onerror = () => reject(transaction.error);
+           });
+       }
+       async clearMessages(chatId) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['messages'], 'readwrite');
+               const msgStore = transaction.objectStore('messages');
+               const msgIndex = msgStore.index('chatId');
+               const req = msgIndex.openCursor(IDBKeyRange.only(chatId));
+               req.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       cursor.delete();
+                       cursor.continue();
+                   }
+               };
+               req.onerror = () => reject(req.error);
+               transaction.oncomplete = () => resolve();
+               transaction.onerror = () => reject(transaction.error);
+           });
+       }
+       // --- MESSAGES ---
+       async addMessage(chatId, role, content, attachments) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['messages'], 'readwrite');
+               const store = transaction.objectStore('messages');
+               const msg = { chatId, role, content, timestamp: Date.now() };
+               if (attachments && attachments.length > 0) {
+                   msg.attachments = attachments;
+               }
+               const request = store.add(msg);
+               request.onsuccess = async () => {
+                   await this.updateChatTimestamp(chatId).catch(console.error);
+                   resolve(request.result);
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async updateMessageText(id, content) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['messages'], 'readwrite');
+               const store = transaction.objectStore('messages');
+               const request = store.get(id);
+               request.onsuccess = () => {
+                   const msg = request.result;
+                   if (!msg) {
+                       return reject(new Error('Message not found'));
+                   }
+                   msg.content = content;
+                   const updateReq = store.put(msg);
+                   updateReq.onsuccess = () => resolve();
+                   updateReq.onerror = () => reject(updateReq.error);
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getMessages(chatId) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['messages'], 'readonly');
+               const store = transaction.objectStore('messages');
+               const index = store.index('chatId');
+               const request = index.getAll(IDBKeyRange.only(chatId));
+               request.onsuccess = () => {
+                   const msgs = request.result;
+                   msgs.sort((a, b) => a.timestamp - b.timestamp);
+                   resolve(msgs);
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- BACKUPS ---
+       async addBackup(type, name, data) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['backups'], 'readwrite');
+               const store = transaction.objectStore('backups');
+               const entry = { type, name, data, timestamp: Date.now() };
+               const request = store.add(entry);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getBackups(type) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['backups'], 'readonly');
+               const store = transaction.objectStore('backups');
+               const index = store.index('timestamp');
+               const backups = [];
+               const request = index.openCursor(null, 'prev'); // sort descending
+               request.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       const entry = cursor.value;
+                       if (!type || entry.type === type) {
+                           backups.push(entry);
+                       }
+                       cursor.continue();
+                   }
+                   else {
+                       resolve(backups);
+                   }
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async deleteBackup(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['backups'], 'readwrite');
+               const store = transaction.objectStore('backups');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- AUTO TASKS ---
+       async createAutoTask(task) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+               const store = transaction.objectStore('autoTasks');
+               const request = store.add(task);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getAllAutoTasks() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readonly');
+               const store = transaction.objectStore('autoTasks');
+               const request = store.getAll();
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async updateAutoTask(id, data) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+               const store = transaction.objectStore('autoTasks');
+               const getReq = store.get(id);
+               getReq.onsuccess = () => {
+                   const task = getReq.result;
+                   if (!task)
+                       return reject(new Error('AutoTask not found'));
+                   Object.assign(task, data);
+                   const putReq = store.put(task);
+                   putReq.onsuccess = () => resolve();
+                   putReq.onerror = () => reject(putReq.error);
+               };
+               getReq.onerror = () => reject(getReq.error);
+           });
+       }
+       async deleteAutoTask(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+               const store = transaction.objectStore('autoTasks');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- UI SNAPSHOTS ---
+       async addSnapshot(snapshot) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.add(snapshot);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getAllSnapshots() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const index = store.index('timestamp');
+               const snapshots = [];
+               const request = index.openCursor(null, 'prev');
+               request.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       snapshots.push(cursor.value);
+                       cursor.continue();
+                   }
+                   else {
+                       resolve(snapshots);
+                   }
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getSnapshotById(snapshotId) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const index = store.index('snapshotId');
+               const req = index.get(snapshotId);
+               req.onsuccess = () => {
+                   resolve(req.result || null);
+               };
+               req.onerror = () => reject(req.error);
+           });
+       }
+       async getActiveSnapshots() {
+           const all = await this.getAllSnapshots();
+           return all.filter((s) => s.applied === true);
+       }
+       async markSnapshotRolledBack(snapshotId) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const index = store.index('snapshotId');
+               const req = index.get(snapshotId);
+               req.onsuccess = () => {
+                   const snap = req.result;
+                   if (!snap)
+                       return resolve();
+                   snap.applied = false;
+                   const putReq = store.put(snap);
+                   putReq.onsuccess = () => resolve();
+                   putReq.onerror = () => reject(putReq.error);
+               };
+               req.onerror = () => reject(req.error);
+           });
+       }
+       async markAllSnapshotsRolledBack() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.openCursor();
+               request.onsuccess = (e) => {
+                   const cursor = e.target.result;
+                   if (cursor) {
+                       const snap = cursor.value;
+                       if (snap.applied) {
+                           snap.applied = false;
+                           cursor.update(snap);
+                       }
+                       cursor.continue();
+                   }
+               };
+               request.onerror = () => reject(request.error);
+               transaction.oncomplete = () => resolve();
+               transaction.onerror = () => reject(transaction.error);
+           });
+       }
+       async deleteSnapshot(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async clearAllSnapshots() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+               const store = transaction.objectStore('kaiz_ui_snapshots');
+               const request = store.clear();
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- THEME LIBRARY ---
+       async addThemeReference(theme) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.add(theme);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getAllThemeReferences() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readonly');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.getAll();
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async deleteThemeReference(id) {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async clearThemeLibrary() {
+           return new Promise((resolve, reject) => {
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+               const store = transaction.objectStore('kaiz_theme_library');
+               const request = store.clear();
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       // --- IMAGE GALLERY (DB v6) ---
+       async addGalleryImage(image) {
+           return new Promise(async (resolve, reject) => {
+               if (!this.db)
+                   await this.init().catch(reject);
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+               const store = transaction.objectStore('gallery_images');
+               const request = store.add(image);
+               request.onsuccess = () => resolve(request.result);
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async getAllGalleryImages() {
+           return new Promise(async (resolve, reject) => {
+               if (!this.db)
+                   await this.init().catch(reject);
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['gallery_images'], 'readonly');
+               const store = transaction.objectStore('gallery_images');
+               const request = store.getAll();
+               request.onsuccess = () => {
+                   const results = request.result || [];
+                   results.sort((a, b) => b.timestamp - a.timestamp);
+                   resolve(results);
+               };
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async deleteGalleryImage(id) {
+           return new Promise(async (resolve, reject) => {
+               if (!this.db)
+                   await this.init().catch(reject);
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+               const store = transaction.objectStore('gallery_images');
+               const request = store.delete(id);
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+       async deleteMultipleGalleryImages(ids) {
+           if (!ids || ids.length === 0)
+               return;
+           return new Promise(async (resolve, reject) => {
+               if (!this.db)
+                   await this.init().catch(reject);
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+               const store = transaction.objectStore('gallery_images');
+               ids.forEach((id) => store.delete(id));
+               transaction.oncomplete = () => resolve();
+               transaction.onerror = () => reject(transaction.error);
+           });
+       }
+       async clearAllGalleryImages() {
+           return new Promise(async (resolve, reject) => {
+               if (!this.db)
+                   await this.init().catch(reject);
+               if (!this.db)
+                   return reject(new Error('DB not initialized'));
+               const transaction = this.db.transaction(['gallery_images'], 'readwrite');
+               const store = transaction.objectStore('gallery_images');
+               const request = store.clear();
+               request.onsuccess = () => resolve();
+               request.onerror = () => reject(request.error);
+           });
+       }
+   }
+
    class WebImageBridge {
        static pendingJobs = new Map();
        static status = {
@@ -5216,6 +6022,54 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                }, '*');
            });
        }
+       /**
+        * Tự động ghép Custom Prompt (Prefix hoặc Suffix) từ cấu hình người dùng
+        */
+       static mergeCustomPrompt(basePrompt) {
+           try {
+               const ctx = typeof globalThis.SillyTavern !== 'undefined'
+                   ? globalThis.SillyTavern.getContext()
+                   : (globalThis.window?.SillyTavern?.getContext?.() || null);
+               const settings = ctx?.extensionSettings?.['kaiz_agent'];
+               const customPrompt = (settings?.customImagePrompt || '').trim();
+               const position = settings?.customImagePromptPosition || 'suffix';
+               const rawBase = (basePrompt || '').trim();
+               if (!customPrompt)
+                   return rawBase;
+               if (!rawBase)
+                   return customPrompt;
+               let combined = '';
+               if (position === 'prefix') {
+                   combined = `${customPrompt}\n\n${rawBase}`;
+               }
+               else {
+                   combined = `${rawBase}\n\n${customPrompt}`;
+               }
+               return combined.trim();
+           }
+           catch (e) {
+               return basePrompt;
+           }
+       }
+       /**
+        * Tự động lưu ảnh sinh ra vào IndexedDB Image Gallery
+        */
+       static async saveImageToGallery(data) {
+           try {
+               await KaizDB.getInstance().addGalleryImage({
+                   prompt: data.prompt,
+                   base64: data.base64,
+                   timestamp: Date.now(),
+                   provider: data.provider || 'gemini',
+               });
+               console.log('[WebImageBridge] Đã lưu ảnh vào Image Gallery thành công.');
+               // Bắn custom event để Gallery UI nếu đang mở thì tự động cập nhật
+               window.dispatchEvent(new CustomEvent('kaiz_gallery_updated'));
+           }
+           catch (err) {
+               console.warn('[WebImageBridge] Không thể lưu ảnh vào Gallery:', err);
+           }
+       }
    }
 
    const generateWebImageTool = {
@@ -5248,18 +6102,25 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    };
                }
                const target = args.target || 'auto';
-               console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, prompt);
+               const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
+               console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, finalPrompt);
                const base64 = await WebImageBridge.requestImage({
-                   prompt,
+                   prompt: finalPrompt,
                    target,
                    timeoutMs: 80000,
                });
-               const safePrompt = prompt
+               // Tự động lưu vào Image Gallery
+               await WebImageBridge.saveImageToGallery({
+                   prompt: finalPrompt,
+                   base64,
+                   provider: target,
+               });
+               const safePrompt = finalPrompt
                    .replace(/&/g, '&amp;')
                    .replace(/"/g, '&quot;')
                    .replace(/</g, '&lt;')
                    .replace(/>/g, '&gt;');
-               const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic;">🎨 ${safePrompt}</div></div>`;
+               const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;">🎨 ${safePrompt}</div></div>`;
                // Dán trực tiếp bức ảnh vào chính văn SillyTavern chat
                let messageSent = false;
                try {
@@ -5309,7 +6170,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                    content: JSON.stringify({
                        success: true,
                        message: 'Đã sinh ảnh thành công và nhúng trực tiếp bức ảnh vào khung chat chính cho người dùng xem.',
-                       prompt: prompt,
+                       prompt: finalPrompt,
                        posted_to_chat: messageSent,
                    }),
                    isError: false,
@@ -6906,720 +7767,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        }
    }
 
-   class KaizDB {
-       dbName = 'KaizAgentDB';
-       dbVersion = 5;
-       db = null;
-       async init() {
-           return new Promise((resolve, reject) => {
-               const request = indexedDB.open(this.dbName, this.dbVersion);
-               request.onupgradeneeded = (event) => {
-                   const db = event.target.result;
-                   if (!db.objectStoreNames.contains('workspaces')) {
-                       const wsStore = db.createObjectStore('workspaces', { keyPath: 'id', autoIncrement: true });
-                       wsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-                   }
-                   if (!db.objectStoreNames.contains('chats')) {
-                       const chatStore = db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
-                       chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
-                       chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
-                   }
-                   else if (event.oldVersion < 3) {
-                       const txn = event.target.transaction;
-                       const chatStore = txn.objectStore('chats');
-                       if (!chatStore.indexNames.contains('workspaceId')) {
-                           chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
-                       }
-                   }
-                   if (!db.objectStoreNames.contains('messages')) {
-                       const msgStore = db.createObjectStore('messages', { keyPath: 'id', autoIncrement: true });
-                       msgStore.createIndex('chatId', 'chatId', { unique: false });
-                       msgStore.createIndex('timestamp', 'timestamp', { unique: false });
-                   }
-                   if (!db.objectStoreNames.contains('backups')) {
-                       const backupStore = db.createObjectStore('backups', { keyPath: 'id', autoIncrement: true });
-                       backupStore.createIndex('type', 'type', { unique: false });
-                       backupStore.createIndex('timestamp', 'timestamp', { unique: false });
-                   }
-                   // --- AUTO TASKS (DB v4) ---
-                   if (!db.objectStoreNames.contains('autoTasks')) {
-                       db.createObjectStore('autoTasks', { keyPath: 'id', autoIncrement: true });
-                   }
-                   // --- UI CUSTOMIZATION (DB v5) ---
-                   if (!db.objectStoreNames.contains('kaiz_ui_snapshots')) {
-                       const snapStore = db.createObjectStore('kaiz_ui_snapshots', { keyPath: 'id', autoIncrement: true });
-                       snapStore.createIndex('snapshotId', 'snapshotId', { unique: true });
-                       snapStore.createIndex('timestamp', 'timestamp', { unique: false });
-                       snapStore.createIndex('applied', 'applied', { unique: false });
-                   }
-                   if (!db.objectStoreNames.contains('kaiz_theme_library')) {
-                       const themeStore = db.createObjectStore('kaiz_theme_library', {
-                           keyPath: 'id',
-                           autoIncrement: true,
-                       });
-                       themeStore.createIndex('name', 'name', { unique: false });
-                   }
-               };
-               request.onsuccess = async (event) => {
-                   this.db = event.target.result;
-                   await this.ensureSystemWorkspaces();
-                   resolve();
-               };
-               request.onerror = (event) => {
-                   console.error('[KaizDB] Error opening DB', event);
-                   reject(event.target.error);
-               };
-           });
-       }
-       async ensureSystemWorkspaces() {
-           const workspaces = await this.getAllWorkspaces();
-           const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
-           const roleplayPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
-           const roleplayTools = [
-               'get_char_info',
-               'get_chat_history',
-               'get_lorebook_info',
-               'get_user_persona',
-               'manage_user_input',
-           ];
-           if (!roleplayWs) {
-               await this.createSystemWorkspace('roleplay', 'Roleplay & Story', roleplayPrompt, roleplayTools);
-           }
-           const modderWs = workspaces.find((w) => w.systemId === 'modder');
-           const modderPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
-           const modderTools = [
-               'get_chat_history',
-               'get_char_info',
-               'list_characters',
-               'edit_character_card',
-               'get_lorebook_info',
-               'manage_lorebook_entry',
-               'manage_worldbook',
-               'get_regex_list',
-               'get_regex_info',
-               'manage_regex',
-               'get_tavern_helper_scripts',
-               'get_tavern_helper_script_info',
-               'manage_tavern_helper_script',
-               'get_user_persona',
-               'edit_user_persona',
-               'manage_chat_text',
-               'manage_backup',
-           ];
-           if (!modderWs) {
-               await this.createSystemWorkspace('modder', 'Modding & Editor', modderPrompt, modderTools);
-           }
-           const uiDesignerWs = workspaces.find((w) => w.systemId === 'ui_designer');
-           const uiDesignerPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
-           const uiDesignerTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
-           if (!uiDesignerWs) {
-               await this.createSystemWorkspace('ui_designer', 'UI & Theme Designer', uiDesignerPrompt, uiDesignerTools);
-           }
-       }
-       async createSystemWorkspace(systemId, name, systemPrompt, toolNames) {
-           const toolsConfig = {};
-           toolNames.forEach((t) => (toolsConfig[t] = true));
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['workspaces'], 'readwrite');
-               const store = transaction.objectStore('workspaces');
-               const now = Date.now();
-               const ws = {
-                   systemId,
-                   name,
-                   systemPrompt,
-                   toolsConfig,
-                   createdAt: now,
-                   updatedAt: now,
-               };
-               const request = store.add(ws);
-               request.onsuccess = () => resolve();
-               request.onerror = () => reject(request.error);
-           });
-       }
-       // --- WORKSPACES ---
-       async createWorkspace(name) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['workspaces'], 'readwrite');
-               const store = transaction.objectStore('workspaces');
-               const now = Date.now();
-               const ws = { name, systemPrompt: '', toolsConfig: {}, createdAt: now, updatedAt: now };
-               const request = store.add(ws);
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async updateWorkspace(id, data) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['workspaces'], 'readwrite');
-               const store = transaction.objectStore('workspaces');
-               const getReq = store.get(id);
-               getReq.onsuccess = () => {
-                   const ws = getReq.result;
-                   if (!ws)
-                       return reject(new Error('Workspace not found'));
-                   Object.assign(ws, data);
-                   ws.updatedAt = Date.now();
-                   const putReq = store.put(ws);
-                   putReq.onsuccess = () => resolve();
-                   putReq.onerror = () => reject(putReq.error);
-               };
-               getReq.onerror = () => reject(getReq.error);
-           });
-       }
-       async getAllWorkspaces() {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['workspaces'], 'readonly');
-               const store = transaction.objectStore('workspaces');
-               const index = store.index('updatedAt');
-               const workspaces = [];
-               const request = index.openCursor(null, 'prev');
-               request.onsuccess = (e) => {
-                   const cursor = e.target.result;
-                   if (cursor) {
-                       workspaces.push(cursor.value);
-                       cursor.continue();
-                   }
-                   else {
-                       resolve(workspaces);
-                   }
-               };
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async deleteWorkspace(id) {
-           if (!this.db)
-               throw new Error('DB not initialized');
-           // Check if it's a system workspace
-           const workspaces = await this.getAllWorkspaces();
-           const ws = workspaces.find((w) => w.id === id);
-           if (ws && ws.systemId) {
-               throw new Error('Cannot delete a system workspace');
-           }
-           // Bước 1: Lấy danh sách chat trong workspace này
-           const chatsToDelete = await this.getAllChats(id);
-           // Bước 2: Xóa từng chat (và messages đi kèm)
-           for (const chat of chatsToDelete) {
-               if (chat.id) {
-                   await this.deleteChat(chat.id).catch(console.error);
-               }
-           }
-           // Bước 3: Xóa bản ghi workspace trong db
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['workspaces'], 'readwrite');
-               const store = transaction.objectStore('workspaces');
-               const req = store.delete(id);
-               req.onsuccess = () => resolve();
-               req.onerror = () => reject(req.error);
-           });
-       }
-       async resetSystemWorkspace(id) {
-           const workspaces = await this.getAllWorkspaces();
-           const ws = workspaces.find((w) => w.id === id);
-           if (!ws || !ws.systemId)
-               return;
-           let defaultName = '';
-           let defaultPrompt = '';
-           let defaultTools = [];
-           if (ws.systemId === 'roleplay') {
-               defaultName = 'Roleplay & Story';
-               defaultPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
-               defaultTools = [
-                   'get_char_info',
-                   'get_chat_history',
-                   'get_lorebook_info',
-                   'get_user_persona',
-                   'manage_user_input',
-               ];
-           }
-           else if (ws.systemId === 'modder') {
-               defaultName = 'Modding & Editor';
-               defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
-               defaultTools = [
-                   'get_chat_history',
-                   'get_char_info',
-                   'list_characters',
-                   'edit_character_card',
-                   'get_lorebook_info',
-                   'manage_lorebook_entry',
-                   'manage_worldbook',
-                   'get_regex_list',
-                   'get_regex_info',
-                   'manage_regex',
-                   'get_tavern_helper_scripts',
-                   'get_tavern_helper_script_info',
-                   'manage_tavern_helper_script',
-                   'get_user_persona',
-                   'edit_user_persona',
-                   'manage_chat_text',
-                   'manage_backup',
-               ];
-           }
-           else if (ws.systemId === 'ui_designer') {
-               defaultName = 'UI & Theme Designer';
-               defaultPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
-               defaultTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
-           }
-           const toolsConfig = {};
-           defaultTools.forEach((t) => (toolsConfig[t] = true));
-           return this.updateWorkspace(id, {
-               name: defaultName,
-               systemPrompt: defaultPrompt,
-               toolsConfig,
-           });
-       }
-       // --- CHATS ---
-       async createChat(name, workspaceId = null) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['chats'], 'readwrite');
-               const store = transaction.objectStore('chats');
-               const now = Date.now();
-               const chat = { name, workspaceId, createdAt: now, updatedAt: now };
-               const request = store.add(chat);
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async updateChatName(id, name) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['chats'], 'readwrite');
-               const store = transaction.objectStore('chats');
-               const getReq = store.get(id);
-               getReq.onsuccess = () => {
-                   const chat = getReq.result;
-                   if (!chat)
-                       return reject(new Error('Chat not found'));
-                   chat.name = name;
-                   chat.updatedAt = Date.now();
-                   const putReq = store.put(chat);
-                   putReq.onsuccess = () => resolve();
-                   putReq.onerror = () => reject(putReq.error);
-               };
-               getReq.onerror = () => reject(getReq.error);
-           });
-       }
-       async updateChatTimestamp(id) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['chats'], 'readwrite');
-               const store = transaction.objectStore('chats');
-               const getReq = store.get(id);
-               getReq.onsuccess = () => {
-                   const chat = getReq.result;
-                   if (!chat)
-                       return resolve(); // Bỏ qua nếu ko tìm thấy
-                   chat.updatedAt = Date.now();
-                   const putReq = store.put(chat);
-                   putReq.onsuccess = () => resolve();
-                   putReq.onerror = () => reject(putReq.error);
-               };
-               getReq.onerror = () => reject(getReq.error);
-           });
-       }
-       async getAllChats(workspaceId = null) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['chats'], 'readonly');
-               const store = transaction.objectStore('chats');
-               const index = store.index('updatedAt');
-               const chats = [];
-               const request = index.openCursor(null, 'prev');
-               request.onsuccess = (e) => {
-                   const cursor = e.target.result;
-                   if (cursor) {
-                       const chat = cursor.value;
-                       const cWorkspaceId = chat.workspaceId ?? null;
-                       if (cWorkspaceId === workspaceId) {
-                           chats.push(chat);
-                       }
-                       cursor.continue();
-                   }
-                   else {
-                       resolve(chats);
-                   }
-               };
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async deleteChat(id) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['chats', 'messages'], 'readwrite');
-               const chatStore = transaction.objectStore('chats');
-               const msgStore = transaction.objectStore('messages');
-               chatStore.delete(id);
-               // Xóa message thuộc chat này
-               const msgIndex = msgStore.index('chatId');
-               const req = msgIndex.openCursor(IDBKeyRange.only(id));
-               req.onsuccess = (e) => {
-                   const cursor = e.target.result;
-                   if (cursor) {
-                       cursor.delete();
-                       cursor.continue();
-                   }
-               };
-               req.onerror = () => reject(req.error);
-               transaction.oncomplete = () => resolve();
-               transaction.onerror = () => reject(transaction.error);
-           });
-       }
-       async clearMessages(chatId) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['messages'], 'readwrite');
-               const msgStore = transaction.objectStore('messages');
-               const msgIndex = msgStore.index('chatId');
-               const req = msgIndex.openCursor(IDBKeyRange.only(chatId));
-               req.onsuccess = (e) => {
-                   const cursor = e.target.result;
-                   if (cursor) {
-                       cursor.delete();
-                       cursor.continue();
-                   }
-               };
-               req.onerror = () => reject(req.error);
-               transaction.oncomplete = () => resolve();
-               transaction.onerror = () => reject(transaction.error);
-           });
-       }
-       // --- MESSAGES ---
-       async addMessage(chatId, role, content, attachments) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['messages'], 'readwrite');
-               const store = transaction.objectStore('messages');
-               const msg = { chatId, role, content, timestamp: Date.now() };
-               if (attachments && attachments.length > 0) {
-                   msg.attachments = attachments;
-               }
-               const request = store.add(msg);
-               request.onsuccess = async () => {
-                   await this.updateChatTimestamp(chatId).catch(console.error);
-                   resolve(request.result);
-               };
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async updateMessageText(id, content) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['messages'], 'readwrite');
-               const store = transaction.objectStore('messages');
-               const request = store.get(id);
-               request.onsuccess = () => {
-                   const msg = request.result;
-                   if (!msg) {
-                       return reject(new Error('Message not found'));
-                   }
-                   msg.content = content;
-                   const updateReq = store.put(msg);
-                   updateReq.onsuccess = () => resolve();
-                   updateReq.onerror = () => reject(updateReq.error);
-               };
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async getMessages(chatId) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['messages'], 'readonly');
-               const store = transaction.objectStore('messages');
-               const index = store.index('chatId');
-               const request = index.getAll(IDBKeyRange.only(chatId));
-               request.onsuccess = () => {
-                   const msgs = request.result;
-                   msgs.sort((a, b) => a.timestamp - b.timestamp);
-                   resolve(msgs);
-               };
-               request.onerror = () => reject(request.error);
-           });
-       }
-       // --- BACKUPS ---
-       async addBackup(type, name, data) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['backups'], 'readwrite');
-               const store = transaction.objectStore('backups');
-               const entry = { type, name, data, timestamp: Date.now() };
-               const request = store.add(entry);
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async getBackups(type) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['backups'], 'readonly');
-               const store = transaction.objectStore('backups');
-               const index = store.index('timestamp');
-               const backups = [];
-               const request = index.openCursor(null, 'prev'); // sort descending
-               request.onsuccess = (e) => {
-                   const cursor = e.target.result;
-                   if (cursor) {
-                       const entry = cursor.value;
-                       if (!type || entry.type === type) {
-                           backups.push(entry);
-                       }
-                       cursor.continue();
-                   }
-                   else {
-                       resolve(backups);
-                   }
-               };
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async deleteBackup(id) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['backups'], 'readwrite');
-               const store = transaction.objectStore('backups');
-               const request = store.delete(id);
-               request.onsuccess = () => resolve();
-               request.onerror = () => reject(request.error);
-           });
-       }
-       // --- AUTO TASKS ---
-       async createAutoTask(task) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
-               const store = transaction.objectStore('autoTasks');
-               const request = store.add(task);
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async getAllAutoTasks() {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['autoTasks'], 'readonly');
-               const store = transaction.objectStore('autoTasks');
-               const request = store.getAll();
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async updateAutoTask(id, data) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
-               const store = transaction.objectStore('autoTasks');
-               const getReq = store.get(id);
-               getReq.onsuccess = () => {
-                   const task = getReq.result;
-                   if (!task)
-                       return reject(new Error('AutoTask not found'));
-                   Object.assign(task, data);
-                   const putReq = store.put(task);
-                   putReq.onsuccess = () => resolve();
-                   putReq.onerror = () => reject(putReq.error);
-               };
-               getReq.onerror = () => reject(getReq.error);
-           });
-       }
-       async deleteAutoTask(id) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['autoTasks'], 'readwrite');
-               const store = transaction.objectStore('autoTasks');
-               const request = store.delete(id);
-               request.onsuccess = () => resolve();
-               request.onerror = () => reject(request.error);
-           });
-       }
-       // --- UI SNAPSHOTS ---
-       async addSnapshot(snapshot) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
-               const store = transaction.objectStore('kaiz_ui_snapshots');
-               const request = store.add(snapshot);
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async getAllSnapshots() {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
-               const store = transaction.objectStore('kaiz_ui_snapshots');
-               const index = store.index('timestamp');
-               const snapshots = [];
-               const request = index.openCursor(null, 'prev');
-               request.onsuccess = (e) => {
-                   const cursor = e.target.result;
-                   if (cursor) {
-                       snapshots.push(cursor.value);
-                       cursor.continue();
-                   }
-                   else {
-                       resolve(snapshots);
-                   }
-               };
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async getSnapshotById(snapshotId) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
-               const store = transaction.objectStore('kaiz_ui_snapshots');
-               const index = store.index('snapshotId');
-               const req = index.get(snapshotId);
-               req.onsuccess = () => {
-                   resolve(req.result || null);
-               };
-               req.onerror = () => reject(req.error);
-           });
-       }
-       async getActiveSnapshots() {
-           const all = await this.getAllSnapshots();
-           return all.filter((s) => s.applied === true);
-       }
-       async markSnapshotRolledBack(snapshotId) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
-               const store = transaction.objectStore('kaiz_ui_snapshots');
-               const index = store.index('snapshotId');
-               const req = index.get(snapshotId);
-               req.onsuccess = () => {
-                   const snap = req.result;
-                   if (!snap)
-                       return resolve();
-                   snap.applied = false;
-                   const putReq = store.put(snap);
-                   putReq.onsuccess = () => resolve();
-                   putReq.onerror = () => reject(putReq.error);
-               };
-               req.onerror = () => reject(req.error);
-           });
-       }
-       async markAllSnapshotsRolledBack() {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
-               const store = transaction.objectStore('kaiz_ui_snapshots');
-               const request = store.openCursor();
-               request.onsuccess = (e) => {
-                   const cursor = e.target.result;
-                   if (cursor) {
-                       const snap = cursor.value;
-                       if (snap.applied) {
-                           snap.applied = false;
-                           cursor.update(snap);
-                       }
-                       cursor.continue();
-                   }
-               };
-               request.onerror = () => reject(request.error);
-               transaction.oncomplete = () => resolve();
-               transaction.onerror = () => reject(transaction.error);
-           });
-       }
-       async deleteSnapshot(id) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
-               const store = transaction.objectStore('kaiz_ui_snapshots');
-               const request = store.delete(id);
-               request.onsuccess = () => resolve();
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async clearAllSnapshots() {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
-               const store = transaction.objectStore('kaiz_ui_snapshots');
-               const request = store.clear();
-               request.onsuccess = () => resolve();
-               request.onerror = () => reject(request.error);
-           });
-       }
-       // --- THEME LIBRARY ---
-       async addThemeReference(theme) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
-               const store = transaction.objectStore('kaiz_theme_library');
-               const request = store.add(theme);
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async getAllThemeReferences() {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_theme_library'], 'readonly');
-               const store = transaction.objectStore('kaiz_theme_library');
-               const request = store.getAll();
-               request.onsuccess = () => resolve(request.result);
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async deleteThemeReference(id) {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
-               const store = transaction.objectStore('kaiz_theme_library');
-               const request = store.delete(id);
-               request.onsuccess = () => resolve();
-               request.onerror = () => reject(request.error);
-           });
-       }
-       async clearThemeLibrary() {
-           return new Promise((resolve, reject) => {
-               if (!this.db)
-                   return reject(new Error('DB not initialized'));
-               const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
-               const store = transaction.objectStore('kaiz_theme_library');
-               const request = store.clear();
-               request.onsuccess = () => resolve();
-               request.onerror = () => reject(request.error);
-           });
-       }
-   }
-
    class StateManager {
        db;
        currentChatId = null;
@@ -8575,6 +8722,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            $('#kaiz-web-image-provider').val(settings.webImageProvider || 'auto');
            $('#kaiz-web-image-provider').on('change', function () {
                settings.webImageProvider = this.value || 'auto';
+               ctx.saveSettingsDebounced();
+           });
+           $('#kaiz-web-image-custom-prompt').val(settings.customImagePrompt || '');
+           $('#kaiz-web-image-custom-prompt').on('input', function () {
+               settings.customImagePrompt = this.value;
+               ctx.saveSettingsDebounced();
+           });
+           $('#kaiz-web-image-custom-prompt-pos').val(settings.customImagePromptPosition || 'suffix');
+           $('#kaiz-web-image-custom-prompt-pos').on('change', function () {
+               settings.customImagePromptPosition = this.value || 'suffix';
                ctx.saveSettingsDebounced();
            });
            const updateBridgeStatusUI = () => {
@@ -11772,6 +11929,361 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
        }
    }
 
+   class ImageGalleryModal {
+       db;
+       images = [];
+       filteredImages = [];
+       selectedIds = new Set();
+       currentPreviewImage = null;
+       displayLimit = 36;
+       currentLimit = 36;
+       constructor(db) {
+           this.db = db;
+           this.bindEvents();
+       }
+       isModalOpen() {
+           const modal = document.getElementById('kaiz-gallery-modal');
+           return !!(modal && modal.open);
+       }
+       bindEvents() {
+           const $ = jQuery;
+           // Mở Gallery từ nút trên Tools Dropdown Menu
+           $('#kaiz-chat-gallery-btn')
+               .off('click')
+               .on('click', async () => {
+               const modal = $('#kaiz-gallery-modal')[0];
+               if (modal) {
+                   modal.showModal();
+                   await this.loadAndRender();
+               }
+           });
+           // Đóng Gallery Modal
+           $('#kaiz-gallery-close')
+               .off('click')
+               .on('click', () => {
+               const modal = $('#kaiz-gallery-modal')[0];
+               if (modal)
+                   modal.close();
+           });
+           // Tìm kiếm prompt thời gian thực
+           $('#kaiz-gallery-search')
+               .off('input')
+               .on('input', (e) => {
+               const query = (e.target.value || '').trim().toLowerCase();
+               if (!query) {
+                   this.filteredImages = [...this.images];
+               }
+               else {
+                   this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
+               }
+               this.currentLimit = this.displayLimit;
+               this.renderGrid();
+           });
+           // Chọn tất cả / Bỏ chọn tất cả
+           $('#kaiz-gallery-select-all-btn')
+               .off('click')
+               .on('click', () => {
+               if (this.selectedIds.size === this.filteredImages.length && this.filteredImages.length > 0) {
+                   this.selectedIds.clear();
+               }
+               else {
+                   this.filteredImages.forEach((img) => {
+                       if (img.id !== undefined)
+                           this.selectedIds.add(img.id);
+                   });
+               }
+               this.updateSelectionUI();
+               this.renderGrid();
+           });
+           // Xóa các ảnh đã chọn (Bulk delete)
+           $('#kaiz-gallery-delete-selected-btn')
+               .off('click')
+               .on('click', async () => {
+               const count = this.selectedIds.size;
+               if (count === 0)
+                   return;
+               if (confirm(`Bạn có chắc chắn muốn xóa ${count} bức ảnh đã chọn không?`)) {
+                   const idsToDelete = Array.from(this.selectedIds);
+                   await this.db.deleteMultipleGalleryImages(idsToDelete);
+                   this.selectedIds.clear();
+                   if (typeof toastr !== 'undefined') {
+                       toastr.success(`Đã xóa ${count} ảnh thành công!`);
+                   }
+                   await this.loadAndRender();
+               }
+           });
+           // Xóa tất cả ảnh (Delete all)
+           $('#kaiz-gallery-delete-all-btn')
+               .off('click')
+               .on('click', async () => {
+               if (this.images.length === 0) {
+                   if (typeof toastr !== 'undefined')
+                       toastr.info('Thư viện ảnh hiện đang trống.');
+                   return;
+               }
+               if (confirm('CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ ảnh trong thư viện không? Thao tác này sẽ xóa vĩnh viễn và không thể khôi phục!')) {
+                   await this.db.clearAllGalleryImages();
+                   this.selectedIds.clear();
+                   if (typeof toastr !== 'undefined') {
+                       toastr.success('Đã làm trống thư viện ảnh!');
+                   }
+                   await this.loadAndRender();
+               }
+           });
+           // Đóng Preview Modal
+           $('#kaiz-gallery-preview-close, #kaiz-preview-close-btn')
+               .off('click')
+               .on('click', () => {
+               const previewModal = $('#kaiz-gallery-preview-modal')[0];
+               if (previewModal)
+                   previewModal.close();
+           });
+           // Sao chép Prompt trong Preview Modal
+           $('#kaiz-preview-copy-prompt-btn')
+               .off('click')
+               .on('click', async () => {
+               if (this.currentPreviewImage?.prompt) {
+                   try {
+                       await navigator.clipboard.writeText(this.currentPreviewImage.prompt);
+                       if (typeof toastr !== 'undefined')
+                           toastr.success('Đã sao chép prompt!');
+                   }
+                   catch (e) {
+                       if (typeof toastr !== 'undefined')
+                           toastr.info('Không thể tự động sao chép prompt.');
+                   }
+               }
+           });
+           // Tải ảnh về máy trong Preview Modal
+           $('#kaiz-preview-download-btn')
+               .off('click')
+               .on('click', () => {
+               if (this.currentPreviewImage) {
+                   this.downloadImage(this.currentPreviewImage);
+               }
+           });
+           // Xóa ảnh hiện tại trong Preview Modal
+           $('#kaiz-preview-delete-btn')
+               .off('click')
+               .on('click', async () => {
+               if (!this.currentPreviewImage || this.currentPreviewImage.id === undefined)
+                   return;
+               if (confirm('Bạn có chắc muốn xóa bức ảnh này không?')) {
+                   const id = this.currentPreviewImage.id;
+                   await this.db.deleteGalleryImage(id);
+                   this.selectedIds.delete(id);
+                   const previewModal = $('#kaiz-gallery-preview-modal')[0];
+                   if (previewModal)
+                       previewModal.close();
+                   if (typeof toastr !== 'undefined')
+                       toastr.success('Đã xóa bức ảnh!');
+                   await this.loadAndRender();
+               }
+           });
+           // Lắng nghe sự kiện tạo ảnh mới xong từ WebImageBridge để cập nhật UI
+           window.addEventListener('kaiz_gallery_updated', () => {
+               if (this.isModalOpen()) {
+                   this.loadAndRender();
+               }
+           });
+       }
+       async loadAndRender() {
+           this.images = await this.db.getAllGalleryImages();
+           const query = (jQuery('#kaiz-gallery-search').val() || '').trim().toLowerCase();
+           if (!query) {
+               this.filteredImages = [...this.images];
+           }
+           else {
+               this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
+           }
+           this.currentLimit = this.displayLimit;
+           this.updateSelectionUI();
+           this.renderGrid();
+       }
+       updateSelectionUI() {
+           const $ = jQuery;
+           const total = this.filteredImages.length;
+           const selected = this.selectedIds.size;
+           $('#kaiz-gallery-total-badge').text(`${this.images.length} ảnh`);
+           $('#kaiz-gallery-selected-count').text(selected);
+           if (selected > 0) {
+               $('#kaiz-gallery-delete-selected-btn').show();
+           }
+           else {
+               $('#kaiz-gallery-delete-selected-btn').hide();
+           }
+           const selectAllBtn = $('#kaiz-gallery-select-all-btn');
+           if (selected > 0 && selected === total) {
+               selectAllBtn.html('<i class="fa-solid fa-square-check"></i> Bỏ chọn tất cả');
+           }
+           else {
+               selectAllBtn.html('<i class="fa-regular fa-square-check"></i> Chọn tất cả');
+           }
+       }
+       renderGrid() {
+           const $ = jQuery;
+           const grid = $('#kaiz-gallery-grid');
+           const emptyState = $('#kaiz-gallery-empty');
+           grid.empty();
+           if (this.filteredImages.length === 0) {
+               emptyState.show();
+               return;
+           }
+           emptyState.hide();
+           const itemsToShow = this.filteredImages.slice(0, this.currentLimit);
+           itemsToShow.forEach((img) => {
+               const isSelected = img.id !== undefined && this.selectedIds.has(img.id);
+               const dateStr = this.formatDate(img.timestamp);
+               const safePrompt = this.escapeHtml(img.prompt);
+               const providerLabel = (img.provider || 'gemini').toUpperCase();
+               const card = $(`
+                <div class="kaiz-gallery-card ${isSelected ? 'is-selected' : ''}" data-id="${img.id}">
+                    <div class="kaiz-gallery-card-thumb">
+                        <img src="${img.base64}" alt="${safePrompt}" loading="lazy" />
+                        <div class="kaiz-gallery-card-checkbox ${isSelected ? 'checked' : ''}" title="Chọn ảnh">
+                            <i class="fa-solid fa-check"></i>
+                        </div>
+                        <div class="kaiz-gallery-provider-tag">${providerLabel}</div>
+                    </div>
+                    <div class="kaiz-gallery-card-info">
+                        <div class="kaiz-gallery-card-prompt" title="${safePrompt}">${safePrompt}</div>
+                        <div class="kaiz-gallery-card-footer">
+                            <span class="kaiz-gallery-card-date">${dateStr}</span>
+                            <div class="kaiz-gallery-card-actions">
+                                <button class="kaiz-card-action-btn copy-btn" title="Sao chép prompt">
+                                    <i class="fa-regular fa-copy"></i>
+                                </button>
+                                <button class="kaiz-card-action-btn download-btn" title="Tải ảnh">
+                                    <i class="fa-solid fa-download"></i>
+                                </button>
+                                <button class="kaiz-card-action-btn delete-btn" title="Xóa ảnh">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+               // Checkbox click toggle selection
+               card.find('.kaiz-gallery-card-checkbox').on('click', (e) => {
+                   e.stopPropagation();
+                   if (img.id !== undefined) {
+                       if (this.selectedIds.has(img.id)) {
+                           this.selectedIds.delete(img.id);
+                       }
+                       else {
+                           this.selectedIds.add(img.id);
+                       }
+                       this.updateSelectionUI();
+                       card.toggleClass('is-selected', this.selectedIds.has(img.id));
+                       card.find('.kaiz-gallery-card-checkbox').toggleClass('checked', this.selectedIds.has(img.id));
+                   }
+               });
+               // Click vào ảnh hoặc card -> Mở Lightbox Preview
+               card.find('.kaiz-gallery-card-thumb').on('click', (e) => {
+                   if ($(e.target).closest('.kaiz-gallery-card-checkbox').length)
+                       return;
+                   this.openPreview(img);
+               });
+               // Action: Copy prompt
+               card.find('.copy-btn').on('click', async (e) => {
+                   e.stopPropagation();
+                   try {
+                       await navigator.clipboard.writeText(img.prompt);
+                       if (typeof toastr !== 'undefined')
+                           toastr.success('Đã sao chép prompt!');
+                   }
+                   catch {
+                       if (typeof toastr !== 'undefined')
+                           toastr.info('Không thể tự động sao chép.');
+                   }
+               });
+               // Action: Download
+               card.find('.download-btn').on('click', (e) => {
+                   e.stopPropagation();
+                   this.downloadImage(img);
+               });
+               // Action: Single Delete
+               card.find('.delete-btn').on('click', async (e) => {
+                   e.stopPropagation();
+                   if (img.id === undefined)
+                       return;
+                   if (confirm('Bạn có chắc muốn xóa bức ảnh này không?')) {
+                       await this.db.deleteGalleryImage(img.id);
+                       this.selectedIds.delete(img.id);
+                       if (typeof toastr !== 'undefined')
+                           toastr.success('Đã xóa bức ảnh!');
+                       await this.loadAndRender();
+                   }
+               });
+               grid.append(card);
+           });
+           // Nếu còn ảnh chưa hiển thị -> Hiện nút "Xem thêm ảnh"
+           if (this.filteredImages.length > this.currentLimit) {
+               const remaining = this.filteredImages.length - this.currentLimit;
+               const loadMoreBtn = $(`
+                <div style="grid-column: 1 / -1; text-align: center; padding: 15px 0;">
+                    <button id="kaiz-gallery-load-more" class="menu_button interactable" style="padding: 8px 24px; font-size: 13px;">
+                        <i class="fa-solid fa-angles-down"></i> Tải thêm ảnh (${remaining} ảnh còn lại)
+                    </button>
+                </div>
+            `);
+               loadMoreBtn.find('button').on('click', () => {
+                   this.currentLimit += this.displayLimit;
+                   this.renderGrid();
+               });
+               grid.append(loadMoreBtn);
+           }
+       }
+       openPreview(img) {
+           const $ = jQuery;
+           this.currentPreviewImage = img;
+           $('#kaiz-preview-img').attr('src', img.base64);
+           $('#kaiz-preview-prompt-text').text(img.prompt);
+           $('#kaiz-preview-date').text(this.formatDate(img.timestamp, true));
+           $('#kaiz-preview-provider-badge').text((img.provider || 'gemini').toUpperCase());
+           const previewModal = $('#kaiz-gallery-preview-modal')[0];
+           if (previewModal) {
+               previewModal.showModal();
+           }
+       }
+       downloadImage(img) {
+           const a = document.createElement('a');
+           a.href = img.base64;
+           const cleanPrompt = (img.prompt || 'kaiz_image')
+               .replace(/[^a-zA-Z0-9]/g, '_')
+               .substring(0, 25);
+           a.download = `${cleanPrompt}_${img.timestamp || Date.now()}.png`;
+           document.body.appendChild(a);
+           a.click();
+           document.body.removeChild(a);
+           if (typeof toastr !== 'undefined')
+               toastr.success('Đang tải ảnh về máy...');
+       }
+       formatDate(timestamp, full = false) {
+           if (!timestamp)
+               return '';
+           const d = new Date(timestamp);
+           const pad = (n) => (n < 10 ? '0' + n : n);
+           const time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+           const date = `${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+           if (full) {
+               return `${time} ngày ${date}/${d.getFullYear()}`;
+           }
+           return `${time} ${date}`;
+       }
+       escapeHtml(str) {
+           if (!str)
+               return '';
+           return str
+               .replace(/&/g, '&amp;')
+               .replace(/"/g, '&quot;')
+               .replace(/'/g, '&#39;')
+               .replace(/</g, '&lt;')
+               .replace(/>/g, '&gt;');
+       }
+   }
+
    const EXT_NAME = 'kaiz_agent';
    console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
    // Tìm chính xác thư mục extension
@@ -11828,6 +12340,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                enableBrowser: false,
                webImageBridgeEnabled: true,
                webImageProvider: 'auto',
+               customImagePrompt: '',
+               customImagePromptPosition: 'suffix',
            };
        }
        else {
@@ -11873,6 +12387,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
            if (ctx.extensionSettings[EXT_NAME].webImageProvider === undefined) {
                ctx.extensionSettings[EXT_NAME].webImageProvider = 'auto';
            }
+           if (ctx.extensionSettings[EXT_NAME].customImagePrompt === undefined) {
+               ctx.extensionSettings[EXT_NAME].customImagePrompt = '';
+           }
+           if (ctx.extensionSettings[EXT_NAME].customImagePromptPosition === undefined) {
+               ctx.extensionSettings[EXT_NAME].customImagePromptPosition = 'suffix';
+           }
        }
        // Nạp style.css thủ công (Thêm cache buster để tránh trình duyệt lưu CSS cũ)
        const cssPath = `/scripts/extensions/${extPath}/style.css?v=${Date.now()}`;
@@ -11914,7 +12434,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                initCSSManagerTool(uiEngine);
                initInjectElementTool(uiEngine);
                new UICustomizationModal(stateManager.db, uiEngine);
-               console.log('[KaizAgent] UI Customization Engine initialized.');
+               new ImageGalleryModal(stateManager.db);
+               console.log('[KaizAgent] UI Customization Engine & Image Gallery initialized.');
                // Bắt đầu Auto Tasks sau khi DB đã init
                const allTasks = await stateManager.db.getAllAutoTasks();
                await autoTaskScheduler.start(allTasks);
@@ -11946,18 +12467,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                            }
                            return;
                        }
+                       const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
                        if (typeof toastr !== 'undefined') {
                            toastr.info('Đang gửi prompt vẽ ảnh sang Web (Gemini/ChatGPT)...');
                        }
                        try {
                            const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
-                           const base64 = await WebImageBridge.requestImage({ prompt, target });
-                           const safePrompt = prompt
+                           const base64 = await WebImageBridge.requestImage({ prompt: finalPrompt, target });
+                           await WebImageBridge.saveImageToGallery({ prompt: finalPrompt, base64, provider: target });
+                           const safePrompt = finalPrompt
                                .replace(/&/g, '&amp;')
                                .replace(/"/g, '&quot;')
                                .replace(/</g, '&lt;')
                                .replace(/>/g, '&gt;');
-                           const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic;">🎨 ${safePrompt}</div></div>`;
+                           const imageHtml = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;">🎨 ${safePrompt}</div></div>`;
                            let messageSent = false;
                            if (typeof ctx.sendSystemMessage === 'function') {
                                try {

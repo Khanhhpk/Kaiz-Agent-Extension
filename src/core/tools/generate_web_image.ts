@@ -35,20 +35,28 @@ export const generateWebImageTool: ITool = {
             }
 
             const target = args.target || 'auto';
-            console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, prompt);
+            const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
+            console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, finalPrompt);
 
             const base64 = await WebImageBridge.requestImage({
-                prompt,
+                prompt: finalPrompt,
                 target,
                 timeoutMs: 80000,
             });
 
-            const safePrompt = prompt
+            // Tự động lưu vào Image Gallery
+            await WebImageBridge.saveImageToGallery({
+                prompt: finalPrompt,
+                base64,
+                provider: target,
+            });
+
+            const safePrompt = finalPrompt
                 .replace(/&/g, '&amp;')
                 .replace(/"/g, '&quot;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
-            const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic;">🎨 ${safePrompt}</div></div>`;
+            const markdownImage = `<div class="kaiz-draw-result" style="margin: 10px 0; text-align: center;"><img src="${base64}" alt="${safePrompt.replace(/\n+/g, ' ')}" style="max-width: 100%; max-height: 520px; border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,0.45); object-fit: contain; cursor: pointer; display: inline-block;" onclick="window.open(this.src)" /><div style="margin-top: 6px; font-size: 12px; opacity: 0.85; font-style: italic; white-space: pre-wrap; line-height: 1.4; text-align: left; background: rgba(0,0,0,0.2); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-width: 520px; margin-left: auto; margin-right: auto;">🎨 ${safePrompt}</div></div>`;
 
             // Dán trực tiếp bức ảnh vào chính văn SillyTavern chat
             let messageSent = false;
@@ -100,7 +108,7 @@ export const generateWebImageTool: ITool = {
                 content: JSON.stringify({
                     success: true,
                     message: 'Đã sinh ảnh thành công và nhúng trực tiếp bức ảnh vào khung chat chính cho người dùng xem.',
-                    prompt: prompt,
+                    prompt: finalPrompt,
                     posted_to_chat: messageSent,
                 }),
                 isError: false,
