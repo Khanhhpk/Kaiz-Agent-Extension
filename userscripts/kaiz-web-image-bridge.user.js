@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.7
+// @version      1.2.8
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web (Imagen 3) / ChatGPT Web (DALL-E 3) và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -104,7 +104,7 @@
                 // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.7' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.8' }, '*');
                 checkAllHeartbeats();
                 cleanupOldStorage();
                 // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
@@ -535,29 +535,35 @@
 
         // 4. Tìm và bấm nút gửi DUY NHẤT 1 LẦN (Chống spam request)
         const sendSelectors = [
-            'button.send-button',
-            '.send-button-container button',
             'button[aria-label*="Gửi" i]',
             'button[aria-label*="Send" i]',
             'button[aria-label*="Submit" i]',
+            'button.send-button',
             'button[data-test-id="send-button"]',
             'div[role="button"][aria-label*="Gửi" i]',
             'div[role="button"][aria-label*="Send" i]',
+            '.send-button-container button',
         ];
 
         let sendBtn = null;
         for (let i = 0; i < 30; i++) {
             for (const sel of sendSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
+                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && btn.offsetParent !== null) {
                     const label = (btn.getAttribute('aria-label') || '').toLowerCase();
                     const isExcluded =
                         label.includes('mic') ||
+                        label.includes('micro') ||
                         label.includes('menu') ||
                         label.includes('tệp') ||
                         label.includes('file') ||
                         label.includes('thêm') ||
-                        label.includes('add');
+                        label.includes('add') ||
+                        label.includes('ngừng') ||
+                        label.includes('dừng') ||
+                        label.includes('stop') ||
+                        label.includes('cancel') ||
+                        label.includes('hủy');
                     if (!isExcluded) {
                         sendBtn = btn;
                         break;
@@ -606,12 +612,14 @@
         // Hàm nhận diện Gemini đang trong trạng thái sinh phản hồi / tạo ảnh
         const isGeminiGenerating = () => {
             const stopSelectors = [
+                'button[aria-label*="Ngừng" i]',
                 'button[aria-label*="Stop" i]',
                 'button[aria-label*="Dừng" i]',
                 'button[aria-label*="Cancel" i]',
                 'button[aria-label*="Hủy" i]',
                 'button.stop-button',
                 'button[data-test-id="stop-button"]',
+                '.send-button-container button[aria-label*="ngừng" i]',
                 '.send-button-container button[aria-label*="stop" i]',
                 '.send-button-container button[aria-label*="dừng" i]',
             ];
