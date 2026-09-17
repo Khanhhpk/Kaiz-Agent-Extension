@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.15
+// @version      1.2.16
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -714,7 +714,7 @@
         }
 
         // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT CANCEL (LIFECYCLE STATE MACHINE)
-        const timeoutMs = 85000;
+        const timeoutMs = 150000;
         const startTime = Date.now();
         console.log('[Kaiz Bridge][Gemini] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Cancel xuất hiện...');
 
@@ -818,7 +818,7 @@
         // Không dùng buffer thời gian cứng; kiên nhẫn chờ nút cancel hiện ra dù mạng lag
         // =========================================================================
         let hasStarted = false;
-        const phase1MaxWait = 25000; // Tối đa 25s cho mạng chậm
+        const phase1MaxWait = 40000; // Tối đa 40s cho mạng chậm
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
@@ -900,7 +900,7 @@
             }
         }
 
-        throw new Error('Hết thời gian chờ (Timeout 85s) nhưng không phát hiện ảnh mới từ Gemini Web.');
+        throw new Error('Hết thời gian chờ (Timeout 150s) nhưng không phát hiện ảnh mới từ Gemini Web.');
     }
 
     // =========================================================================
@@ -1273,7 +1273,7 @@
 
         // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN HOẶC ẢNH XUẤT HIỆN SỚM
         let hasStarted = false;
-        const phase1MaxWait = 25000;
+        const phase1MaxWait = 40000; // Tối đa 40s cho mạng chậm
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
@@ -1339,9 +1339,9 @@
                 if (finishedCheckCount >= 3) {
                     console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất. Đang chờ ảnh xuất hiện...');
 
-                    // Kiên nhẫn chờ thẻ ảnh xuất hiện thêm tối đa 25s
+                    // Kiên nhẫn chờ thẻ ảnh xuất hiện thêm tối đa 40s
                     const waitStart = Date.now();
-                    while (Date.now() - waitStart < 25000) {
+                    while (Date.now() - waitStart < 40000) {
                         wakeUpBackgroundRendering();
                         const finalCandidate = findChatGPTImageCandidate();
                         if (finalCandidate && finalCandidate.src) {
@@ -1357,6 +1357,6 @@
             }
         }
 
-        throw new Error('Hết thời gian chờ (Timeout 85s) nhưng không thấy ảnh mới từ ChatGPT Web.');
+        throw new Error('Hết thời gian chờ (Timeout 150s) nhưng không thấy ảnh mới từ ChatGPT Web.');
     }
 })();
