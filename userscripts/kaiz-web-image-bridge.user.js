@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.8
+// @version      1.2.9
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -97,14 +97,14 @@
                 console.log('[Kaiz Bridge][ST] 🚀 Nhận yêu cầu vẽ từ ST:', job);
                 GM_setValue('KAIZ_PENDING_JOB', {
                     id: job.id,
-                    target: job.target || 'gemini',
+                    target: job.target || 'auto',
                     prompt: job.prompt,
                     timestamp: Date.now(),
                 });
                 // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.8' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.9' }, '*');
                 checkAllHeartbeats();
                 cleanupOldStorage();
                 // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
@@ -805,22 +805,26 @@
         );
         console.log(`[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} ảnh cũ trên trang.`);
 
-        // 2. Chờ tìm ô input nhập prompt
+        // 2. Chờ tìm ô input nhập prompt (ProseMirror #prompt-textarea hoặc textarea)
         let inputEl = null;
         for (let i = 0; i < 25; i++) {
             inputEl =
                 document.querySelector('#prompt-textarea') ||
                 document.querySelector('div[contenteditable="true"]#prompt-textarea') ||
+                document.querySelector('div[contenteditable="true"][data-placeholder]') ||
+                document.querySelector('textarea#prompt-textarea') ||
                 document.querySelector('textarea');
             if (inputEl) break;
             await new Promise((r) => setTimeout(r, 200));
         }
 
         if (!inputEl) {
-            throw new Error('Không tìm thấy ô nhập prompt trên ChatGPT Web.');
+            throw new Error('Không tìm thấy ô nhập prompt trên ChatGPT Web. Hãy chắc chắn tab đang ở trang chat.');
         }
 
-        // 3. Điền prompt
+        console.log('[Kaiz Bridge][ChatGPT] Tìm thấy ô nhập:', inputEl);
+
+        // 3. Điền prompt an toàn theo chuẩn ProseMirror / React
         try {
             inputEl.focus({ preventScroll: true });
         } catch (e) {
@@ -830,49 +834,88 @@
 
         if (inputEl.tagName.toLowerCase() === 'textarea') {
             inputEl.value = job.prompt;
-            inputEl.dispatchEvent(new Event('input', { bubbles: true }));
-            inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+            inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
         } else {
-            // Thử Clipboard paste event
-            try {
-                const dt = new DataTransfer();
-                dt.setData('text/plain', job.prompt);
-                const pasteEvt = new ClipboardEvent('paste', {
-                    bubbles: true,
-                    cancelable: true,
-                    clipboardData: dt,
-                });
-                inputEl.dispatchEvent(pasteEvt);
-            } catch (pe) {
-                /* ignore */
-            }
+            // ProseMirror contenteditable container
+            let textInserted = false;
 
+            // Kỹ thuật 1: Selection & execCommand ('insertText') - Chuẩn nhất cho ProseMirror
             try {
+                let pEl = inputEl.querySelector('p');
+                if (!pEl) {
+                    pEl = document.createElement('p');
+                    inputEl.appendChild(pEl);
+                }
                 const selection = window.getSelection();
                 const range = document.createRange();
-                range.selectNodeContents(inputEl);
+                range.selectNodeContents(pEl);
                 selection.removeAllRanges();
                 selection.addRange(range);
-                document.execCommand('insertText', false, job.prompt);
+                textInserted = document.execCommand('insertText', false, job.prompt);
+                if (textInserted && inputEl.textContent?.trim()) {
+                    console.log('[Kaiz Bridge][ChatGPT] Đã nạp prompt qua ProseMirror execCommand insertText.');
+                }
             } catch (e) {
-                /* ignore */
+                console.warn('[Kaiz Bridge][ChatGPT] execCommand failed:', e);
             }
 
-            if (!inputEl.innerText || !inputEl.innerText.trim()) {
-                inputEl.innerText = job.prompt;
+            // Kỹ thuật 2: ClipboardEvent paste fallback (chỉ chạy nếu Kỹ thuật 1 chưa đưa được text vào)
+            if (!textInserted || !inputEl.textContent?.trim()) {
+                try {
+                    const dt = new DataTransfer();
+                    dt.setData('text/plain', job.prompt);
+                    const pasteEvt = new ClipboardEvent('paste', {
+                        bubbles: true,
+                        cancelable: true,
+                        composed: true,
+                        clipboardData: dt,
+                    });
+                    inputEl.dispatchEvent(pasteEvt);
+                    console.log('[Kaiz Bridge][ChatGPT] Đã nạp prompt qua ClipboardEvent paste fallback.');
+                } catch (pe) {
+                    console.warn('[Kaiz Bridge][ChatGPT] Paste event fallback error:', pe);
+                }
             }
-            inputEl.dispatchEvent(
-                new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: job.prompt }),
-            );
-            inputEl.dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Kỹ thuật 3: DOM Fallback bảo toàn thẻ <p> nếu vẫn chưa có text
+            if (!inputEl.textContent || !inputEl.textContent.trim()) {
+                let pEl = inputEl.querySelector('p');
+                if (pEl) {
+                    pEl.textContent = job.prompt;
+                } else {
+                    inputEl.innerText = job.prompt;
+                }
+            }
+
+            // Bắn InputEvent và ChangeEvent để React state cập nhật và bật sáng nút gửi
+            try {
+                inputEl.dispatchEvent(
+                    new InputEvent('input', {
+                        bubbles: true,
+                        cancelable: true,
+                        composed: true,
+                        inputType: 'insertText',
+                        data: job.prompt,
+                    }),
+                );
+            } catch (ie) {
+                inputEl.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+            }
+            inputEl.dispatchEvent(new Event('change', { bubbles: true, composed: true }));
         }
 
+        console.log('[Kaiz Bridge][ChatGPT] Đã hoàn tất nhập prompt vào ô input.');
         await new Promise((r) => setTimeout(r, 600));
 
         // 4. Bấm nút gửi (Chờ nút kích hoạt trong background tab)
         const sendSelectors = [
             'button[data-testid="send-button"]',
+            'button[aria-label*="Send prompt" i]',
+            'button[aria-label*="Send message" i]',
             'button[aria-label*="Send" i]',
+            'button[aria-label*="Gửi lời nhắc" i]',
+            'button[aria-label*="Gửi tin nhắn" i]',
             'button[aria-label*="Gửi" i]',
         ];
 
@@ -880,9 +923,24 @@
         for (let i = 0; i < 30; i++) {
             for (const sel of sendSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
-                    sendBtn = btn;
-                    break;
+                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && btn.offsetParent !== null) {
+                    const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    const testId = (btn.getAttribute('data-testid') || '').toLowerCase();
+                    const isExcluded =
+                        testId.includes('speech') ||
+                        testId.includes('stop') ||
+                        label.includes('mic') ||
+                        label.includes('voice') ||
+                        label.includes('nói') ||
+                        label.includes('dictate') ||
+                        label.includes('ngừng') ||
+                        label.includes('dừng') ||
+                        label.includes('stop') ||
+                        label.includes('cancel');
+                    if (!isExcluded) {
+                        sendBtn = btn;
+                        break;
+                    }
                 }
             }
             if (sendBtn) break;
@@ -890,9 +948,9 @@
         }
 
         if (sendBtn) {
-            console.log('[Kaiz Bridge][ChatGPT] Click nút gửi send-button duy nhất 1 lần...');
-            sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-            sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            console.log('[Kaiz Bridge][ChatGPT] Tìm thấy send-button hợp lệ, click nút gửi duy nhất 1 lần:', sendBtn);
+            sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }));
+            sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.click();
         } else {
             console.log('[Kaiz Bridge][ChatGPT] Nút gửi chưa kích hoạt, gửi duy nhất 1 lần qua phím Enter...');
@@ -904,6 +962,7 @@
                     which: 13,
                     bubbles: true,
                     cancelable: true,
+                    composed: true,
                 }),
             );
             inputEl.dispatchEvent(
@@ -914,20 +973,32 @@
                     which: 13,
                     bubbles: true,
                     cancelable: true,
+                    composed: true,
                 }),
             );
         }
 
-        // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT CANCEL (LIFECYCLE STATE MACHINE)
+        // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT STOP (LIFECYCLE STATE MACHINE)
         const timeoutMs = 85000;
         const startTime = Date.now();
         console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Stop xuất hiện...');
 
         const isChatGPTGenerating = () => {
-            const stopBtn = document.querySelector(
-                'button[data-testid="stop-button"], button[aria-label*="Stop" i], button[aria-label*="Dừng" i]',
-            );
-            return !!(stopBtn && stopBtn.offsetParent !== null);
+            const stopSelectors = [
+                'button[data-testid="stop-button"]',
+                'button[aria-label*="Stop" i]',
+                'button[aria-label*="Dừng" i]',
+                'button[aria-label*="Ngừng" i]',
+                'button.stop-button',
+            ];
+            for (const sel of stopSelectors) {
+                const btn = document.querySelector(sel);
+                if (btn && btn.offsetParent !== null) return true;
+            }
+            // Kiểm tra trạng thái streaming / đang sinh phản hồi của ChatGPT
+            const streaming = document.querySelector('.result-streaming, div[class*="streaming"]');
+            if (streaming && streaming.offsetParent !== null) return true;
+            return false;
         };
 
         const findNewValidChatGPTImage = () => {
@@ -935,14 +1006,53 @@
             for (const img of currentImages) {
                 const src = img.src || '';
                 const isNew = !existingImages.has(src);
-                const isOAI = src.includes('oaiusercontent.com') || src.includes('files.oaiusercontent');
+                const isImageHost =
+                    src.includes('oaiusercontent.com') ||
+                    src.includes('files.oaiusercontent') ||
+                    src.includes('openai.com') ||
+                    src.startsWith('blob:') ||
+                    src.startsWith('data:image');
+                const isNotAvatar =
+                    !src.includes('avatar') &&
+                    !src.includes('profile') &&
+                    !src.includes('logo') &&
+                    !src.includes('icon') &&
+                    !img.closest('[data-testid*="avatar"]') &&
+                    !img.closest('.avatar');
                 const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
 
-                if (src && isNew && isOAI && isLoaded) {
+                if (src && isNew && isImageHost && isNotAvatar && isLoaded) {
                     return img;
                 }
             }
             return null;
+        };
+
+        const checkChatGPTRefusal = () => {
+            const bodyText = document.body.innerText || '';
+            const lower = bodyText.toLowerCase();
+            const refusalKeywords = [
+                'cannot generate that image',
+                "can't generate that image",
+                'unable to generate',
+                'unable to create',
+                'cannot fulfill this request',
+                "can't fulfill this request",
+                'content policy',
+                'usage policies',
+                'chính sách nội dung',
+                'chính sách sử dụng',
+                'không thể tạo ảnh',
+                'không thể vẽ',
+                'không thể tạo hình ảnh',
+                'vi phạm chính sách',
+            ];
+            for (const kw of refusalKeywords) {
+                if (lower.includes(kw)) {
+                    return true;
+                }
+            }
+            return false;
         };
 
         const deliverChatGPTImageResult = async (img) => {
@@ -1003,13 +1113,8 @@
                 break;
             }
 
-            const bodyText = document.body.innerText;
-            if (
-                bodyText.includes('I cannot generate that image') ||
-                bodyText.includes('content policy') ||
-                bodyText.includes('chính sách nội dung')
-            ) {
-                throw new Error('ChatGPT từ chối vẽ ảnh do vi phạm chính sách nội dung.');
+            if (checkChatGPTRefusal()) {
+                throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
 
             await new Promise((r) => setTimeout(r, 400));
@@ -1037,6 +1142,11 @@
                 return;
             }
 
+            // Kiểm tra nếu ChatGPT trả lời từ chối giữa chừng
+            if (checkChatGPTRefusal()) {
+                throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
+            }
+
             const isGen = isChatGPTGenerating();
             if (isGen) {
                 finishedCheckCount = 0;
@@ -1057,6 +1167,6 @@
             }
         }
 
-        throw new Error('Hết thời gian chờ (Timeout 85s) nhưng không thấy ảnh mới từ ChatGPT.');
+        throw new Error('Hết thời gian chờ (Timeout 85s) nhưng không thấy ảnh mới từ ChatGPT Web.');
     }
 })();

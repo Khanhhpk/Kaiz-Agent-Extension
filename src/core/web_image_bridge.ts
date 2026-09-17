@@ -30,6 +30,8 @@ export class WebImageBridge {
         chatgptOnline: false,
     };
 
+    private static lastDeliveredProvider: 'gemini' | 'chatgpt' = 'gemini';
+
     private static isInitialized = false;
 
     public static init(): void {
@@ -65,7 +67,10 @@ export class WebImageBridge {
 
             // 3. Nhận kết quả vẽ ảnh từ Web
             if (type === 'KAIZ_BRIDGE_IMAGE_RESPONSE' && payload) {
-                console.log('[WebImageBridge] Nhận kết quả ảnh từ Userscript:', payload.id, payload.status);
+                console.log('[WebImageBridge] Nhận kết quả ảnh từ Userscript:', payload.id, payload.status, payload.provider);
+                if (payload.provider === 'chatgpt' || payload.provider === 'gemini') {
+                    this.lastDeliveredProvider = payload.provider;
+                }
                 const job = this.pendingJobs.get(payload.id);
                 if (job) {
                     clearTimeout(job.timer);
@@ -100,6 +105,10 @@ export class WebImageBridge {
 
     public static getStatus(): IBridgeStatus {
         return { ...this.status };
+    }
+
+    public static getLastDeliveredProvider(): 'gemini' | 'chatgpt' {
+        return this.lastDeliveredProvider;
     }
 
     public static async requestImage(req: IWebImageJobRequest): Promise<string> {
@@ -198,13 +207,15 @@ export class WebImageBridge {
         provider: string;
     }): Promise<void> {
         try {
+            const providerName =
+                data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider;
             await KaizDB.getInstance().addGalleryImage({
                 prompt: data.prompt,
                 base64: data.base64,
                 timestamp: Date.now(),
-                provider: data.provider || 'gemini',
+                provider: providerName,
             });
-            console.log('[WebImageBridge] Đã lưu ảnh vào Image Gallery thành công.');
+            console.log(`[WebImageBridge] Đã lưu ảnh (${providerName}) vào Image Gallery thành công.`);
             // Bắn custom event để Gallery UI nếu đang mở thì tự động cập nhật
             window.dispatchEvent(new CustomEvent('kaiz_gallery_updated'));
         } catch (err) {

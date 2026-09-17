@@ -5928,6 +5928,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            geminiOnline: false,
            chatgptOnline: false,
        };
+       static lastDeliveredProvider = 'gemini';
        static isInitialized = false;
        static init() {
            if (this.isInitialized)
@@ -5960,7 +5961,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                }
                // 3. Nhận kết quả vẽ ảnh từ Web
                if (type === 'KAIZ_BRIDGE_IMAGE_RESPONSE' && payload) {
-                   console.log('[WebImageBridge] Nhận kết quả ảnh từ Userscript:', payload.id, payload.status);
+                   console.log('[WebImageBridge] Nhận kết quả ảnh từ Userscript:', payload.id, payload.status, payload.provider);
+                   if (payload.provider === 'chatgpt' || payload.provider === 'gemini') {
+                       this.lastDeliveredProvider = payload.provider;
+                   }
                    const job = this.pendingJobs.get(payload.id);
                    if (job) {
                        clearTimeout(job.timer);
@@ -5992,6 +5996,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        }
        static getStatus() {
            return { ...this.status };
+       }
+       static getLastDeliveredProvider() {
+           return this.lastDeliveredProvider;
        }
        static async requestImage(req) {
            this.init();
@@ -6073,13 +6080,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
         */
        static async saveImageToGallery(data) {
            try {
+               const providerName = data.provider && data.provider !== 'auto' ? data.provider : this.lastDeliveredProvider;
                await KaizDB.getInstance().addGalleryImage({
                    prompt: data.prompt,
                    base64: data.base64,
                    timestamp: Date.now(),
-                   provider: data.provider || 'gemini',
+                   provider: providerName,
                });
-               console.log('[WebImageBridge] Đã lưu ảnh vào Image Gallery thành công.');
+               console.log(`[WebImageBridge] Đã lưu ảnh (${providerName}) vào Image Gallery thành công.`);
                // Bắn custom event để Gallery UI nếu đang mở thì tự động cập nhật
                window.dispatchEvent(new CustomEvent('kaiz_gallery_updated'));
            }
