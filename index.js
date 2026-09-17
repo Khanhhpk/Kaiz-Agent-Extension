@@ -6023,6 +6023,23 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
            });
        }
        /**
+        * Lấy Provider được người dùng cài đặt trong Settings ('gemini' | 'chatgpt' | 'auto')
+        */
+       static getConfiguredProvider() {
+           try {
+               const ctx = typeof globalThis.SillyTavern !== 'undefined'
+                   ? globalThis.SillyTavern.getContext()
+                   : (globalThis.window?.SillyTavern?.getContext?.() || null);
+               const prov = ctx?.extensionSettings?.['kaiz_agent']?.webImageProvider;
+               if (prov === 'gemini' || prov === 'chatgpt')
+                   return prov;
+           }
+           catch (e) {
+               /* ignore */
+           }
+           return 'auto';
+       }
+       /**
         * Tự động ghép Custom Prompt (Prefix hoặc Suffix) từ cấu hình người dùng
         */
        static mergeCustomPrompt(basePrompt) {
@@ -6075,18 +6092,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
    const generateWebImageTool = {
        schema: {
            name: 'generate_web_image',
-           description: 'CÔNG CỤ SINH ẢNH MINH HỌA WEB (Gemini Imagen 3 / ChatGPT DALL-E 3). Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt bằng tiếng Anh thật chi tiết, giàu tính mô tả (ánh sáng, phong cách nghệ thuật, góc máy, chi tiết nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
+           description: 'CÔNG CỤ SINH ẢNH MINH HỌA WEB. Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt bằng tiếng Anh thật chi tiết, giàu tính mô tả (ánh sáng, phong cách nghệ thuật, góc máy, chi tiết nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
            parameters: {
                type: 'object',
                properties: {
                    prompt: {
                        type: 'string',
                        description: 'Câu lệnh prompt mô tả bức ảnh chi tiết bằng tiếng Anh (ví dụ: "cinematic anime illustration of a silver-haired knight resting under a blooming cherry blossom tree at sunset, soft volumetric lighting, highly detailed, 8k resolution").',
-                   },
-                   target: {
-                       type: 'string',
-                       enum: ['gemini', 'chatgpt', 'auto'],
-                       description: 'Nền tảng sinh ảnh mong muốn: "gemini" (Imagen 3 - nhanh, miễn phí) hoặc "chatgpt" (DALL-E 3 / GPT-4o). Mặc định là "auto".',
                    },
                },
                required: ['prompt'],
@@ -6101,7 +6113,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                        isError: true,
                    };
                }
-               const target = args.target || 'auto';
+               const target = WebImageBridge.getConfiguredProvider();
                const finalPrompt = WebImageBridge.mergeCustomPrompt(prompt);
                console.log(`[Tool: generate_web_image] Đang gửi yêu cầu vẽ sang ${target}:`, finalPrompt);
                const base64 = await WebImageBridge.requestImage({
@@ -12472,7 +12484,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                            toastr.info('Đang gửi prompt vẽ ảnh sang Web (Gemini/ChatGPT)...');
                        }
                        try {
-                           const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
+                           const target = WebImageBridge.getConfiguredProvider();
                            const base64 = await WebImageBridge.requestImage({ prompt: finalPrompt, target });
                            await WebImageBridge.saveImageToGallery({ prompt: finalPrompt, base64, provider: target });
                            const safePrompt = finalPrompt
@@ -12525,7 +12537,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                            }
                            return `[Error] ${e.message}`;
                        }
-                   }, [], '<mô_tả_ảnh>', 'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Imagen 3 / ChatGPT DALL-E 3)', true);
+                   }, [], '<mô_tả_ảnh>', 'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Web / ChatGPT Web)', true);
                }
            }
            else {

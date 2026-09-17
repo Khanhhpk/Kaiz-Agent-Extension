@@ -220,7 +220,7 @@ jQuery(async () => {
                             toastr.info('Đang gửi prompt vẽ ảnh sang Web (Gemini/ChatGPT)...');
                         }
                         try {
-                            const target = ctx.extensionSettings[EXT_NAME]?.webImageProvider || 'auto';
+                            const target = WebImageBridge.getConfiguredProvider();
                             const base64 = await WebImageBridge.requestImage({ prompt: finalPrompt, target });
                             await WebImageBridge.saveImageToGallery({ prompt: finalPrompt, base64, provider: target });
                             const safePrompt = finalPrompt
@@ -276,7 +276,7 @@ jQuery(async () => {
                     },
                     [],
                     '<mô_tả_ảnh>',
-                    'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Imagen 3 / ChatGPT DALL-E 3)',
+                    'Tạo ảnh minh họa thông qua Web Image Bridge (Gemini Web / ChatGPT Web)',
                     true,
                 );
             }

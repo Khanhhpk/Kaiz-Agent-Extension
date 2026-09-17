@@ -144,6 +144,23 @@ export class WebImageBridge {
     }
 
     /**
+     * Lấy Provider được người dùng cài đặt trong Settings ('gemini' | 'chatgpt' | 'auto')
+     */
+    public static getConfiguredProvider(): 'gemini' | 'chatgpt' | 'auto' {
+        try {
+            const ctx =
+                typeof (globalThis as any).SillyTavern !== 'undefined'
+                    ? (globalThis as any).SillyTavern.getContext()
+                    : ((globalThis as any).window?.SillyTavern?.getContext?.() || null);
+            const prov = ctx?.extensionSettings?.['kaiz_agent']?.webImageProvider;
+            if (prov === 'gemini' || prov === 'chatgpt') return prov;
+        } catch (e) {
+            /* ignore */
+        }
+        return 'auto';
+    }
+
+    /**
      * Tự động ghép Custom Prompt (Prefix hoặc Suffix) từ cấu hình người dùng
      */
     public static mergeCustomPrompt(basePrompt: string): string {
