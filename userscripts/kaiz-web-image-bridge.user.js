@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.18
+// @version      1.2.19
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -667,21 +667,24 @@
             for (const sel of sendSelectors) {
                 const btn = document.querySelector(sel);
                 if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && btn.offsetParent !== null) {
-                    const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-                    const isExcluded =
-                        label.includes('mic') ||
-                        label.includes('micro') ||
-                        label.includes('menu') ||
-                        label.includes('tệp') ||
-                        label.includes('file') ||
-                        label.includes('thêm') ||
-                        label.includes('add') ||
-                        label.includes('ngừng') ||
-                        label.includes('dừng') ||
-                        label.includes('stop') ||
-                        label.includes('cancel') ||
-                        label.includes('hủy');
-                    if (!isExcluded) {
+                    const rawLabel = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    const normLabel = rawLabel.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const isStopOrCancel =
+                        normLabel.includes('ngung') ||
+                        normLabel.includes('dung') ||
+                        normLabel.includes('stop') ||
+                        normLabel.includes('cancel') ||
+                        normLabel.includes('huy');
+                    const isMicOrAttach =
+                        normLabel.includes('mic') ||
+                        normLabel.includes('micro') ||
+                        normLabel.includes('menu') ||
+                        normLabel.includes('tep') ||
+                        normLabel.includes('file') ||
+                        normLabel.includes('them') ||
+                        normLabel.includes('add');
+
+                    if (!isStopOrCancel && !isMicOrAttach) {
                         sendBtn = btn;
                         break;
                     }
@@ -804,7 +807,7 @@
             return false;
         };
 
-        // Hàm tìm ảnh mới hợp lệ trên trang: Quét Bottom-to-Top, kiểm tra Cột mốc DOM và lọc sạch icon/sparkle
+        // Hàm tìm ảnh mới hợp lệ trên trang: Quét Bottom-to-Top, kiểm tra Cột mốc DOM
         const findNewValidImage = () => {
             const currentImages = Array.from(document.querySelectorAll('img'));
             // Duyệt ngược từ dưới lên trên (Bottom-to-Top)
@@ -820,49 +823,40 @@
                     if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
                         continue;
                     }
-                    // Ảnh hợp lệ phải nằm phía sau câu prompt trong DOM
-                    if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
-                        continue;
-                    }
                 } else {
                     // Fallback nếu không định vị được promptAnchor
                     if (existingImages.has(src)) continue;
                 }
 
-                // 2. Lọc host ảnh hợp lệ (Loại bỏ gstatic.com vì gstatic là icon giao diện)
+                // 2. Lọc host ảnh hợp lệ
                 const isImageHost =
-                    src.includes('googleusercontent.com') || src.startsWith('blob:') || src.startsWith('data:image');
+                    src.includes('googleusercontent.com') ||
+                    src.includes('gstatic.com') ||
+                    src.startsWith('blob:') ||
+                    src.startsWith('data:image');
                 if (!isImageHost) continue;
 
-                // 3. Lọc bỏ avatar, icon, button, và dấu sao/sparkle của Gemini
-                if (img.closest('button, [role="button"], mat-icon, .sparkle, [class*="sparkle"]')) {
-                    continue;
-                }
+                // 3. Lọc bỏ avatar, icon, logo rõ ràng (bằng keyword chuẩn hóa)
                 const alt = (img.alt || '').toLowerCase();
                 const className = (typeof img.className === 'string' ? img.className : '').toLowerCase();
-                const isIgnored =
+                const isAvatarOrLogo =
                     src.includes('avatar') ||
                     src.includes('profile') ||
-                    src.includes('logo') ||
                     src.includes('favicon') ||
-                    src.includes('sparkle') ||
-                    src.includes('spark') ||
-                    src.includes('star') ||
+                    src.includes('emoji') ||
                     alt.includes('avatar') ||
-                    alt.includes('sparkle') ||
-                    alt.includes('star') ||
-                    alt.includes('icon') ||
+                    alt.includes('profile') ||
                     className.includes('avatar') ||
-                    className.includes('sparkle');
-                if (isIgnored) continue;
+                    className.includes('profile');
+                if (isAvatarOrLogo) continue;
 
-                // 4. Kiểm tra kích thước (ảnh thật sự từ Imagen 3 luôn >= 256x256)
-                const isLoaded =
-                    img.complete &&
-                    (img.naturalWidth >= 256 || img.width >= 256) &&
-                    (img.naturalHeight >= 256 || img.height >= 256);
+                // 4. Kiểm tra kích thước: Ảnh tạo bởi AI luôn là ảnh lớn (ít nhất rộng >= 200px)
+                // Lưu ý: Không dùng img.closest('button') vì thẻ ảnh của Gemini nằm trong nút để click phóng to
+                const w = img.naturalWidth || img.width || img.clientWidth || 0;
+                const h = img.naturalHeight || img.height || img.clientHeight || 0;
+                const isBigEnough = w >= 200 && (h >= 100 || h === 0);
 
-                if (isLoaded) {
+                if (img.complete && isBigEnough) {
                     return img;
                 }
             }
@@ -983,15 +977,19 @@
                 finishedCheckCount++;
                 if (finishedCheckCount >= 2) {
                     console.log('[Kaiz Bridge][Gemini] ⚠️ Nút Cancel đã biến mất (AI hoàn tất). Quét ảnh kết quả...');
-                    await new Promise((r) => setTimeout(r, 1200));
-
-                    const finalImg = findNewValidImage();
-                    if (finalImg) {
-                        await deliverImageResult(finalImg);
-                        return;
+                    
+                    // Quét lặp lại tối đa 15 giây phòng khi browser cần thời gian giải mã và mount ảnh
+                    const scanStart = Date.now();
+                    while (Date.now() - scanStart < 15000) {
+                        const finalImg = findNewValidImage();
+                        if (finalImg) {
+                            await deliverImageResult(finalImg);
+                            return;
+                        }
+                        await new Promise((r) => setTimeout(r, 600));
                     }
 
-                    // Nút cancel biến mất mà không hề có ảnh mới -> Gemini kết thúc nhưng từ chối / lỗi!
+                    // Hết 15s sau khi nút Cancel biến mất mà vẫn không thấy ảnh
                     throw new Error(
                         'Gemini đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt hoặc không thực thi lệnh vẽ).',
                     );
@@ -1306,8 +1304,7 @@
                         alt.includes('image') ||
                         alt.includes('ảnh');
 
-                    // Loại trừ avatar / nút bấm
-                    if (img.closest('button, [role="button"]')) continue;
+                    // Loại trừ avatar
                     const isAvatar =
                         alt.includes('avatar') ||
                         alt === 'chatgpt' ||
@@ -1317,7 +1314,11 @@
                         (img.naturalWidth > 0 && img.naturalWidth <= 64) ||
                         (img.clientHeight > 0 && img.clientHeight <= 64);
 
-                    if (!isAvatar && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg))) {
+                    const w = img.naturalWidth || img.width || img.clientWidth || 0;
+                    const h = img.naturalHeight || img.height || img.clientHeight || 0;
+                    const isBigEnough = w >= 200 && (h >= 100 || h === 0);
+
+                    if (!isAvatar && isBigEnough && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg))) {
                         return { el: img, src: src };
                     }
                 }
