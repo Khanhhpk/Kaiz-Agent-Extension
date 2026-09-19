@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.17
+// @version      1.2.18
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -726,7 +726,51 @@
         // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT CANCEL (LIFECYCLE STATE MACHINE)
         const timeoutMs = 150000;
         const startTime = Date.now();
+        let promptAnchor = null;
         console.log('[Kaiz Bridge][Gemini] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Cancel xuất hiện...');
+
+        // Định vị phần tử prompt của người dùng để làm Cột mốc tọa độ DOM
+        const findPromptAnchor = () => {
+            const selectors = [
+                'user-query',
+                '[data-test-id="user-query"]',
+                '.user-query',
+                '.query-content',
+                'div[class*="user-query"]',
+            ];
+            for (const sel of selectors) {
+                const elements = Array.from(document.querySelectorAll(sel));
+                if (elements.length > 0) {
+                    const promptSnippet = (job.prompt || '').trim().slice(0, 30);
+                    for (let i = elements.length - 1; i >= 0; i--) {
+                        if (
+                            promptSnippet &&
+                            elements[i].textContent &&
+                            elements[i].textContent.includes(promptSnippet)
+                        ) {
+                            return elements[i];
+                        }
+                    }
+                    return elements[elements.length - 1];
+                }
+            }
+            const promptSnippet = (job.prompt || '').trim().slice(0, 30);
+            if (promptSnippet) {
+                const candidates = Array.from(document.querySelectorAll('p, div, span')).filter((el) => {
+                    return (
+                        el.textContent &&
+                        el.textContent.includes(promptSnippet) &&
+                        !el.closest('rich-textarea') &&
+                        !el.closest('.ql-editor') &&
+                        !el.closest('textarea')
+                    );
+                });
+                if (candidates.length > 0) {
+                    return candidates[candidates.length - 1];
+                }
+            }
+            return null;
+        };
 
         // Hàm nhận diện Gemini đang trong trạng thái sinh phản hồi / tạo ảnh
         const isGeminiGenerating = () => {
@@ -760,21 +804,65 @@
             return false;
         };
 
-        // Hàm tìm ảnh mới hợp lệ trên trang
+        // Hàm tìm ảnh mới hợp lệ trên trang: Quét Bottom-to-Top, kiểm tra Cột mốc DOM và lọc sạch icon/sparkle
         const findNewValidImage = () => {
             const currentImages = Array.from(document.querySelectorAll('img'));
-            for (const img of currentImages) {
-                const src = img.src || '';
-                const isNew = !existingImages.has(src);
-                const isImageHost =
-                    src.includes('googleusercontent.com') ||
-                    src.includes('gstatic.com') ||
-                    src.includes('blob:') ||
-                    src.includes('data:image');
-                const isNotAvatar = !src.includes('avatar') && !src.includes('profile') && !src.includes('logo');
-                const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
+            // Duyệt ngược từ dưới lên trên (Bottom-to-Top)
+            for (let i = currentImages.length - 1; i >= 0; i--) {
+                const img = currentImages[i];
+                const src = img.currentSrc || img.src || img.getAttribute('src') || '';
+                if (!src) continue;
 
-                if (src && isNew && isImageHost && isNotAvatar && isLoaded) {
+                // 1. Kiểm tra Cột mốc tọa độ DOM (DOM Positional Anchor)
+                if (promptAnchor) {
+                    const pos = promptAnchor.compareDocumentPosition(img);
+                    // Nếu ảnh nằm phía trước câu prompt trong DOM -> chắc chắn là ảnh cũ của lượt chat trước
+                    if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
+                        continue;
+                    }
+                    // Ảnh hợp lệ phải nằm phía sau câu prompt trong DOM
+                    if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+                        continue;
+                    }
+                } else {
+                    // Fallback nếu không định vị được promptAnchor
+                    if (existingImages.has(src)) continue;
+                }
+
+                // 2. Lọc host ảnh hợp lệ (Loại bỏ gstatic.com vì gstatic là icon giao diện)
+                const isImageHost =
+                    src.includes('googleusercontent.com') || src.startsWith('blob:') || src.startsWith('data:image');
+                if (!isImageHost) continue;
+
+                // 3. Lọc bỏ avatar, icon, button, và dấu sao/sparkle của Gemini
+                if (img.closest('button, [role="button"], mat-icon, .sparkle, [class*="sparkle"]')) {
+                    continue;
+                }
+                const alt = (img.alt || '').toLowerCase();
+                const className = (typeof img.className === 'string' ? img.className : '').toLowerCase();
+                const isIgnored =
+                    src.includes('avatar') ||
+                    src.includes('profile') ||
+                    src.includes('logo') ||
+                    src.includes('favicon') ||
+                    src.includes('sparkle') ||
+                    src.includes('spark') ||
+                    src.includes('star') ||
+                    alt.includes('avatar') ||
+                    alt.includes('sparkle') ||
+                    alt.includes('star') ||
+                    alt.includes('icon') ||
+                    className.includes('avatar') ||
+                    className.includes('sparkle');
+                if (isIgnored) continue;
+
+                // 4. Kiểm tra kích thước (ảnh thật sự từ Imagen 3 luôn >= 256x256)
+                const isLoaded =
+                    img.complete &&
+                    (img.naturalWidth >= 256 || img.width >= 256) &&
+                    (img.naturalHeight >= 256 || img.height >= 256);
+
+                if (isLoaded) {
                     return img;
                 }
             }
@@ -825,19 +913,19 @@
 
         // =========================================================================
         // GIAI ĐOẠN 1: CHỜ NÚT CANCEL XUẤT HIỆN (Khởi động tiến trình)
-        // Không dùng buffer thời gian cứng; kiên nhẫn chờ nút cancel hiện ra dù mạng lag
+        // Tuyệt đối KHÔNG bắt ảnh sớm trong Phase 1 vì AI không thể sinh ảnh trong vài giây đầu!
         // =========================================================================
         let hasStarted = false;
         const phase1MaxWait = 40000; // Tối đa 40s cho mạng chậm
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
-            // Trường hợp cực nhanh: ảnh mới đã có sẵn
-            const earlyImg = findNewValidImage();
-            if (earlyImg) {
-                console.log('[Kaiz Bridge][Gemini] 🎉 Bắt được ảnh ngay trong Phase 1!');
-                await deliverImageResult(earlyImg);
-                return;
+            // Định vị promptAnchor nếu chưa có
+            if (!promptAnchor) {
+                promptAnchor = findPromptAnchor();
+                if (promptAnchor) {
+                    console.log('[Kaiz Bridge][Gemini] 📍 Đã định vị Cột mốc Prompt Anchor:', promptAnchor);
+                }
             }
 
             // Nút Cancel đã xuất hiện -> Khởi động thành công!
@@ -864,18 +952,15 @@
         }
 
         if (!hasStarted) {
-            const lastCheckImg = findNewValidImage();
-            if (lastCheckImg) {
-                await deliverImageResult(lastCheckImg);
-                return;
-            }
             throw new Error(
-                'Không phát hiện Gemini bắt đầu tạo ảnh sau 25s (nút Cancel không xuất hiện, có thể do lỗi mạng hoặc prompt chưa gửi được).',
+                'Không phát hiện Gemini bắt đầu tạo ảnh sau 40s (nút Cancel không xuất hiện, có thể do lỗi mạng hoặc prompt chưa gửi được).',
             );
         }
 
         // =========================================================================
-        // GIAI ĐOẠN 2: THEO DÕI NÚT CANCEL CHO TỚI KHI BIẾN MẤT (Hoàn tất hoặc từ chối)
+        // GIAI ĐOẠN 2: THEO DÕI CHO TỚI KHI NÚT CANCEL BIẾN MẤT (Chu trình chuẩn)
+        // Tuyệt đối KHÔNG bắt ảnh trong khi AI đang sinh (isGenerating === true).
+        // Chỉ lấy ảnh khi AI đã hoàn tất toàn bộ chu trình và nút Cancel đã biến mất.
         // =========================================================================
         console.log('[Kaiz Bridge][Gemini] ⏳ Đang theo dõi tiến trình tạo ảnh...');
         let finishedCheckCount = 0;
@@ -883,23 +968,21 @@
         while (Date.now() - startTime < timeoutMs) {
             await new Promise((r) => setTimeout(r, 800));
 
-            // ƯU TIÊN 1: Bắt ngay ảnh mới ngay khi vừa tải xong
-            const newImg = findNewValidImage();
-            if (newImg) {
-                await deliverImageResult(newImg);
-                return;
+            // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy
+            if (!promptAnchor) {
+                promptAnchor = findPromptAnchor();
             }
 
-            // ƯU TIÊN 2: Kiểm tra trạng thái nút Cancel
+            // Kiểm tra trạng thái nút Cancel - KHÔNG bắt ảnh khi đang generate!
             const isGen = isGeminiGenerating();
             if (isGen) {
-                finishedCheckCount = 0; // Nút vẫn còn -> reset bộ đếm
+                finishedCheckCount = 0; // Đang sinh nội dung -> reset bộ đếm, kiên nhẫn chờ
             } else {
                 // Nút Cancel đã biến mất!
                 // Debounce 2 nhịp liên tiếp (~1.6s) để tránh lỗi re-render / chớp tắt của UI Angular
                 finishedCheckCount++;
                 if (finishedCheckCount >= 2) {
-                    console.log('[Kaiz Bridge][Gemini] ⚠️ Nút Cancel đã biến mất. Quét ảnh lần cuối...');
+                    console.log('[Kaiz Bridge][Gemini] ⚠️ Nút Cancel đã biến mất (AI hoàn tất). Quét ảnh kết quả...');
                     await new Promise((r) => setTimeout(r, 1200));
 
                     const finalImg = findNewValidImage();
@@ -1116,6 +1199,7 @@
         // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT STOP (LIFECYCLE STATE MACHINE)
         const timeoutMs = 150000;
         const startTime = Date.now();
+        let promptAnchor = null;
         console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Stop xuất hiện...');
 
         const isChatGPTGenerating = () => {
@@ -1123,20 +1207,21 @@
                 'button[data-testid="stop-button"]',
                 'button[aria-label*="Stop" i]',
                 'button[aria-label*="Dừng" i]',
-                'button[aria-label*="Ngừng" i]',
+                'button[aria-label*="Cancel" i]',
                 'button.stop-button',
+                '.text-2xl[aria-label*="Stop" i]',
             ];
             for (const sel of stopSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
-                    return true;
-                }
+                if (btn && (btn.offsetParent !== null || btn.isConnected)) return true;
             }
-            // Kiểm tra trạng thái streaming / thinking của ChatGPT
+
+            // Kiểm tra trạng thái streaming của ChatGPT (SVG spinner hoặc hiệu ứng typing)
             const streaming = document.querySelector(
-                '.result-streaming, div[class*="streaming"], div[class*="result-thinking"]',
+                'button[data-testid="stop-button"], [data-testid="composer-speech-button"] svg.animate-spin',
             );
             if (streaming) return true;
+
             return false;
         };
 
@@ -1146,6 +1231,25 @@
                 '[data-message-author-role="assistant"], article, div[class*="agent-turn"], div[data-testid^="conversation-turn-"]',
             );
             return list.length > 0 ? list[list.length - 1] : null;
+        };
+
+        // Định vị phần tử prompt người dùng vừa gửi để làm Cột mốc tọa độ DOM
+        const findChatGPTPromptAnchor = () => {
+            const userTurns = Array.from(
+                document.querySelectorAll(
+                    '[data-message-author-role="user"], div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
+                ),
+            );
+            if (userTurns.length > 0) {
+                const promptSnippet = (job.prompt || '').trim().slice(0, 30);
+                for (let i = userTurns.length - 1; i >= 0; i--) {
+                    if (promptSnippet && userTurns[i].textContent && userTurns[i].textContent.includes(promptSnippet)) {
+                        return userTurns[i];
+                    }
+                }
+                return userTurns[userTurns.length - 1];
+            }
+            return null;
         };
 
         // Kiểm tra xem có placeholder/skeleton của tiến trình tạo ảnh DALL-E đang chạy không
@@ -1160,7 +1264,8 @@
         // Hàm tìm ứng viên ảnh mới sinh từ ChatGPT (Ưu tiên quét tin nhắn cuối cùng trước để phản hồi cực nhanh)
         const findChatGPTImageCandidate = () => {
             const lastMsg = getLastAssistantMsg();
-            const searchScopes = lastMsg ? [lastMsg, document.body] : [document.body];
+            // CHỈ tìm kiếm trong tin nhắn cuối của Assistant nếu có, không quét lan ra ngoài
+            const searchScopes = lastMsg ? [lastMsg] : [document.body];
 
             for (const scope of searchScopes) {
                 // 1. Quét thẻ img (từ dưới lên trên)
@@ -1168,7 +1273,20 @@
                 for (let i = currentImages.length - 1; i >= 0; i--) {
                     const img = currentImages[i];
                     const src = img.currentSrc || img.src || img.getAttribute('src') || '';
-                    if (!src || existingImages.has(src)) continue;
+                    if (!src) continue;
+
+                    // Kiểm tra Cột mốc tọa độ DOM
+                    if (promptAnchor) {
+                        const pos = promptAnchor.compareDocumentPosition(img);
+                        if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
+                            continue;
+                        }
+                        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+                            continue;
+                        }
+                    } else {
+                        if (existingImages.has(src)) continue;
+                    }
 
                     // Nhận diện URL ảnh đặc trưng của ChatGPT
                     const isEstuary = src.includes('backend-api/estuary/content') || src.includes('estuary/content');
@@ -1188,7 +1306,8 @@
                         alt.includes('image') ||
                         alt.includes('ảnh');
 
-                    // Loại trừ avatar
+                    // Loại trừ avatar / nút bấm
+                    if (img.closest('button, [role="button"]')) continue;
                     const isAvatar =
                         alt.includes('avatar') ||
                         alt === 'chatgpt' ||
@@ -1354,17 +1473,17 @@
             console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi kết quả Base64 về SillyTavern thành công!');
         };
 
-        // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN HOẶC ẢNH XUẤT HIỆN SỚM (Tối đa 30s phòng nút Stop hiện trễ)
+        // =========================================================================
+        // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN (Khởi động tiến trình)
+        // Tuyệt đối KHÔNG bắt ảnh sớm trong Phase 1!
+        // =========================================================================
         let hasStarted = false;
         const phase1MaxWait = 30000; // Tối đa 30s: ChatGPT đôi khi bắt đầu gen nhưng nút Stop hiện sau vài giây
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
-            const earlyImg = findChatGPTImageCandidate();
-            if (earlyImg && earlyImg.src) {
-                console.log('[Kaiz Bridge][ChatGPT] 🎯 Phát hiện ảnh sớm trong Phase 1! Trích xuất ngay...');
-                await deliverChatGPTImageResult(earlyImg);
-                return;
+            if (!promptAnchor) {
+                promptAnchor = findChatGPTPromptAnchor();
             }
 
             if (isChatGPTGenerating()) {
@@ -1381,11 +1500,6 @@
         }
 
         if (!hasStarted) {
-            const lastCheckImg = findChatGPTImageCandidate();
-            if (lastCheckImg && lastCheckImg.src) {
-                await deliverChatGPTImageResult(lastCheckImg);
-                return;
-            }
             if (checkChatGPTRefusal()) {
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
@@ -1394,7 +1508,10 @@
             );
         }
 
-        // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI ẢNH XUẤT HIỆN HOẶC KẾT THÚC (Tối ưu chu kỳ quét 300ms)
+        // =========================================================================
+        // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI KẾT THÚC HOÀN TOÀN (Chu trình chuẩn)
+        // Tuyệt đối KHÔNG bắt ảnh trong khi AI đang sinh (isGenerating === true).
+        // =========================================================================
         console.log('[Kaiz Bridge][ChatGPT] ⏳ Đang theo dõi tiến trình tạo ảnh...');
         let finishedCheckCount = 0;
 
@@ -1404,20 +1521,16 @@
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
 
-            // 1. Kiểm tra ngay nếu ảnh đã xuất hiện trong DOM (bất kể browser đã render xong bitmap hay chưa)
-            const candidate = findChatGPTImageCandidate();
-            if (candidate && candidate.src) {
-                console.log('[Kaiz Bridge][ChatGPT] 🎯 Bắt được ảnh trong Phase 2! Trích xuất ngay trong nền...');
-                await deliverChatGPTImageResult(candidate);
-                return;
+            if (!promptAnchor) {
+                promptAnchor = findChatGPTPromptAnchor();
             }
 
-            // 2. Bắt tức thì nếu ChatGPT gõ câu từ chối trong khi stream
+            // Bắt tức thì nếu ChatGPT gõ câu từ chối trong khi stream
             if (checkChatGPTRefusal()) {
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
 
-            // 3. Theo dõi vòng đời nút Stop
+            // Theo dõi vòng đời nút Stop - KHÔNG bắt ảnh khi đang generate!
             const isGen = isChatGPTGenerating();
             if (isGen) {
                 finishedCheckCount = 0;
@@ -1425,14 +1538,7 @@
                 finishedCheckCount++;
                 // Xác nhận nút Stop đã biến mất sau 3 nhịp (3 x 300ms ≈ 0.9s)
                 if (finishedCheckCount >= 3) {
-                    console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất. Phân tích kết quả...');
-
-                    // Kiểm tra ảnh ngay lập tức
-                    const immediateCandidate = findChatGPTImageCandidate();
-                    if (immediateCandidate && immediateCandidate.src) {
-                        await deliverChatGPTImageResult(immediateCandidate);
-                        return;
-                    }
+                    console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất (AI hoàn tất). Phân tích kết quả...');
 
                     // Kiểm tra từ chối ngay sau khi stop
                     if (checkChatGPTRefusal()) {
@@ -1447,7 +1553,6 @@
                             '[Kaiz Bridge][ChatGPT] 🖼️ Phát hiện placeholder đang tải ảnh DALL-E. Kiên nhẫn chờ tối đa 18s...',
                         );
                         const waitStart = Date.now();
-                        // Chờ tối đa 18s (thay vì 40s mù quáng)
                         while (Date.now() - waitStart < 18000) {
                             wakeUpBackgroundRendering();
                             const finalCandidate = findChatGPTImageCandidate();
@@ -1462,9 +1567,8 @@
                             await new Promise((r) => setTimeout(r, 300));
                         }
                     } else {
-                        // Không hề có placeholder ảnh nào -> ChatGPT chỉ trả lời bằng chữ hoặc từ chối không kèm keyword
-                        // Chỉ chờ 1.5s phòng khi React trễ nhịp mount
-                        console.log('[Kaiz Bridge][ChatGPT] Không có placeholder ảnh. Chờ 1.5s xác nhận hoàn tất...');
+                        // Không có placeholder hoặc đã xong -> Chờ 1.5s để React mount hoàn tất
+                        console.log('[Kaiz Bridge][ChatGPT] Chờ 1.5s xác nhận hoàn tất render...');
                         await new Promise((r) => setTimeout(r, 1500));
                         wakeUpBackgroundRendering();
                         const finalCandidate = findChatGPTImageCandidate();

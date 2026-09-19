@@ -94,4 +94,3 @@ CẤU TRÚC PROMPT (TIẾNG ANH):
 ĐỊNH DẠNG ĐẦU RA BẮT BUỘC:
 1. Toàn bộ quá trình phân tích 5 bước phải nằm gọn trong thẻ <thinking> ... </thinking>.
 2. Theo sau đó là DUY NHẤT một câu prompt tiếng Anh hoàn chỉnh. Tuyệt đối không thêm lời giải thích hay chào hỏi bên ngoài.`;
-

@@ -374,7 +374,10 @@ jQuery(async () => {
 
                             // Loại bỏ CoT / thinking nếu có
                             generatedPrompt = generatedPrompt
-                                .replace(/<(?:think|thinking|thought|agent_cot)>[\s\S]*?(?:<\/(?:think|thinking|thought|agent_cot)>|$)/gi, '')
+                                .replace(
+                                    /<(?:think|thinking|thought|agent_cot)>[\s\S]*?(?:<\/(?:think|thinking|thought|agent_cot)>|$)/gi,
+                                    '',
+                                )
                                 .trim();
 
                             // Bỏ dấu ngoặc kép bọc ngoài nếu model sinh ra
