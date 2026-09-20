@@ -931,24 +931,24 @@ export class SettingsUI {
                 $geminiStatus
                     .removeClass('badge-danger')
                     .addClass('badge-success')
-                    .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+                    .html('<i class="fa-solid fa-circle"></i> Sẵn sàng');
             } else {
                 $geminiStatus
                     .removeClass('badge-success')
                     .addClass('badge-danger')
-                    .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+                    .html('<i class="fa-solid fa-circle"></i> Chưa mở tab');
             }
 
             if (status.chatgptOnline) {
                 $chatgptStatus
                     .removeClass('badge-danger')
                     .addClass('badge-success')
-                    .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+                    .html('<i class="fa-solid fa-circle"></i> Sẵn sàng');
             } else {
                 $chatgptStatus
                     .removeClass('badge-success')
                     .addClass('badge-danger')
-                    .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+                    .html('<i class="fa-solid fa-circle"></i> Chưa mở tab');
             }
         };
 
