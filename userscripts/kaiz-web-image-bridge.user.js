@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.24
+// @version      1.2.25
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -36,7 +36,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.24';
+    const BRIDGE_VERSION = '1.2.25';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -1133,8 +1133,9 @@
             console.log('[Kaiz Bridge][Gemini] 🎉 Xử lý trích xuất ảnh:', src.substring(0, 100));
             let base64 = null;
 
-            // Kỹ thuật 1: Direct fetch (Cực nhanh và nhẹ, hoạt động ngay trong page session)
-            if (src && !src.startsWith('data:')) {
+            // Kỹ thuật 1: Direct fetch (Cực nhanh và nhẹ cho các CDN HTTPS hợp lệ)
+            // LƯU Ý: Tuyệt đối bỏ qua URL blob: vì CSP của Google Gemini cấm 'blob:' trong connect-src
+            if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
                 try {
                     console.log('[Kaiz Bridge][Gemini] 🚀 Thử tải blob ảnh trực tiếp qua fetch...');
                     let res = null;
@@ -1813,7 +1814,7 @@
 
             // Kỹ thuật 1 (Tối ưu nhất cho Background Tab): Fetch trực tiếp qua network với credentials
             // Chạy ngầm 100% độc lập, không phụ thuộc vào GPU rasterization hay canvas
-            if (src && !src.startsWith('data:')) {
+            if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
                 try {
                     console.log('[Kaiz Bridge][ChatGPT] 🚀 Đang tải blob ảnh trực tiếp qua fetch credentials...');
                     const res = await fetch(src, { credentials: 'include' });
