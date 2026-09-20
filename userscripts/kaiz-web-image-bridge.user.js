@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.27
+// @version      1.2.28
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -36,7 +36,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.27';
+    const BRIDGE_VERSION = '1.2.28';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -526,16 +526,32 @@
         if (!rawUrl || typeof rawUrl !== 'string') return [];
         const keys = [rawUrl.trim()];
         try {
-            const cleanUrl = rawUrl.split('?')[0].split('#')[0].trim();
-            if (cleanUrl) keys.push(cleanUrl);
+            // Bóc tách estuary content ID: id=XXXXX (ChatGPT)
+            const estuaryMatch = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (estuaryMatch) {
+                keys.push('estuary:' + estuaryMatch[1]);
+            }
 
             // Bóc tách file ID đối với DALL-E / ChatGPT: /file-XXXXX
             const fileMatch = rawUrl.match(/(file-[a-zA-Z0-9_-]+)/);
-            if (fileMatch) keys.push(fileMatch[1]);
+            if (fileMatch) {
+                keys.push('file:' + fileMatch[1]);
+            }
 
-            // Bóc tách estuary content ID: id=XXXXX
-            const estuaryMatch = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-            if (estuaryMatch) keys.push(estuaryMatch[1]);
+            // Bóc tách cleanUrl loại bỏ query:
+            // CẢNH BÁO SỐNG CÒN: Tuyệt đối KHÔNG dùng cleanUrl nếu đường dẫn chứa estuary/content hoặc kết thúc bằng /content, /download
+            // vì /backend-api/estuary/content là endpoint API dùng chung cho MỌI ảnh trên ChatGPT.
+            // Nếu lưu cleanUrl này vào Set ảnh cũ thì tất cả ảnh mới sau đó sẽ bị coi là ảnh cũ!
+            const cleanUrl = rawUrl.split('?')[0].split('#')[0].trim();
+            if (
+                cleanUrl &&
+                !cleanUrl.includes('estuary/content') &&
+                !cleanUrl.endsWith('/content') &&
+                !cleanUrl.endsWith('/download') &&
+                !cleanUrl.endsWith('/files')
+            ) {
+                keys.push(cleanUrl);
+            }
         } catch (e) {}
         return keys;
     };
@@ -1851,7 +1867,7 @@
                     const res = await fetch(src, { credentials: 'include' });
                     if (res.ok) {
                         const blob = await res.blob();
-                        if (blob && blob.size > 20000) {
+                        if (blob && blob.size > 2000) {
                             base64 = await blobToBase64(blob);
                             console.log(
                                 `[Kaiz Bridge][ChatGPT] ✅ Tải ảnh thành công qua fetch (${Math.round(blob.size / 1024)} KB)!`,
