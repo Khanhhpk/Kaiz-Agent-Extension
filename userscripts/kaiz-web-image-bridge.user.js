@@ -1,13 +1,23 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.17
+// @version      1.2.28
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
 // @match        http://127.0.0.1:*/*
 // @match        https://gemini.google.com/*
 // @match        https://chatgpt.com/*
+// @connect      *
+// @connect      googleusercontent.com
+// @connect      *.googleusercontent.com
+// @connect      gstatic.com
+// @connect      *.gstatic.com
+// @connect      chatgpt.com
+// @connect      oaiusercontent.com
+// @connect      *.oaiusercontent.com
+// @connect      localhost
+// @connect      127.0.0.1
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
@@ -26,6 +36,7 @@
         return;
     }
 
+    const BRIDGE_VERSION = '1.2.28';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -34,7 +45,7 @@
     // 1. CONTEXT: SILLYTAVERN (CẦU NỐI CỤC BỘ)
     // =========================================================================
     if (IS_ST) {
-        console.log('[Kaiz Bridge] Userscript loaded on SillyTavern (Top-level window).');
+        console.log(`[Kaiz Bridge] Userscript v${BRIDGE_VERSION} loaded on SillyTavern (Top-level window).`);
 
         const sendHeartbeatUpdate = (hb) => {
             if (!hb || !hb.target) return;
@@ -104,7 +115,7 @@
                 // Phát xung Kickstart tức thì để kích hoạt xử lý trong tab Web chạy ngầm (không đổi tab)
                 GM_setValue('KAIZ_KICKSTART_PULSE', Date.now());
             } else if (event.data.type === 'KAIZ_BRIDGE_PING') {
-                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: '1.2.13' }, '*');
+                window.postMessage({ type: 'KAIZ_BRIDGE_PONG', version: BRIDGE_VERSION }, '*');
                 checkAllHeartbeats();
                 cleanupOldStorage();
                 // Gửi xung Ping Pulse qua GM Storage để tab Web lập tức phản hồi ngay cả khi đang chạy ngầm
@@ -180,65 +191,107 @@
     if (CURRENT_TARGET === 'unknown') return;
 
     const TAB_ID = 'tab_' + Math.random().toString(36).substring(2, 9);
-    console.log(`[Kaiz Bridge] 🌐 Web Adapter active for: ${CURRENT_TARGET} (Tab ID: ${TAB_ID})`);
+    console.log(`[Kaiz Bridge] 🌐 Web Adapter v${BRIDGE_VERSION} active for: ${CURRENT_TARGET} (Tab ID: ${TAB_ID})`);
 
     // =========================================================================
-    // HỆ THỐNG CHỐNG SLEEP, UNFREEZE RENDER & KICKSTART LIÊN TỤC TRONG BACKGROUND TAB
+    // HỆ THỐNG FORCE WEB ALWAYS-VISIBLE, UNFREEZE RENDER & CHỐNG SLEEP TOÀN DIỆN
     // =========================================================================
 
-    // 1. Visibility & Focus Spoofing: Đánh lừa trình duyệt và React luôn thấy tab ở trạng thái Active & Focused
+    const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+    // 1. Ghi đè triệt để Visibility & Focus trên cả Prototype và Instance
     try {
-        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-        const setProp = (target, prop, val) => {
+        const setProp = (target, prop, getter) => {
             try {
-                Object.defineProperty(target, prop, { get: () => val, configurable: true });
+                Object.defineProperty(target, prop, { get: getter, configurable: true });
             } catch (e) {}
         };
 
-        setProp(document, 'hidden', false);
-        setProp(document, 'visibilityState', 'visible');
-        setProp(document, 'webkitVisibilityState', 'visible');
+        const targets = [
+            document,
+            Document.prototype,
+            win.document,
+            win.Document?.prototype,
+        ].filter(Boolean);
 
-        try {
-            document.hasFocus = () => true;
-            Document.prototype.hasFocus = () => true;
-        } catch (e) {}
-
-        if (win && win.document) {
-            setProp(win.document, 'hidden', false);
-            setProp(win.document, 'visibilityState', 'visible');
-            setProp(win.document, 'webkitVisibilityState', 'visible');
+        for (const t of targets) {
+            setProp(t, 'hidden', () => false);
+            setProp(t, 'visibilityState', () => 'visible');
+            setProp(t, 'webkitHidden', () => false);
+            setProp(t, 'webkitVisibilityState', () => 'visible');
             try {
-                win.document.hasFocus = () => true;
-                if (win.Document && win.Document.prototype) {
-                    win.Document.prototype.hasFocus = () => true;
-                }
+                t.hasFocus = () => true;
             } catch (e) {}
         }
 
-        // Chặn sự kiện visibilitychange khi nó cố báo hiệu tab đã bị ẩn
-        const preventHide = (e) => {
-            if (document.visibilityState === 'hidden' || (e && e.target && e.target.hidden)) {
-                e.stopImmediatePropagation();
+        // 2. Chặn đứng 100% sự kiện ẩn tab / mất focus (Capture Phase)
+        const stopHideEvent = (e) => {
+            // CHỈ chặn sự kiện ở cấp window hoặc document, KHÔNG chặn input/textarea blur
+            if (e.type === 'blur' || e.type === 'focusout') {
+                const target = e.target;
+                if (
+                    target !== win &&
+                    target !== win.document &&
+                    target !== document &&
+                    target !== window
+                ) {
+                    return; // Cho phép blur bình thường trên input, textarea, editor...
+                }
             }
+            e.stopImmediatePropagation();
+            e.stopPropagation();
         };
-        window.addEventListener('visibilitychange', preventHide, true);
-        if (win) win.addEventListener('visibilitychange', preventHide, true);
+
+        const hideEvents = [
+            'visibilitychange',
+            'webkitvisibilitychange',
+            'blur',
+            'focusout',
+            'freeze',
+        ];
+
+        for (const evt of hideEvents) {
+            window.addEventListener(evt, stopHideEvent, true);
+            document.addEventListener(evt, stopHideEvent, true);
+            if (win && win !== window) {
+                win.addEventListener(evt, stopHideEvent, true);
+                if (win.document) {
+                    win.document.addEventListener(evt, stopHideEvent, true);
+                }
+            }
+        }
     } catch (e) {
         console.warn('[Kaiz Bridge] Visibility spoofing error:', e);
     }
 
-    // 2. Chống đóng băng requestAnimationFrame trong Background Tab
-    // Trình duyệt Chromium tự động dừng 100% requestAnimationFrame khi tab ở chế độ nền (background tab).
-    // React 18 / Next.js / animation transition mask của ChatGPT sẽ bị đứng hình chờ người dùng click tab mới chịu render ảnh!
-    // Bằng cách proxy rAF kèm timeout fallback 25ms, React sẽ render mượt mà ngay cả khi tab hoàn toàn chạy ngầm!
+    // 3. Giải phóng requestAnimationFrame bằng MessageChannel (Chống 0 FPS và timer throttling của Chromium)
     try {
-        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
         const nativeRAF = (win.requestAnimationFrame || window.requestAnimationFrame).bind(win);
         const nativeCAF = (win.cancelAnimationFrame || window.cancelAnimationFrame).bind(win);
 
+        // Sử dụng MessageChannel để tạo nhịp macro-task siêu tốc (0-4ms) không bị bóp 1000ms ở background
+        const channel = new MessageChannel();
         const rafCallbacks = new Map();
         let nextRafId = 100000;
+        let portPending = false;
+
+        channel.port2.onmessage = () => {
+            portPending = false;
+            const now = performance.now();
+            const entries = Array.from(rafCallbacks.entries());
+            for (const [id, item] of entries) {
+                if (now - item.time >= 16) { // Chu kỳ ~60 FPS
+                    rafCallbacks.delete(id);
+                    try {
+                        item.cb(now);
+                    } catch (err) {}
+                }
+            }
+            if (rafCallbacks.size > 0 && !portPending) {
+                portPending = true;
+                channel.port1.postMessage(null);
+            }
+        };
 
         win.requestAnimationFrame = function (cb) {
             const id = ++nextRafId;
@@ -250,9 +303,7 @@
                     rafCallbacks.delete(id);
                     try {
                         cb(time);
-                    } catch (err) {
-                        /* ignore callback errors */
-                    }
+                    } catch (err) {}
                 }
             };
 
@@ -261,28 +312,30 @@
                 nativeId = nativeRAF(wrappedCb);
             } catch (e) {}
 
-            // Nếu Chromium đóng băng native rAF (tab ngầm), kích hoạt fallback sau 25ms
-            const timerId = setTimeout(() => {
+            rafCallbacks.set(id, {
+                cb: wrappedCb,
+                nativeId,
+                time: performance.now(),
+            });
+
+            if (!portPending) {
+                portPending = true;
+                channel.port1.postMessage(null);
+            }
+
+            // Fallback hẹn giờ dự phòng
+            setTimeout(() => {
                 if (!called) {
                     wrappedCb(performance.now());
                 }
             }, 25);
 
-            rafCallbacks.set(id, {
-                nativeId,
-                timerId,
-                cancel: () => {
-                    called = true;
-                    clearTimeout(timerId);
-                },
-            });
             return id;
         };
 
         win.cancelAnimationFrame = function (id) {
             const item = rafCallbacks.get(id);
             if (item) {
-                item.cancel();
                 if (item.nativeId) {
                     try {
                         nativeCAF(item.nativeId);
@@ -299,14 +352,68 @@
         console.warn('[Kaiz Bridge] requestAnimationFrame unfreezer error:', e);
     }
 
-    // 3. Hàm Kickstart & Đánh thức Rendering nền (Chống lazy loading / IntersectionObserver bị treo)
+    // 4. Silent Web Audio Keep-Alive: Bảo vệ tiến trình tab không bao giờ bị Chromium đóng băng ở cấp OS/Process
+    let audioContext = null;
+    let hasUserInteracted = false;
+
+    const ensureAudioKeepAlive = () => {
+        try {
+            const canStart =
+                hasUserInteracted ||
+                (typeof navigator !== 'undefined' && navigator.userActivation?.hasBeenActive);
+            if (!canStart) return;
+
+            if (!audioContext) {
+                const AudioCtx =
+                    win.AudioContext ||
+                    win.webkitAudioContext ||
+                    window.AudioContext ||
+                    window.webkitAudioContext;
+                if (AudioCtx) {
+                    audioContext = new AudioCtx();
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    gain.gain.value = 0.00001; // Hoàn toàn câm, không phát ra tiếng động
+                    osc.connect(gain);
+                    gain.connect(audioContext.destination);
+                    osc.start();
+                }
+            }
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+            }
+        } catch (e) {}
+    };
+
+    // Tự động mở khóa AudioContext sau khi người dùng có thao tác chuột / phím đầu tiên trên trang (Tuân thủ Autoplay Policy)
+    const onUserInteraction = () => {
+        hasUserInteracted = true;
+        ensureAudioKeepAlive();
+    };
+
+    ['click', 'keydown', 'touchstart', 'mousedown'].forEach((evt) => {
+        window.addEventListener(evt, onUserInteraction, { capture: true, passive: true });
+        if (win && win !== window) {
+            win.addEventListener(evt, onUserInteraction, { capture: true, passive: true });
+        }
+    });
+
+    // 5. Hàm Kickstart & Đánh thức Rendering nền (Chống lazy loading / Virtual DOM bị treo)
     // TUYỆT ĐỐI KHÔNG gọi window.focus() hay win.focus() để tránh nhảy tab trình duyệt từ SillyTavern sang Web!
     const kickstartTab = () => {
         try {
+            ensureAudioKeepAlive();
             window.dispatchEvent(new Event('focus'));
             document.dispatchEvent(new Event('focus'));
             window.dispatchEvent(new Event('visibilitychange'));
             document.dispatchEvent(new Event('visibilitychange'));
+            if (win && win !== window) {
+                win.dispatchEvent(new Event('focus'));
+                if (win.document) {
+                    win.document.dispatchEvent(new Event('focus'));
+                    win.document.dispatchEvent(new Event('visibilitychange'));
+                }
+            }
         } catch (e) {
             /* ignore */
         }
@@ -322,7 +429,7 @@
                 img.loading = 'eager';
             }
 
-            // Tự động cuộn xuống đáy để kích hoạt trigger IntersectionObserver và mount tin nhắn mới
+            // Tự động cuộn nhẹ xuống đáy để kích hoạt trigger mount tin nhắn mới
             window.scrollTo(0, document.body.scrollHeight);
             const scrollContainers = document.querySelectorAll(
                 '[class*="react-scroll-to-bottom"], main, div[role="presentation"], div[class*="overflow-y-auto"]',
@@ -340,6 +447,10 @@
             if (lastAssistantMsg && typeof lastAssistantMsg.scrollIntoView === 'function') {
                 lastAssistantMsg.scrollIntoView({ behavior: 'instant', block: 'end' });
             }
+
+            // Kích hoạt vi sự kiện để nhắc nhở framework (React/Angular) xử lý các microtask / cập nhật UI
+            window.dispatchEvent(new Event('focus'));
+            document.dispatchEvent(new Event('focus'));
         } catch (e) {
             /* ignore */
         }
@@ -380,6 +491,143 @@
         sendHeartbeat();
     });
 
+    // Chuẩn hóa văn bản tiếng Việt & tiếng Anh (bóc tách NFD Unicode để so khớp chính xác)
+    const normalizeText = (s) =>
+        (s || '')
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '');
+
+    // Kiểm tra phần tử có thực sự hiển thị trên DOM không (không bị display:none, hidden, opacity:0)
+    const isElementVisible = (el) => {
+        if (!el) return false;
+        if (el.hidden || el.getAttribute('aria-hidden') === 'true') return false;
+        try {
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                return false;
+            }
+        } catch (e) {}
+        return el.offsetParent !== null || el.isConnected;
+    };
+
+    // Kiểm tra kích thước ảnh tối thiểu (ảnh do AI sinh luôn lớn, ít nhất rộng >= 100px)
+    const isValidImageDimensions = (img) => {
+        if (!img) return false;
+        const w = img.naturalWidth || img.width || img.clientWidth || 0;
+        const h = img.naturalHeight || img.height || img.clientHeight || 0;
+        // Trong background tab, Chromium không render layout nên w/h có thể bằng 0!
+        // Nếu w > 0 thì phải đủ lớn (>= 100px) để loại trừ icon/avatar. Nếu w === 0 thì chấp nhận ở tab ngầm.
+        return (w >= 100 && (h >= 80 || h === 0)) || (w === 0 && h === 0);
+    };
+
+    // Trích xuất các định danh duy nhất của URL ảnh (URL đầy đủ, pathname gốc loại bỏ query, file-id)
+    const extractImageKeys = (rawUrl) => {
+        if (!rawUrl || typeof rawUrl !== 'string') return [];
+        const keys = [rawUrl.trim()];
+        try {
+            // Bóc tách estuary content ID: id=XXXXX (ChatGPT)
+            const estuaryMatch = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (estuaryMatch) {
+                keys.push('estuary:' + estuaryMatch[1]);
+            }
+
+            // Bóc tách file ID đối với DALL-E / ChatGPT: /file-XXXXX
+            const fileMatch = rawUrl.match(/(file-[a-zA-Z0-9_-]+)/);
+            if (fileMatch) {
+                keys.push('file:' + fileMatch[1]);
+            }
+
+            // Bóc tách cleanUrl loại bỏ query:
+            // CẢNH BÁO SỐNG CÒN: Tuyệt đối KHÔNG dùng cleanUrl nếu đường dẫn chứa estuary/content hoặc kết thúc bằng /content, /download
+            // vì /backend-api/estuary/content là endpoint API dùng chung cho MỌI ảnh trên ChatGPT.
+            // Nếu lưu cleanUrl này vào Set ảnh cũ thì tất cả ảnh mới sau đó sẽ bị coi là ảnh cũ!
+            const cleanUrl = rawUrl.split('?')[0].split('#')[0].trim();
+            if (
+                cleanUrl &&
+                !cleanUrl.includes('estuary/content') &&
+                !cleanUrl.endsWith('/content') &&
+                !cleanUrl.endsWith('/download') &&
+                !cleanUrl.endsWith('/files')
+            ) {
+                keys.push(cleanUrl);
+            }
+        } catch (e) {}
+        return keys;
+    };
+
+    // Tạo Set các định danh của toàn bộ ảnh hiện có trên trang trước khi gửi prompt
+    const snapshotExistingImages = () => {
+        const set = new Set();
+        const elements = document.querySelectorAll(
+            'img, a[download], a[href*="backend-api/estuary"], a[href*="oaiusercontent"], a[href*="googleusercontent"]',
+        );
+        for (const el of elements) {
+            const urls = [
+                el.currentSrc,
+                el.src,
+                el.href,
+                el.getAttribute && el.getAttribute('src'),
+                el.getAttribute && el.getAttribute('href'),
+                el.getAttribute && el.getAttribute('data-src'),
+            ].filter(Boolean);
+
+            for (const u of urls) {
+                const keys = extractImageKeys(u);
+                for (const k of keys) {
+                    set.add(k);
+                }
+            }
+        }
+        return set;
+    };
+
+    // Kiểm tra xem một URL/Element ảnh có phải là ảnh cũ từ trước khi gửi prompt hay không
+    const isOldImage = (elOrUrl, existingSet) => {
+        if (!elOrUrl || !existingSet || existingSet.size === 0) return false;
+        let urlsToCheck = [];
+        if (typeof elOrUrl === 'string') {
+            urlsToCheck = [elOrUrl];
+        } else if (elOrUrl && elOrUrl.tagName) {
+            urlsToCheck = [
+                elOrUrl.currentSrc,
+                elOrUrl.src,
+                elOrUrl.href,
+                elOrUrl.getAttribute && elOrUrl.getAttribute('src'),
+                elOrUrl.getAttribute && elOrUrl.getAttribute('href'),
+                elOrUrl.getAttribute && elOrUrl.getAttribute('data-src'),
+            ].filter(Boolean);
+        }
+        for (const u of urlsToCheck) {
+            const keys = extractImageKeys(u);
+            for (const k of keys) {
+                if (existingSet.has(k)) return true;
+            }
+        }
+        return false;
+    };
+
+    // ==========================================================================
+    // TIMER CHỐNG THROTTLE BACKGROUND TAB (MessageChannel Scheduler)
+    // Chrome C++ engine throttle setTimeout xuống 1 lần/phút sau 5 phút tab ẩn.
+    // MessageChannel.port.postMessage KHÔNG bị throttle (React Scheduler cũng dùng kỹ thuật này).
+    // Hàm này thay thế hoàn toàn setTimeout trong các vòng lặp polling.
+    // ==========================================================================
+    const backgroundSafeDelay = (ms) => {
+        return new Promise((resolve) => {
+            const start = performance.now();
+            const ch = new MessageChannel();
+            ch.port1.onmessage = () => {
+                if (performance.now() - start >= ms) {
+                    resolve();
+                } else {
+                    ch.port2.postMessage(null);
+                }
+            };
+            ch.port2.postMessage(null);
+        });
+    };
+
     // Chuyển đổi Blob ảnh sang Base64
     const blobToBase64 = (blob) => {
         return new Promise((resolve, reject) => {
@@ -393,25 +641,43 @@
     // Tải ảnh xuyên miền bypass CORS bằng GM_xmlhttpRequest
     const fetchImageAsBase64 = (url) => {
         return new Promise((resolve, reject) => {
-            console.log('[Kaiz Bridge] Đang tải blob ảnh:', url.substring(0, 100));
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: url,
-                responseType: 'blob',
-                onload: async (res) => {
-                    if (res.status >= 200 && res.status < 300) {
-                        try {
-                            const base64 = await blobToBase64(res.response);
-                            resolve(base64);
-                        } catch (e) {
-                            reject(e);
+            console.log('[Kaiz Bridge] Đang tải blob ảnh qua GM_xmlhttpRequest:', url.substring(0, 100));
+            try {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: url,
+                    responseType: 'blob',
+                    timeout: 30000,
+                    headers: {
+                        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    },
+                    onload: async (res) => {
+                        if (res.status >= 200 && res.status < 300) {
+                            try {
+                                const blob = res.response;
+                                if (blob && blob.size > 1000) {
+                                    const base64 = await blobToBase64(blob);
+                                    resolve(base64);
+                                } else {
+                                    reject(new Error(`Tệp blob quá nhỏ hoặc rỗng (${blob ? blob.size : 0} bytes)`));
+                                }
+                            } catch (e) {
+                                reject(e);
+                            }
+                        } else {
+                            reject(new Error(`Failed to load image: HTTP ${res.status} ${res.statusText || ''}`));
                         }
-                    } else {
-                        reject(new Error(`Failed to load image: HTTP ${res.status}`));
-                    }
-                },
-                onerror: (err) => reject(err),
-            });
+                    },
+                    onerror: (err) => {
+                        console.warn('[Kaiz Bridge] GM_xmlhttpRequest onerror:', err);
+                        reject(err);
+                    },
+                    ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout sau 30s')),
+                    onabort: () => reject(new Error('GM_xmlhttpRequest aborted')),
+                });
+            } catch (err) {
+                reject(err);
+            }
         });
     };
 
@@ -459,7 +725,7 @@
         GM_setValue(claimKey, TAB_ID);
 
         // Chờ 80ms để giải quyết race condition phân xử giữa nhiều tab
-        await new Promise((r) => setTimeout(r, 80));
+        await backgroundSafeDelay(80);
         if (GM_getValue(claimKey) !== TAB_ID) {
             console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Job ${job.id} đã được tab khác nhận.`);
             return;
@@ -517,15 +783,78 @@
     // 3. GEMINI WEB AUTOMATION (HỖ TRỢ ĐẦY ĐỦ BACKGROUND TAB)
     // =========================================================================
     async function executeGeminiJob(job) {
-        const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        // Nhận diện Gemini đang trong trạng thái sinh phản hồi / tạo ảnh (Nút Ngừng/Cancel đang hiển thị)
+        const isGeminiGenerating = () => {
+            const stopSelectors = [
+                'button[aria-label*="Ngừng" i]',
+                'button[aria-label*="Stop" i]',
+                'button[aria-label*="Dừng" i]',
+                'button[aria-label*="Cancel" i]',
+                'button[aria-label*="Hủy" i]',
+                'button.stop-button',
+                'button[data-test-id="stop-button"]',
+                '.send-button-container button[aria-label*="ngừng" i]',
+                '.send-button-container button[aria-label*="stop" i]',
+                '.send-button-container button[aria-label*="dừng" i]',
+            ];
+            for (const sel of stopSelectors) {
+                const btn = document.querySelector(sel);
+                if (btn && isElementVisible(btn)) return true;
+            }
 
-        // 1. Snapshot URL các ảnh hiện có
-        const existingImages = new Set(
-            Array.from(document.querySelectorAll('img'))
-                .map((img) => img.src)
-                .filter(Boolean),
+            // Kiểm tra icon Stop trong nút bấm
+            const stopIcon = document.querySelector(
+                'mat-icon[fonticon="stop"], mat-icon[data-mat-icon-name="stop"], mat-icon[data-mat-icon-name="stop_circle"], svg.stop-icon',
+            );
+            if (stopIcon && isElementVisible(stopIcon)) return true;
+
+            // Kiểm tra hiệu ứng loading / progress bar
+            const loader = document.querySelector(
+                'mat-progress-bar:not([hidden]), .loading-indicator, bard-loading-indicator',
+            );
+            if (loader && isElementVisible(loader)) return true;
+
+            return false;
+        };
+
+        // Kiểm tra thông báo từ chối do chính sách an toàn/kiểm duyệt của Gemini
+        const checkGeminiRefusal = () => {
+            const text = normalizeText(document.body.innerText || '');
+            const refusalKeywords = [
+                "i can't create that image",
+                "i can't generate that image",
+                "i cannot create that image",
+                "i cannot generate that image",
+                'unable to generate',
+                'unable to create',
+                'safety guidelines',
+                'chinh sach an toan',
+                'chinh sach noi dung',
+                'khong the tao anh',
+                'khong the ve anh',
+                'khong the tao hinh anh',
+            ];
+            return refusalKeywords.some((kw) => text.includes(kw));
+        };
+
+        // 0. Pre-prompt Idle Guard: Nếu Gemini đang dở lượt sinh trước, kiên nhẫn chờ tối đa 15s cho lượt trước xong
+        if (isGeminiGenerating()) {
+            console.log('[Kaiz Bridge][Gemini] ⏳ AI đang bận sinh phản hồi từ trước, chờ hoàn tất...');
+            const waitIdleStart = Date.now();
+            while (Date.now() - waitIdleStart < 15000) {
+                if (!isGeminiGenerating()) break;
+                await backgroundSafeDelay(500);
+            }
+        }
+
+        // 1. Snapshot toàn diện các ảnh & định danh cũ trên trang trước khi gửi prompt
+        const existingImages = snapshotExistingImages();
+        const prePromptQueriesCount = document.querySelectorAll(
+            'user-query, [data-test-id="user-query"], .user-query, .query-content, div[class*="user-query"]',
+        ).length;
+        console.log(
+            `[Kaiz Bridge][Gemini] Đã snapshot ${existingImages.size} định danh ảnh cũ trên trang (Số lượt hỏi cũ: ${prePromptQueriesCount}).`,
         );
-        console.log(`[Kaiz Bridge][Gemini] Đã snapshot ${existingImages.size} ảnh cũ trên trang.`);
 
         // 2. Chờ tìm ô input (Tối đa 5s phòng khi Angular render trễ trong background tab)
         let inputEl = null;
@@ -541,7 +870,7 @@
                 document.querySelector('textarea[aria-label*="prompt" i]') ||
                 document.querySelector('textarea');
             if (inputEl) break;
-            await new Promise((r) => setTimeout(r, 200));
+            await backgroundSafeDelay(200);
         }
 
         if (!inputEl) {
@@ -648,7 +977,7 @@
 
         console.log('[Kaiz Bridge][Gemini] Đã hoàn tất nhập prompt vào ô input.');
         // Chờ Angular digest cycle cập nhật trạng thái ô nhập và đổi nút Mic sang nút Gửi
-        await new Promise((r) => setTimeout(r, 600));
+        await backgroundSafeDelay(600);
 
         // 4. Tìm và bấm nút gửi DUY NHẤT 1 LẦN (Chống spam request)
         const sendSelectors = [
@@ -667,32 +996,35 @@
             for (const sel of sendSelectors) {
                 const btn = document.querySelector(sel);
                 if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true' && btn.offsetParent !== null) {
-                    const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-                    const isExcluded =
-                        label.includes('mic') ||
-                        label.includes('micro') ||
-                        label.includes('menu') ||
-                        label.includes('tệp') ||
-                        label.includes('file') ||
-                        label.includes('thêm') ||
-                        label.includes('add') ||
-                        label.includes('ngừng') ||
-                        label.includes('dừng') ||
-                        label.includes('stop') ||
-                        label.includes('cancel') ||
-                        label.includes('hủy');
-                    if (!isExcluded) {
+                    const normLabel = normalizeText(btn.getAttribute('aria-label') || '');
+                    const isStopOrCancel =
+                        normLabel.includes('ngung') ||
+                        normLabel.includes('dung') ||
+                        normLabel.includes('stop') ||
+                        normLabel.includes('cancel') ||
+                        normLabel.includes('huy');
+                    const isMicOrAttach =
+                        normLabel.includes('mic') ||
+                        normLabel.includes('micro') ||
+                        normLabel.includes('menu') ||
+                        normLabel.includes('tep') ||
+                        normLabel.includes('file') ||
+                        normLabel.includes('them') ||
+                        normLabel.includes('add');
+
+                    if (!isStopOrCancel && !isMicOrAttach) {
                         sendBtn = btn;
                         break;
                     }
                 }
             }
             if (sendBtn) break;
-            await new Promise((r) => setTimeout(r, 100));
+            await backgroundSafeDelay(100);
         }
 
         if (sendBtn) {
-            console.log('[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ, click nút gửi duy nhất 1 lần:', sendBtn);
+            const sendDesc = sendBtn.getAttribute('aria-label') || sendBtn.className || sendBtn.tagName;
+            console.log(`[Kaiz Bridge][Gemini] Tìm thấy nút gửi hợp lệ (${sendDesc}), click nút gửi duy nhất 1 lần.`);
             sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.click();
@@ -726,55 +1058,106 @@
         // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT CANCEL (LIFECYCLE STATE MACHINE)
         const timeoutMs = 150000;
         const startTime = Date.now();
+        let promptAnchor = null;
         console.log('[Kaiz Bridge][Gemini] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Cancel xuất hiện...');
 
-        // Hàm nhận diện Gemini đang trong trạng thái sinh phản hồi / tạo ảnh
-        const isGeminiGenerating = () => {
-            const stopSelectors = [
-                'button[aria-label*="Ngừng" i]',
-                'button[aria-label*="Stop" i]',
-                'button[aria-label*="Dừng" i]',
-                'button[aria-label*="Cancel" i]',
-                'button[aria-label*="Hủy" i]',
-                'button.stop-button',
-                'button[data-test-id="stop-button"]',
-                '.send-button-container button[aria-label*="ngừng" i]',
-                '.send-button-container button[aria-label*="stop" i]',
-                '.send-button-container button[aria-label*="dừng" i]',
+        // Định vị phần tử prompt của người dùng để làm Cột mốc tọa độ DOM
+        const findPromptAnchor = () => {
+            const selectors = [
+                'user-query',
+                '[data-test-id="user-query"]',
+                '.user-query',
+                '.query-content',
+                'div[class*="user-query"]',
             ];
-            for (const sel of stopSelectors) {
-                const btn = document.querySelector(sel);
-                if (btn && btn.offsetParent !== null) return true;
+            const promptSnippet = normalizeText((job.prompt || '').trim().slice(0, 40));
+
+            for (const sel of selectors) {
+                const elements = Array.from(document.querySelectorAll(sel));
+                if (elements.length > 0) {
+                    // 1. Ưu tiên tuyệt đối: Tìm element thực sự chứa nội dung prompt vừa gửi
+                    for (let i = elements.length - 1; i >= 0; i--) {
+                        const text = normalizeText(elements[i].textContent || '');
+                        if (promptSnippet && text.includes(promptSnippet)) {
+                            return elements[i];
+                        }
+                    }
+                    // 2. Chỉ chấp nhận turn cuối nếu số lượng turn ĐÃ TĂNG so với trước khi gửi
+                    if (elements.length > prePromptQueriesCount) {
+                        return elements[elements.length - 1];
+                    }
+                }
             }
 
-            // Kiểm tra icon Stop trong nút bấm
-            const stopIcon = document.querySelector(
-                'mat-icon[fonticon="stop"], mat-icon[data-mat-icon-name="stop"], mat-icon[data-mat-icon-name="stop_circle"], svg.stop-icon',
-            );
-            if (stopIcon && stopIcon.offsetParent !== null) return true;
+            // 3. Fallback: Quét các thẻ p, div bên ngoài editor chứa promptSnippet
+            if (promptSnippet) {
+                const candidates = Array.from(document.querySelectorAll('p, div, span')).filter((el) => {
+                    const text = normalizeText(el.textContent || '');
+                    return (
+                        text &&
+                        text.includes(promptSnippet) &&
+                        !el.closest('rich-textarea') &&
+                        !el.closest('.ql-editor') &&
+                        !el.closest('textarea')
+                    );
+                });
+                if (candidates.length > 0) {
+                    return candidates[candidates.length - 1];
+                }
+            }
 
-            // Kiểm tra hiệu ứng loading / progress bar
-            const loader = document.querySelector('mat-progress-bar, .loading-indicator, bard-loading-indicator');
-            if (loader && loader.offsetParent !== null) return true;
-
-            return false;
+            // Tuyệt đối KHÔNG trả về turn cũ nếu chưa thấy turn mới trong DOM!
+            return null;
         };
 
-        // Hàm tìm ảnh mới hợp lệ trên trang
+        // Hàm tìm ảnh mới hợp lệ trên trang: Quét Bottom-to-Top, kiểm tra Cột mốc DOM
         const findNewValidImage = () => {
             const currentImages = Array.from(document.querySelectorAll('img'));
-            for (const img of currentImages) {
-                const src = img.src || '';
-                const isNew = !existingImages.has(src);
+            // Duyệt ngược từ dưới lên trên (Bottom-to-Top)
+            for (let i = currentImages.length - 1; i >= 0; i--) {
+                const img = currentImages[i];
+                const src = img.currentSrc || img.src || img.getAttribute('src') || '';
+                if (!src) continue;
+
+                // 1. Kiểm tra Cột mốc tọa độ DOM (DOM Positional Anchor)
+                if (promptAnchor && promptAnchor.isConnected) {
+                    const pos = promptAnchor.compareDocumentPosition(img);
+                    // Nếu ảnh nằm phía trước câu prompt trong DOM -> chắc chắn là ảnh cũ của lượt chat trước
+                    if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
+                        continue;
+                    }
+                    if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+                        continue;
+                    }
+                }
+
+                // Bất kể có promptAnchor hay không, LUÔN loại trừ ảnh đã có trong existingImages snapshot
+                if (isOldImage(img, existingImages)) continue;
+
+                // 2. Lọc host ảnh hợp lệ (Loại bỏ gstatic.com vì đó là icon giao diện của Google)
                 const isImageHost =
                     src.includes('googleusercontent.com') ||
-                    src.includes('gstatic.com') ||
-                    src.includes('blob:') ||
-                    src.includes('data:image');
-                const isNotAvatar = !src.includes('avatar') && !src.includes('profile') && !src.includes('logo');
-                const isLoaded = img.complete && (img.naturalWidth >= 200 || img.width >= 200);
+                    src.startsWith('blob:') ||
+                    src.startsWith('data:image');
+                if (!isImageHost) continue;
 
-                if (src && isNew && isImageHost && isNotAvatar && isLoaded) {
+                // 3. Lọc bỏ avatar, icon, logo rõ ràng (bằng keyword chuẩn hóa)
+                const alt = (img.alt || '').toLowerCase();
+                const className = (typeof img.className === 'string' ? img.className : '').toLowerCase();
+                const isAvatarOrLogo =
+                    src.includes('avatar') ||
+                    src.includes('profile') ||
+                    src.includes('favicon') ||
+                    src.includes('emoji') ||
+                    alt.includes('avatar') ||
+                    alt.includes('profile') ||
+                    className.includes('avatar') ||
+                    className.includes('profile');
+                if (isAvatarOrLogo) continue;
+
+                // 4. Kiểm tra kích thước: Ảnh tạo bởi AI luôn là ảnh lớn (dùng hàm chuẩn hóa isValidImageDimensions)
+                // Lưu ý: Không bắt buộc img.complete vì ở background tab Chromium hoãn decode bitmap
+                if (isValidImageDimensions(img)) {
                     return img;
                 }
             }
@@ -783,33 +1166,110 @@
 
         // Hàm trích xuất ảnh và gửi Base64 về SillyTavern
         const deliverImageResult = async (img) => {
-            console.log('[Kaiz Bridge][Gemini] 🎉 Xử lý trích xuất ảnh:', (img.src || '').substring(0, 100));
+            const src = img.currentSrc || img.src || img.getAttribute('src') || '';
+            console.log('[Kaiz Bridge][Gemini] 🎉 Xử lý trích xuất ảnh:', src.substring(0, 100));
             let base64 = null;
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width;
-                canvas.height = img.naturalHeight || img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const dataUrl = canvas.toDataURL('image/png');
-                if (dataUrl && dataUrl.startsWith('data:image')) {
-                    base64 = dataUrl;
+
+            // Kỹ thuật 1: Direct fetch (Cực nhanh và nhẹ cho các CDN HTTPS hợp lệ)
+            // LƯU Ý: Tuyệt đối bỏ qua URL blob: vì CSP của Google Gemini cấm 'blob:' trong connect-src
+            if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
+                try {
+                    console.log('[Kaiz Bridge][Gemini] 🚀 Thử tải blob ảnh trực tiếp qua fetch...');
+                    let res = null;
+                    try {
+                        res = await fetch(src, { credentials: 'include' });
+                    } catch (fetchCredErr) {
+                        res = await fetch(src);
+                    }
+                    if (res && res.ok) {
+                        const blob = await res.blob();
+                        if (blob && blob.size > 2000) {
+                            base64 = await blobToBase64(blob);
+                            console.log(
+                                `[Kaiz Bridge][Gemini] ✅ Tải ảnh thành công qua direct fetch (${Math.round(blob.size / 1024)} KB)!`,
+                            );
+                        }
+                    } else if (res) {
+                        console.warn('[Kaiz Bridge][Gemini] Direct fetch HTTP status:', res.status);
+                    }
+                } catch (fetchErr) {
+                    console.warn('[Kaiz Bridge][Gemini] Direct fetch không khả dụng:', fetchErr);
                 }
-            } catch (canvasErr) {
-                // CORS tainted, tiếp tục với fetch/GM_xmlhttpRequest
             }
 
-            if (!base64 && img.src.startsWith('blob:')) {
+            // Kỹ thuật 2: Fallback GM_xmlhttpRequest (Bypass CORS, CSP và tab throttling của Chromium)
+            if (!base64 && src && !src.startsWith('data:')) {
                 try {
-                    const blob = await fetch(img.src).then((r) => r.blob());
-                    base64 = await blobToBase64(blob);
+                    console.log('[Kaiz Bridge][Gemini] 🚀 Đang tải ảnh qua GM_xmlhttpRequest fallback...');
+                    base64 = await fetchImageAsBase64(src);
+                    if (base64) {
+                        console.log('[Kaiz Bridge][Gemini] ✅ GM_xmlhttpRequest tải ảnh thành công!');
+                    }
                 } catch (e) {
-                    console.warn('[Kaiz Bridge][Gemini] fetch blob error:', e);
+                    console.warn('[Kaiz Bridge][Gemini] GM_xmlhttpRequest error:', e);
                 }
+            }
+
+            // Kỹ thuật 3: Fallback Offscreen Image với crossOrigin
+            if (!base64 && src && !src.startsWith('data:')) {
+                try {
+                    base64 = await new Promise((resolve, reject) => {
+                        const tempImg = new Image();
+                        tempImg.crossOrigin = 'anonymous';
+                        tempImg.onload = () => {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = tempImg.naturalWidth || 1024;
+                                canvas.height = tempImg.naturalHeight || 1024;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(tempImg, 0, 0);
+                                const dataUrl = canvas.toDataURL('image/png');
+                                if (dataUrl && dataUrl.startsWith('data:image') && dataUrl.length > 2000) {
+                                    resolve(dataUrl);
+                                } else {
+                                    reject(new Error('Canvas rỗng'));
+                                }
+                            } catch (err) {
+                                reject(err);
+                            }
+                        };
+                        tempImg.onerror = reject;
+                        tempImg.src = src;
+                        setTimeout(() => reject(new Error('Timeout tải tempImg')), 4000);
+                    });
+                    if (base64) {
+                        console.log('[Kaiz Bridge][Gemini] ✅ Trích xuất Base64 thành công qua Offscreen Canvas!');
+                    }
+                } catch (canvasErr) {
+                    // Tiếp tục fallback DOM Canvas
+                }
+            }
+
+            // Kỹ thuật 4: Fallback DOM Canvas
+            if (!base64 && (img.naturalWidth > 0 || img.width > 0)) {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width || 1024;
+                    canvas.height = img.naturalHeight || img.height || 1024;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    if (dataUrl && dataUrl.startsWith('data:image') && dataUrl.length > 2000) {
+                        base64 = dataUrl;
+                        console.log('[Kaiz Bridge][Gemini] ✅ Trích xuất Base64 thành công qua DOM Canvas!');
+                    }
+                } catch (canvasErr) {
+                    // CORS tainted
+                }
+            }
+
+            // Kỹ thuật 5: Nếu src đã là data:image sẵn
+            if (!base64 && src.startsWith('data:image')) {
+                base64 = src;
             }
 
             if (!base64) {
-                base64 = await fetchImageAsBase64(img.src);
+                throw new Error('Đã tìm thấy ảnh nhưng không thể trích xuất dữ liệu Base64 từ Gemini.');
             }
 
             GM_setValue('KAIZ_JOB_RESULT', {
@@ -825,19 +1285,19 @@
 
         // =========================================================================
         // GIAI ĐOẠN 1: CHỜ NÚT CANCEL XUẤT HIỆN (Khởi động tiến trình)
-        // Không dùng buffer thời gian cứng; kiên nhẫn chờ nút cancel hiện ra dù mạng lag
+        // Tuyệt đối KHÔNG bắt ảnh sớm trong Phase 1 vì AI không thể sinh ảnh trong vài giây đầu!
         // =========================================================================
         let hasStarted = false;
         const phase1MaxWait = 40000; // Tối đa 40s cho mạng chậm
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
-            // Trường hợp cực nhanh: ảnh mới đã có sẵn
-            const earlyImg = findNewValidImage();
-            if (earlyImg) {
-                console.log('[Kaiz Bridge][Gemini] 🎉 Bắt được ảnh ngay trong Phase 1!');
-                await deliverImageResult(earlyImg);
-                return;
+            // Định vị promptAnchor nếu chưa có
+            if (!promptAnchor || !promptAnchor.isConnected) {
+                promptAnchor = findPromptAnchor();
+                if (promptAnchor) {
+                    console.log('[Kaiz Bridge][Gemini] 📍 Đã định vị Cột mốc Prompt Anchor:', promptAnchor);
+                }
             }
 
             // Nút Cancel đã xuất hiện -> Khởi động thành công!
@@ -849,66 +1309,109 @@
                 break;
             }
 
-            // Bắt nhanh Safety keywords nếu Gemini từ chối tức thì
-            const bodyText = document.body.innerText;
-            if (
-                bodyText.includes("I can't create that image") ||
-                bodyText.includes("I can't generate that image") ||
-                bodyText.includes('safety guidelines') ||
-                bodyText.includes('chính sách an toàn')
-            ) {
+            // Bắt nhanh nếu Gemini từ chối an toàn/kiểm duyệt
+            if (checkGeminiRefusal()) {
                 throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
             }
 
-            await new Promise((r) => setTimeout(r, 400));
+            await backgroundSafeDelay(400);
         }
 
         if (!hasStarted) {
-            const lastCheckImg = findNewValidImage();
-            if (lastCheckImg) {
-                await deliverImageResult(lastCheckImg);
-                return;
-            }
             throw new Error(
-                'Không phát hiện Gemini bắt đầu tạo ảnh sau 25s (nút Cancel không xuất hiện, có thể do lỗi mạng hoặc prompt chưa gửi được).',
+                'Không phát hiện Gemini bắt đầu tạo ảnh sau 40s (nút Cancel không xuất hiện, có thể do lỗi mạng hoặc prompt chưa gửi được).',
             );
         }
 
         // =========================================================================
-        // GIAI ĐOẠN 2: THEO DÕI NÚT CANCEL CHO TỚI KHI BIẾN MẤT (Hoàn tất hoặc từ chối)
+        // GIAI ĐOẠN 2: THEO DÕI TIẾN TRÌNH & ĐÓN ẢNH (HỆ THỐNG TRIGGER KÉP THÔNG MINH)
+        // Trigger A: Theo dõi vòng đời nút Cancel (chuẩn mực khi web hiển thị hoặc Angular cập nhật kịp).
+        // Trigger B: Nhận diện ảnh mới đã sẵn sàng sau promptAnchor (vượt qua việc Angular hoãn cập nhật nút Cancel trong background tab).
         // =========================================================================
         console.log('[Kaiz Bridge][Gemini] ⏳ Đang theo dõi tiến trình tạo ảnh...');
         let finishedCheckCount = 0;
+        let candidateSeenCount = 0;
+        let lastCandidateSrc = '';
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 800));
+            await backgroundSafeDelay(600);
 
-            // ƯU TIÊN 1: Bắt ngay ảnh mới ngay khi vừa tải xong
-            const newImg = findNewValidImage();
-            if (newImg) {
-                await deliverImageResult(newImg);
-                return;
+            // Đánh thức rendering liên tục trong background tab mỗi nhịp
+            wakeUpBackgroundRendering();
+
+            // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy hoặc bị unmount
+            if (!promptAnchor || !promptAnchor.isConnected) {
+                promptAnchor = findPromptAnchor();
             }
 
-            // ƯU TIÊN 2: Kiểm tra trạng thái nút Cancel
+            // Bắt nhanh nếu Gemini từ chối an toàn/kiểm duyệt
+            if (checkGeminiRefusal()) {
+                throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
+            }
+
+            // TRIGGER B (CHỦ ĐỘNG - THÍCH ỨNG BACKGROUND TAB):
+            // Bỏ qua trạng thái nút Cancel bị kẹt do Angular hoãn cập nhật UI trong background tab
+            // Điều kiện an toàn tuyệt đối chống bắt nhầm ảnh cũ:
+            // 1. Đã qua ít nhất 25s (Gemini tạo ảnh trong khoảng ~30s theo quan sát thực tế).
+            // 2. Đã định vị được promptAnchor đang kết nối trong DOM.
+            // 3. Ảnh nằm strictly SAU promptAnchor và KHÔNG có trong existingImages snapshot ban đầu.
+            // 4. URL ảnh ổn định trong 2 nhịp kiểm tra (~1.2s).
+            const GEMINI_SAFE_CAPTURE_DELAY = 25000;
+            if (Date.now() - startTime >= GEMINI_SAFE_CAPTURE_DELAY && promptAnchor && promptAnchor.isConnected) {
+                const liveImg = findNewValidImage();
+                if (liveImg) {
+                    const liveSrc = liveImg.currentSrc || liveImg.src || liveImg.getAttribute('src') || '';
+                    if (liveSrc) {
+                        if (liveSrc === lastCandidateSrc) {
+                            candidateSeenCount++;
+                        } else {
+                            lastCandidateSrc = liveSrc;
+                            candidateSeenCount = 1;
+                        }
+
+                        if (candidateSeenCount >= 2) {
+                            console.log(
+                                `[Kaiz Bridge][Gemini] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Đã qua ${Math.round((Date.now() - startTime) / 1000)}s, bỏ qua nút Cancel trong background tab). Trích xuất ngay...`,
+                            );
+                            try {
+                                await deliverImageResult(liveImg);
+                                return;
+                            } catch (err) {
+                                console.warn('[Kaiz Bridge][Gemini] Thử trích xuất ảnh nền thất bại, tiếp tục theo dõi:', err);
+                            }
+                        }
+                    }
+                } else {
+                    candidateSeenCount = 0;
+                    lastCandidateSrc = '';
+                }
+            }
+
+            // TRIGGER A (CHU KỲ CHUẨN - THEO DÕI VÒNG ĐỜI NÚT CANCEL):
             const isGen = isGeminiGenerating();
             if (isGen) {
-                finishedCheckCount = 0; // Nút vẫn còn -> reset bộ đếm
+                finishedCheckCount = 0; // Đang sinh nội dung -> reset bộ đếm, kiên nhẫn chờ
             } else {
                 // Nút Cancel đã biến mất!
-                // Debounce 2 nhịp liên tiếp (~1.6s) để tránh lỗi re-render / chớp tắt của UI Angular
                 finishedCheckCount++;
                 if (finishedCheckCount >= 2) {
-                    console.log('[Kaiz Bridge][Gemini] ⚠️ Nút Cancel đã biến mất. Quét ảnh lần cuối...');
-                    await new Promise((r) => setTimeout(r, 1200));
+                    console.log('[Kaiz Bridge][Gemini] ⚠️ Nút Cancel đã biến mất (AI hoàn tất). Quét ảnh kết quả...');
 
-                    const finalImg = findNewValidImage();
-                    if (finalImg) {
-                        await deliverImageResult(finalImg);
-                        return;
+                    // Quét lặp lại tối đa 15 giây phòng khi browser cần thời gian giải mã và mount ảnh
+                    const scanStart = Date.now();
+                    while (Date.now() - scanStart < 15000) {
+                        const finalImg = findNewValidImage();
+                        if (finalImg) {
+                            await deliverImageResult(finalImg);
+                            return;
+                        }
+                        if (checkGeminiRefusal()) {
+                            throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
+                        }
+                        await backgroundSafeDelay(600);
                     }
 
-                    // Nút cancel biến mất mà không hề có ảnh mới -> Gemini kết thúc nhưng từ chối / lỗi!
+                    // Hết 15s sau khi nút Cancel biến mất mà vẫn không thấy ảnh
                     throw new Error(
                         'Gemini đã kết thúc phản hồi nhưng không tạo ảnh (bị từ chối kiểm duyệt hoặc không thực thi lệnh vẽ).',
                     );
@@ -923,17 +1426,109 @@
     // 4. CHATGPT WEB AUTOMATION (HỖ TRỢ ĐẦY ĐỦ BACKGROUND TAB)
     // =========================================================================
     async function executeChatGPTJob(job) {
-        // 1. Snapshot URL các ảnh hiện có
-        const existingImages = new Set(
-            Array.from(
-                document.querySelectorAll(
-                    'img, a[download], a[href*="backend-api/estuary"], a[href*="oaiusercontent"]',
-                ),
-            )
-                .map((el) => el.currentSrc || el.src || el.href || el.getAttribute('src') || el.getAttribute('href'))
-                .filter(Boolean),
+        // Lấy container tin nhắn gần nhất của Assistant
+        const getLastAssistantMsg = () => {
+            const list = document.querySelectorAll(
+                '[data-message-author-role="assistant"], article, div[class*="agent-turn"], div[data-testid^="conversation-turn-"]',
+            );
+            return list.length > 0 ? list[list.length - 1] : null;
+        };
+
+        // Nhận diện ChatGPT đang trong trạng thái sinh phản hồi / tạo ảnh
+        const isChatGPTGenerating = () => {
+            // 1. Nếu nút Send đã quay trở lại và sáng đèn (không disabled) -> Khẳng định AI đã hoàn tất
+            const sendBtn = document.querySelector('button[data-testid="send-button"]');
+            if (
+                sendBtn &&
+                isElementVisible(sendBtn) &&
+                !sendBtn.disabled &&
+                sendBtn.getAttribute('aria-disabled') !== 'true'
+            ) {
+                return false;
+            }
+
+            // 2. Nút Stop đặc trưng của ChatGPT
+            const stopBtn = document.querySelector('button[data-testid="stop-button"], button.stop-button');
+            if (stopBtn && isElementVisible(stopBtn)) {
+                return true;
+            }
+
+            // 3. Trạng thái spinner đang hoạt động
+            const spinner = document.querySelector('[data-testid="composer-speech-button"] svg.animate-spin');
+            if (spinner && isElementVisible(spinner)) {
+                return true;
+            }
+
+            return false;
+        };
+
+        // Kiểm tra từ chối do chính sách an toàn/nội dung của ChatGPT
+        const checkChatGPTRefusal = () => {
+            const lastMsg = getLastAssistantMsg();
+            const textToCheck = normalizeText((lastMsg?.innerText || '') + '\n' + (document.body.innerText || ''));
+
+            const refusalKeywords = [
+                'cannot generate that image',
+                "can't generate that image",
+                'cannot generate images',
+                "can't generate images",
+                'cannot create that image',
+                "can't create that image",
+                'cannot create images',
+                "can't create images",
+                'unable to generate',
+                'unable to create',
+                'cannot fulfill this request',
+                "can't fulfill this request",
+                'unable to fulfill',
+                'content policy',
+                'usage policy',
+                'usage policies',
+                'safety guidelines',
+                'chinh sach noi dung',
+                'chinh sach su dung',
+                'khong the tao anh',
+                'khong the ve',
+                'khong the tao hinh anh',
+                'khong the thuc hien yeu cau',
+                'vi pham chinh sach',
+                'sorry, i cannot',
+                "sorry, i can't",
+                "i'm sorry, but i cannot",
+                "i'm sorry, but i can't",
+                'i apologize, but i cannot',
+                "i apologize, but i can't",
+                'not allowed to generate',
+                'not permitted to generate',
+                'against our safety policies',
+                'against our policy',
+                'against content guidelines',
+                'cannot depict',
+                "can't depict",
+                'cannot illustrate',
+                "can't illustrate",
+            ];
+            return refusalKeywords.some((kw) => textToCheck.includes(kw));
+        };
+
+        // 0. Pre-prompt Idle Guard: Nếu ChatGPT đang dở lượt sinh trước, chờ tối đa 15s
+        if (isChatGPTGenerating()) {
+            console.log('[Kaiz Bridge][ChatGPT] ⏳ AI đang bận sinh phản hồi từ trước, chờ hoàn tất...');
+            const waitIdleStart = Date.now();
+            while (Date.now() - waitIdleStart < 15000) {
+                if (!isChatGPTGenerating()) break;
+                await backgroundSafeDelay(500);
+            }
+        }
+
+        // 1. Snapshot toàn diện các ảnh & định danh cũ trên trang trước khi gửi prompt
+        const existingImages = snapshotExistingImages();
+        const prePromptUserTurnsCount = document.querySelectorAll(
+            '[data-message-author-role="user"], article[data-testid^="conversation-turn-"]:has([data-message-author-role="user"]), div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
+        ).length;
+        console.log(
+            `[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} định danh ảnh/tài nguyên cũ trên trang (Số lượt hỏi cũ: ${prePromptUserTurnsCount}).`,
         );
-        console.log(`[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} ảnh/tài nguyên cũ trên trang.`);
 
         // 2. Chờ tìm ô input nhập prompt (ProseMirror #prompt-textarea hoặc textarea)
         let inputEl = null;
@@ -945,7 +1540,7 @@
                 document.querySelector('textarea#prompt-textarea') ||
                 document.querySelector('textarea');
             if (inputEl) break;
-            await new Promise((r) => setTimeout(r, 200));
+            await backgroundSafeDelay(200);
         }
 
         if (!inputEl) {
@@ -1036,7 +1631,7 @@
         }
 
         console.log('[Kaiz Bridge][ChatGPT] Đã hoàn tất nhập prompt vào ô input.');
-        await new Promise((r) => setTimeout(r, 300));
+        await backgroundSafeDelay(300);
 
         // 4. Bấm nút gửi (Chờ nút kích hoạt trong background tab)
         const sendSelectors = [
@@ -1059,17 +1654,17 @@
                     btn.getAttribute('aria-disabled') !== 'true' &&
                     (btn.offsetParent !== null || btn.isConnected)
                 ) {
-                    const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-                    const testId = (btn.getAttribute('data-testid') || '').toLowerCase();
+                    const label = normalizeText(btn.getAttribute('aria-label') || '');
+                    const testId = normalizeText(btn.getAttribute('data-testid') || '');
                     const isExcluded =
                         testId.includes('speech') ||
                         testId.includes('stop') ||
                         label.includes('mic') ||
                         label.includes('voice') ||
-                        label.includes('nói') ||
+                        label.includes('noi') ||
                         label.includes('dictate') ||
-                        label.includes('ngừng') ||
-                        label.includes('dừng') ||
+                        label.includes('ngung') ||
+                        label.includes('dung') ||
                         label.includes('stop') ||
                         label.includes('cancel');
                     if (!isExcluded) {
@@ -1079,11 +1674,16 @@
                 }
             }
             if (sendBtn) break;
-            await new Promise((r) => setTimeout(r, 100));
+            await backgroundSafeDelay(100);
         }
 
         if (sendBtn) {
-            console.log('[Kaiz Bridge][ChatGPT] Tìm thấy send-button hợp lệ, click nút gửi duy nhất 1 lần:', sendBtn);
+            const sendDesc =
+                sendBtn.getAttribute('aria-label') ||
+                sendBtn.getAttribute('data-testid') ||
+                sendBtn.className ||
+                sendBtn.tagName;
+            console.log(`[Kaiz Bridge][ChatGPT] Tìm thấy send-button hợp lệ (${sendDesc}), click nút gửi duy nhất 1 lần.`);
             sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.click();
@@ -1116,50 +1716,62 @@
         // 5. CƠ CHẾ 2 GIAI ĐOẠN DỰA TRÊN VÒNG ĐỜI NÚT STOP (LIFECYCLE STATE MACHINE)
         const timeoutMs = 150000;
         const startTime = Date.now();
+        let promptAnchor = null;
         console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi prompt. Bắt đầu Phase 1: Chờ nút Stop xuất hiện...');
 
-        const isChatGPTGenerating = () => {
-            const stopSelectors = [
-                'button[data-testid="stop-button"]',
-                'button[aria-label*="Stop" i]',
-                'button[aria-label*="Dừng" i]',
-                'button[aria-label*="Ngừng" i]',
-                'button.stop-button',
-            ];
-            for (const sel of stopSelectors) {
-                const btn = document.querySelector(sel);
-                if (btn && !btn.disabled && btn.getAttribute('aria-disabled') !== 'true') {
-                    return true;
+        // Định vị phần tử prompt người dùng vừa gửi để làm Cột mốc tọa độ DOM
+        const findChatGPTPromptAnchor = () => {
+            const userTurns = Array.from(
+                document.querySelectorAll(
+                    '[data-message-author-role="user"], article[data-testid^="conversation-turn-"]:has([data-message-author-role="user"]), div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
+                ),
+            );
+            const promptSnippet = normalizeText((job.prompt || '').trim().slice(0, 40));
+
+            if (userTurns.length > 0) {
+                // 1. Ưu tiên tuyệt đối: Tìm user turn thực sự chứa promptSnippet
+                for (let i = userTurns.length - 1; i >= 0; i--) {
+                    const text = normalizeText(userTurns[i].textContent || '');
+                    if (promptSnippet && text.includes(promptSnippet)) {
+                        return userTurns[i];
+                    }
+                }
+                // 2. Chỉ chấp nhận turn cuối nếu số lượng user turn ĐÃ TĂNG so với trước khi gửi
+                if (userTurns.length > prePromptUserTurnsCount) {
+                    return userTurns[userTurns.length - 1];
                 }
             }
-            // Kiểm tra trạng thái streaming / thinking của ChatGPT
-            const streaming = document.querySelector(
-                '.result-streaming, div[class*="streaming"], div[class*="result-thinking"]',
-            );
-            if (streaming) return true;
-            return false;
-        };
 
-        // Lấy container tin nhắn gần nhất của Assistant
-        const getLastAssistantMsg = () => {
-            const list = document.querySelectorAll(
-                '[data-message-author-role="assistant"], article, div[class*="agent-turn"], div[data-testid^="conversation-turn-"]',
-            );
-            return list.length > 0 ? list[list.length - 1] : null;
-        };
+            // 3. Fallback: Quét các thẻ p, div bên ngoài editor nếu không tìm thấy selector turn chuẩn
+            // LƯU Ý SỐNG CÒN: Tuyệt đối LOẠI BỎ form/composer/footer ở đáy trang
+            // để tránh biến composer thành anchor khiến toàn bộ ảnh trong chat bị coi là "nằm trước anchor"!
+            if (promptSnippet) {
+                const candidates = Array.from(document.querySelectorAll('p, div, span')).filter((el) => {
+                    const text = normalizeText(el.textContent || '');
+                    return (
+                        text &&
+                        text.includes(promptSnippet) &&
+                        !el.closest('form') &&
+                        !el.closest('footer') &&
+                        !el.closest('#prompt-textarea') &&
+                        !el.closest('textarea') &&
+                        !el.closest('[class*="composer"]') &&
+                        !el.closest('[data-testid*="composer"]')
+                    );
+                });
+                if (candidates.length > 0) {
+                    return candidates[candidates.length - 1];
+                }
+            }
 
-        // Kiểm tra xem có placeholder/skeleton của tiến trình tạo ảnh DALL-E đang chạy không
-        const isImageStillLoadingOrRendering = () => {
-            const lastMsg = getLastAssistantMsg() || document.body;
-            const placeholder = lastMsg.querySelector(
-                'div[class*="aspect-"], div[class*="skeleton"], .animate-pulse, svg[class*="spin"], div[aria-label*="image" i], div[aria-label*="ảnh" i], div[class*="loading"], [data-testid*="image-placeholder"]',
-            );
-            return !!placeholder;
+            // Tuyệt đối KHÔNG trả về turn cũ nếu chưa thấy turn mới trong DOM!
+            return null;
         };
 
         // Hàm tìm ứng viên ảnh mới sinh từ ChatGPT (Ưu tiên quét tin nhắn cuối cùng trước để phản hồi cực nhanh)
         const findChatGPTImageCandidate = () => {
             const lastMsg = getLastAssistantMsg();
+            // Quét trong lastMsg trước, sau đó fallback sang document.body để không bỏ sót các card ảnh nằm ngoài container
             const searchScopes = lastMsg ? [lastMsg, document.body] : [document.body];
 
             for (const scope of searchScopes) {
@@ -1168,15 +1780,29 @@
                 for (let i = currentImages.length - 1; i >= 0; i--) {
                     const img = currentImages[i];
                     const src = img.currentSrc || img.src || img.getAttribute('src') || '';
-                    if (!src || existingImages.has(src)) continue;
+                    if (!src) continue;
 
-                    // Nhận diện URL ảnh đặc trưng của ChatGPT
+                    // Kiểm tra Cột mốc tọa độ DOM:
+                    // CHỈ áp dụng lọc anchor nếu trên trang ĐÃ TỒN TẠI ảnh cũ từ trước khi gửi prompt (existingImages.size > 0).
+                    // Nếu trước đó trang chưa có ảnh nào (existingImages.size === 0), mọi ảnh lớn mới xuất hiện chắc chắn là ảnh của lượt này!
+                    if (promptAnchor && promptAnchor.isConnected && existingImages && existingImages.size > 0) {
+                        const pos = promptAnchor.compareDocumentPosition(img);
+                        if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
+                            continue;
+                        }
+                        if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+                            continue;
+                        }
+                    }
+
+                    // Bất kể có promptAnchor hay không, LUÔN loại trừ ảnh đã có trong existingImages snapshot
+                    if (isOldImage(img, existingImages)) continue;
+
+                    // Nhận diện URL ảnh đặc trưng của ChatGPT (Loại bỏ oaistatic.com vì đó là icon giao diện)
                     const isEstuary = src.includes('backend-api/estuary/content') || src.includes('estuary/content');
                     const isOAI =
                         src.includes('oaiusercontent.com') ||
-                        src.includes('files.oaiusercontent') ||
-                        src.includes('openai.com') ||
-                        src.includes('oaistatic.com');
+                        src.includes('files.oaiusercontent');
                     const isBlobOrData = src.startsWith('blob:') || src.startsWith('data:image');
                     const isChatGPTPattern = isEstuary || isOAI || isBlobOrData;
 
@@ -1198,7 +1824,11 @@
                         (img.naturalWidth > 0 && img.naturalWidth <= 64) ||
                         (img.clientHeight > 0 && img.clientHeight <= 64);
 
-                    if (!isAvatar && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg))) {
+                    const isBigEnough = isValidImageDimensions(img);
+
+                    // Chấp nhận nếu: không phải avatar, kích thước lớn, VÀ:
+                    // (thuộc domain ChatGPT HOẶC có alt sinh ảnh HOẶC nằm trong lastMsg HOẶC là ảnh mới khi trang ban đầu chưa có ảnh)
+                    if (!isAvatar && isBigEnough && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg) || !existingImages || existingImages.size === 0)) {
                         return { el: img, src: src };
                     }
                 }
@@ -1210,67 +1840,14 @@
                 for (let i = downloadLinks.length - 1; i >= 0; i--) {
                     const a = downloadLinks[i];
                     const href = a.href || a.getAttribute('href') || '';
-                    if (!href || existingImages.has(href)) continue;
-                    if (href.includes('estuary') || href.includes('oaiusercontent')) {
+                    if (!href || isOldImage(a, existingImages)) continue;
+                    if (href.includes('estuary') || href.includes('oaiusercontent') || (!existingImages || existingImages.size === 0)) {
                         return { el: a, src: href };
                     }
                 }
             }
 
             return null;
-        };
-
-        const checkChatGPTRefusal = () => {
-            const lastMsg = getLastAssistantMsg();
-            const textToCheck = ((lastMsg?.innerText || '') + '\n' + (document.body.innerText || '')).toLowerCase();
-
-            const refusalKeywords = [
-                'cannot generate that image',
-                "can't generate that image",
-                'cannot generate images',
-                "can't generate images",
-                'cannot create that image',
-                "can't create that image",
-                'cannot create images',
-                "can't create images",
-                'unable to generate',
-                'unable to create',
-                'cannot fulfill this request',
-                "can't fulfill this request",
-                'unable to fulfill',
-                'content policy',
-                'usage policy',
-                'usage policies',
-                'safety guidelines',
-                'chính sách nội dung',
-                'chính sách sử dụng',
-                'không thể tạo ảnh',
-                'không thể vẽ',
-                'không thể tạo hình ảnh',
-                'không thể thực hiện yêu cầu',
-                'vi phạm chính sách',
-                'sorry, i cannot',
-                "sorry, i can't",
-                "i'm sorry, but i cannot",
-                "i'm sorry, but i can't",
-                'i apologize, but i cannot',
-                "i apologize, but i can't",
-                'not allowed to generate',
-                'not permitted to generate',
-                'against our safety policies',
-                'against our policy',
-                'against content guidelines',
-                'cannot depict',
-                "can't depict",
-                'cannot illustrate',
-                "can't illustrate",
-            ];
-            for (const kw of refusalKeywords) {
-                if (textToCheck.includes(kw)) {
-                    return true;
-                }
-            }
-            return false;
         };
 
         const deliverChatGPTImageResult = async (candidate) => {
@@ -1284,7 +1861,7 @@
 
             // Kỹ thuật 1 (Tối ưu nhất cho Background Tab): Fetch trực tiếp qua network với credentials
             // Chạy ngầm 100% độc lập, không phụ thuộc vào GPU rasterization hay canvas
-            if (src && !src.startsWith('data:')) {
+            if (src && !src.startsWith('data:') && !src.startsWith('blob:')) {
                 try {
                     console.log('[Kaiz Bridge][ChatGPT] 🚀 Đang tải blob ảnh trực tiếp qua fetch credentials...');
                     const res = await fetch(src, { credentials: 'include' });
@@ -1315,7 +1892,42 @@
                 }
             }
 
-            // Kỹ thuật 3: Fallback Canvas (chỉ dùng nếu src là data:image hoặc fetch thất bại và element là img)
+            // Kỹ thuật 3: Fallback Offscreen Image với crossOrigin
+            if (!base64 && src && !src.startsWith('data:')) {
+                try {
+                    base64 = await new Promise((resolve, reject) => {
+                        const tempImg = new Image();
+                        tempImg.crossOrigin = 'anonymous';
+                        tempImg.onload = () => {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = tempImg.naturalWidth || 1024;
+                                canvas.height = tempImg.naturalHeight || 1024;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(tempImg, 0, 0);
+                                const dataUrl = canvas.toDataURL('image/png');
+                                if (dataUrl && dataUrl.startsWith('data:image/png') && dataUrl.length > 2000) {
+                                    resolve(dataUrl);
+                                } else {
+                                    reject(new Error('Canvas rỗng'));
+                                }
+                            } catch (err) {
+                                reject(err);
+                            }
+                        };
+                        tempImg.onerror = reject;
+                        tempImg.src = src;
+                        setTimeout(() => reject(new Error('Timeout tải tempImg ChatGPT')), 4000);
+                    });
+                    if (base64) {
+                        console.log('[Kaiz Bridge][ChatGPT] ✅ Trích xuất Base64 thành công qua Offscreen Canvas!');
+                    }
+                } catch (canvasErr) {
+                    // Tiếp tục fallback DOM Canvas
+                }
+            }
+
+            // Kỹ thuật 4: Fallback DOM Canvas (chỉ dùng nếu src là data:image hoặc fetch thất bại và element là img)
             if (!base64 && candidate.el && candidate.el.tagName && candidate.el.tagName.toLowerCase() === 'img') {
                 try {
                     const img = candidate.el;
@@ -1334,7 +1946,7 @@
                 }
             }
 
-            // Kỹ thuật 4: Nếu src là data:image sẵn
+            // Kỹ thuật 5: Nếu src là data:image sẵn
             if (!base64 && src.startsWith('data:image')) {
                 base64 = src;
             }
@@ -1354,17 +1966,20 @@
             console.log('[Kaiz Bridge][ChatGPT] 🚀 Đã gửi kết quả Base64 về SillyTavern thành công!');
         };
 
-        // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN HOẶC ẢNH XUẤT HIỆN SỚM (Tối đa 30s phòng nút Stop hiện trễ)
+        // =========================================================================
+        // GIAI ĐOẠN 1: CHỜ NÚT STOP XUẤT HIỆN (Khởi động tiến trình)
+        // Tuyệt đối KHÔNG bắt ảnh sớm trong Phase 1!
+        // =========================================================================
         let hasStarted = false;
         const phase1MaxWait = 30000; // Tối đa 30s: ChatGPT đôi khi bắt đầu gen nhưng nút Stop hiện sau vài giây
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
-            const earlyImg = findChatGPTImageCandidate();
-            if (earlyImg && earlyImg.src) {
-                console.log('[Kaiz Bridge][ChatGPT] 🎯 Phát hiện ảnh sớm trong Phase 1! Trích xuất ngay...');
-                await deliverChatGPTImageResult(earlyImg);
-                return;
+            if (!promptAnchor || !promptAnchor.isConnected) {
+                promptAnchor = findChatGPTPromptAnchor();
+                if (promptAnchor) {
+                    console.log('[Kaiz Bridge][ChatGPT] 📍 Đã định vị Cột mốc Prompt Anchor:', promptAnchor);
+                }
             }
 
             if (isChatGPTGenerating()) {
@@ -1377,15 +1992,10 @@
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
 
-            await new Promise((r) => setTimeout(r, 200));
+            await backgroundSafeDelay(200);
         }
 
         if (!hasStarted) {
-            const lastCheckImg = findChatGPTImageCandidate();
-            if (lastCheckImg && lastCheckImg.src) {
-                await deliverChatGPTImageResult(lastCheckImg);
-                return;
-            }
             if (checkChatGPTRefusal()) {
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
@@ -1394,84 +2004,103 @@
             );
         }
 
-        // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI ẢNH XUẤT HIỆN HOẶC KẾT THÚC (Tối ưu chu kỳ quét 300ms)
+        // =========================================================================
+        // GIAI ĐOẠN 2: THEO DÕI TIẾN TRÌNH & ĐÓN ẢNH (HỆ THỐNG TRIGGER KÉP THÔNG MINH)
+        // Trigger A: Theo dõi vòng đời nút Stop (chuẩn mực khi web hiển thị hoặc React cập nhật kịp).
+        // Trigger B: Nhận diện ảnh mới đã sẵn sàng sau promptAnchor (vượt qua việc React hoãn cập nhật nút Stop trong background tab).
+        // =========================================================================
         console.log('[Kaiz Bridge][ChatGPT] ⏳ Đang theo dõi tiến trình tạo ảnh...');
         let finishedCheckCount = 0;
+        let candidateSeenCount = 0;
+        let lastCandidateSrc = '';
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 300));
+            await backgroundSafeDelay(400);
 
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
 
-            // 1. Kiểm tra ngay nếu ảnh đã xuất hiện trong DOM (bất kể browser đã render xong bitmap hay chưa)
-            const candidate = findChatGPTImageCandidate();
-            if (candidate && candidate.src) {
-                console.log('[Kaiz Bridge][ChatGPT] 🎯 Bắt được ảnh trong Phase 2! Trích xuất ngay trong nền...');
-                await deliverChatGPTImageResult(candidate);
-                return;
+            // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy hoặc bị unmount
+            if (!promptAnchor || !promptAnchor.isConnected) {
+                promptAnchor = findChatGPTPromptAnchor();
+                if (promptAnchor) {
+                    console.log('[Kaiz Bridge][ChatGPT] 📍 Đã cập nhật Cột mốc Prompt Anchor:', promptAnchor);
+                }
             }
 
-            // 2. Bắt tức thì nếu ChatGPT gõ câu từ chối trong khi stream
+            // Bắt tức thì nếu ChatGPT gõ câu từ chối trong khi stream
             if (checkChatGPTRefusal()) {
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
 
-            // 3. Theo dõi vòng đời nút Stop
+            // TRIGGER B (CHỦ ĐỘNG - THÍCH ỨNG BACKGROUND TAB):
+            // Bỏ qua trạng thái nút Stop bị kẹt/hoãn do React hoãn cập nhật composer UI trong background tab
+            // Điều kiện an toàn tuyệt đối chống bắt nhầm ảnh cũ:
+            // 1. Đã qua ít nhất 40s (theo yêu cầu: ChatGPT tạo ảnh trong khoảng ~50s).
+            // 2. Đã định vị được promptAnchor đang kết nối trong DOM.
+            // 3. Ứng viên ảnh nằm strictly SAU promptAnchor và KHÔNG có trong existingImages snapshot ban đầu.
+            // 4. URL ảnh ổn định trong 2 nhịp kiểm tra (~800ms).
+            const CHATGPT_SAFE_CAPTURE_DELAY = 40000;
+            if (Date.now() - startTime >= CHATGPT_SAFE_CAPTURE_DELAY && promptAnchor && promptAnchor.isConnected) {
+                const liveCandidate = findChatGPTImageCandidate();
+                if (liveCandidate && liveCandidate.src) {
+                    const candidateSrc = liveCandidate.src;
+                    if (candidateSrc === lastCandidateSrc) {
+                        candidateSeenCount++;
+                    } else {
+                        lastCandidateSrc = candidateSrc;
+                        candidateSeenCount = 1;
+                    }
+
+                    if (candidateSeenCount >= 2) {
+                        console.log(
+                            `[Kaiz Bridge][ChatGPT] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Đã qua ${Math.round((Date.now() - startTime) / 1000)}s, bỏ qua nút Stop trong background tab). Trích xuất ngay...`,
+                        );
+                        try {
+                            await deliverChatGPTImageResult(liveCandidate);
+                            return;
+                        } catch (err) {
+                            console.warn(
+                                '[Kaiz Bridge][ChatGPT] Thử trích xuất ảnh sớm chưa thành công, tiếp tục theo dõi:',
+                                err,
+                            );
+                        }
+                    }
+                } else {
+                    candidateSeenCount = 0;
+                    lastCandidateSrc = '';
+                }
+            }
+
+            // TRIGGER A (CHU KỲ CHUẨN - THEO DÕI VÒNG ĐỜI NÚT STOP):
             const isGen = isChatGPTGenerating();
             if (isGen) {
                 finishedCheckCount = 0;
             } else {
                 finishedCheckCount++;
-                // Xác nhận nút Stop đã biến mất sau 3 nhịp (3 x 300ms ≈ 0.9s)
-                if (finishedCheckCount >= 3) {
-                    console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất. Phân tích kết quả...');
-
-                    // Kiểm tra ảnh ngay lập tức
-                    const immediateCandidate = findChatGPTImageCandidate();
-                    if (immediateCandidate && immediateCandidate.src) {
-                        await deliverChatGPTImageResult(immediateCandidate);
-                        return;
-                    }
+                // Xác nhận nút Stop đã biến mất sau 2 nhịp (2 x 400ms ≈ 0.8s)
+                if (finishedCheckCount >= 2) {
+                    console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất (AI hoàn tất). Quét ảnh kết quả...');
 
                     // Kiểm tra từ chối ngay sau khi stop
                     if (checkChatGPTRefusal()) {
                         throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
                     }
 
-                    // Kiểm tra xem DALL-E có đang tải ảnh không (thẻ skeleton / placeholder loading)
-                    const isStillLoading = isImageStillLoadingOrRendering();
-
-                    if (isStillLoading) {
-                        console.log(
-                            '[Kaiz Bridge][ChatGPT] 🖼️ Phát hiện placeholder đang tải ảnh DALL-E. Kiên nhẫn chờ tối đa 18s...',
-                        );
-                        const waitStart = Date.now();
-                        // Chờ tối đa 18s (thay vì 40s mù quáng)
-                        while (Date.now() - waitStart < 18000) {
-                            wakeUpBackgroundRendering();
-                            const finalCandidate = findChatGPTImageCandidate();
-                            if (finalCandidate && finalCandidate.src) {
-                                console.log('[Kaiz Bridge][ChatGPT] 🖼️ Đã phát hiện thẻ ảnh, trích xuất ngay...');
-                                await deliverChatGPTImageResult(finalCandidate);
-                                return;
-                            }
-                            if (checkChatGPTRefusal()) {
-                                throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
-                            }
-                            await new Promise((r) => setTimeout(r, 300));
-                        }
-                    } else {
-                        // Không hề có placeholder ảnh nào -> ChatGPT chỉ trả lời bằng chữ hoặc từ chối không kèm keyword
-                        // Chỉ chờ 1.5s phòng khi React trễ nhịp mount
-                        console.log('[Kaiz Bridge][ChatGPT] Không có placeholder ảnh. Chờ 1.5s xác nhận hoàn tất...');
-                        await new Promise((r) => setTimeout(r, 1500));
+                    // Quét lặp lại tối đa 18 giây phòng khi browser cần thời gian mount và giải mã ảnh DALL-E
+                    const scanStart = Date.now();
+                    while (Date.now() - scanStart < 18000) {
                         wakeUpBackgroundRendering();
                         const finalCandidate = findChatGPTImageCandidate();
                         if (finalCandidate && finalCandidate.src) {
+                            console.log('[Kaiz Bridge][ChatGPT] 🖼️ Đã phát hiện thẻ ảnh, trích xuất ngay...');
                             await deliverChatGPTImageResult(finalCandidate);
                             return;
                         }
+                        if (checkChatGPTRefusal()) {
+                            throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
+                        }
+                        await backgroundSafeDelay(400);
                     }
 
                     throw new Error(

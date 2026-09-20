@@ -10,6 +10,7 @@ import {
     DEFAULT_CORE_BEHAVIOR,
     DEFAULT_CORE_PREFILL,
     DEFAULT_CORE_COT_PROMPT,
+    DEFAULT_VIEW_SYSTEM_PROMPT,
 } from '../core/defaults';
 
 const escapeHtml = (s: string): string =>
@@ -886,6 +887,28 @@ export class SettingsUI {
             ctx.saveSettingsDebounced();
         });
 
+        $('#kaiz-web-image-view-depth').val(settings.viewContextDepth ?? 5);
+        $('#kaiz-web-image-view-depth').on('input change', function (this: HTMLInputElement) {
+            const val = parseInt(this.value, 10);
+            settings.viewContextDepth = !isNaN(val) && val > 0 ? val : 5;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-view-prompt').val(settings.viewSystemPrompt || DEFAULT_VIEW_SYSTEM_PROMPT);
+        $('#kaiz-web-image-view-prompt').on('input', function (this: HTMLTextAreaElement) {
+            settings.viewSystemPrompt = this.value;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-reset-view-prompt').on('click', () => {
+            $('#kaiz-web-image-view-prompt').val(DEFAULT_VIEW_SYSTEM_PROMPT);
+            settings.viewSystemPrompt = DEFAULT_VIEW_SYSTEM_PROMPT;
+            ctx.saveSettingsDebounced();
+            if (typeof toastr !== 'undefined') {
+                toastr.success('Đã khôi phục prompt lõi của lệnh /view về mặc định.');
+            }
+        });
+
         const updateBridgeStatusUI = () => {
             const status = WebImageBridge.getStatus();
             const $userScriptStatus = $('#kaiz-bridge-status-userscript');
@@ -908,24 +931,24 @@ export class SettingsUI {
                 $geminiStatus
                     .removeClass('badge-danger')
                     .addClass('badge-success')
-                    .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+                    .html('<i class="fa-solid fa-circle"></i> Sẵn sàng');
             } else {
                 $geminiStatus
                     .removeClass('badge-success')
                     .addClass('badge-danger')
-                    .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+                    .html('<i class="fa-solid fa-circle"></i> Chưa mở tab');
             }
 
             if (status.chatgptOnline) {
                 $chatgptStatus
                     .removeClass('badge-danger')
                     .addClass('badge-success')
-                    .html('<i class="fa-solid fa-circle"></i> 🟢 Sẵn sàng');
+                    .html('<i class="fa-solid fa-circle"></i> Sẵn sàng');
             } else {
                 $chatgptStatus
                     .removeClass('badge-success')
                     .addClass('badge-danger')
-                    .html('<i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab');
+                    .html('<i class="fa-solid fa-circle"></i> Chưa mở tab');
             }
         };
 

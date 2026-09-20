@@ -717,6 +717,85 @@
                                 </span>
                             </div>
 
+                            <!-- Cấu hình Slash Command /view -->
+                            <div
+                                class="kaiz-form-group"
+                                style="
+                                    margin-bottom: 12px;
+                                    border-top: 1px solid rgba(255, 255, 255, 0.08);
+                                    padding-top: 12px;
+                                "
+                            >
+                                <label class="kaiz-label" for="kaiz-web-image-view-depth">
+                                    <i class="fa-solid fa-layer-group"></i> Độ sâu tin nhắn chính văn cho lệnh /view:
+                                </label>
+                                <div style="display: flex; align-items: center; gap: 8px">
+                                    <input
+                                        id="kaiz-web-image-view-depth"
+                                        type="number"
+                                        min="1"
+                                        max="50"
+                                        class="kaiz-input interactable"
+                                        placeholder="5"
+                                        style="width: 80px"
+                                    />
+                                    <span style="font-size: 0.85em; opacity: 0.8"
+                                        >tin nhắn gần nhất (Tin nhắn cuối là trọng tâm)</span
+                                    >
+                                </div>
+                                <span
+                                    class="kaiz-help-text"
+                                    style="font-size: 0.8em; opacity: 0.75; display: block; margin-top: 4px"
+                                >
+                                    Số tin nhắn chính văn gần nhất Agent đọc để nắm bắt bối cảnh câu chuyện trước khi
+                                    tạo prompt vẽ ảnh.
+                                </span>
+                            </div>
+
+                            <div class="kaiz-form-group" style="margin-bottom: 12px">
+                                <div
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                        margin-bottom: 4px;
+                                    "
+                                >
+                                    <label class="kaiz-label" for="kaiz-web-image-view-prompt" style="margin-bottom: 0">
+                                        <i class="fa-solid fa-brain"></i> Prompt lõi (System Directive) của lệnh /view:
+                                    </label>
+                                    <button
+                                        id="kaiz-reset-view-prompt"
+                                        type="button"
+                                        class="kaiz-btn kaiz-btn-secondary kaiz-btn-xs interactable"
+                                        title="Khôi phục prompt lõi về mặc định"
+                                        style="font-size: 0.75em; padding: 2px 8px"
+                                    >
+                                        <i class="fa-solid fa-rotate-left"></i> Khôi phục mặc định
+                                    </button>
+                                </div>
+                                <textarea
+                                    id="kaiz-web-image-view-prompt"
+                                    class="kaiz-input interactable"
+                                    rows="4"
+                                    placeholder="Chỉ thị cho Agent phân tích bối cảnh để tạo Image Prompt..."
+                                    style="
+                                        resize: vertical;
+                                        font-size: 0.82em;
+                                        width: 100%;
+                                        box-sizing: border-box;
+                                        line-height: 1.4;
+                                    "
+                                ></textarea>
+                                <span
+                                    class="kaiz-help-text"
+                                    style="font-size: 0.8em; opacity: 0.75; display: block; margin-top: 4px"
+                                >
+                                    Chỉ dẫn Agent cách phân tích nhân vật, biểu cảm, cử chỉ, bối cảnh, góc máy và ánh
+                                    sáng để sáng tạo prompt vẽ ảnh.
+                                </span>
+                            </div>
+
                             <!-- Trạng thái kết nối thời gian thực -->
                             <div
                                 class="kaiz-bridge-status-card"
@@ -741,13 +820,13 @@
                                     <div style="display: flex; justify-content: space-between; align-items: center">
                                         <span>Gemini Web (gemini.google.com):</span>
                                         <span id="kaiz-bridge-status-gemini" class="kaiz-status-pill badge-danger"
-                                            ><i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab</span
+                                            ><i class="fa-solid fa-circle"></i> Chưa mở tab</span
                                         >
                                     </div>
                                     <div style="display: flex; justify-content: space-between; align-items: center">
                                         <span>ChatGPT Web (chatgpt.com):</span>
                                         <span id="kaiz-bridge-status-chatgpt" class="kaiz-status-pill badge-danger"
-                                            ><i class="fa-solid fa-circle"></i> 🔴 Chưa mở tab</span
+                                            ><i class="fa-solid fa-circle"></i> Chưa mở tab</span
                                         >
                                     </div>
                                 </div>
@@ -763,8 +842,9 @@
                                     2. Cài đặt script <b>Kaiz Web Image Bridge</b>.<br />
                                     3. Mở sẵn 1 tab <code>gemini.google.com</code> hoặc <code>chatgpt.com</code> (đã
                                     đăng nhập).<br />
-                                    4. Trong khung chat SillyTavern, gõ <code>/draw &lt;mô tả&gt;</code> hoặc để Agent
-                                    tự động vẽ ảnh!
+                                    4. Trong khung chat SillyTavern, gõ <code>/draw &lt;mô tả&gt;</code> hoặc gõ
+                                    <code>/view</code> (Agent tự phân tích tin nhắn mới nhất để tạo prompt vẽ ảnh) hoặc
+                                    để Agent tự vẽ ảnh!
                                 </p>
                                 <div class="kaiz-guide-action">
                                     <a
