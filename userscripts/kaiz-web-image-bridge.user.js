@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.19
+// @version      1.2.20
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -26,7 +26,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.19';
+    const BRIDGE_VERSION = '1.2.20';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -184,62 +184,104 @@
     console.log(`[Kaiz Bridge] 🌐 Web Adapter v${BRIDGE_VERSION} active for: ${CURRENT_TARGET} (Tab ID: ${TAB_ID})`);
 
     // =========================================================================
-    // HỆ THỐNG CHỐNG SLEEP, UNFREEZE RENDER & KICKSTART LIÊN TỤC TRONG BACKGROUND TAB
+    // HỆ THỐNG FORCE WEB ALWAYS-VISIBLE, UNFREEZE RENDER & CHỐNG SLEEP TOÀN DIỆN
     // =========================================================================
 
-    // 1. Visibility & Focus Spoofing: Đánh lừa trình duyệt và React luôn thấy tab ở trạng thái Active & Focused
+    const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
+
+    // 1. Ghi đè triệt để Visibility & Focus trên cả Prototype và Instance
     try {
-        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
-        const setProp = (target, prop, val) => {
+        const setProp = (target, prop, getter) => {
             try {
-                Object.defineProperty(target, prop, { get: () => val, configurable: true });
+                Object.defineProperty(target, prop, { get: getter, configurable: true });
             } catch (e) {}
         };
 
-        setProp(document, 'hidden', false);
-        setProp(document, 'visibilityState', 'visible');
-        setProp(document, 'webkitVisibilityState', 'visible');
+        const targets = [
+            document,
+            Document.prototype,
+            win.document,
+            win.Document?.prototype,
+        ].filter(Boolean);
 
-        try {
-            document.hasFocus = () => true;
-            Document.prototype.hasFocus = () => true;
-        } catch (e) {}
-
-        if (win && win.document) {
-            setProp(win.document, 'hidden', false);
-            setProp(win.document, 'visibilityState', 'visible');
-            setProp(win.document, 'webkitVisibilityState', 'visible');
+        for (const t of targets) {
+            setProp(t, 'hidden', () => false);
+            setProp(t, 'visibilityState', () => 'visible');
+            setProp(t, 'webkitHidden', () => false);
+            setProp(t, 'webkitVisibilityState', () => 'visible');
             try {
-                win.document.hasFocus = () => true;
-                if (win.Document && win.Document.prototype) {
-                    win.Document.prototype.hasFocus = () => true;
-                }
+                t.hasFocus = () => true;
             } catch (e) {}
         }
 
-        // Chặn sự kiện visibilitychange khi nó cố báo hiệu tab đã bị ẩn
-        const preventHide = (e) => {
-            if (document.visibilityState === 'hidden' || (e && e.target && e.target.hidden)) {
-                e.stopImmediatePropagation();
+        // 2. Chặn đứng 100% sự kiện ẩn tab / mất focus (Capture Phase)
+        const stopHideEvent = (e) => {
+            // CHỈ chặn sự kiện ở cấp window hoặc document, KHÔNG chặn input/textarea blur
+            if (e.type === 'blur' || e.type === 'focusout') {
+                const target = e.target;
+                if (
+                    target !== win &&
+                    target !== win.document &&
+                    target !== document &&
+                    target !== window
+                ) {
+                    return; // Cho phép blur bình thường trên input, textarea, editor...
+                }
             }
+            e.stopImmediatePropagation();
+            e.stopPropagation();
         };
-        window.addEventListener('visibilitychange', preventHide, true);
-        if (win) win.addEventListener('visibilitychange', preventHide, true);
+
+        const hideEvents = [
+            'visibilitychange',
+            'webkitvisibilitychange',
+            'blur',
+            'focusout',
+            'freeze',
+        ];
+
+        for (const evt of hideEvents) {
+            window.addEventListener(evt, stopHideEvent, true);
+            document.addEventListener(evt, stopHideEvent, true);
+            if (win && win !== window) {
+                win.addEventListener(evt, stopHideEvent, true);
+                if (win.document) {
+                    win.document.addEventListener(evt, stopHideEvent, true);
+                }
+            }
+        }
     } catch (e) {
         console.warn('[Kaiz Bridge] Visibility spoofing error:', e);
     }
 
-    // 2. Chống đóng băng requestAnimationFrame trong Background Tab
-    // Trình duyệt Chromium tự động dừng 100% requestAnimationFrame khi tab ở chế độ nền (background tab).
-    // React 18 / Next.js / animation transition mask của ChatGPT sẽ bị đứng hình chờ người dùng click tab mới chịu render ảnh!
-    // Bằng cách proxy rAF kèm timeout fallback 25ms, React sẽ render mượt mà ngay cả khi tab hoàn toàn chạy ngầm!
+    // 3. Giải phóng requestAnimationFrame bằng MessageChannel (Chống 0 FPS và timer throttling của Chromium)
     try {
-        const win = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window;
         const nativeRAF = (win.requestAnimationFrame || window.requestAnimationFrame).bind(win);
         const nativeCAF = (win.cancelAnimationFrame || window.cancelAnimationFrame).bind(win);
 
+        // Sử dụng MessageChannel để tạo nhịp macro-task siêu tốc (0-4ms) không bị bóp 1000ms ở background
+        const channel = new MessageChannel();
         const rafCallbacks = new Map();
         let nextRafId = 100000;
+        let portPending = false;
+
+        channel.port2.onmessage = () => {
+            portPending = false;
+            const now = performance.now();
+            const entries = Array.from(rafCallbacks.entries());
+            for (const [id, item] of entries) {
+                if (now - item.time >= 16) { // Chu kỳ ~60 FPS
+                    rafCallbacks.delete(id);
+                    try {
+                        item.cb(now);
+                    } catch (err) {}
+                }
+            }
+            if (rafCallbacks.size > 0 && !portPending) {
+                portPending = true;
+                channel.port1.postMessage(null);
+            }
+        };
 
         win.requestAnimationFrame = function (cb) {
             const id = ++nextRafId;
@@ -251,9 +293,7 @@
                     rafCallbacks.delete(id);
                     try {
                         cb(time);
-                    } catch (err) {
-                        /* ignore callback errors */
-                    }
+                    } catch (err) {}
                 }
             };
 
@@ -262,28 +302,30 @@
                 nativeId = nativeRAF(wrappedCb);
             } catch (e) {}
 
-            // Nếu Chromium đóng băng native rAF (tab ngầm), kích hoạt fallback sau 25ms
-            const timerId = setTimeout(() => {
+            rafCallbacks.set(id, {
+                cb: wrappedCb,
+                nativeId,
+                time: performance.now(),
+            });
+
+            if (!portPending) {
+                portPending = true;
+                channel.port1.postMessage(null);
+            }
+
+            // Fallback hẹn giờ dự phòng
+            setTimeout(() => {
                 if (!called) {
                     wrappedCb(performance.now());
                 }
             }, 25);
 
-            rafCallbacks.set(id, {
-                nativeId,
-                timerId,
-                cancel: () => {
-                    called = true;
-                    clearTimeout(timerId);
-                },
-            });
             return id;
         };
 
         win.cancelAnimationFrame = function (id) {
             const item = rafCallbacks.get(id);
             if (item) {
-                item.cancel();
                 if (item.nativeId) {
                     try {
                         nativeCAF(item.nativeId);
@@ -300,14 +342,57 @@
         console.warn('[Kaiz Bridge] requestAnimationFrame unfreezer error:', e);
     }
 
-    // 3. Hàm Kickstart & Đánh thức Rendering nền (Chống lazy loading / IntersectionObserver bị treo)
+    // 4. Silent Web Audio Keep-Alive: Bảo vệ tiến trình tab không bao giờ bị Chromium đóng băng ở cấp OS/Process
+    let audioContext = null;
+    const ensureAudioKeepAlive = () => {
+        try {
+            if (!audioContext) {
+                const AudioCtx =
+                    win.AudioContext ||
+                    win.webkitAudioContext ||
+                    window.AudioContext ||
+                    window.webkitAudioContext;
+                if (AudioCtx) {
+                    audioContext = new AudioCtx();
+                    const osc = audioContext.createOscillator();
+                    const gain = audioContext.createGain();
+                    gain.gain.value = 0.00001; // Hoàn toàn câm, không phát ra tiếng động
+                    osc.connect(gain);
+                    gain.connect(audioContext.destination);
+                    osc.start();
+                }
+            }
+            if (audioContext && audioContext.state === 'suspended') {
+                audioContext.resume().catch(() => {});
+            }
+        } catch (e) {}
+    };
+
+    // Tự động mở khóa AudioContext khi có bất kỳ thao tác nào
+    ['click', 'keydown', 'touchstart', 'mousedown'].forEach((evt) => {
+        window.addEventListener(evt, ensureAudioKeepAlive, { capture: true, passive: true, once: false });
+        if (win && win !== window) {
+            win.addEventListener(evt, ensureAudioKeepAlive, { capture: true, passive: true, once: false });
+        }
+    });
+    ensureAudioKeepAlive();
+
+    // 5. Hàm Kickstart & Đánh thức Rendering nền (Chống lazy loading / Virtual DOM bị treo)
     // TUYỆT ĐỐI KHÔNG gọi window.focus() hay win.focus() để tránh nhảy tab trình duyệt từ SillyTavern sang Web!
     const kickstartTab = () => {
         try {
+            ensureAudioKeepAlive();
             window.dispatchEvent(new Event('focus'));
             document.dispatchEvent(new Event('focus'));
             window.dispatchEvent(new Event('visibilitychange'));
             document.dispatchEvent(new Event('visibilitychange'));
+            if (win && win !== window) {
+                win.dispatchEvent(new Event('focus'));
+                if (win.document) {
+                    win.document.dispatchEvent(new Event('focus'));
+                    win.document.dispatchEvent(new Event('visibilitychange'));
+                }
+            }
         } catch (e) {
             /* ignore */
         }
@@ -323,7 +408,7 @@
                 img.loading = 'eager';
             }
 
-            // Tự động cuộn xuống đáy để kích hoạt trigger IntersectionObserver và mount tin nhắn mới
+            // Tự động cuộn nhẹ xuống đáy để kích hoạt trigger mount tin nhắn mới
             window.scrollTo(0, document.body.scrollHeight);
             const scrollContainers = document.querySelectorAll(
                 '[class*="react-scroll-to-bottom"], main, div[role="presentation"], div[class*="overflow-y-auto"]',
@@ -1049,26 +1134,43 @@
             return list.length > 0 ? list[list.length - 1] : null;
         };
 
-        // Nhận diện ChatGPT đang trong trạng thái sinh phản hồi / tạo ảnh (Nút Stop đang hiển thị)
+        // Kiểm tra phần tử có thực sự hiển thị trên màn hình không (không bị display:none, hidden, opacity:0)
+        const isElementVisible = (el) => {
+            if (!el) return false;
+            if (el.hidden || el.getAttribute('aria-hidden') === 'true') return false;
+            try {
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                    return false;
+                }
+            } catch (e) {}
+            return el.offsetParent !== null || el.getClientRects().length > 0;
+        };
+
+        // Nhận diện ChatGPT đang trong trạng thái sinh phản hồi / tạo ảnh
         const isChatGPTGenerating = () => {
-            const stopSelectors = [
-                'button[data-testid="stop-button"]',
-                'button[aria-label*="Stop" i]',
-                'button[aria-label*="Dừng" i]',
-                'button[aria-label*="Cancel" i]',
-                'button.stop-button',
-                '.text-2xl[aria-label*="Stop" i]',
-            ];
-            for (const sel of stopSelectors) {
-                const btn = document.querySelector(sel);
-                if (btn && (btn.offsetParent !== null || btn.isConnected)) return true;
+            // 1. Nếu nút Send đã quay trở lại và sáng đèn (không disabled) -> Khẳng định AI đã hoàn tất
+            const sendBtn = document.querySelector('button[data-testid="send-button"]');
+            if (
+                sendBtn &&
+                isElementVisible(sendBtn) &&
+                !sendBtn.disabled &&
+                sendBtn.getAttribute('aria-disabled') !== 'true'
+            ) {
+                return false;
             }
 
-            // Kiểm tra trạng thái streaming của ChatGPT (SVG spinner hoặc hiệu ứng typing)
-            const streaming = document.querySelector(
-                'button[data-testid="stop-button"], [data-testid="composer-speech-button"] svg.animate-spin',
-            );
-            if (streaming && (streaming.offsetParent !== null || streaming.isConnected)) return true;
+            // 2. Nút Stop đặc trưng của ChatGPT
+            const stopBtn = document.querySelector('button[data-testid="stop-button"], button.stop-button');
+            if (stopBtn && isElementVisible(stopBtn)) {
+                return true;
+            }
+
+            // 3. Trạng thái spinner đang hoạt động
+            const spinner = document.querySelector('[data-testid="composer-speech-button"] svg.animate-spin');
+            if (spinner && isElementVisible(spinner)) {
+                return true;
+            }
 
             return false;
         };
@@ -1590,8 +1692,8 @@
                 finishedCheckCount = 0;
             } else {
                 finishedCheckCount++;
-                // Xác nhận nút Stop đã biến mất sau 3 nhịp (3 x 300ms ≈ 0.9s)
-                if (finishedCheckCount >= 3) {
+                // Xác nhận nút Stop đã biến mất sau 2 nhịp (2 x 300ms ≈ 0.6s)
+                if (finishedCheckCount >= 2) {
                     console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất (AI hoàn tất). Quét ảnh kết quả...');
 
                     // Kiểm tra từ chối ngay sau khi stop
