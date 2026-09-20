@@ -151,6 +151,17 @@ jQuery(async () => {
                 ctx.extensionSettings[EXT_NAME].customImageSuffix = '';
             }
         }
+        // Dọn dẹp dứt điểm key cũ để không gây hiểu nhầm hoặc phục hồi cấu hình cũ
+        if (
+            ctx.extensionSettings[EXT_NAME].customImagePrompt !== undefined ||
+            ctx.extensionSettings[EXT_NAME].customImagePromptPosition !== undefined
+        ) {
+            delete ctx.extensionSettings[EXT_NAME].customImagePrompt;
+            delete ctx.extensionSettings[EXT_NAME].customImagePromptPosition;
+            try {
+                ctx.saveSettingsDebounced();
+            } catch (_e) {}
+        }
         if (ctx.extensionSettings[EXT_NAME].viewContextDepth === undefined) {
             ctx.extensionSettings[EXT_NAME].viewContextDepth = 5;
         }

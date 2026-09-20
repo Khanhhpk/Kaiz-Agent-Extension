@@ -878,12 +878,16 @@ export class SettingsUI {
         $('#kaiz-web-image-custom-prefix').val(settings.customImagePrefix || '');
         $('#kaiz-web-image-custom-prefix').on('input', function (this: HTMLTextAreaElement) {
             settings.customImagePrefix = this.value;
+            delete settings.customImagePrompt;
+            delete settings.customImagePromptPosition;
             ctx.saveSettingsDebounced();
         });
 
         $('#kaiz-web-image-custom-suffix').val(settings.customImageSuffix || '');
         $('#kaiz-web-image-custom-suffix').on('input', function (this: HTMLTextAreaElement) {
             settings.customImageSuffix = this.value;
+            delete settings.customImagePrompt;
+            delete settings.customImagePromptPosition;
             ctx.saveSettingsDebounced();
         });
 

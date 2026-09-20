@@ -6103,18 +6103,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   ? globalThis.SillyTavern.getContext()
                   : globalThis.window?.SillyTavern?.getContext?.() || null;
               const settings = ctx?.extensionSettings?.['kaiz_agent'];
-              let prefix = (settings?.customImagePrefix ?? '').trim();
-              let suffix = (settings?.customImageSuffix ?? '').trim();
-              // Migration / fallback nếu người dùng còn cấu hình cũ
-              if (!prefix && !suffix && settings?.customImagePrompt) {
-                  const legacy = (settings.customImagePrompt || '').trim();
-                  if (settings?.customImagePromptPosition === 'prefix') {
-                      prefix = legacy;
+              // Dọn dẹp triệt để key cũ customImagePrompt và position nếu vẫn còn lưu trong extensionSettings
+              if (settings && ('customImagePrompt' in settings || 'customImagePromptPosition' in settings)) {
+                  delete settings.customImagePrompt;
+                  delete settings.customImagePromptPosition;
+                  try {
+                      ctx?.saveSettingsDebounced?.();
                   }
-                  else {
-                      suffix = legacy;
+                  catch (_saveErr) {
+                      /* ignore */
                   }
               }
+              const prefix = (settings?.customImagePrefix ?? '').trim();
+              const suffix = (settings?.customImageSuffix ?? '').trim();
               const rawBase = (basePrompt || '').trim();
               const parts = [];
               if (prefix)
@@ -8883,11 +8884,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           $('#kaiz-web-image-custom-prefix').val(settings.customImagePrefix || '');
           $('#kaiz-web-image-custom-prefix').on('input', function () {
               settings.customImagePrefix = this.value;
+              delete settings.customImagePrompt;
+              delete settings.customImagePromptPosition;
               ctx.saveSettingsDebounced();
           });
           $('#kaiz-web-image-custom-suffix').val(settings.customImageSuffix || '');
           $('#kaiz-web-image-custom-suffix').on('input', function () {
               settings.customImageSuffix = this.value;
+              delete settings.customImagePrompt;
+              delete settings.customImagePromptPosition;
               ctx.saveSettingsDebounced();
           });
           $('#kaiz-web-image-view-depth').val(settings.viewContextDepth ?? 5);
@@ -12587,6 +12592,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               else {
                   ctx.extensionSettings[EXT_NAME].customImageSuffix = '';
               }
+          }
+          // Dọn dẹp dứt điểm key cũ để không gây hiểu nhầm hoặc phục hồi cấu hình cũ
+          if (ctx.extensionSettings[EXT_NAME].customImagePrompt !== undefined ||
+              ctx.extensionSettings[EXT_NAME].customImagePromptPosition !== undefined) {
+              delete ctx.extensionSettings[EXT_NAME].customImagePrompt;
+              delete ctx.extensionSettings[EXT_NAME].customImagePromptPosition;
+              try {
+                  ctx.saveSettingsDebounced();
+              }
+              catch (_e) { }
           }
           if (ctx.extensionSettings[EXT_NAME].viewContextDepth === undefined) {
               ctx.extensionSettings[EXT_NAME].viewContextDepth = 5;

@@ -198,18 +198,19 @@ export class WebImageBridge {
                     : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
             const settings = ctx?.extensionSettings?.['kaiz_agent'];
 
-            let prefix = (settings?.customImagePrefix ?? '').trim();
-            let suffix = (settings?.customImageSuffix ?? '').trim();
-
-            // Migration / fallback nếu người dùng còn cấu hình cũ
-            if (!prefix && !suffix && settings?.customImagePrompt) {
-                const legacy = (settings.customImagePrompt || '').trim();
-                if (settings?.customImagePromptPosition === 'prefix') {
-                    prefix = legacy;
-                } else {
-                    suffix = legacy;
+            // Dọn dẹp triệt để key cũ customImagePrompt và position nếu vẫn còn lưu trong extensionSettings
+            if (settings && ('customImagePrompt' in settings || 'customImagePromptPosition' in settings)) {
+                delete settings.customImagePrompt;
+                delete settings.customImagePromptPosition;
+                try {
+                    ctx?.saveSettingsDebounced?.();
+                } catch (_saveErr) {
+                    /* ignore */
                 }
             }
+
+            const prefix = (settings?.customImagePrefix ?? '').trim();
+            const suffix = (settings?.customImageSuffix ?? '').trim();
 
             const rawBase = (basePrompt || '').trim();
             const parts: string[] = [];

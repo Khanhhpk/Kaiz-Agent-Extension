@@ -207,12 +207,7 @@
             } catch (e) {}
         };
 
-        const targets = [
-            document,
-            Document.prototype,
-            win.document,
-            win.Document?.prototype,
-        ].filter(Boolean);
+        const targets = [document, Document.prototype, win.document, win.Document?.prototype].filter(Boolean);
 
         for (const t of targets) {
             setProp(t, 'hidden', () => false);
@@ -229,12 +224,7 @@
             // CHỈ chặn sự kiện ở cấp window hoặc document, KHÔNG chặn input/textarea blur
             if (e.type === 'blur' || e.type === 'focusout') {
                 const target = e.target;
-                if (
-                    target !== win &&
-                    target !== win.document &&
-                    target !== document &&
-                    target !== window
-                ) {
+                if (target !== win && target !== win.document && target !== document && target !== window) {
                     return; // Cho phép blur bình thường trên input, textarea, editor...
                 }
             }
@@ -242,13 +232,7 @@
             e.stopPropagation();
         };
 
-        const hideEvents = [
-            'visibilitychange',
-            'webkitvisibilitychange',
-            'blur',
-            'focusout',
-            'freeze',
-        ];
+        const hideEvents = ['visibilitychange', 'webkitvisibilitychange', 'blur', 'focusout', 'freeze'];
 
         for (const evt of hideEvents) {
             window.addEventListener(evt, stopHideEvent, true);
@@ -280,7 +264,8 @@
             const now = performance.now();
             const entries = Array.from(rafCallbacks.entries());
             for (const [id, item] of entries) {
-                if (now - item.time >= 16) { // Chu kỳ ~60 FPS
+                if (now - item.time >= 16) {
+                    // Chu kỳ ~60 FPS
                     rafCallbacks.delete(id);
                     try {
                         item.cb(now);
@@ -359,16 +344,12 @@
     const ensureAudioKeepAlive = () => {
         try {
             const canStart =
-                hasUserInteracted ||
-                (typeof navigator !== 'undefined' && navigator.userActivation?.hasBeenActive);
+                hasUserInteracted || (typeof navigator !== 'undefined' && navigator.userActivation?.hasBeenActive);
             if (!canStart) return;
 
             if (!audioContext) {
                 const AudioCtx =
-                    win.AudioContext ||
-                    win.webkitAudioContext ||
-                    window.AudioContext ||
-                    window.webkitAudioContext;
+                    win.AudioContext || win.webkitAudioContext || window.AudioContext || window.webkitAudioContext;
                 if (AudioCtx) {
                     audioContext = new AudioCtx();
                     const osc = audioContext.createOscillator();
@@ -823,8 +804,8 @@
             const refusalKeywords = [
                 "i can't create that image",
                 "i can't generate that image",
-                "i cannot create that image",
-                "i cannot generate that image",
+                'i cannot create that image',
+                'i cannot generate that image',
                 'unable to generate',
                 'unable to create',
                 'safety guidelines',
@@ -1136,9 +1117,7 @@
 
                 // 2. Lọc host ảnh hợp lệ (Loại bỏ gstatic.com vì đó là icon giao diện của Google)
                 const isImageHost =
-                    src.includes('googleusercontent.com') ||
-                    src.startsWith('blob:') ||
-                    src.startsWith('data:image');
+                    src.includes('googleusercontent.com') || src.startsWith('blob:') || src.startsWith('data:image');
                 if (!isImageHost) continue;
 
                 // 3. Lọc bỏ avatar, icon, logo rõ ràng (bằng keyword chuẩn hóa)
@@ -1377,7 +1356,10 @@
                                 await deliverImageResult(liveImg);
                                 return;
                             } catch (err) {
-                                console.warn('[Kaiz Bridge][Gemini] Thử trích xuất ảnh nền thất bại, tiếp tục theo dõi:', err);
+                                console.warn(
+                                    '[Kaiz Bridge][Gemini] Thử trích xuất ảnh nền thất bại, tiếp tục theo dõi:',
+                                    err,
+                                );
                             }
                         }
                     }
@@ -1683,7 +1665,9 @@
                 sendBtn.getAttribute('data-testid') ||
                 sendBtn.className ||
                 sendBtn.tagName;
-            console.log(`[Kaiz Bridge][ChatGPT] Tìm thấy send-button hợp lệ (${sendDesc}), click nút gửi duy nhất 1 lần.`);
+            console.log(
+                `[Kaiz Bridge][ChatGPT] Tìm thấy send-button hợp lệ (${sendDesc}), click nút gửi duy nhất 1 lần.`,
+            );
             sendBtn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, composed: true }));
             sendBtn.click();
@@ -1800,9 +1784,7 @@
 
                     // Nhận diện URL ảnh đặc trưng của ChatGPT (Loại bỏ oaistatic.com vì đó là icon giao diện)
                     const isEstuary = src.includes('backend-api/estuary/content') || src.includes('estuary/content');
-                    const isOAI =
-                        src.includes('oaiusercontent.com') ||
-                        src.includes('files.oaiusercontent');
+                    const isOAI = src.includes('oaiusercontent.com') || src.includes('files.oaiusercontent');
                     const isBlobOrData = src.startsWith('blob:') || src.startsWith('data:image');
                     const isChatGPTPattern = isEstuary || isOAI || isBlobOrData;
 
@@ -1828,7 +1810,15 @@
 
                     // Chấp nhận nếu: không phải avatar, kích thước lớn, VÀ:
                     // (thuộc domain ChatGPT HOẶC có alt sinh ảnh HOẶC nằm trong lastMsg HOẶC là ảnh mới khi trang ban đầu chưa có ảnh)
-                    if (!isAvatar && isBigEnough && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg) || !existingImages || existingImages.size === 0)) {
+                    if (
+                        !isAvatar &&
+                        isBigEnough &&
+                        (isChatGPTPattern ||
+                            isGeneratedAlt ||
+                            (lastMsg && scope === lastMsg) ||
+                            !existingImages ||
+                            existingImages.size === 0)
+                    ) {
                         return { el: img, src: src };
                     }
                 }
@@ -1841,7 +1831,12 @@
                     const a = downloadLinks[i];
                     const href = a.href || a.getAttribute('href') || '';
                     if (!href || isOldImage(a, existingImages)) continue;
-                    if (href.includes('estuary') || href.includes('oaiusercontent') || (!existingImages || existingImages.size === 0)) {
+                    if (
+                        href.includes('estuary') ||
+                        href.includes('oaiusercontent') ||
+                        !existingImages ||
+                        existingImages.size === 0
+                    ) {
                         return { el: a, src: href };
                     }
                 }
