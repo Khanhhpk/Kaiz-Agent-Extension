@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.26
+// @version      1.2.27
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -36,7 +36,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.26';
+    const BRIDGE_VERSION = '1.2.27';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -1508,7 +1508,7 @@
         // 1. Snapshot toàn diện các ảnh & định danh cũ trên trang trước khi gửi prompt
         const existingImages = snapshotExistingImages();
         const prePromptUserTurnsCount = document.querySelectorAll(
-            '[data-message-author-role="user"], div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
+            '[data-message-author-role="user"], article[data-testid^="conversation-turn-"]:has([data-message-author-role="user"]), div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
         ).length;
         console.log(
             `[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} định danh ảnh/tài nguyên cũ trên trang (Số lượt hỏi cũ: ${prePromptUserTurnsCount}).`,
@@ -1707,7 +1707,7 @@
         const findChatGPTPromptAnchor = () => {
             const userTurns = Array.from(
                 document.querySelectorAll(
-                    '[data-message-author-role="user"], div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
+                    '[data-message-author-role="user"], article[data-testid^="conversation-turn-"]:has([data-message-author-role="user"]), div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
                 ),
             );
             const promptSnippet = normalizeText((job.prompt || '').trim().slice(0, 40));
@@ -1727,14 +1727,20 @@
             }
 
             // 3. Fallback: Quét các thẻ p, div bên ngoài editor nếu không tìm thấy selector turn chuẩn
+            // LƯU Ý SỐNG CÒN: Tuyệt đối LOẠI BỎ form/composer/footer ở đáy trang
+            // để tránh biến composer thành anchor khiến toàn bộ ảnh trong chat bị coi là "nằm trước anchor"!
             if (promptSnippet) {
                 const candidates = Array.from(document.querySelectorAll('p, div, span')).filter((el) => {
                     const text = normalizeText(el.textContent || '');
                     return (
                         text &&
                         text.includes(promptSnippet) &&
+                        !el.closest('form') &&
+                        !el.closest('footer') &&
                         !el.closest('#prompt-textarea') &&
-                        !el.closest('textarea')
+                        !el.closest('textarea') &&
+                        !el.closest('[class*="composer"]') &&
+                        !el.closest('[data-testid*="composer"]')
                     );
                 });
                 if (candidates.length > 0) {
@@ -1760,8 +1766,10 @@
                     const src = img.currentSrc || img.src || img.getAttribute('src') || '';
                     if (!src) continue;
 
-                    // Kiểm tra Cột mốc tọa độ DOM
-                    if (promptAnchor && promptAnchor.isConnected) {
+                    // Kiểm tra Cột mốc tọa độ DOM:
+                    // CHỈ áp dụng lọc anchor nếu trên trang ĐÃ TỒN TẠI ảnh cũ từ trước khi gửi prompt (existingImages.size > 0).
+                    // Nếu trước đó trang chưa có ảnh nào (existingImages.size === 0), mọi ảnh lớn mới xuất hiện chắc chắn là ảnh của lượt này!
+                    if (promptAnchor && promptAnchor.isConnected && existingImages && existingImages.size > 0) {
                         const pos = promptAnchor.compareDocumentPosition(img);
                         if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
                             continue;
@@ -1802,7 +1810,9 @@
 
                     const isBigEnough = isValidImageDimensions(img);
 
-                    if (!isAvatar && isBigEnough && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg))) {
+                    // Chấp nhận nếu: không phải avatar, kích thước lớn, VÀ:
+                    // (thuộc domain ChatGPT HOẶC có alt sinh ảnh HOẶC nằm trong lastMsg HOẶC là ảnh mới khi trang ban đầu chưa có ảnh)
+                    if (!isAvatar && isBigEnough && (isChatGPTPattern || isGeneratedAlt || (lastMsg && scope === lastMsg) || !existingImages || existingImages.size === 0)) {
                         return { el: img, src: src };
                     }
                 }
@@ -1815,7 +1825,7 @@
                     const a = downloadLinks[i];
                     const href = a.href || a.getAttribute('href') || '';
                     if (!href || isOldImage(a, existingImages)) continue;
-                    if (href.includes('estuary') || href.includes('oaiusercontent')) {
+                    if (href.includes('estuary') || href.includes('oaiusercontent') || (!existingImages || existingImages.size === 0)) {
                         return { el: a, src: href };
                     }
                 }
@@ -1951,6 +1961,9 @@
         while (Date.now() - phase1Start < phase1MaxWait) {
             if (!promptAnchor || !promptAnchor.isConnected) {
                 promptAnchor = findChatGPTPromptAnchor();
+                if (promptAnchor) {
+                    console.log('[Kaiz Bridge][ChatGPT] 📍 Đã định vị Cột mốc Prompt Anchor:', promptAnchor);
+                }
             }
 
             if (isChatGPTGenerating()) {
@@ -1994,6 +2007,9 @@
             // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy hoặc bị unmount
             if (!promptAnchor || !promptAnchor.isConnected) {
                 promptAnchor = findChatGPTPromptAnchor();
+                if (promptAnchor) {
+                    console.log('[Kaiz Bridge][ChatGPT] 📍 Đã cập nhật Cột mốc Prompt Anchor:', promptAnchor);
+                }
             }
 
             // Bắt tức thì nếu ChatGPT gõ câu từ chối trong khi stream
