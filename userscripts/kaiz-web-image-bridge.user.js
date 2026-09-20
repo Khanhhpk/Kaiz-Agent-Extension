@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.25
+// @version      1.2.26
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -36,7 +36,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.25';
+    const BRIDGE_VERSION = '1.2.26';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -591,6 +591,27 @@
         return false;
     };
 
+    // ==========================================================================
+    // TIMER CHỐNG THROTTLE BACKGROUND TAB (MessageChannel Scheduler)
+    // Chrome C++ engine throttle setTimeout xuống 1 lần/phút sau 5 phút tab ẩn.
+    // MessageChannel.port.postMessage KHÔNG bị throttle (React Scheduler cũng dùng kỹ thuật này).
+    // Hàm này thay thế hoàn toàn setTimeout trong các vòng lặp polling.
+    // ==========================================================================
+    const backgroundSafeDelay = (ms) => {
+        return new Promise((resolve) => {
+            const start = performance.now();
+            const ch = new MessageChannel();
+            ch.port1.onmessage = () => {
+                if (performance.now() - start >= ms) {
+                    resolve();
+                } else {
+                    ch.port2.postMessage(null);
+                }
+            };
+            ch.port2.postMessage(null);
+        });
+    };
+
     // Chuyển đổi Blob ảnh sang Base64
     const blobToBase64 = (blob) => {
         return new Promise((resolve, reject) => {
@@ -688,7 +709,7 @@
         GM_setValue(claimKey, TAB_ID);
 
         // Chờ 80ms để giải quyết race condition phân xử giữa nhiều tab
-        await new Promise((r) => setTimeout(r, 80));
+        await backgroundSafeDelay(80);
         if (GM_getValue(claimKey) !== TAB_ID) {
             console.log(`[Kaiz Bridge][${CURRENT_TARGET}] Job ${job.id} đã được tab khác nhận.`);
             return;
@@ -806,7 +827,7 @@
             const waitIdleStart = Date.now();
             while (Date.now() - waitIdleStart < 15000) {
                 if (!isGeminiGenerating()) break;
-                await new Promise((r) => setTimeout(r, 500));
+                await backgroundSafeDelay(500);
             }
         }
 
@@ -833,7 +854,7 @@
                 document.querySelector('textarea[aria-label*="prompt" i]') ||
                 document.querySelector('textarea');
             if (inputEl) break;
-            await new Promise((r) => setTimeout(r, 200));
+            await backgroundSafeDelay(200);
         }
 
         if (!inputEl) {
@@ -940,7 +961,7 @@
 
         console.log('[Kaiz Bridge][Gemini] Đã hoàn tất nhập prompt vào ô input.');
         // Chờ Angular digest cycle cập nhật trạng thái ô nhập và đổi nút Mic sang nút Gửi
-        await new Promise((r) => setTimeout(r, 600));
+        await backgroundSafeDelay(600);
 
         // 4. Tìm và bấm nút gửi DUY NHẤT 1 LẦN (Chống spam request)
         const sendSelectors = [
@@ -982,7 +1003,7 @@
                 }
             }
             if (sendBtn) break;
-            await new Promise((r) => setTimeout(r, 100));
+            await backgroundSafeDelay(100);
         }
 
         if (sendBtn) {
@@ -1277,7 +1298,7 @@
                 throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
             }
 
-            await new Promise((r) => setTimeout(r, 400));
+            await backgroundSafeDelay(400);
         }
 
         if (!hasStarted) {
@@ -1297,7 +1318,7 @@
         let lastCandidateSrc = '';
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 600));
+            await backgroundSafeDelay(600);
 
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
@@ -1371,7 +1392,7 @@
                         if (checkGeminiRefusal()) {
                             throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
                         }
-                        await new Promise((r) => setTimeout(r, 600));
+                        await backgroundSafeDelay(600);
                     }
 
                     // Hết 15s sau khi nút Cancel biến mất mà vẫn không thấy ảnh
@@ -1480,7 +1501,7 @@
             const waitIdleStart = Date.now();
             while (Date.now() - waitIdleStart < 15000) {
                 if (!isChatGPTGenerating()) break;
-                await new Promise((r) => setTimeout(r, 500));
+                await backgroundSafeDelay(500);
             }
         }
 
@@ -1503,7 +1524,7 @@
                 document.querySelector('textarea#prompt-textarea') ||
                 document.querySelector('textarea');
             if (inputEl) break;
-            await new Promise((r) => setTimeout(r, 200));
+            await backgroundSafeDelay(200);
         }
 
         if (!inputEl) {
@@ -1594,7 +1615,7 @@
         }
 
         console.log('[Kaiz Bridge][ChatGPT] Đã hoàn tất nhập prompt vào ô input.');
-        await new Promise((r) => setTimeout(r, 300));
+        await backgroundSafeDelay(300);
 
         // 4. Bấm nút gửi (Chờ nút kích hoạt trong background tab)
         const sendSelectors = [
@@ -1637,7 +1658,7 @@
                 }
             }
             if (sendBtn) break;
-            await new Promise((r) => setTimeout(r, 100));
+            await backgroundSafeDelay(100);
         }
 
         if (sendBtn) {
@@ -1942,7 +1963,7 @@
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
 
-            await new Promise((r) => setTimeout(r, 200));
+            await backgroundSafeDelay(200);
         }
 
         if (!hasStarted) {
@@ -1965,7 +1986,7 @@
         let lastCandidateSrc = '';
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 400));
+            await backgroundSafeDelay(400);
 
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
@@ -2047,7 +2068,7 @@
                         if (checkChatGPTRefusal()) {
                             throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
                         }
-                        await new Promise((r) => setTimeout(r, 400));
+                        await backgroundSafeDelay(400);
                     }
 
                     throw new Error(
