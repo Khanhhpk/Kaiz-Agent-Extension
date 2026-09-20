@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.22
+// @version      1.2.23
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -26,7 +26,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.22';
+    const BRIDGE_VERSION = '1.2.23';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -511,6 +511,76 @@
         return (w >= 100 && (h >= 80 || h === 0)) || (w === 0 && h === 0);
     };
 
+    // Trích xuất các định danh duy nhất của URL ảnh (URL đầy đủ, pathname gốc loại bỏ query, file-id)
+    const extractImageKeys = (rawUrl) => {
+        if (!rawUrl || typeof rawUrl !== 'string') return [];
+        const keys = [rawUrl.trim()];
+        try {
+            const cleanUrl = rawUrl.split('?')[0].split('#')[0].trim();
+            if (cleanUrl) keys.push(cleanUrl);
+
+            // Bóc tách file ID đối với DALL-E / ChatGPT: /file-XXXXX
+            const fileMatch = rawUrl.match(/(file-[a-zA-Z0-9_-]+)/);
+            if (fileMatch) keys.push(fileMatch[1]);
+
+            // Bóc tách estuary content ID: id=XXXXX
+            const estuaryMatch = rawUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (estuaryMatch) keys.push(estuaryMatch[1]);
+        } catch (e) {}
+        return keys;
+    };
+
+    // Tạo Set các định danh của toàn bộ ảnh hiện có trên trang trước khi gửi prompt
+    const snapshotExistingImages = () => {
+        const set = new Set();
+        const elements = document.querySelectorAll(
+            'img, a[download], a[href*="backend-api/estuary"], a[href*="oaiusercontent"], a[href*="googleusercontent"]',
+        );
+        for (const el of elements) {
+            const urls = [
+                el.currentSrc,
+                el.src,
+                el.href,
+                el.getAttribute && el.getAttribute('src'),
+                el.getAttribute && el.getAttribute('href'),
+                el.getAttribute && el.getAttribute('data-src'),
+            ].filter(Boolean);
+
+            for (const u of urls) {
+                const keys = extractImageKeys(u);
+                for (const k of keys) {
+                    set.add(k);
+                }
+            }
+        }
+        return set;
+    };
+
+    // Kiểm tra xem một URL/Element ảnh có phải là ảnh cũ từ trước khi gửi prompt hay không
+    const isOldImage = (elOrUrl, existingSet) => {
+        if (!elOrUrl || !existingSet || existingSet.size === 0) return false;
+        let urlsToCheck = [];
+        if (typeof elOrUrl === 'string') {
+            urlsToCheck = [elOrUrl];
+        } else if (elOrUrl && elOrUrl.tagName) {
+            urlsToCheck = [
+                elOrUrl.currentSrc,
+                elOrUrl.src,
+                elOrUrl.href,
+                elOrUrl.getAttribute && elOrUrl.getAttribute('src'),
+                elOrUrl.getAttribute && elOrUrl.getAttribute('href'),
+                elOrUrl.getAttribute && elOrUrl.getAttribute('data-src'),
+            ].filter(Boolean);
+        }
+        for (const u of urlsToCheck) {
+            const keys = extractImageKeys(u);
+            for (const k of keys) {
+                if (existingSet.has(k)) return true;
+            }
+        }
+        return false;
+    };
+
     // Chuyển đổi Blob ảnh sang Base64
     const blobToBase64 = (blob) => {
         return new Promise((resolve, reject) => {
@@ -717,13 +787,14 @@
             }
         }
 
-        // 1. Snapshot URL các ảnh hiện có
-        const existingImages = new Set(
-            Array.from(document.querySelectorAll('img'))
-                .map((img) => img.src)
-                .filter(Boolean),
+        // 1. Snapshot toàn diện các ảnh & định danh cũ trên trang trước khi gửi prompt
+        const existingImages = snapshotExistingImages();
+        const prePromptQueriesCount = document.querySelectorAll(
+            'user-query, [data-test-id="user-query"], .user-query, .query-content, div[class*="user-query"]',
+        ).length;
+        console.log(
+            `[Kaiz Bridge][Gemini] Đã snapshot ${existingImages.size} định danh ảnh cũ trên trang (Số lượt hỏi cũ: ${prePromptQueriesCount}).`,
         );
-        console.log(`[Kaiz Bridge][Gemini] Đã snapshot ${existingImages.size} ảnh cũ trên trang.`);
 
         // 2. Chờ tìm ô input (Tối đa 5s phòng khi Angular render trễ trong background tab)
         let inputEl = null;
@@ -939,28 +1010,32 @@
                 '.query-content',
                 'div[class*="user-query"]',
             ];
+            const promptSnippet = normalizeText((job.prompt || '').trim().slice(0, 40));
+
             for (const sel of selectors) {
                 const elements = Array.from(document.querySelectorAll(sel));
                 if (elements.length > 0) {
-                    const promptSnippet = (job.prompt || '').trim().slice(0, 30);
+                    // 1. Ưu tiên tuyệt đối: Tìm element thực sự chứa nội dung prompt vừa gửi
                     for (let i = elements.length - 1; i >= 0; i--) {
-                        if (
-                            promptSnippet &&
-                            elements[i].textContent &&
-                            elements[i].textContent.includes(promptSnippet)
-                        ) {
+                        const text = normalizeText(elements[i].textContent || '');
+                        if (promptSnippet && text.includes(promptSnippet)) {
                             return elements[i];
                         }
                     }
-                    return elements[elements.length - 1];
+                    // 2. Chỉ chấp nhận turn cuối nếu số lượng turn ĐÃ TĂNG so với trước khi gửi
+                    if (elements.length > prePromptQueriesCount) {
+                        return elements[elements.length - 1];
+                    }
                 }
             }
-            const promptSnippet = (job.prompt || '').trim().slice(0, 30);
+
+            // 3. Fallback: Quét các thẻ p, div bên ngoài editor chứa promptSnippet
             if (promptSnippet) {
                 const candidates = Array.from(document.querySelectorAll('p, div, span')).filter((el) => {
+                    const text = normalizeText(el.textContent || '');
                     return (
-                        el.textContent &&
-                        el.textContent.includes(promptSnippet) &&
+                        text &&
+                        text.includes(promptSnippet) &&
                         !el.closest('rich-textarea') &&
                         !el.closest('.ql-editor') &&
                         !el.closest('textarea')
@@ -970,6 +1045,8 @@
                     return candidates[candidates.length - 1];
                 }
             }
+
+            // Tuyệt đối KHÔNG trả về turn cũ nếu chưa thấy turn mới trong DOM!
             return null;
         };
 
@@ -983,7 +1060,7 @@
                 if (!src) continue;
 
                 // 1. Kiểm tra Cột mốc tọa độ DOM (DOM Positional Anchor)
-                if (promptAnchor) {
+                if (promptAnchor && promptAnchor.isConnected) {
                     const pos = promptAnchor.compareDocumentPosition(img);
                     // Nếu ảnh nằm phía trước câu prompt trong DOM -> chắc chắn là ảnh cũ của lượt chat trước
                     if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
@@ -995,12 +1072,11 @@
                 }
 
                 // Bất kể có promptAnchor hay không, LUÔN loại trừ ảnh đã có trong existingImages snapshot
-                if (existingImages.has(src)) continue;
+                if (isOldImage(img, existingImages)) continue;
 
-                // 2. Lọc host ảnh hợp lệ
+                // 2. Lọc host ảnh hợp lệ (Loại bỏ gstatic.com vì đó là icon giao diện của Google)
                 const isImageHost =
                     src.includes('googleusercontent.com') ||
-                    src.includes('gstatic.com') ||
                     src.startsWith('blob:') ||
                     src.startsWith('data:image');
                 if (!isImageHost) continue;
@@ -1038,7 +1114,7 @@
             if (src.startsWith('blob:')) {
                 try {
                     const blob = await fetch(src).then((r) => r.blob());
-                    if (blob && blob.size > 2000) {
+                    if (blob && blob.size > 20000) {
                         base64 = await blobToBase64(blob);
                     }
                 } catch (e) {
@@ -1063,7 +1139,7 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0);
                     const dataUrl = canvas.toDataURL('image/png');
-                    if (dataUrl && dataUrl.length > 2000) {
+                    if (dataUrl && dataUrl.length > 5000) {
                         base64 = dataUrl;
                     }
                 } catch (canvasErr) {
@@ -1100,7 +1176,7 @@
 
         while (Date.now() - phase1Start < phase1MaxWait) {
             // Định vị promptAnchor nếu chưa có
-            if (!promptAnchor) {
+            if (!promptAnchor || !promptAnchor.isConnected) {
                 promptAnchor = findPromptAnchor();
                 if (promptAnchor) {
                     console.log('[Kaiz Bridge][Gemini] 📍 Đã định vị Cột mốc Prompt Anchor:', promptAnchor);
@@ -1146,8 +1222,8 @@
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
 
-            // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy
-            if (!promptAnchor) {
+            // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy hoặc bị unmount
+            if (!promptAnchor || !promptAnchor.isConnected) {
                 promptAnchor = findPromptAnchor();
             }
 
@@ -1159,11 +1235,12 @@
             // TRIGGER B (CHỦ ĐỘNG - THÍCH ỨNG BACKGROUND TAB):
             // Bỏ qua trạng thái nút Cancel bị kẹt do Angular hoãn cập nhật UI trong background tab
             // Điều kiện an toàn tuyệt đối chống bắt nhầm ảnh cũ:
-            // 1. Đã qua ít nhất 6 giây (AI không thể tạo ảnh sớm hơn).
-            // 2. Đã định vị được promptAnchor.
+            // 1. Đã qua ít nhất 25s (Gemini tạo ảnh trong khoảng ~30s theo quan sát thực tế).
+            // 2. Đã định vị được promptAnchor đang kết nối trong DOM.
             // 3. Ảnh nằm strictly SAU promptAnchor và KHÔNG có trong existingImages snapshot ban đầu.
             // 4. URL ảnh ổn định trong 2 nhịp kiểm tra (~1.2s).
-            if (Date.now() - startTime >= 6000 && promptAnchor) {
+            const GEMINI_SAFE_CAPTURE_DELAY = 25000;
+            if (Date.now() - startTime >= GEMINI_SAFE_CAPTURE_DELAY && promptAnchor && promptAnchor.isConnected) {
                 const liveImg = findNewValidImage();
                 if (liveImg) {
                     const liveSrc = liveImg.currentSrc || liveImg.src || liveImg.getAttribute('src') || '';
@@ -1177,7 +1254,7 @@
 
                         if (candidateSeenCount >= 2) {
                             console.log(
-                                '[Kaiz Bridge][Gemini] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Bỏ qua nút Cancel chưa chuyển trạng thái trong background tab). Trích xuất ngay...',
+                                `[Kaiz Bridge][Gemini] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Đã qua ${Math.round((Date.now() - startTime) / 1000)}s, bỏ qua nút Cancel trong background tab). Trích xuất ngay...`,
                             );
                             try {
                                 await deliverImageResult(liveImg);
@@ -1327,17 +1404,14 @@
             }
         }
 
-        // 1. Snapshot URL các ảnh hiện có
-        const existingImages = new Set(
-            Array.from(
-                document.querySelectorAll(
-                    'img, a[download], a[href*="backend-api/estuary"], a[href*="oaiusercontent"]',
-                ),
-            )
-                .map((el) => el.currentSrc || el.src || el.href || el.getAttribute('src') || el.getAttribute('href'))
-                .filter(Boolean),
+        // 1. Snapshot toàn diện các ảnh & định danh cũ trên trang trước khi gửi prompt
+        const existingImages = snapshotExistingImages();
+        const prePromptUserTurnsCount = document.querySelectorAll(
+            '[data-message-author-role="user"], div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
+        ).length;
+        console.log(
+            `[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} định danh ảnh/tài nguyên cũ trên trang (Số lượt hỏi cũ: ${prePromptUserTurnsCount}).`,
         );
-        console.log(`[Kaiz Bridge][ChatGPT] Đã snapshot ${existingImages.size} ảnh/tài nguyên cũ trên trang.`);
 
         // 2. Chờ tìm ô input nhập prompt (ProseMirror #prompt-textarea hoặc textarea)
         let inputEl = null;
@@ -1535,22 +1609,29 @@
                     '[data-message-author-role="user"], div[data-testid^="conversation-turn-"]:has([data-message-author-role="user"])',
                 ),
             );
-            const promptSnippet = (job.prompt || '').trim().slice(0, 30);
+            const promptSnippet = normalizeText((job.prompt || '').trim().slice(0, 40));
+
             if (userTurns.length > 0) {
+                // 1. Ưu tiên tuyệt đối: Tìm user turn thực sự chứa promptSnippet
                 for (let i = userTurns.length - 1; i >= 0; i--) {
-                    if (promptSnippet && userTurns[i].textContent && userTurns[i].textContent.includes(promptSnippet)) {
+                    const text = normalizeText(userTurns[i].textContent || '');
+                    if (promptSnippet && text.includes(promptSnippet)) {
                         return userTurns[i];
                     }
                 }
-                return userTurns[userTurns.length - 1];
+                // 2. Chỉ chấp nhận turn cuối nếu số lượng user turn ĐÃ TĂNG so với trước khi gửi
+                if (userTurns.length > prePromptUserTurnsCount) {
+                    return userTurns[userTurns.length - 1];
+                }
             }
 
-            // Fallback: Quét các thẻ p, div bên ngoài editor nếu không tìm thấy selector turn chuẩn
+            // 3. Fallback: Quét các thẻ p, div bên ngoài editor nếu không tìm thấy selector turn chuẩn
             if (promptSnippet) {
                 const candidates = Array.from(document.querySelectorAll('p, div, span')).filter((el) => {
+                    const text = normalizeText(el.textContent || '');
                     return (
-                        el.textContent &&
-                        el.textContent.includes(promptSnippet) &&
+                        text &&
+                        text.includes(promptSnippet) &&
                         !el.closest('#prompt-textarea') &&
                         !el.closest('textarea')
                     );
@@ -1559,6 +1640,8 @@
                     return candidates[candidates.length - 1];
                 }
             }
+
+            // Tuyệt đối KHÔNG trả về turn cũ nếu chưa thấy turn mới trong DOM!
             return null;
         };
 
@@ -1577,7 +1660,7 @@
                     if (!src) continue;
 
                     // Kiểm tra Cột mốc tọa độ DOM
-                    if (promptAnchor) {
+                    if (promptAnchor && promptAnchor.isConnected) {
                         const pos = promptAnchor.compareDocumentPosition(img);
                         if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
                             continue;
@@ -1588,15 +1671,13 @@
                     }
 
                     // Bất kể có promptAnchor hay không, LUÔN loại trừ ảnh đã có trong existingImages snapshot
-                    if (existingImages.has(src)) continue;
+                    if (isOldImage(img, existingImages)) continue;
 
-                    // Nhận diện URL ảnh đặc trưng của ChatGPT
+                    // Nhận diện URL ảnh đặc trưng của ChatGPT (Loại bỏ oaistatic.com vì đó là icon giao diện)
                     const isEstuary = src.includes('backend-api/estuary/content') || src.includes('estuary/content');
                     const isOAI =
                         src.includes('oaiusercontent.com') ||
-                        src.includes('files.oaiusercontent') ||
-                        src.includes('openai.com') ||
-                        src.includes('oaistatic.com');
+                        src.includes('files.oaiusercontent');
                     const isBlobOrData = src.startsWith('blob:') || src.startsWith('data:image');
                     const isChatGPTPattern = isEstuary || isOAI || isBlobOrData;
 
@@ -1632,7 +1713,7 @@
                 for (let i = downloadLinks.length - 1; i >= 0; i--) {
                     const a = downloadLinks[i];
                     const href = a.href || a.getAttribute('href') || '';
-                    if (!href || existingImages.has(href)) continue;
+                    if (!href || isOldImage(a, existingImages)) continue;
                     if (href.includes('estuary') || href.includes('oaiusercontent')) {
                         return { el: a, src: href };
                     }
@@ -1732,7 +1813,7 @@
         const phase1Start = Date.now();
 
         while (Date.now() - phase1Start < phase1MaxWait) {
-            if (!promptAnchor) {
+            if (!promptAnchor || !promptAnchor.isConnected) {
                 promptAnchor = findChatGPTPromptAnchor();
             }
 
@@ -1774,7 +1855,8 @@
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
 
-            if (!promptAnchor) {
+            // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy hoặc bị unmount
+            if (!promptAnchor || !promptAnchor.isConnected) {
                 promptAnchor = findChatGPTPromptAnchor();
             }
 
@@ -1786,11 +1868,12 @@
             // TRIGGER B (CHỦ ĐỘNG - THÍCH ỨNG BACKGROUND TAB):
             // Bỏ qua trạng thái nút Stop bị kẹt/hoãn do React hoãn cập nhật composer UI trong background tab
             // Điều kiện an toàn tuyệt đối chống bắt nhầm ảnh cũ:
-            // 1. Đã qua ít nhất 6 giây (AI không thể tạo ảnh sớm hơn).
-            // 2. Đã định vị được promptAnchor.
+            // 1. Đã qua ít nhất 40s (theo yêu cầu: ChatGPT tạo ảnh trong khoảng ~50s).
+            // 2. Đã định vị được promptAnchor đang kết nối trong DOM.
             // 3. Ứng viên ảnh nằm strictly SAU promptAnchor và KHÔNG có trong existingImages snapshot ban đầu.
             // 4. URL ảnh ổn định trong 2 nhịp kiểm tra (~800ms).
-            if (Date.now() - startTime >= 6000 && promptAnchor) {
+            const CHATGPT_SAFE_CAPTURE_DELAY = 40000;
+            if (Date.now() - startTime >= CHATGPT_SAFE_CAPTURE_DELAY && promptAnchor && promptAnchor.isConnected) {
                 const liveCandidate = findChatGPTImageCandidate();
                 if (liveCandidate && liveCandidate.src) {
                     const candidateSrc = liveCandidate.src;
@@ -1803,7 +1886,7 @@
 
                     if (candidateSeenCount >= 2) {
                         console.log(
-                            '[Kaiz Bridge][ChatGPT] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Bỏ qua nút Stop chưa chuyển trạng thái trong background tab). Trích xuất ngay...',
+                            `[Kaiz Bridge][ChatGPT] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Đã qua ${Math.round((Date.now() - startTime) / 1000)}s, bỏ qua nút Stop trong background tab). Trích xuất ngay...`,
                         );
                         try {
                             await deliverChatGPTImageResult(liveCandidate);
