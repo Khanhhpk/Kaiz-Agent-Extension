@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.20
+// @version      1.2.22
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
@@ -26,7 +26,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.20';
+    const BRIDGE_VERSION = '1.2.22';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -437,6 +437,10 @@
             if (lastAssistantMsg && typeof lastAssistantMsg.scrollIntoView === 'function') {
                 lastAssistantMsg.scrollIntoView({ behavior: 'instant', block: 'end' });
             }
+
+            // Kích hoạt vi sự kiện để nhắc nhở framework (React/Angular) xử lý các microtask / cập nhật UI
+            window.dispatchEvent(new Event('focus'));
+            document.dispatchEvent(new Event('focus'));
         } catch (e) {
             /* ignore */
         }
@@ -484,12 +488,27 @@
             .normalize('NFD')
             .replace(/[\u0300-\u036f]/g, '');
 
-    // Kiểm tra kích thước ảnh tối thiểu (ảnh do AI sinh luôn lớn, ít nhất rộng >= 200px)
+    // Kiểm tra phần tử có thực sự hiển thị trên DOM không (không bị display:none, hidden, opacity:0)
+    const isElementVisible = (el) => {
+        if (!el) return false;
+        if (el.hidden || el.getAttribute('aria-hidden') === 'true') return false;
+        try {
+            const style = window.getComputedStyle(el);
+            if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+                return false;
+            }
+        } catch (e) {}
+        return el.offsetParent !== null || el.isConnected;
+    };
+
+    // Kiểm tra kích thước ảnh tối thiểu (ảnh do AI sinh luôn lớn, ít nhất rộng >= 100px)
     const isValidImageDimensions = (img) => {
         if (!img) return false;
         const w = img.naturalWidth || img.width || img.clientWidth || 0;
         const h = img.naturalHeight || img.height || img.clientHeight || 0;
-        return w >= 200 && (h >= 100 || h === 0);
+        // Trong background tab, Chromium không render layout nên w/h có thể bằng 0!
+        // Nếu w > 0 thì phải đủ lớn (>= 100px) để loại trừ icon/avatar. Nếu w === 0 thì chấp nhận ở tab ngầm.
+        return (w >= 100 && (h >= 80 || h === 0)) || (w === 0 && h === 0);
     };
 
     // Chuyển đổi Blob ảnh sang Base64
@@ -513,8 +532,13 @@
                 onload: async (res) => {
                     if (res.status >= 200 && res.status < 300) {
                         try {
-                            const base64 = await blobToBase64(res.response);
-                            resolve(base64);
+                            const blob = res.response;
+                            if (blob && blob.size > 2000) {
+                                const base64 = await blobToBase64(blob);
+                                resolve(base64);
+                            } else {
+                                reject(new Error(`Tệp blob quá nhỏ hoặc rỗng (${blob ? blob.size : 0} bytes)`));
+                            }
                         } catch (e) {
                             reject(e);
                         }
@@ -645,18 +669,20 @@
             ];
             for (const sel of stopSelectors) {
                 const btn = document.querySelector(sel);
-                if (btn && (btn.offsetParent !== null || btn.isConnected)) return true;
+                if (btn && isElementVisible(btn)) return true;
             }
 
             // Kiểm tra icon Stop trong nút bấm
             const stopIcon = document.querySelector(
                 'mat-icon[fonticon="stop"], mat-icon[data-mat-icon-name="stop"], mat-icon[data-mat-icon-name="stop_circle"], svg.stop-icon',
             );
-            if (stopIcon && (stopIcon.offsetParent !== null || stopIcon.isConnected)) return true;
+            if (stopIcon && isElementVisible(stopIcon)) return true;
 
             // Kiểm tra hiệu ứng loading / progress bar
-            const loader = document.querySelector('mat-progress-bar, .loading-indicator, bard-loading-indicator');
-            if (loader && (loader.offsetParent !== null || loader.isConnected)) return true;
+            const loader = document.querySelector(
+                'mat-progress-bar:not([hidden]), .loading-indicator, bard-loading-indicator',
+            );
+            if (loader && isElementVisible(loader)) return true;
 
             return false;
         };
@@ -963,10 +989,13 @@
                     if (pos & Node.DOCUMENT_POSITION_PRECEDING) {
                         continue;
                     }
-                } else {
-                    // Fallback nếu không định vị được promptAnchor
-                    if (existingImages.has(src)) continue;
+                    if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
+                        continue;
+                    }
                 }
+
+                // Bất kể có promptAnchor hay không, LUÔN loại trừ ảnh đã có trong existingImages snapshot
+                if (existingImages.has(src)) continue;
 
                 // 2. Lọc host ảnh hợp lệ
                 const isImageHost =
@@ -991,8 +1020,8 @@
                 if (isAvatarOrLogo) continue;
 
                 // 4. Kiểm tra kích thước: Ảnh tạo bởi AI luôn là ảnh lớn (dùng hàm chuẩn hóa isValidImageDimensions)
-                // Lưu ý: Không dùng img.closest('button') vì thẻ ảnh của Gemini nằm trong nút để click phóng to
-                if (img.complete && isValidImageDimensions(img)) {
+                // Lưu ý: Không bắt buộc img.complete vì ở background tab Chromium hoãn decode bitmap
+                if (isValidImageDimensions(img)) {
                     return img;
                 }
             }
@@ -1001,33 +1030,53 @@
 
         // Hàm trích xuất ảnh và gửi Base64 về SillyTavern
         const deliverImageResult = async (img) => {
-            console.log('[Kaiz Bridge][Gemini] 🎉 Xử lý trích xuất ảnh:', (img.src || '').substring(0, 100));
+            const src = img.currentSrc || img.src || img.getAttribute('src') || '';
+            console.log('[Kaiz Bridge][Gemini] 🎉 Xử lý trích xuất ảnh:', src.substring(0, 100));
             let base64 = null;
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth || img.width;
-                canvas.height = img.naturalHeight || img.height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                const dataUrl = canvas.toDataURL('image/png');
-                if (dataUrl && dataUrl.startsWith('data:image')) {
-                    base64 = dataUrl;
-                }
-            } catch (canvasErr) {
-                // CORS tainted, tiếp tục với fetch/GM_xmlhttpRequest
-            }
 
-            if (!base64 && img.src.startsWith('blob:')) {
+            // Kỹ thuật 1: Fetch trực tiếp qua GM_xmlhttpRequest hoặc blob (Hoạt động 100% trong background tab)
+            if (src.startsWith('blob:')) {
                 try {
-                    const blob = await fetch(img.src).then((r) => r.blob());
-                    base64 = await blobToBase64(blob);
+                    const blob = await fetch(src).then((r) => r.blob());
+                    if (blob && blob.size > 2000) {
+                        base64 = await blobToBase64(blob);
+                    }
                 } catch (e) {
                     console.warn('[Kaiz Bridge][Gemini] fetch blob error:', e);
                 }
             }
 
+            if (!base64 && src && !src.startsWith('data:')) {
+                try {
+                    base64 = await fetchImageAsBase64(src);
+                } catch (e) {
+                    console.warn('[Kaiz Bridge][Gemini] fetchImageAsBase64 error:', e);
+                }
+            }
+
+            // Kỹ thuật 2: Fallback Canvas (chỉ dùng nếu có kích thước thực sự >= 100px)
+            if (!base64 && (img.naturalWidth >= 100 || img.width >= 100)) {
+                try {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = img.naturalWidth || img.width;
+                    canvas.height = img.naturalHeight || img.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    const dataUrl = canvas.toDataURL('image/png');
+                    if (dataUrl && dataUrl.length > 2000) {
+                        base64 = dataUrl;
+                    }
+                } catch (canvasErr) {
+                    // CORS tainted
+                }
+            }
+
+            if (!base64 && src.startsWith('data:image')) {
+                base64 = src;
+            }
+
             if (!base64) {
-                base64 = await fetchImageAsBase64(img.src);
+                throw new Error('Đã tìm thấy ảnh nhưng không thể trích xuất dữ liệu Base64 từ Gemini.');
             }
 
             GM_setValue('KAIZ_JOB_RESULT', {
@@ -1082,28 +1131,74 @@
         }
 
         // =========================================================================
-        // GIAI ĐOẠN 2: THEO DÕI CHO TỚI KHI NÚT CANCEL BIẾN MẤT (Chu trình chuẩn)
-        // Tuyệt đối KHÔNG bắt ảnh trong khi AI đang sinh (isGenerating === true).
-        // Chỉ lấy ảnh khi AI đã hoàn tất toàn bộ chu trình và nút Cancel đã biến mất.
+        // GIAI ĐOẠN 2: THEO DÕI TIẾN TRÌNH & ĐÓN ẢNH (HỆ THỐNG TRIGGER KÉP THÔNG MINH)
+        // Trigger A: Theo dõi vòng đời nút Cancel (chuẩn mực khi web hiển thị hoặc Angular cập nhật kịp).
+        // Trigger B: Nhận diện ảnh mới đã sẵn sàng sau promptAnchor (vượt qua việc Angular hoãn cập nhật nút Cancel trong background tab).
         // =========================================================================
         console.log('[Kaiz Bridge][Gemini] ⏳ Đang theo dõi tiến trình tạo ảnh...');
         let finishedCheckCount = 0;
+        let candidateSeenCount = 0;
+        let lastCandidateSrc = '';
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 800));
+            await new Promise((r) => setTimeout(r, 600));
+
+            // Đánh thức rendering liên tục trong background tab mỗi nhịp
+            wakeUpBackgroundRendering();
 
             // Cập nhật lại promptAnchor nếu trước đó chưa tìm thấy
             if (!promptAnchor) {
                 promptAnchor = findPromptAnchor();
             }
 
-            // Kiểm tra trạng thái nút Cancel - KHÔNG bắt ảnh khi đang generate!
+            // Bắt nhanh nếu Gemini từ chối an toàn/kiểm duyệt
+            if (checkGeminiRefusal()) {
+                throw new Error('Gemini từ chối vẽ ảnh do chính sách an toàn/kiểm duyệt.');
+            }
+
+            // TRIGGER B (CHỦ ĐỘNG - THÍCH ỨNG BACKGROUND TAB):
+            // Bỏ qua trạng thái nút Cancel bị kẹt do Angular hoãn cập nhật UI trong background tab
+            // Điều kiện an toàn tuyệt đối chống bắt nhầm ảnh cũ:
+            // 1. Đã qua ít nhất 6 giây (AI không thể tạo ảnh sớm hơn).
+            // 2. Đã định vị được promptAnchor.
+            // 3. Ảnh nằm strictly SAU promptAnchor và KHÔNG có trong existingImages snapshot ban đầu.
+            // 4. URL ảnh ổn định trong 2 nhịp kiểm tra (~1.2s).
+            if (Date.now() - startTime >= 6000 && promptAnchor) {
+                const liveImg = findNewValidImage();
+                if (liveImg) {
+                    const liveSrc = liveImg.currentSrc || liveImg.src || liveImg.getAttribute('src') || '';
+                    if (liveSrc) {
+                        if (liveSrc === lastCandidateSrc) {
+                            candidateSeenCount++;
+                        } else {
+                            lastCandidateSrc = liveSrc;
+                            candidateSeenCount = 1;
+                        }
+
+                        if (candidateSeenCount >= 2) {
+                            console.log(
+                                '[Kaiz Bridge][Gemini] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Bỏ qua nút Cancel chưa chuyển trạng thái trong background tab). Trích xuất ngay...',
+                            );
+                            try {
+                                await deliverImageResult(liveImg);
+                                return;
+                            } catch (err) {
+                                console.warn('[Kaiz Bridge][Gemini] Thử trích xuất ảnh nền thất bại, tiếp tục theo dõi:', err);
+                            }
+                        }
+                    }
+                } else {
+                    candidateSeenCount = 0;
+                    lastCandidateSrc = '';
+                }
+            }
+
+            // TRIGGER A (CHU KỲ CHUẨN - THEO DÕI VÒNG ĐỜI NÚT CANCEL):
             const isGen = isGeminiGenerating();
             if (isGen) {
                 finishedCheckCount = 0; // Đang sinh nội dung -> reset bộ đếm, kiên nhẫn chờ
             } else {
                 // Nút Cancel đã biến mất!
-                // Debounce 2 nhịp liên tiếp (~1.6s) để tránh lỗi re-render / chớp tắt của UI Angular
                 finishedCheckCount++;
                 if (finishedCheckCount >= 2) {
                     console.log('[Kaiz Bridge][Gemini] ⚠️ Nút Cancel đã biến mất (AI hoàn tất). Quét ảnh kết quả...');
@@ -1143,19 +1238,6 @@
                 '[data-message-author-role="assistant"], article, div[class*="agent-turn"], div[data-testid^="conversation-turn-"]',
             );
             return list.length > 0 ? list[list.length - 1] : null;
-        };
-
-        // Kiểm tra phần tử có thực sự hiển thị trên màn hình không (không bị display:none, hidden, opacity:0)
-        const isElementVisible = (el) => {
-            if (!el) return false;
-            if (el.hidden || el.getAttribute('aria-hidden') === 'true') return false;
-            try {
-                const style = window.getComputedStyle(el);
-                if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
-                    return false;
-                }
-            } catch (e) {}
-            return el.offsetParent !== null || el.getClientRects().length > 0;
         };
 
         // Nhận diện ChatGPT đang trong trạng thái sinh phản hồi / tạo ảnh
@@ -1483,8 +1565,8 @@
         // Hàm tìm ứng viên ảnh mới sinh từ ChatGPT (Ưu tiên quét tin nhắn cuối cùng trước để phản hồi cực nhanh)
         const findChatGPTImageCandidate = () => {
             const lastMsg = getLastAssistantMsg();
-            // CHỈ tìm kiếm trong tin nhắn cuối của Assistant nếu có, không quét lan ra ngoài
-            const searchScopes = lastMsg ? [lastMsg] : [document.body];
+            // Quét trong lastMsg trước, sau đó fallback sang document.body để không bỏ sót các card ảnh nằm ngoài container
+            const searchScopes = lastMsg ? [lastMsg, document.body] : [document.body];
 
             for (const scope of searchScopes) {
                 // 1. Quét thẻ img (từ dưới lên trên)
@@ -1503,9 +1585,10 @@
                         if (!(pos & Node.DOCUMENT_POSITION_FOLLOWING)) {
                             continue;
                         }
-                    } else {
-                        if (existingImages.has(src)) continue;
                     }
+
+                    // Bất kể có promptAnchor hay không, LUÔN loại trừ ảnh đã có trong existingImages snapshot
+                    if (existingImages.has(src)) continue;
 
                     // Nhận diện URL ảnh đặc trưng của ChatGPT
                     const isEstuary = src.includes('backend-api/estuary/content') || src.includes('estuary/content');
@@ -1576,7 +1659,7 @@
                     const res = await fetch(src, { credentials: 'include' });
                     if (res.ok) {
                         const blob = await res.blob();
-                        if (blob && blob.size > 2000) {
+                        if (blob && blob.size > 20000) {
                             base64 = await blobToBase64(blob);
                             console.log(
                                 `[Kaiz Bridge][ChatGPT] ✅ Tải ảnh thành công qua fetch (${Math.round(blob.size / 1024)} KB)!`,
@@ -1676,14 +1759,17 @@
         }
 
         // =========================================================================
-        // GIAI ĐOẠN 2: THEO DÕI CHO ĐẾN KHI KẾT THÚC HOÀN TOÀN (Chu trình chuẩn)
-        // Tuyệt đối KHÔNG bắt ảnh trong khi AI đang sinh (isGenerating === true).
+        // GIAI ĐOẠN 2: THEO DÕI TIẾN TRÌNH & ĐÓN ẢNH (HỆ THỐNG TRIGGER KÉP THÔNG MINH)
+        // Trigger A: Theo dõi vòng đời nút Stop (chuẩn mực khi web hiển thị hoặc React cập nhật kịp).
+        // Trigger B: Nhận diện ảnh mới đã sẵn sàng sau promptAnchor (vượt qua việc React hoãn cập nhật nút Stop trong background tab).
         // =========================================================================
         console.log('[Kaiz Bridge][ChatGPT] ⏳ Đang theo dõi tiến trình tạo ảnh...');
         let finishedCheckCount = 0;
+        let candidateSeenCount = 0;
+        let lastCandidateSrc = '';
 
         while (Date.now() - startTime < timeoutMs) {
-            await new Promise((r) => setTimeout(r, 300));
+            await new Promise((r) => setTimeout(r, 400));
 
             // Đánh thức rendering liên tục trong background tab mỗi nhịp
             wakeUpBackgroundRendering();
@@ -1697,13 +1783,51 @@
                 throw new Error('ChatGPT từ chối vẽ ảnh do chính sách an toàn / nội dung.');
             }
 
-            // Theo dõi vòng đời nút Stop - KHÔNG bắt ảnh khi đang generate!
+            // TRIGGER B (CHỦ ĐỘNG - THÍCH ỨNG BACKGROUND TAB):
+            // Bỏ qua trạng thái nút Stop bị kẹt/hoãn do React hoãn cập nhật composer UI trong background tab
+            // Điều kiện an toàn tuyệt đối chống bắt nhầm ảnh cũ:
+            // 1. Đã qua ít nhất 6 giây (AI không thể tạo ảnh sớm hơn).
+            // 2. Đã định vị được promptAnchor.
+            // 3. Ứng viên ảnh nằm strictly SAU promptAnchor và KHÔNG có trong existingImages snapshot ban đầu.
+            // 4. URL ảnh ổn định trong 2 nhịp kiểm tra (~800ms).
+            if (Date.now() - startTime >= 6000 && promptAnchor) {
+                const liveCandidate = findChatGPTImageCandidate();
+                if (liveCandidate && liveCandidate.src) {
+                    const candidateSrc = liveCandidate.src;
+                    if (candidateSrc === lastCandidateSrc) {
+                        candidateSeenCount++;
+                    } else {
+                        lastCandidateSrc = candidateSrc;
+                        candidateSeenCount = 1;
+                    }
+
+                    if (candidateSeenCount >= 2) {
+                        console.log(
+                            '[Kaiz Bridge][ChatGPT] 🎯 Phát hiện ảnh mới hợp lệ sau promptAnchor (Bỏ qua nút Stop chưa chuyển trạng thái trong background tab). Trích xuất ngay...',
+                        );
+                        try {
+                            await deliverChatGPTImageResult(liveCandidate);
+                            return;
+                        } catch (err) {
+                            console.warn(
+                                '[Kaiz Bridge][ChatGPT] Thử trích xuất ảnh sớm chưa thành công, tiếp tục theo dõi:',
+                                err,
+                            );
+                        }
+                    }
+                } else {
+                    candidateSeenCount = 0;
+                    lastCandidateSrc = '';
+                }
+            }
+
+            // TRIGGER A (CHU KỲ CHUẨN - THEO DÕI VÒNG ĐỜI NÚT STOP):
             const isGen = isChatGPTGenerating();
             if (isGen) {
                 finishedCheckCount = 0;
             } else {
                 finishedCheckCount++;
-                // Xác nhận nút Stop đã biến mất sau 2 nhịp (2 x 300ms ≈ 0.6s)
+                // Xác nhận nút Stop đã biến mất sau 2 nhịp (2 x 400ms ≈ 0.8s)
                 if (finishedCheckCount >= 2) {
                     console.log('[Kaiz Bridge][ChatGPT] ⚠️ Nút Stop đã biến mất (AI hoàn tất). Quét ảnh kết quả...');
 
