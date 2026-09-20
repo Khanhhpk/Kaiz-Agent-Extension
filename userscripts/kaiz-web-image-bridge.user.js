@@ -344,8 +344,15 @@
 
     // 4. Silent Web Audio Keep-Alive: Bảo vệ tiến trình tab không bao giờ bị Chromium đóng băng ở cấp OS/Process
     let audioContext = null;
+    let hasUserInteracted = false;
+
     const ensureAudioKeepAlive = () => {
         try {
+            const canStart =
+                hasUserInteracted ||
+                (typeof navigator !== 'undefined' && navigator.userActivation?.hasBeenActive);
+            if (!canStart) return;
+
             if (!audioContext) {
                 const AudioCtx =
                     win.AudioContext ||
@@ -368,14 +375,18 @@
         } catch (e) {}
     };
 
-    // Tự động mở khóa AudioContext khi có bất kỳ thao tác nào
+    // Tự động mở khóa AudioContext sau khi người dùng có thao tác chuột / phím đầu tiên trên trang (Tuân thủ Autoplay Policy)
+    const onUserInteraction = () => {
+        hasUserInteracted = true;
+        ensureAudioKeepAlive();
+    };
+
     ['click', 'keydown', 'touchstart', 'mousedown'].forEach((evt) => {
-        window.addEventListener(evt, ensureAudioKeepAlive, { capture: true, passive: true, once: false });
+        window.addEventListener(evt, onUserInteraction, { capture: true, passive: true });
         if (win && win !== window) {
-            win.addEventListener(evt, ensureAudioKeepAlive, { capture: true, passive: true, once: false });
+            win.addEventListener(evt, onUserInteraction, { capture: true, passive: true });
         }
     });
-    ensureAudioKeepAlive();
 
     // 5. Hàm Kickstart & Đánh thức Rendering nền (Chống lazy loading / Virtual DOM bị treo)
     // TUYỆT ĐỐI KHÔNG gọi window.focus() hay win.focus() để tránh nhảy tab trình duyệt từ SillyTavern sang Web!
