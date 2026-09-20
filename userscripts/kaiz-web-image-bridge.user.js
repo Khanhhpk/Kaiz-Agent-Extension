@@ -1,13 +1,23 @@
 // ==UserScript==
 // @name         Kaiz Web Image Bridge (SillyTavern <-> Gemini / ChatGPT)
 // @namespace    https://github.com/Khanhhpk/Kaiz-Agent-Extension
-// @version      1.2.23
+// @version      1.2.24
 // @description  Cầu nối truyền prompt vẽ ảnh từ SillyTavern sang Gemini Web / ChatGPT Web và chuyển ảnh về SillyTavern.
 // @author       Kaiz
 // @match        http://localhost:*/*
 // @match        http://127.0.0.1:*/*
 // @match        https://gemini.google.com/*
 // @match        https://chatgpt.com/*
+// @connect      *
+// @connect      googleusercontent.com
+// @connect      *.googleusercontent.com
+// @connect      gstatic.com
+// @connect      *.gstatic.com
+// @connect      chatgpt.com
+// @connect      oaiusercontent.com
+// @connect      *.oaiusercontent.com
+// @connect      localhost
+// @connect      127.0.0.1
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_deleteValue
@@ -26,7 +36,7 @@
         return;
     }
 
-    const BRIDGE_VERSION = '1.2.23';
+    const BRIDGE_VERSION = '1.2.24';
     const IS_ST = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
     const IS_GEMINI = location.hostname === 'gemini.google.com';
     const IS_CHATGPT = location.hostname === 'chatgpt.com';
@@ -594,30 +604,43 @@
     // Tải ảnh xuyên miền bypass CORS bằng GM_xmlhttpRequest
     const fetchImageAsBase64 = (url) => {
         return new Promise((resolve, reject) => {
-            console.log('[Kaiz Bridge] Đang tải blob ảnh:', url.substring(0, 100));
-            GM_xmlhttpRequest({
-                method: 'GET',
-                url: url,
-                responseType: 'blob',
-                onload: async (res) => {
-                    if (res.status >= 200 && res.status < 300) {
-                        try {
-                            const blob = res.response;
-                            if (blob && blob.size > 2000) {
-                                const base64 = await blobToBase64(blob);
-                                resolve(base64);
-                            } else {
-                                reject(new Error(`Tệp blob quá nhỏ hoặc rỗng (${blob ? blob.size : 0} bytes)`));
+            console.log('[Kaiz Bridge] Đang tải blob ảnh qua GM_xmlhttpRequest:', url.substring(0, 100));
+            try {
+                GM_xmlhttpRequest({
+                    method: 'GET',
+                    url: url,
+                    responseType: 'blob',
+                    timeout: 30000,
+                    headers: {
+                        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    },
+                    onload: async (res) => {
+                        if (res.status >= 200 && res.status < 300) {
+                            try {
+                                const blob = res.response;
+                                if (blob && blob.size > 1000) {
+                                    const base64 = await blobToBase64(blob);
+                                    resolve(base64);
+                                } else {
+                                    reject(new Error(`Tệp blob quá nhỏ hoặc rỗng (${blob ? blob.size : 0} bytes)`));
+                                }
+                            } catch (e) {
+                                reject(e);
                             }
-                        } catch (e) {
-                            reject(e);
+                        } else {
+                            reject(new Error(`Failed to load image: HTTP ${res.status} ${res.statusText || ''}`));
                         }
-                    } else {
-                        reject(new Error(`Failed to load image: HTTP ${res.status}`));
-                    }
-                },
-                onerror: (err) => reject(err),
-            });
+                    },
+                    onerror: (err) => {
+                        console.warn('[Kaiz Bridge] GM_xmlhttpRequest onerror:', err);
+                        reject(err);
+                    },
+                    ontimeout: () => reject(new Error('GM_xmlhttpRequest timeout sau 30s')),
+                    onabort: () => reject(new Error('GM_xmlhttpRequest aborted')),
+                });
+            } catch (err) {
+                reject(err);
+            }
         });
     };
 
@@ -1110,43 +1133,99 @@
             console.log('[Kaiz Bridge][Gemini] 🎉 Xử lý trích xuất ảnh:', src.substring(0, 100));
             let base64 = null;
 
-            // Kỹ thuật 1: Fetch trực tiếp qua GM_xmlhttpRequest hoặc blob (Hoạt động 100% trong background tab)
-            if (src.startsWith('blob:')) {
+            // Kỹ thuật 1: Direct fetch (Cực nhanh và nhẹ, hoạt động ngay trong page session)
+            if (src && !src.startsWith('data:')) {
                 try {
-                    const blob = await fetch(src).then((r) => r.blob());
-                    if (blob && blob.size > 20000) {
-                        base64 = await blobToBase64(blob);
+                    console.log('[Kaiz Bridge][Gemini] 🚀 Thử tải blob ảnh trực tiếp qua fetch...');
+                    let res = null;
+                    try {
+                        res = await fetch(src, { credentials: 'include' });
+                    } catch (fetchCredErr) {
+                        res = await fetch(src);
                     }
-                } catch (e) {
-                    console.warn('[Kaiz Bridge][Gemini] fetch blob error:', e);
+                    if (res && res.ok) {
+                        const blob = await res.blob();
+                        if (blob && blob.size > 2000) {
+                            base64 = await blobToBase64(blob);
+                            console.log(
+                                `[Kaiz Bridge][Gemini] ✅ Tải ảnh thành công qua direct fetch (${Math.round(blob.size / 1024)} KB)!`,
+                            );
+                        }
+                    } else if (res) {
+                        console.warn('[Kaiz Bridge][Gemini] Direct fetch HTTP status:', res.status);
+                    }
+                } catch (fetchErr) {
+                    console.warn('[Kaiz Bridge][Gemini] Direct fetch không khả dụng:', fetchErr);
                 }
             }
 
+            // Kỹ thuật 2: Fallback GM_xmlhttpRequest (Bypass CORS, CSP và tab throttling của Chromium)
             if (!base64 && src && !src.startsWith('data:')) {
                 try {
+                    console.log('[Kaiz Bridge][Gemini] 🚀 Đang tải ảnh qua GM_xmlhttpRequest fallback...');
                     base64 = await fetchImageAsBase64(src);
+                    if (base64) {
+                        console.log('[Kaiz Bridge][Gemini] ✅ GM_xmlhttpRequest tải ảnh thành công!');
+                    }
                 } catch (e) {
-                    console.warn('[Kaiz Bridge][Gemini] fetchImageAsBase64 error:', e);
+                    console.warn('[Kaiz Bridge][Gemini] GM_xmlhttpRequest error:', e);
                 }
             }
 
-            // Kỹ thuật 2: Fallback Canvas (chỉ dùng nếu có kích thước thực sự >= 100px)
-            if (!base64 && (img.naturalWidth >= 100 || img.width >= 100)) {
+            // Kỹ thuật 3: Fallback Offscreen Image với crossOrigin
+            if (!base64 && src && !src.startsWith('data:')) {
+                try {
+                    base64 = await new Promise((resolve, reject) => {
+                        const tempImg = new Image();
+                        tempImg.crossOrigin = 'anonymous';
+                        tempImg.onload = () => {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = tempImg.naturalWidth || 1024;
+                                canvas.height = tempImg.naturalHeight || 1024;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(tempImg, 0, 0);
+                                const dataUrl = canvas.toDataURL('image/png');
+                                if (dataUrl && dataUrl.startsWith('data:image') && dataUrl.length > 2000) {
+                                    resolve(dataUrl);
+                                } else {
+                                    reject(new Error('Canvas rỗng'));
+                                }
+                            } catch (err) {
+                                reject(err);
+                            }
+                        };
+                        tempImg.onerror = reject;
+                        tempImg.src = src;
+                        setTimeout(() => reject(new Error('Timeout tải tempImg')), 4000);
+                    });
+                    if (base64) {
+                        console.log('[Kaiz Bridge][Gemini] ✅ Trích xuất Base64 thành công qua Offscreen Canvas!');
+                    }
+                } catch (canvasErr) {
+                    // Tiếp tục fallback DOM Canvas
+                }
+            }
+
+            // Kỹ thuật 4: Fallback DOM Canvas
+            if (!base64 && (img.naturalWidth > 0 || img.width > 0)) {
                 try {
                     const canvas = document.createElement('canvas');
-                    canvas.width = img.naturalWidth || img.width;
-                    canvas.height = img.naturalHeight || img.height;
+                    canvas.width = img.naturalWidth || img.width || 1024;
+                    canvas.height = img.naturalHeight || img.height || 1024;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0);
                     const dataUrl = canvas.toDataURL('image/png');
-                    if (dataUrl && dataUrl.length > 5000) {
+                    if (dataUrl && dataUrl.startsWith('data:image') && dataUrl.length > 2000) {
                         base64 = dataUrl;
+                        console.log('[Kaiz Bridge][Gemini] ✅ Trích xuất Base64 thành công qua DOM Canvas!');
                     }
                 } catch (canvasErr) {
                     // CORS tainted
                 }
             }
 
+            // Kỹ thuật 5: Nếu src đã là data:image sẵn
             if (!base64 && src.startsWith('data:image')) {
                 base64 = src;
             }
@@ -1765,7 +1844,42 @@
                 }
             }
 
-            // Kỹ thuật 3: Fallback Canvas (chỉ dùng nếu src là data:image hoặc fetch thất bại và element là img)
+            // Kỹ thuật 3: Fallback Offscreen Image với crossOrigin
+            if (!base64 && src && !src.startsWith('data:')) {
+                try {
+                    base64 = await new Promise((resolve, reject) => {
+                        const tempImg = new Image();
+                        tempImg.crossOrigin = 'anonymous';
+                        tempImg.onload = () => {
+                            try {
+                                const canvas = document.createElement('canvas');
+                                canvas.width = tempImg.naturalWidth || 1024;
+                                canvas.height = tempImg.naturalHeight || 1024;
+                                const ctx = canvas.getContext('2d');
+                                ctx.drawImage(tempImg, 0, 0);
+                                const dataUrl = canvas.toDataURL('image/png');
+                                if (dataUrl && dataUrl.startsWith('data:image/png') && dataUrl.length > 2000) {
+                                    resolve(dataUrl);
+                                } else {
+                                    reject(new Error('Canvas rỗng'));
+                                }
+                            } catch (err) {
+                                reject(err);
+                            }
+                        };
+                        tempImg.onerror = reject;
+                        tempImg.src = src;
+                        setTimeout(() => reject(new Error('Timeout tải tempImg ChatGPT')), 4000);
+                    });
+                    if (base64) {
+                        console.log('[Kaiz Bridge][ChatGPT] ✅ Trích xuất Base64 thành công qua Offscreen Canvas!');
+                    }
+                } catch (canvasErr) {
+                    // Tiếp tục fallback DOM Canvas
+                }
+            }
+
+            // Kỹ thuật 4: Fallback DOM Canvas (chỉ dùng nếu src là data:image hoặc fetch thất bại và element là img)
             if (!base64 && candidate.el && candidate.el.tagName && candidate.el.tagName.toLowerCase() === 'img') {
                 try {
                     const img = candidate.el;
@@ -1784,7 +1898,7 @@
                 }
             }
 
-            // Kỹ thuật 4: Nếu src là data:image sẵn
+            // Kỹ thuật 5: Nếu src là data:image sẵn
             if (!base64 && src.startsWith('data:image')) {
                 base64 = src;
             }
