@@ -87,8 +87,12 @@ jQuery(async () => {
             customImageSuffix: '',
             viewContextDepth: 5,
             viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
+            cotDisplayMode: 'collapse_streaming',
         };
     } else {
+        if (ctx.extensionSettings[EXT_NAME].cotDisplayMode === undefined) {
+            ctx.extensionSettings[EXT_NAME].cotDisplayMode = 'collapse_streaming';
+        }
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
             ctx.extensionSettings[EXT_NAME].maxTokens = 65000;
         }
@@ -150,6 +154,17 @@ jQuery(async () => {
             } else {
                 ctx.extensionSettings[EXT_NAME].customImageSuffix = '';
             }
+        }
+        // Dọn dẹp dứt điểm key cũ để không gây hiểu nhầm hoặc phục hồi cấu hình cũ
+        if (
+            ctx.extensionSettings[EXT_NAME].customImagePrompt !== undefined ||
+            ctx.extensionSettings[EXT_NAME].customImagePromptPosition !== undefined
+        ) {
+            delete ctx.extensionSettings[EXT_NAME].customImagePrompt;
+            delete ctx.extensionSettings[EXT_NAME].customImagePromptPosition;
+            try {
+                ctx.saveSettingsDebounced();
+            } catch (_e) {}
         }
         if (ctx.extensionSettings[EXT_NAME].viewContextDepth === undefined) {
             ctx.extensionSettings[EXT_NAME].viewContextDepth = 5;

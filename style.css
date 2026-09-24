@@ -416,9 +416,51 @@
 
 /* Tin nhắn */
 .kaiz-msg {
+    position: relative;
     display: flex;
     gap: 10px;
     max-width: 90%;
+}
+
+.kaiz-msg-delete-btn {
+    position: absolute;
+    top: -5px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(25, 30, 40, 0.85);
+    color: rgba(255, 255, 255, 0.45);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    opacity: 0.55;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 10;
+    padding: 0;
+}
+
+.kaiz-msg-user .kaiz-msg-delete-btn {
+    left: -8px;
+}
+
+.kaiz-msg-agent .kaiz-msg-delete-btn {
+    right: -8px;
+}
+
+.kaiz-msg:hover .kaiz-msg-delete-btn {
+    opacity: 0.9;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.kaiz-msg-delete-btn:hover {
+    opacity: 1 !important;
+    background: #e74c3c !important;
+    color: #ffffff !important;
+    transform: scale(1.15);
 }
 
 .kaiz-msg-user {
@@ -476,35 +518,209 @@
 
 /* Input Area */
 .kaiz-chat-input-area {
-    padding: 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    position: relative;
+    padding: 12px 14px 14px 14px;
+    background: rgba(10, 14, 22, 0.75);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     display: flex;
     flex-direction: column;
+    gap: 8px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+/* Input Resizer Handle */
+.kaiz-input-resizer-handle {
+    width: 100%;
+    height: 10px;
+    margin-top: -12px;
+    margin-bottom: -6px;
+    cursor: row-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    user-select: none;
+    z-index: 5;
+    padding: 2px 0;
+}
+
+.kaiz-input-resizer-bar {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    transition:
+        background 0.2s,
+        width 0.2s;
+}
+
+.kaiz-input-resizer-handle:hover .kaiz-input-resizer-bar,
+.kaiz-input-resizer-handle.resizing .kaiz-input-resizer-bar {
+    background: rgba(255, 255, 255, 0.6);
+    width: 56px;
+}
+
+/* Fullscreen Header Banner */
+.kaiz-input-fullscreen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 8px;
+}
+
+.kaiz-input-fullscreen-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kaiz-input-fullscreen-actions {
+    display: flex;
+    align-items: center;
     gap: 12px;
 }
 
-.kaiz-chat-input {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    padding: 12px 16px;
-    color: #fff;
-    font-size: 14px;
-    resize: none;
-    outline: none;
-    font-family: inherit;
-    max-height: 120px;
-    overflow-y: auto;
-    transition:
-        border-color 0.2s,
-        background 0.2s;
+.kaiz-input-char-counter {
+    font-size: 11px;
+    color: #aaa;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 3px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.kaiz-chat-input:focus {
-    border-color: rgba(255, 255, 255, 0.4);
-    background: rgba(255, 255, 255, 0.08);
+.kaiz-fullscreen-exit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.kaiz-fullscreen-exit-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Fullscreen Mode on #kaiz-chat-body-wrapper */
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen #kaiz-chat-history,
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen #kaiz-chat-sidebar {
+    display: none !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-chat-input-area {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    inset: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 10001 !important;
+    background: #0d1117 !important;
+    backdrop-filter: blur(16px);
+    display: flex !important;
+    flex-direction: column !important;
+    padding: 14px 16px !important;
+    box-sizing: border-box !important;
+    border-top: none !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-input-resizer-handle {
+    display: none !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-input-fullscreen-header {
+    display: flex !important;
+    flex-shrink: 0 !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-chat-input-box {
+    flex: 1 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    min-height: 0 !important;
+    height: 100% !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    background: rgba(18, 24, 38, 0.85) !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen #kaiz-chat-input {
+    flex: 1 !important;
+    width: 100% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    resize: none !important;
+    padding: 14px 16px !important;
+    font-size: 14px !important;
+    line-height: 1.6 !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-chat-input-bottom-bar {
+    flex-shrink: 0 !important;
+    padding: 8px 12px 10px 12px !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Modern Unified Input Box Card */
+.kaiz-chat-input-box {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    background: rgba(22, 28, 42, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    transition:
+        border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-sizing: border-box;
+    overflow: hidden;
+}
+
+.kaiz-chat-input-box:focus-within {
+    border-color: rgba(99, 102, 241, 0.55);
+    box-shadow:
+        0 0 0 2px rgba(99, 102, 241, 0.15),
+        0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.kaiz-chat-input {
+    width: 100% !important;
+    min-height: 44px !important;
+    height: 44px;
+    max-height: 140px;
+    background: transparent !important;
+    border: none !important;
+    outline: none !important;
+    padding: 11px 12px !important;
+    color: #f8fafc;
+    font-size: 13.5px;
+    line-height: 22px;
+    resize: none;
+    font-family: inherit;
+    box-sizing: border-box;
+    overflow-y: auto;
+}
+
+.kaiz-chat-input::placeholder {
+    color: #64748b;
+    font-size: 13px;
 }
 
 .kaiz-chat-input::-webkit-scrollbar {
@@ -516,31 +732,127 @@
     border-radius: 2px;
 }
 
+/* Bottom Bar Inside Input Box */
+.kaiz-chat-input-bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px 8px 8px;
+    gap: 8px;
+    box-sizing: border-box;
+}
+
+.kaiz-chat-input-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kaiz-chat-input-actions-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Action Icon Buttons (Left side: Fan, Clip, Fullscreen) */
+.kaiz-input-action-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    color: #94a3b8;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.15s ease;
+    padding: 0;
+}
+
+.kaiz-input-action-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.12);
+    color: #f1f5f9;
+}
+
+.kaiz-input-action-btn:active {
+    transform: scale(0.95);
+}
+
+/* Continue Button */
+.kaiz-continue-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 32px;
+    padding: 0 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #cbd5e1;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.kaiz-continue-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+/* Send & Stop Button */
+.kaiz-send-btn,
 .kaiz-chat-send {
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #2b2b2b 0%, #000000 100%);
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     color: #ffffff;
     border: none;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 14px;
+    box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
+    transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
     flex-shrink: 0;
-    transition:
-        transform 0.2s,
-        box-shadow 0.2s;
 }
 
+.kaiz-send-btn:hover,
 .kaiz-chat-send:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    background: linear-gradient(135deg, #818cf8 0%, #6366f1 100%);
+    box-shadow: 0 3px 10px rgba(99, 102, 241, 0.5);
+    transform: translateY(-1px);
 }
 
+.kaiz-send-btn:active,
 .kaiz-chat-send:active {
-    transform: translateY(0);
+    transform: scale(0.95);
+}
+
+.kaiz-send-btn:disabled,
+.kaiz-chat-send:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.kaiz-send-btn.kaiz-stop-mode,
+.kaiz-chat-send.kaiz-stop-mode {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%) !important;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4) !important;
+}
+
+.kaiz-send-btn.kaiz-force-aborted,
+.kaiz-chat-send.kaiz-force-aborted {
+    background: #000 !important;
+    border: 1px solid #ef4444 !important;
 }
 
 /* Icon Picker */
@@ -1278,7 +1590,7 @@
 /* 2. Segmented Navigation Tabs */
 .kaiz-settings-tabs {
     display: grid !important;
-    grid-template-columns: repeat(6, 1fr) !important;
+    grid-template-columns: repeat(3, 1fr) !important;
     gap: 6px !important;
     background: rgba(0, 0, 0, 0.25) !important;
     border: 1px solid rgba(255, 255, 255, 0.06) !important;
@@ -1293,8 +1605,8 @@
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    gap: 6px !important;
-    padding: 8px 6px !important;
+    gap: 5px !important;
+    padding: 7px 4px !important;
     font-size: 11.5px !important;
     font-weight: 500 !important;
     color: #94a3b8 !important;
@@ -1321,28 +1633,16 @@
     box-shadow: 0 2px 8px rgba(99, 102, 241, 0.2) !important;
 }
 
-/* Distribution: 3 on row 1 (each span 2 = 1/3), 2 on row 2 (each span 3 = 1/2) */
-.kaiz-tab-btn[data-tab='model'],
-.kaiz-tab-btn[data-tab='prompts'],
-.kaiz-tab-btn[data-tab='tools'] {
-    grid-column: span 2 !important;
-}
-
-.kaiz-tab-btn[data-tab='flow'],
-.kaiz-tab-btn[data-tab='browser'] {
-    grid-column: span 3 !important;
-}
-
 .kaiz-tab-badge {
-    font-size: 8.5px !important;
-    padding: 1px 5px !important;
+    font-size: 8px !important;
+    padding: 1px 4px !important;
     border-radius: 999px !important;
     background: rgba(251, 191, 36, 0.15) !important;
     color: #fbbf24 !important;
     border: 1px solid rgba(251, 191, 36, 0.3) !important;
     font-weight: 600 !important;
     flex-shrink: 0 !important;
-    line-height: 1.2 !important;
+    line-height: 1.1 !important;
 }
 
 /* 3. Tab Panes */

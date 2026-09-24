@@ -63,7 +63,7 @@ export class StateManager {
         role: 'user' | 'agent' | 'system',
         content: string,
         attachments?: import('./db').ChatAttachment[],
-    ): Promise<void> {
+    ): Promise<number> {
         let chatId = this.currentChatId;
 
         if (!chatId) {
@@ -82,11 +82,17 @@ export class StateManager {
             }
         }
 
-        await this.db.addMessage(chatId, role, content, attachments);
+        const msgId = await this.db.addMessage(chatId, role, content, attachments);
 
         // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
         const chats = await this.db.getAllChats(this.currentWorkspaceId);
         if (this.onChatsListUpdated) this.onChatsListUpdated(chats);
+
+        return msgId;
+    }
+
+    public async deleteMessage(messageId: number): Promise<void> {
+        await this.db.deleteMessage(messageId);
     }
 
     public async updateMessage(messageId: number, newContent: string): Promise<void> {
