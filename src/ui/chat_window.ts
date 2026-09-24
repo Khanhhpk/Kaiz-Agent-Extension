@@ -992,7 +992,7 @@ export class ChatWindowUI {
             let html = text || '';
 
             const ctx = (window as any).SillyTavern?.getContext?.();
-            const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'auto_collapse';
+            const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'collapse_streaming';
 
             let closeTag = '';
             let closeIndex = html.indexOf('</agent_cot>');
@@ -1297,7 +1297,7 @@ export class ChatWindowUI {
                 let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                 if (event.reasoning && !event.text) {
                     const ctx = (window as any).SillyTavern?.getContext?.();
-                    const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'auto_collapse';
+                    const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'collapse_streaming';
                     const shouldOpen = cotMode === 'auto_collapse' || cotMode === 'always_expanded';
                     const escapedReasoning = event.reasoning.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
                     htmlToRender += `<details class="kaiz-cot-block"${shouldOpen ? ' open' : ''}><summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${escapedReasoning}</div></details>`;
@@ -1486,10 +1486,11 @@ export class ChatWindowUI {
         // --- XỬ LÝ KÉO THẢ CO GIÃN CHIỀU CAO THANH INPUT ---
         const inputResizer = $('#kaiz-input-resizer');
         const chatBodyWrapper = $('#kaiz-chat-body-wrapper');
+        const DEFAULT_INPUT_HEIGHT = 44;
         const savedInputHeight = localStorage.getItem('kaiz_chat_input_height');
         if (savedInputHeight) {
             const h = parseInt(savedInputHeight, 10);
-            if (!isNaN(h) && h >= 44) {
+            if (!isNaN(h) && h >= DEFAULT_INPUT_HEIGHT) {
                 input.css({ height: `${h}px`, maxHeight: 'none' });
             }
         }
@@ -1502,7 +1503,7 @@ export class ChatWindowUI {
             if (!isResizingInput) return;
             const deltaY = startY - clientY; // Kéo lên trên -> tăng chiều cao
             let newHeight = startHeight + deltaY;
-            const minHeight = 44;
+            const minHeight = DEFAULT_INPUT_HEIGHT;
             const maxHeight = Math.max(200, (chatBodyWrapper.height() || 500) * 0.7);
 
             if (newHeight < minHeight) newHeight = minHeight;
@@ -1517,7 +1518,7 @@ export class ChatWindowUI {
             inputResizer.removeClass('resizing');
             $(document).off('.kaizInputResize');
             const currentH = input.height();
-            if (currentH && currentH >= 44) {
+            if (currentH && currentH >= DEFAULT_INPUT_HEIGHT) {
                 localStorage.setItem('kaiz_chat_input_height', Math.round(currentH).toString());
             }
         };
@@ -1527,7 +1528,7 @@ export class ChatWindowUI {
             e.preventDefault();
             isResizingInput = true;
             startY = e.clientY;
-            startHeight = input.height() || 44;
+            startHeight = input.height() || DEFAULT_INPUT_HEIGHT;
             inputResizer.addClass('resizing');
 
             $(document).on('mousemove.kaizInputResize', (moveEvent: any) => {
@@ -1543,7 +1544,7 @@ export class ChatWindowUI {
             if (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 0) {
                 isResizingInput = true;
                 startY = e.originalEvent.touches[0].clientY;
-                startHeight = input.height() || 44;
+                startHeight = input.height() || DEFAULT_INPUT_HEIGHT;
                 inputResizer.addClass('resizing');
 
                 $(document).on('touchmove.kaizInputResize', (moveEvent: any) => {
@@ -1561,7 +1562,7 @@ export class ChatWindowUI {
         inputResizer.on('dblclick', () => {
             if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) return;
             localStorage.removeItem('kaiz_chat_input_height');
-            input.css({ height: '', maxHeight: '140px' });
+            input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
             toastr.info('Đã khôi phục kích thước khung input về mặc định', 'Kaiz Agent');
         });
 
@@ -1598,19 +1599,19 @@ export class ChatWindowUI {
                 if (preFullscreenHeight) {
                     input.css({ height: preFullscreenHeight, maxHeight: 'none' });
                 } else {
-                    input.css({ height: '', maxHeight: '140px' });
+                    input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
                 }
             } else {
                 const savedH = localStorage.getItem('kaiz_chat_input_height');
                 if (savedH) {
                     const h = parseInt(savedH, 10);
-                    if (!isNaN(h) && h >= 44) {
+                    if (!isNaN(h) && h >= DEFAULT_INPUT_HEIGHT) {
                         input.css({ height: `${h}px`, maxHeight: 'none' });
                     } else {
-                        input.css({ height: '', maxHeight: '140px' });
+                        input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
                     }
                 } else {
-                    input.css({ height: '', maxHeight: '140px' });
+                    input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
                 }
             }
             preFullscreenHeight = null;

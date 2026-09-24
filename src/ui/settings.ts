@@ -190,7 +190,7 @@ export class SettingsUI {
         });
 
         // --- AGENT THINK DISPLAY MODE ---
-        const currentCotMode = settings.cotDisplayMode || 'auto_collapse';
+        const currentCotMode = settings.cotDisplayMode || 'collapse_streaming';
         $('#kaiz-cot-display-mode').val(currentCotMode);
         $('#kaiz-cot-display-mode').on('change', function (this: HTMLSelectElement) {
             settings.cotDisplayMode = this.value;
