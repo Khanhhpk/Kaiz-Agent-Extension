@@ -271,12 +271,12 @@
                 <!-- Tin nhắn sẽ được nhúng vào đây -->
             </div>
 
-            <div class="kaiz-chat-input-area" id="kaiz-chat-input-area" style="position: relative">
+            <div class="kaiz-chat-input-area" id="kaiz-chat-input-area">
                 <!-- Input Resizer Handle -->
                 <div
                     id="kaiz-input-resizer"
                     class="kaiz-input-resizer-handle interactable"
-                    title="Kéo để thay đổi chiều cao thanh nhập liệu"
+                    title="Kéo để thay đổi chiều cao thanh nhập liệu (Nhấp đúp để đặt lại mặc định)"
                 >
                     <span class="kaiz-input-resizer-bar"></span>
                 </div>
@@ -329,51 +329,62 @@
                     <!-- Menu items will be injected here -->
                 </div>
 
-                <div
-                    class="kaiz-chat-input-controls-row"
-                    style="display: flex; align-items: flex-end; gap: 8px; width: 100%"
-                >
-                    <button
-                        id="kaiz-quick-prompt-btn"
-                        class="kaiz-chat-send"
-                        style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-                        title="Quick Prompts"
-                    >
-                        <i class="fa-solid fa-fan"></i>
-                    </button>
-                    <button
-                        id="kaiz-attach-btn"
-                        class="kaiz-chat-send"
-                        style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-                        title="Đính kèm file (Ảnh, TXT, MD)"
-                    >
-                        <i class="fa-solid fa-paperclip"></i>
-                    </button>
-                    <button
-                        id="kaiz-input-fullscreen-btn"
-                        class="kaiz-chat-send interactable"
-                        style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-                        title="Phóng to khung soạn thảo (Fullscreen)"
-                    >
-                        <i class="fa-solid fa-expand"></i>
-                    </button>
+                <div class="kaiz-chat-input-box" id="kaiz-chat-input-box">
                     <textarea
                         id="kaiz-chat-input"
                         class="kaiz-chat-input"
                         placeholder="Nhập yêu cầu hoặc Paste/Kéo thả file..."
                         rows="1"
                     ></textarea>
-                    <button
-                        id="kaiz-chat-continue"
-                        class="kaiz-chat-send"
-                        style="display: none"
-                        title="Tiếp tục (Continue)"
-                    >
-                        <i class="fa-solid fa-forward-step"></i>
-                    </button>
-                    <button id="kaiz-chat-send" class="kaiz-chat-send">
-                        <i class="fa-solid fa-paper-plane"></i>
-                    </button>
+
+                    <div class="kaiz-chat-input-bottom-bar">
+                        <div class="kaiz-chat-input-actions-left">
+                            <button
+                                type="button"
+                                id="kaiz-quick-prompt-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Quick Prompts"
+                            >
+                                <i class="fa-solid fa-fan"></i>
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-attach-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Đính kèm file (Ảnh, TXT, MD)"
+                            >
+                                <i class="fa-solid fa-paperclip"></i>
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-input-fullscreen-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Phóng to khung soạn thảo (Fullscreen)"
+                            >
+                                <i class="fa-solid fa-expand"></i>
+                            </button>
+                        </div>
+
+                        <div class="kaiz-chat-input-actions-right">
+                            <button
+                                type="button"
+                                id="kaiz-chat-continue"
+                                class="kaiz-continue-btn interactable"
+                                style="display: none"
+                                title="Tiếp tục (Continue)"
+                            >
+                                <i class="fa-solid fa-forward-step"></i> Tiếp tục
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-chat-send"
+                                class="kaiz-send-btn interactable"
+                                title="Gửi tin nhắn"
+                            >
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

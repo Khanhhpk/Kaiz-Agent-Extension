@@ -319,7 +319,7 @@ export class ChatWindowUI {
                 lastMsgRow.hasClass('kaiz-msg-agent') &&
                 !lastMsgRow.hasClass('kaiz-msg-welcome')
             ) {
-                continueBtn.show();
+                continueBtn.css('display', 'inline-flex');
             } else {
                 continueBtn.hide();
             }
@@ -1557,11 +1557,21 @@ export class ChatWindowUI {
             }
         });
 
+        // Nhấp đúp vào thanh resizer để reset chiều cao về mặc định
+        inputResizer.on('dblclick', () => {
+            if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) return;
+            localStorage.removeItem('kaiz_chat_input_height');
+            input.css({ height: '', maxHeight: '140px' });
+            toastr.info('Đã khôi phục kích thước khung input về mặc định', 'Kaiz Agent');
+        });
+
         // --- XỬ LÝ CHẾ ĐỘ MỞ FULL THANH INPUT (FULLSCREEN) ---
         const fullscreenBtn = $('#kaiz-input-fullscreen-btn');
         const exitFullscreenBtn = $('#kaiz-input-exit-fullscreen-btn');
         const fullscreenHeader = $('#kaiz-input-fullscreen-header');
         const charCounter = $('#kaiz-input-char-counter');
+
+        let preFullscreenHeight: string | null = null;
 
         const updateCharCount = () => {
             const val = String(input.val() || '');
@@ -1569,6 +1579,7 @@ export class ChatWindowUI {
         };
 
         const enterFullscreen = () => {
+            preFullscreenHeight = input[0]?.style.height || '';
             chatBodyWrapper.addClass('kaiz-input-fullscreen');
             fullscreenHeader.show();
             fullscreenBtn.find('i').removeClass('fa-expand').addClass('fa-compress');
@@ -1582,17 +1593,27 @@ export class ChatWindowUI {
             fullscreenHeader.hide();
             fullscreenBtn.find('i').removeClass('fa-compress').addClass('fa-expand');
             fullscreenBtn.attr('title', 'Phóng to khung soạn thảo (Fullscreen)');
-            const savedH = localStorage.getItem('kaiz_chat_input_height');
-            if (savedH) {
-                const h = parseInt(savedH, 10);
-                if (!isNaN(h) && h >= 44) {
-                    input.css({ height: `${h}px`, maxHeight: 'none' });
+
+            if (preFullscreenHeight !== null) {
+                if (preFullscreenHeight) {
+                    input.css({ height: preFullscreenHeight, maxHeight: 'none' });
                 } else {
-                    input.css({ height: '', maxHeight: '120px' });
+                    input.css({ height: '', maxHeight: '140px' });
                 }
             } else {
-                input.css({ height: '', maxHeight: '120px' });
+                const savedH = localStorage.getItem('kaiz_chat_input_height');
+                if (savedH) {
+                    const h = parseInt(savedH, 10);
+                    if (!isNaN(h) && h >= 44) {
+                        input.css({ height: `${h}px`, maxHeight: 'none' });
+                    } else {
+                        input.css({ height: '', maxHeight: '140px' });
+                    }
+                } else {
+                    input.css({ height: '', maxHeight: '140px' });
+                }
             }
+            preFullscreenHeight = null;
             input.focus();
         };
 
