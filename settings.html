@@ -54,6 +54,9 @@
                     <i class="fa-brands fa-chrome"></i> Browser
                     <span class="kaiz-tab-badge">Tùy chọn</span>
                 </button>
+                <button class="kaiz-tab-btn interactable" data-tab="ui" role="tab">
+                    <i class="fa-solid fa-palette"></i> UI
+                </button>
             </div>
 
             <!-- 3. Tab Panes Content -->
@@ -857,6 +860,68 @@
                                     </a>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ================= TAB 6: UI (GIAO DIỆN) ================= -->
+                <div id="kaiz-pane-ui" class="kaiz-tab-pane" role="tabpanel">
+                    <!-- Agent Think (CoT) Display Mode Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-brain"></i> Hiển thị suy nghĩ (Agent Think / CoT)
+                            </div>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Tùy chỉnh cách khối suy nghĩ của Agent hiển thị trong khung chat (Bạn vẫn có thể click
+                                vào khối suy nghĩ để đóng/mở thủ công bất cứ lúc nào).
+                            </p>
+
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-cot-display-mode" class="kaiz-field-label"
+                                    >Chế độ hiển thị suy nghĩ</label
+                                >
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-lightbulb kaiz-input-icon"></i>
+                                    <select id="kaiz-cot-display-mode" class="text_pole kaiz-input">
+                                        <option value="auto_collapse">
+                                            Mở khi stream, tự thu gọn khi hoàn tất (Mặc định)
+                                        </option>
+                                        <option value="collapse_streaming">Luôn thu gọn khi streaming</option>
+                                        <option value="always_expanded">Luôn mở</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Phone Mode Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-mobile-screen"></i> Chế độ Phone Mode
+                            </div>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Phóng to toàn màn hình cho cửa sổ Agent Chat (Phù hợp trải nghiệm trên điện thoại hoặc
+                                màn hình nhỏ).
+                            </p>
+
+                            <label class="kaiz-switch-row" style="margin-top: 8px">
+                                <span class="kaiz-switch-label">
+                                    <i class="fa-solid fa-mobile-screen-button"></i> Kích hoạt Phone Mode (Full-screen
+                                    chat)
+                                </span>
+                                <span class="kaiz-switch">
+                                    <input type="checkbox" id="kaiz-phone-mode-tab" />
+                                    <span class="kaiz-slider"></span>
+                                </span>
+                            </label>
                         </div>
                     </div>
                 </div>

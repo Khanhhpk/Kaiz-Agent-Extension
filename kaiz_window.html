@@ -271,7 +271,34 @@
                 <!-- Tin nhắn sẽ được nhúng vào đây -->
             </div>
 
-            <div class="kaiz-chat-input-area" style="position: relative">
+            <div class="kaiz-chat-input-area" id="kaiz-chat-input-area" style="position: relative">
+                <!-- Input Resizer Handle -->
+                <div
+                    id="kaiz-input-resizer"
+                    class="kaiz-input-resizer-handle interactable"
+                    title="Kéo để thay đổi chiều cao thanh nhập liệu"
+                >
+                    <span class="kaiz-input-resizer-bar"></span>
+                </div>
+
+                <!-- Fullscreen Header Banner -->
+                <div id="kaiz-input-fullscreen-header" class="kaiz-input-fullscreen-header" style="display: none">
+                    <div class="kaiz-input-fullscreen-title">
+                        <i class="fa-solid fa-pen-to-square"></i> Soạn thảo tin nhắn
+                    </div>
+                    <div class="kaiz-input-fullscreen-actions">
+                        <span id="kaiz-input-char-counter" class="kaiz-input-char-counter">0 ký tự</span>
+                        <button
+                            type="button"
+                            id="kaiz-input-exit-fullscreen-btn"
+                            class="kaiz-fullscreen-exit-btn interactable"
+                            title="Thu nhỏ (Thoát Fullscreen)"
+                        >
+                            <i class="fa-solid fa-compress"></i> Thu nhỏ
+                        </button>
+                    </div>
+                </div>
+
                 <!-- Attachment Preview Area -->
                 <div id="kaiz-attachments-preview" style="display: flex; gap: 8px; flex-wrap: wrap"></div>
                 <input type="file" id="kaiz-file-upload" accept="image/*,.txt,.md" multiple style="display: none" />
@@ -302,7 +329,10 @@
                     <!-- Menu items will be injected here -->
                 </div>
 
-                <div style="display: flex; align-items: flex-end; gap: 8px; width: 100%">
+                <div
+                    class="kaiz-chat-input-controls-row"
+                    style="display: flex; align-items: flex-end; gap: 8px; width: 100%"
+                >
                     <button
                         id="kaiz-quick-prompt-btn"
                         class="kaiz-chat-send"
@@ -318,6 +348,14 @@
                         title="Đính kèm file (Ảnh, TXT, MD)"
                     >
                         <i class="fa-solid fa-paperclip"></i>
+                    </button>
+                    <button
+                        id="kaiz-input-fullscreen-btn"
+                        class="kaiz-chat-send interactable"
+                        style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
+                        title="Phóng to khung soạn thảo (Fullscreen)"
+                    >
+                        <i class="fa-solid fa-expand"></i>
                     </button>
                     <textarea
                         id="kaiz-chat-input"

@@ -87,8 +87,12 @@ jQuery(async () => {
             customImageSuffix: '',
             viewContextDepth: 5,
             viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
+            cotDisplayMode: 'auto_collapse',
         };
     } else {
+        if (ctx.extensionSettings[EXT_NAME].cotDisplayMode === undefined) {
+            ctx.extensionSettings[EXT_NAME].cotDisplayMode = 'auto_collapse';
+        }
         if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
             ctx.extensionSettings[EXT_NAME].maxTokens = 65000;
         }

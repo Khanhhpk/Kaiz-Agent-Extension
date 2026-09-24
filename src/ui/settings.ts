@@ -140,9 +140,10 @@ export class SettingsUI {
         });
 
         // --- UI SETTINGS LOGIC ---
-        $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
-        $('#kaiz-phone-mode').on('change', function (this: HTMLInputElement) {
-            settings.phoneMode = !!this.checked;
+        const applyPhoneMode = (enabled: boolean) => {
+            settings.phoneMode = enabled;
+            $('#kaiz-phone-mode').prop('checked', enabled);
+            $('#kaiz-phone-mode-tab').prop('checked', enabled);
             ctx.saveSettingsDebounced();
 
             const win = $('#kaiz-chat-window');
@@ -181,6 +182,19 @@ export class SettingsUI {
                     dialogEl.show();
                 }
             }
+        };
+
+        $('#kaiz-phone-mode, #kaiz-phone-mode-tab').prop('checked', !!settings.phoneMode);
+        $('#kaiz-phone-mode, #kaiz-phone-mode-tab').on('change', function (this: HTMLInputElement) {
+            applyPhoneMode(!!this.checked);
+        });
+
+        // --- AGENT THINK DISPLAY MODE ---
+        const currentCotMode = settings.cotDisplayMode || 'auto_collapse';
+        $('#kaiz-cot-display-mode').val(currentCotMode);
+        $('#kaiz-cot-display-mode').on('change', function (this: HTMLSelectElement) {
+            settings.cotDisplayMode = this.value;
+            ctx.saveSettingsDebounced();
         });
 
         // --- SAFE MODE LOGIC ---

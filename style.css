@@ -416,9 +416,51 @@
 
 /* Tin nhắn */
 .kaiz-msg {
+    position: relative;
     display: flex;
     gap: 10px;
     max-width: 90%;
+}
+
+.kaiz-msg-delete-btn {
+    position: absolute;
+    top: -5px;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(25, 30, 40, 0.85);
+    color: rgba(255, 255, 255, 0.45);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+    opacity: 0.55;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 10;
+    padding: 0;
+}
+
+.kaiz-msg-user .kaiz-msg-delete-btn {
+    left: -8px;
+}
+
+.kaiz-msg-agent .kaiz-msg-delete-btn {
+    right: -8px;
+}
+
+.kaiz-msg:hover .kaiz-msg-delete-btn {
+    opacity: 0.9;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.kaiz-msg-delete-btn:hover {
+    opacity: 1 !important;
+    background: #e74c3c !important;
+    color: #ffffff !important;
+    transform: scale(1.15);
 }
 
 .kaiz-msg-user {
@@ -482,6 +524,134 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+/* Input Resizer Handle */
+.kaiz-input-resizer-handle {
+    width: 100%;
+    height: 10px;
+    margin-top: -12px;
+    margin-bottom: -6px;
+    cursor: row-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: none;
+    user-select: none;
+    z-index: 5;
+    padding: 2px 0;
+}
+
+.kaiz-input-resizer-bar {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    transition:
+        background 0.2s,
+        width 0.2s;
+}
+
+.kaiz-input-resizer-handle:hover .kaiz-input-resizer-bar,
+.kaiz-input-resizer-handle.resizing .kaiz-input-resizer-bar {
+    background: rgba(255, 255, 255, 0.6);
+    width: 56px;
+}
+
+/* Fullscreen Header Banner */
+.kaiz-input-fullscreen-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 8px;
+}
+
+.kaiz-input-fullscreen-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kaiz-input-fullscreen-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.kaiz-input-char-counter {
+    font-size: 11px;
+    color: #aaa;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 3px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.kaiz-fullscreen-exit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.kaiz-fullscreen-exit-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Fullscreen Mode on #kaiz-chat-body-wrapper */
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-chat-input-area {
+    position: absolute;
+    inset: 0;
+    z-index: 10001;
+    height: 100% !important;
+    background: rgba(18, 22, 30, 0.98);
+    backdrop-filter: blur(14px);
+    display: flex;
+    flex-direction: column;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-input-resizer-handle {
+    display: none !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-input-fullscreen-header {
+    display: flex !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-chat-input-controls-row {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    width: 100%;
+    min-height: 0;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-chat-send {
+    align-self: flex-end;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen #kaiz-chat-input {
+    flex: 1;
+    height: 100% !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    resize: none;
 }
 
 .kaiz-chat-input {

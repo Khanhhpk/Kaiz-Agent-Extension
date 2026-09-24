@@ -5606,6 +5606,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               request.onerror = () => reject(request.error);
           });
       }
+      async deleteMessage(id) {
+          return new Promise((resolve, reject) => {
+              if (!this.db)
+                  return reject(new Error('DB not initialized'));
+              const transaction = this.db.transaction(['messages'], 'readwrite');
+              const store = transaction.objectStore('messages');
+              const request = store.delete(id);
+              request.onsuccess = () => resolve();
+              request.onerror = () => reject(request.error);
+          });
+      }
       async getMessages(chatId) {
           return new Promise((resolve, reject) => {
               if (!this.db)
@@ -7999,11 +8010,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
               }
           }
-          await this.db.addMessage(chatId, role, content, attachments);
+          const msgId = await this.db.addMessage(chatId, role, content, attachments);
           // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
           const chats = await this.db.getAllChats(this.currentWorkspaceId);
           if (this.onChatsListUpdated)
               this.onChatsListUpdated(chats);
+          return msgId;
+      }
+      async deleteMessage(messageId) {
+          await this.db.deleteMessage(messageId);
       }
       async updateMessage(messageId, newContent) {
           await this.db.updateMessageText(messageId, newContent);
@@ -8211,9 +8226,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               ctx.saveSettingsDebounced();
           });
           // --- UI SETTINGS LOGIC ---
-          $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
-          $('#kaiz-phone-mode').on('change', function () {
-              settings.phoneMode = !!this.checked;
+          const applyPhoneMode = (enabled) => {
+              settings.phoneMode = enabled;
+              $('#kaiz-phone-mode').prop('checked', enabled);
+              $('#kaiz-phone-mode-tab').prop('checked', enabled);
               ctx.saveSettingsDebounced();
               const win = $('#kaiz-chat-window');
               const dialogEl = win[0];
@@ -8252,6 +8268,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       dialogEl.show();
                   }
               }
+          };
+          $('#kaiz-phone-mode, #kaiz-phone-mode-tab').prop('checked', !!settings.phoneMode);
+          $('#kaiz-phone-mode, #kaiz-phone-mode-tab').on('change', function () {
+              applyPhoneMode(!!this.checked);
+          });
+          // --- AGENT THINK DISPLAY MODE ---
+          const currentCotMode = settings.cotDisplayMode || 'auto_collapse';
+          $('#kaiz-cot-display-mode').val(currentCotMode);
+          $('#kaiz-cot-display-mode').on('change', function () {
+              settings.cotDisplayMode = this.value;
+              ctx.saveSettingsDebounced();
           });
           // --- SAFE MODE LOGIC ---
           $('#kaiz-safe-mode').prop('checked', settings.safeMode);
@@ -10208,12 +10235,33 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // Hàm tiện ích format tin nhắn
           const formatMessage = (text, isFinal) => {
               let html = text || '';
-              const detailsTag = '<details class="kaiz-cot-block">';
-              const closeIndex = html.indexOf('</agent_cot>');
+              const ctx = window.SillyTavern?.getContext?.();
+              const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'auto_collapse';
+              let closeTag = '';
+              let closeIndex = html.indexOf('</agent_cot>');
               if (closeIndex !== -1) {
-                  const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                  let restContent = html.substring(closeIndex + '</agent_cot>'.length).trim();
+                  closeTag = '</agent_cot>';
+              }
+              else {
+                  closeIndex = html.indexOf('</think>');
+                  if (closeIndex !== -1) {
+                      closeTag = '</think>';
+                  }
+                  else {
+                      closeIndex = html.indexOf('</thinking>');
+                      if (closeIndex !== -1) {
+                          closeTag = '</thinking>';
+                      }
+                  }
+              }
+              if (closeIndex !== -1) {
+                  let cotContent = html.substring(0, closeIndex);
+                  cotContent = cotContent.replace(/<agent_cot>|<think>|<thinking>/gi, '').trim();
+                  cotContent = cotContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                  let restContent = html.substring(closeIndex + closeTag.length).trim();
                   restContent = parseToolCallsToHtml(restContent, !isFinal);
+                  const shouldOpen = cotMode === 'always_expanded';
+                  const detailsTag = `<details class="kaiz-cot-block"${shouldOpen ? ' open' : ''}>`;
                   html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                   if (restContent) {
                       const parsedMarkdown = isFinal ? g.parse(restContent) : restContent;
@@ -10221,8 +10269,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               }
               else if (!isFinal) {
-                  // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT (giữ đóng gọn gàng)
-                  const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                  // Đang stream và chưa thấy thẻ đóng
+                  const shouldOpen = cotMode === 'auto_collapse' || cotMode === 'always_expanded';
+                  const detailsTag = `<details class="kaiz-cot-block"${shouldOpen ? ' open' : ''}>`;
+                  let cotContent = html.replace(/<agent_cot>|<think>|<thinking>/gi, '').trim();
+                  cotContent = cotContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
                   html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
               }
               else {
@@ -10343,10 +10394,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           ? '<i class="fa-solid fa-yin-yang"></i>'
                           : '<i class="fa-solid fa-gear"></i>';
                   const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
+                  const deleteBtnHtml = msg.id
+                      ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${msg.id}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
+                      : '';
                   htmlBuffer += `
-                    <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
+                    <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${msg.id || ''}">
                         <div class="kaiz-msg-avatar">${avatar}</div>
                         <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                        ${deleteBtnHtml}
                     </div>
                 `;
               }
@@ -10367,7 +10422,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               updateContinueBtnVisibility();
           };
           // Hàm tiện ích thêm tin nhắn DOM (không save DB)
-          const addMessageToDOM = (role, htmlContent, animate = true) => {
+          const addMessageToDOM = (role, htmlContent, animate = true, dbMessageId) => {
               let avatar;
               let extraClass;
               if (role === 'user') {
@@ -10383,10 +10438,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   extraClass = 'kaiz-msg-agent';
               }
               const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
+              const deleteBtnHtml = dbMessageId
+                  ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${dbMessageId}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
+                  : `<button type="button" class="kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`;
               history.append(`
-                <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
+                <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${dbMessageId || ''}">
                     <div class="kaiz-msg-avatar">${avatar}</div>
                     <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
+                    ${deleteBtnHtml}
                 </div>
             `);
               if (animate) {
@@ -10395,6 +10454,31 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               updateContinueBtnVisibility();
               return msgId;
           };
+          // Lắng nghe sự kiện xóa tin nhắn
+          history.on('click', '.kaiz-msg-delete-btn', async function (e) {
+              e.stopPropagation();
+              const btn = $(this);
+              const container = btn.closest('.kaiz-msg');
+              const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+              const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
+              if (msgId && !isNaN(msgId)) {
+                  try {
+                      await stateManager.deleteMessage(msgId);
+                  }
+                  catch (err) {
+                      console.error('[KaizAgent] Failed to delete message from DB:', err);
+                  }
+              }
+              container.fadeOut(200, function () {
+                  container.remove();
+                  refreshTokens();
+                  updateContinueBtnVisibility();
+                  if (history.children('.kaiz-msg').length === 0) {
+                      addWelcomeMessage();
+                  }
+              });
+              toastr.info('Đã xóa tin nhắn', 'Kaiz Agent');
+          });
           const startAgent = async (continueMode = false) => {
               sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
               sendBtn.prop('disabled', false); // Bật lại ngay để cho phép click Stop
@@ -10422,7 +10506,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const fullText = event.text || '';
                   let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                   if (event.reasoning && !event.text) {
-                      htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
+                      const ctx = window.SillyTavern?.getContext?.();
+                      const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'auto_collapse';
+                      const shouldOpen = cotMode === 'auto_collapse' || cotMode === 'always_expanded';
+                      const escapedReasoning = event.reasoning.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                      htmlToRender += `<details class="kaiz-cot-block"${shouldOpen ? ' open' : ''}><summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${escapedReasoning}</div></details>`;
                   }
                   if (!htmlToRender) {
                       htmlToRender = `<div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating...</div>`;
@@ -10477,15 +10565,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           }
                       }
                       else {
-                          await stateManager.addMessage('agent', currentStepResponse);
+                          const newAgentMsgId = await stateManager.addMessage('agent', currentStepResponse);
+                          if (agentMsgId) {
+                              const container = $(`#container-${agentMsgId}`);
+                              container.attr('data-msg-id', newAgentMsgId);
+                              container.find('.kaiz-msg-delete-btn').attr('data-msg-id', newAgentMsgId).show();
+                          }
                       }
                       refreshTokens();
                       agentContentBox = null;
                   }
                   else if (event.type === 'tool_result') {
+                      const toolMsgId = await stateManager.addMessage('user', event.text || '');
                       const formatted = formatUserMessage(event.text || '');
-                      addMessageToDOM('user', formatted);
-                      await stateManager.addMessage('user', event.text || '');
+                      addMessageToDOM('user', formatted, true, toolMsgId);
                       refreshTokens();
                   }
                   else if (event.type === 'tool_confirm') {
@@ -10538,14 +10631,25 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   else if (event.type === 'error') {
                       lastStreamEvent = null;
                       streamUpdatePending = false;
+                      let errDomId = null;
                       if (agentContentBox) {
                           agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$1(event.text || '')}</div>`);
                           agentContentBox = null;
                       }
                       else {
-                          addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$1(event.text || '')}</div>`);
                       }
-                      await stateManager.addMessage('agent', `[Error] ${event.text}`);
+                      const errMsgId = await stateManager.addMessage('agent', `[Error] ${event.text}`);
+                      if (errDomId) {
+                          const container = $(`#container-${errDomId}`);
+                          container.attr('data-msg-id', errMsgId);
+                          container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+                      }
+                      else if (agentMsgId) {
+                          const container = $(`#container-${agentMsgId}`);
+                          container.attr('data-msg-id', errMsgId);
+                          container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+                      }
                   }
                   else if (event.type === 'debug') {
                       ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
@@ -10567,6 +10671,129 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               input.focus();
               updateContinueBtnVisibility();
           };
+          // --- XỬ LÝ KÉO THẢ CO GIÃN CHIỀU CAO THANH INPUT ---
+          const inputResizer = $('#kaiz-input-resizer');
+          const chatBodyWrapper = $('#kaiz-chat-body-wrapper');
+          const savedInputHeight = localStorage.getItem('kaiz_chat_input_height');
+          if (savedInputHeight) {
+              const h = parseInt(savedInputHeight, 10);
+              if (!isNaN(h) && h >= 44) {
+                  input.css({ height: `${h}px`, maxHeight: 'none' });
+              }
+          }
+          let isResizingInput = false;
+          let startY = 0;
+          let startHeight = 0;
+          const onResizeMove = (clientY) => {
+              if (!isResizingInput)
+                  return;
+              const deltaY = startY - clientY; // Kéo lên trên -> tăng chiều cao
+              let newHeight = startHeight + deltaY;
+              const minHeight = 44;
+              const maxHeight = Math.max(200, (chatBodyWrapper.height() || 500) * 0.7);
+              if (newHeight < minHeight)
+                  newHeight = minHeight;
+              if (newHeight > maxHeight)
+                  newHeight = maxHeight;
+              input.css({ height: `${newHeight}px`, maxHeight: 'none' });
+          };
+          const onResizeEnd = () => {
+              if (!isResizingInput)
+                  return;
+              isResizingInput = false;
+              inputResizer.removeClass('resizing');
+              $(document).off('.kaizInputResize');
+              const currentH = input.height();
+              if (currentH && currentH >= 44) {
+                  localStorage.setItem('kaiz_chat_input_height', Math.round(currentH).toString());
+              }
+          };
+          inputResizer.on('mousedown', (e) => {
+              if (chatBodyWrapper.hasClass('kaiz-input-fullscreen'))
+                  return;
+              e.preventDefault();
+              isResizingInput = true;
+              startY = e.clientY;
+              startHeight = input.height() || 44;
+              inputResizer.addClass('resizing');
+              $(document).on('mousemove.kaizInputResize', (moveEvent) => {
+                  onResizeMove(moveEvent.clientY);
+              });
+              $(document).on('mouseup.kaizInputResize', () => {
+                  onResizeEnd();
+              });
+          });
+          inputResizer.on('touchstart', (e) => {
+              if (chatBodyWrapper.hasClass('kaiz-input-fullscreen'))
+                  return;
+              if (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 0) {
+                  isResizingInput = true;
+                  startY = e.originalEvent.touches[0].clientY;
+                  startHeight = input.height() || 44;
+                  inputResizer.addClass('resizing');
+                  $(document).on('touchmove.kaizInputResize', (moveEvent) => {
+                      if (moveEvent.originalEvent && moveEvent.originalEvent.touches) {
+                          onResizeMove(moveEvent.originalEvent.touches[0].clientY);
+                      }
+                  });
+                  $(document).on('touchend.kaizInputResize touchcancel.kaizInputResize', () => {
+                      onResizeEnd();
+                  });
+              }
+          });
+          // --- XỬ LÝ CHẾ ĐỘ MỞ FULL THANH INPUT (FULLSCREEN) ---
+          const fullscreenBtn = $('#kaiz-input-fullscreen-btn');
+          const exitFullscreenBtn = $('#kaiz-input-exit-fullscreen-btn');
+          const fullscreenHeader = $('#kaiz-input-fullscreen-header');
+          const charCounter = $('#kaiz-input-char-counter');
+          const updateCharCount = () => {
+              const val = String(input.val() || '');
+              charCounter.text(`${val.length.toLocaleString()} ký tự`);
+          };
+          const enterFullscreen = () => {
+              chatBodyWrapper.addClass('kaiz-input-fullscreen');
+              fullscreenHeader.show();
+              fullscreenBtn.find('i').removeClass('fa-expand').addClass('fa-compress');
+              fullscreenBtn.attr('title', 'Thu nhỏ (Thoát Fullscreen)');
+              updateCharCount();
+              input.focus();
+          };
+          const exitFullscreen = () => {
+              chatBodyWrapper.removeClass('kaiz-input-fullscreen');
+              fullscreenHeader.hide();
+              fullscreenBtn.find('i').removeClass('fa-compress').addClass('fa-expand');
+              fullscreenBtn.attr('title', 'Phóng to khung soạn thảo (Fullscreen)');
+              const savedH = localStorage.getItem('kaiz_chat_input_height');
+              if (savedH) {
+                  const h = parseInt(savedH, 10);
+                  if (!isNaN(h) && h >= 44) {
+                      input.css({ height: `${h}px`, maxHeight: 'none' });
+                  }
+                  else {
+                      input.css({ height: '', maxHeight: '120px' });
+                  }
+              }
+              else {
+                  input.css({ height: '', maxHeight: '120px' });
+              }
+              input.focus();
+          };
+          fullscreenBtn.on('click', () => {
+              if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                  exitFullscreen();
+              }
+              else {
+                  enterFullscreen();
+              }
+          });
+          exitFullscreenBtn.on('click', () => {
+              exitFullscreen();
+          });
+          input.on('input', () => {
+              if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                  updateCharCount();
+              }
+          });
           // Xử lý gửi tin nhắn UI
           const sendMessage = async () => {
               if (sendBtn.prop('disabled'))
@@ -10575,16 +10802,19 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const attachmentsToSend = [...ChatWindowUI.currentAttachments];
               if (!text && attachmentsToSend.length === 0)
                   return;
+              if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                  exitFullscreen();
+              }
               sendBtn.prop('disabled', true);
               input.val('');
               ChatWindowUI.currentAttachments = [];
               renderAttachmentsPreview();
               // Lưu vào DB trước
-              await stateManager.addMessage('user', text, attachmentsToSend);
+              const userMsgId = await stateManager.addMessage('user', text, attachmentsToSend);
               refreshTokens();
               // In ra UI
               const formattedUI = formatUserMessage(text, attachmentsToSend);
-              addMessageToDOM('user', formattedUI);
+              addMessageToDOM('user', formattedUI, true, userMsgId);
               // Title updates are removed
               startAgent(false);
           };
@@ -10637,9 +10867,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               sendMessage();
           });
           input.on('keydown', (e) => {
+              if (e.key === 'Escape' && chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                  e.preventDefault();
+                  exitFullscreen();
+                  return;
+              }
               if (e.key === 'Enter' && !e.shiftKey) {
-                  // Trong phone mode, Enter dùng để xuống dòng
-                  if ($('#kaiz-chat-window').hasClass('kaiz-phone-mode')) {
+                  // Trong phone mode hoặc fullscreen, Enter dùng để xuống dòng
+                  if ($('#kaiz-chat-window').hasClass('kaiz-phone-mode') ||
+                      chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
                       return;
                   }
                   e.preventDefault();
@@ -12530,9 +12766,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               customImageSuffix: '',
               viewContextDepth: 5,
               viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
+              cotDisplayMode: 'auto_collapse',
           };
       }
       else {
+          if (ctx.extensionSettings[EXT_NAME].cotDisplayMode === undefined) {
+              ctx.extensionSettings[EXT_NAME].cotDisplayMode = 'auto_collapse';
+          }
           if (ctx.extensionSettings[EXT_NAME].maxTokens === undefined) {
               ctx.extensionSettings[EXT_NAME].maxTokens = 65000;
           }
