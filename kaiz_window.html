@@ -176,6 +176,13 @@
                             <span class="kaiz-menu-item-desc">Bộ sưu tập ảnh AI đã tạo</span>
                         </div>
                     </div>
+                    <div id="kaiz-chat-preset-git-btn" class="kaiz-menu-item interactable" title="Preset Git Version Control">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-code-branch"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Preset Git & Versions</span>
+                            <span class="kaiz-menu-item-desc">Lịch sử commit, diff & rollback</span>
+                        </div>
+                    </div>
                     <div class="kaiz-menu-divider"></div>
                     <div id="kaiz-chat-backup-btn" class="kaiz-menu-item interactable" title="Backup Manager">
                         <div class="kaiz-menu-item-icon"><i class="fa-solid fa-floppy-disk"></i></div>
@@ -1284,5 +1291,308 @@
                 Đóng
             </button>
         </div>
+    </div>
+</dialog>
+
+<!-- ================= PRESET GIT & VERSION CONTROL MODAL ================= -->
+<dialog
+    id="kaiz-preset-git-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(14, 18, 26, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        color: #eee;
+        padding: 18px;
+        width: 860px;
+        max-width: 95vw;
+        height: 86vh;
+        max-height: 860px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8);
+        display: none;
+        flex-direction: column;
+        box-sizing: border-box;
+        overflow: hidden;
+    "
+>
+    <!-- Modal Header -->
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+            gap: 12px;
+        "
+    >
+        <div style="display: flex; align-items: center; gap: 10px; min-width: 0">
+            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(167, 139, 250, 0.15); color: #a78bfa; display: flex; align-items: center; justify-content: center; font-size: 15px; flex-shrink: 0">
+                <i class="fa-solid fa-code-branch"></i>
+            </div>
+            <div style="min-width: 0">
+                <h3 style="margin: 0; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px">
+                    Preset Git Control
+                    <span id="kaiz-pg-active-badge" class="kaiz-status-pill badge-success" style="font-size: 10px; font-weight: normal">Live Active</span>
+                </h3>
+                <div style="font-size: 11px; opacity: 0.65; margin-top: 1px">Lịch sử commit, staging sandbox & tối ưu bộ nhớ</div>
+            </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0">
+            <!-- Preset Selector -->
+            <select
+                id="kaiz-pg-preset-select"
+                class="text_pole"
+                style="padding: 4px 8px; font-size: 12px; border-radius: 6px; background: rgba(0, 0, 0, 0.4); color: #fff; max-width: 220px"
+                title="Chọn Preset để xem lịch sử Git"
+            >
+                <option value="">Đang tải danh sách...</option>
+            </select>
+
+            <button
+                id="kaiz-pg-refresh-btn"
+                class="menu_button interactable"
+                style="padding: 5px 10px; font-size: 12px"
+                title="Làm mới dữ liệu"
+            >
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
+
+            <i
+                id="kaiz-pg-close-btn"
+                class="fa-solid fa-xmark interactable"
+                style="cursor: pointer; font-size: 18px; opacity: 0.7; padding: 4px"
+                title="Đóng cửa sổ"
+            ></i>
+        </div>
+    </div>
+
+    <!-- Modal Scrollable Body -->
+    <div style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; min-height: 0; padding-right: 4px">
+        <!-- 1. Storage & Memory Metrics Bar -->
+        <div class="kaiz-pg-metric-card" style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 12px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px">
+            <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap">
+                <div style="display: flex; align-items: center; gap: 8px">
+                    <i class="fa-solid fa-hard-drive" style="color: #38bdf8"></i>
+                    <div>
+                        <div style="font-size: 10px; opacity: 0.6; text-transform: uppercase">Bộ nhớ Git Store</div>
+                        <div id="kaiz-pg-stat-memory" style="font-size: 13px; font-weight: 600; color: #38bdf8">0 KB</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                    <i class="fa-solid fa-code-commit" style="color: #a78bfa"></i>
+                    <div>
+                        <div style="font-size: 10px; opacity: 0.6; text-transform: uppercase">Tổng Commits</div>
+                        <div id="kaiz-pg-stat-commits" style="font-size: 13px; font-weight: 600">0</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                    <i class="fa-solid fa-boxes-stacked" style="color: #fbbf24"></i>
+                    <div>
+                        <div style="font-size: 10px; opacity: 0.6; text-transform: uppercase">Presets Có Lịch Sử</div>
+                        <div id="kaiz-pg-stat-presets" style="font-size: 13px; font-weight: 600">0</div>
+                    </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px">
+                    <i class="fa-solid fa-code-merge" style="color: #4ade80"></i>
+                    <div>
+                        <div style="font-size: 10px; opacity: 0.6; text-transform: uppercase">Commit HEAD</div>
+                        <div id="kaiz-pg-stat-head" style="font-size: 12px; font-family: monospace; font-weight: 600; color: #4ade80">none</div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="display: flex; gap: 8px; align-items: center">
+                <button
+                    id="kaiz-pg-prune-btn"
+                    class="menu_button interactable"
+                    style="font-size: 11px; padding: 4px 8px; color: #fbbf24; border-color: rgba(251, 191, 36, 0.3)"
+                    title="Chỉ giữ lại 30 commit gần nhất, xóa bớt các commit cũ để giải phóng dung lượng"
+                >
+                    <i class="fa-solid fa-broom"></i> Cắt tỉa (Prune)
+                </button>
+                <button
+                    id="kaiz-pg-clear-history-btn"
+                    class="menu_button interactable"
+                    style="font-size: 11px; padding: 4px 8px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)"
+                    title="Xóa toàn bộ lịch sử commit của preset đang chọn để làm mới từ đầu"
+                >
+                    <i class="fa-solid fa-trash-can"></i> Xóa Lịch Sử
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Staging Sandbox & Manual Operations Card -->
+        <div
+            id="kaiz-pg-staging-card"
+            style="
+                background: rgba(255, 255, 255, 0.03);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+                padding: 12px 14px;
+            "
+        >
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+                <div style="display: flex; align-items: center; gap: 8px">
+                    <span style="font-size: 13px; font-weight: 600">
+                        <i class="fa-solid fa-box-archive" style="color: #fbbf24; margin-right: 4px"></i> Staging Sandbox (Vùng Nháp)
+                    </span>
+                    <span id="kaiz-pg-staging-badge" class="kaiz-status-pill badge-neutral" style="font-size: 10px">Clean</span>
+                </div>
+                <div id="kaiz-pg-staging-actions" style="display: none; gap: 8px">
+                    <button
+                        id="kaiz-pg-view-staged-diff-btn"
+                        class="menu_button interactable"
+                        style="font-size: 11px; padding: 4px 10px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)"
+                    >
+                        <i class="fa-solid fa-code-compare"></i> Xem Diff Nháp
+                    </button>
+                    <button
+                        id="kaiz-pg-discard-staged-btn"
+                        class="menu_button interactable"
+                        style="font-size: 11px; padding: 4px 10px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)"
+                        title="Hủy toàn bộ nháp để quay về HEAD"
+                    >
+                        <i class="fa-solid fa-xmark"></i> Hủy Nháp (Discard)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Staging summary / dirty explanation -->
+            <div id="kaiz-pg-staging-summary" style="font-size: 12px; opacity: 0.75; margin-bottom: 8px">
+                Working tree sạch — Không có thay đổi nháp nào trong bộ nhớ đệm.
+            </div>
+
+            <!-- Staged items list (if dirty) -->
+            <div id="kaiz-pg-staged-list" style="display: none; flex-direction: column; gap: 4px; margin-bottom: 12px; max-height: 120px; overflow-y: auto"></div>
+
+            <!-- Manual Commit Form (Tiết kiệm API) -->
+            <div
+                id="kaiz-pg-manual-commit-container"
+                style="
+                    display: flex;
+                    gap: 8px;
+                    align-items: center;
+                    background: rgba(0, 0, 0, 0.25);
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    border-radius: 6px;
+                    padding: 8px 10px;
+                "
+            >
+                <div style="flex: 1; display: flex; gap: 8px">
+                    <input
+                        id="kaiz-pg-commit-msg-input"
+                        type="text"
+                        class="text_pole"
+                        placeholder="Nhập Commit Message thủ công... (VD: Tối ưu prompt NSFW)"
+                        style="flex: 1; font-size: 12px; padding: 6px 10px; border-radius: 5px; background: rgba(0,0,0,0.3)"
+                    />
+                    <input
+                        id="kaiz-pg-commit-tag-input"
+                        type="text"
+                        class="text_pole"
+                        placeholder="Tag (VD: v1.0)"
+                        style="width: 110px; font-size: 12px; padding: 6px 8px; border-radius: 5px; background: rgba(0,0,0,0.3)"
+                    />
+                </div>
+                <button
+                    id="kaiz-pg-manual-commit-btn"
+                    class="menu_button interactable"
+                    style="font-size: 12px; padding: 6px 14px; background: rgba(46, 204, 113, 0.15); color: #2ecc71; border-color: rgba(46, 204, 113, 0.4); font-weight: 500; white-space: nowrap"
+                    title="Commit các thay đổi đang có trong Staging vào database và áp dụng vào SillyTavern mà không cần gọi LLM"
+                >
+                    <i class="fa-solid fa-check"></i> Lưu Commit Thủ Công
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Commit History Timeline Card -->
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 8px; padding: 14px; flex: 1; display: flex; flex-direction: column; min-height: 250px">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px">
+                <div style="font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 6px">
+                    <i class="fa-solid fa-timeline" style="color: #a78bfa"></i> Lịch Sử Commit (Commit Tree)
+                </div>
+                <input
+                    id="kaiz-pg-timeline-search"
+                    type="text"
+                    class="text_pole"
+                    placeholder="Tìm kiếm commit theo message, hash hoặc tag..."
+                    style="font-size: 11px; padding: 4px 10px; width: 280px; max-width: 40%; border-radius: 6px; background: rgba(0, 0, 0, 0.3)"
+                />
+            </div>
+
+            <!-- Timeline List Container -->
+            <div
+                id="kaiz-pg-commit-list"
+                style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px"
+            >
+                <!-- Rendered dynamically via JS -->
+            </div>
+        </div>
+    </div>
+</dialog>
+
+<!-- ================= DIFF PREVIEW MODAL ================= -->
+<dialog
+    id="kaiz-preset-diff-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(14, 18, 26, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 10px;
+        color: #eee;
+        padding: 16px;
+        width: 780px;
+        max-width: 92vw;
+        height: 75vh;
+        max-height: 720px;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.85);
+        display: none;
+        flex-direction: column;
+        box-sizing: border-box;
+        overflow: hidden;
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+        "
+    >
+        <div style="font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px">
+            <i class="fa-solid fa-code-compare" style="color: #38bdf8"></i>
+            <span id="kaiz-pg-diff-modal-title">So sánh thay đổi (Diff Viewer)</span>
+        </div>
+        <i
+            id="kaiz-pg-diff-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px; opacity: 0.7; padding: 4px"
+        ></i>
+    </div>
+
+    <div
+        id="kaiz-pg-diff-body"
+        style="
+            flex: 1;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            font-family: monospace;
+            font-size: 12px;
+            padding-right: 4px;
+        "
+    >
+        <!-- Diff content rendered here -->
     </div>
 </dialog>

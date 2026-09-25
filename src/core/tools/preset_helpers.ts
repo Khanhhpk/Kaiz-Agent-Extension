@@ -852,6 +852,7 @@ export class PresetGitManager {
                 totalBlocks: finalPrompts.length,
             },
             diffSummary: diff.summary,
+            diffItems: diff.items,
         };
 
         // 1. Save commit to IndexedDB
@@ -919,9 +920,7 @@ export class PresetGitManager {
         };
     }
 
-    public async pruneCommits(
-        keepCount: number = 30,
-    ): Promise<{ ok: boolean; pruned_count: number; summary: string }> {
+    public async pruneCommits(keepCount: number = 30): Promise<{ ok: boolean; pruned_count: number; summary: string }> {
         const presetName = this.getActivePresetName();
         const pruned = await this.db.prunePresetCommits(presetName, keepCount);
         return {
@@ -939,6 +938,18 @@ export class PresetGitManager {
             ok: true,
             summary: `Đã xóa sạch toàn bộ lịch sử commit của preset "${presetName}".`,
         };
+    }
+
+    public async getStorageStats() {
+        return await this.db.getPresetStorageStats();
+    }
+
+    public async getDistinctPresetNames(): Promise<string[]> {
+        return await this.db.getDistinctPresetNames();
+    }
+
+    public async manualCommit(message: string, tag?: string): Promise<{ ok: boolean; hash: string; summary: string }> {
+        return await this.commit(message, 'user', tag);
     }
 
     public discard(): { ok: boolean; summary: string } {

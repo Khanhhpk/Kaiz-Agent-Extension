@@ -2542,3 +2542,31 @@
     color: #f87171;
     background: rgba(239, 68, 68, 0.2);
 }
+
+/* ================= PRESET GIT MODAL & TIMELINE ================= */
+#kaiz-preset-git-modal::backdrop,
+#kaiz-preset-diff-modal::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+}
+
+.kaiz-pg-commit-card:hover {
+    border-color: rgba(167, 139, 250, 0.35) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+}
+
+.kaiz-pg-hash-btn:hover {
+    background: rgba(56, 189, 248, 0.2) !important;
+    border-color: #38bdf8 !important;
+}
+
+.kaiz-pg-metric-card {
+    transition: all 0.2s ease;
+}
+
+.kaiz-pg-metric-card:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+

@@ -6133,6 +6133,69 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               request.onerror = () => reject(request.error);
           });
       }
+      async getDistinctPresetNames() {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const names = new Set();
+              const request = index.openKeyCursor();
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      names.add(cursor.key);
+                      cursor.continue();
+                  }
+                  else {
+                      resolve(Array.from(names));
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetStorageStats() {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              let totalCommits = 0;
+              let totalBytes = 0;
+              const byPreset = {};
+              const request = store.openCursor();
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      totalCommits++;
+                      const entry = cursor.value;
+                      const pName = entry.presetName || 'unknown';
+                      const str = JSON.stringify(entry);
+                      const bytes = str.length * 2; // rough UTF-16 bytes in memory
+                      totalBytes += bytes;
+                      if (!byPreset[pName])
+                          byPreset[pName] = { commits: 0, bytes: 0 };
+                      byPreset[pName].commits++;
+                      byPreset[pName].bytes += bytes;
+                      cursor.continue();
+                  }
+                  else {
+                      resolve({
+                          totalCommits,
+                          totalBytes,
+                          presetCount: Object.keys(byPreset).length,
+                          byPreset,
+                      });
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
   }
 
   class WebImageBridge {
@@ -7132,6 +7195,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   totalBlocks: finalPrompts.length,
               },
               diffSummary: diff.summary,
+              diffItems: diff.items,
           };
           // 1. Save commit to IndexedDB
           await this.db.addPresetCommit(newCommit);
@@ -7198,6 +7262,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               ok: true,
               summary: `Đã xóa sạch toàn bộ lịch sử commit của preset "${presetName}".`,
           };
+      }
+      async getStorageStats() {
+          return await this.db.getPresetStorageStats();
+      }
+      async getDistinctPresetNames() {
+          return await this.db.getDistinctPresetNames();
+      }
+      async manualCommit(message, tag) {
+          return await this.commit(message, 'user', tag);
       }
       discard() {
           const hasChanges = this.hasStagingChanges();
@@ -8242,7 +8315,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
    * SillyTavern Adapter
    * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
    */
-  const escapeHtml$3 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$4 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SillyTavernAdapter {
       constructor() { }
       /**
@@ -8413,7 +8486,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 <div style="height:calc(100% - 55px); padding:15px; overflow-y:auto; background:#1e1e1e; box-sizing:border-box;">`;
           for (let i = 0; i < chat.length; i++) {
               const msg = chat[i];
-              const name = escapeHtml$3(msg.name || 'System');
+              const name = escapeHtml$4(msg.name || 'System');
               // Lấy safe_preview
               let preview = msg.mes || '';
               if (preview.length > 50)
@@ -9997,7 +10070,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       }
   }
 
-  const escapeHtml$2 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$3 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SettingsUI {
       static async init(extPath, EXT_NAME, registry) {
           const $ = jQuery;
@@ -10194,8 +10267,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               $safeToolsList.empty();
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
-                  const name = escapeHtml$2(tool.schema.name);
-                  const desc = escapeHtml$2(tool.schema.description);
+                  const name = escapeHtml$3(tool.schema.name);
+                  const desc = escapeHtml$3(tool.schema.description);
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
                       !desc.toLowerCase().includes(lowerFilter)) {
@@ -10360,7 +10433,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                             <button class="kaiz-qp-icon-btn interactable" data-index="${index}" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$2(qp.name || '')}" placeholder="Name (e.g. Analyze)">
+                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$3(qp.name || '')}" placeholder="Name (e.g. Analyze)">
                             <div class="kaiz-qp-actions">
                                 <button class="kaiz-qp-act-btn interactable kaiz-qp-up" data-index="${index}" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
                                 <button class="kaiz-qp-act-btn interactable kaiz-qp-down" data-index="${index}" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
@@ -10368,7 +10441,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$2(qp.prompt || '')}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$3(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -10651,8 +10724,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               $toolsList.empty();
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
-                  const name = escapeHtml$2(tool.schema.name);
-                  const desc = escapeHtml$2(tool.schema.description);
+                  const name = escapeHtml$3(tool.schema.name);
+                  const desc = escapeHtml$3(tool.schema.description);
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
                       !desc.toLowerCase().includes(lowerFilter)) {
@@ -11246,7 +11319,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
-  const escapeHtml$1 = (s) => s
+  const escapeHtml$2 = (s) => s
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -11420,12 +11493,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const item = $('<div class="kaiz-attachment-item"></div>');
                   if (att.type === 'image') {
                       item.addClass('is-image');
-                      item.append(`<img src="${att.data}" title="${escapeHtml$1(att.name)}" />`);
+                      item.append(`<img src="${att.data}" title="${escapeHtml$2(att.name)}" />`);
                   }
                   else {
                       item.addClass('is-file');
                       item.append(`<i class="fa-solid fa-file-lines"></i>`);
-                      item.append(`<span>${escapeHtml$1(att.name)}</span>`);
+                      item.append(`<span>${escapeHtml$2(att.name)}</span>`);
                   }
                   const removeBtn = $('<div class="kaiz-attachment-remove"><i class="fa-solid fa-xmark"></i></div>');
                   removeBtn.on('click', () => {
@@ -11711,7 +11784,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               wsSelect.empty();
               wsSelect.append('<option value="default">Default</option>');
               for (const ws of workspaces) {
-                  wsSelect.append(`<option value="${ws.id}">${escapeHtml$1(ws.name)}</option>`);
+                  wsSelect.append(`<option value="${ws.id}">${escapeHtml$2(ws.name)}</option>`);
               }
               if (stateManager.currentWorkspaceId) {
                   wsSelect.val(stateManager.currentWorkspaceId.toString());
@@ -11793,13 +11866,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   enabled.forEach((schema) => {
                       const chip = $(`
-                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$1(schema.name)}" style="
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$2(schema.name)}" style="
                             display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
                             background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
                             border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
                         ">
-                            ${escapeHtml$1(schema.name)}
-                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$1(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                            ${escapeHtml$2(schema.name)}
+                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$2(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
                         </span>
                     `);
                       chipsContainer.append(chip);
@@ -11819,12 +11892,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   matches.forEach((schema) => {
                       const item = $(`
-                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$1(schema.name)}" style="
+                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$2(schema.name)}" style="
                             padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
                             border-bottom:1px solid rgba(255,255,255,0.04);
                         ">
-                            <span style="color:#fff; font-weight:500;">${escapeHtml$1(schema.name)}</span>
-                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$1(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
+                            <span style="color:#fff; font-weight:500;">${escapeHtml$2(schema.name)}</span>
+                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$2(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
                         </div>
                     `);
                       item.on('mouseenter', function () {
@@ -12047,7 +12120,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const bg = isSelected ? 'rgba(0, 201, 255, 0.2)' : 'transparent';
                   htmlBuffer += `
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml$1(chat.name)}</span>
+                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml$2(chat.name)}</span>
                         <div>
                             <i class="fa-solid fa-pen kaiz-chat-edit" style="color:#f39c12; font-size:12px; margin-right:8px;" data-id="${chat.id}" data-name="${chat.name.replace(/"/g, '&quot;')}"></i>
                             <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
@@ -12062,7 +12135,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const toolCalls = [];
               let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
                   const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                  const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${escapeHtml$1(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
+                  const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${escapeHtml$2(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
                   toolCalls.push(toolHtml);
                   return `__TOOL_CALL_${toolCalls.length - 1}__`;
               });
@@ -12179,7 +12252,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
           const formatUserMessage = (text, attachments) => {
               const safeText = text || '';
-              const escapedText = escapeHtml$1(safeText).replace(/\n/g, '<br>');
+              const escapedText = escapeHtml$2(safeText).replace(/\n/g, '<br>');
               let finalHtml = escapedText;
               if (safeText.startsWith('[Tool Result')) {
                   // ... logic Tool Result ...
@@ -12203,10 +12276,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   let attachmentsHtml = '<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">';
                   for (const att of attachments) {
                       if (att.type === 'image') {
-                          attachmentsHtml += `<img src="${att.data}" class="kaiz-msg-attachment-img" title="${escapeHtml$1(att.name)}" />`;
+                          attachmentsHtml += `<img src="${att.data}" class="kaiz-msg-attachment-img" title="${escapeHtml$2(att.name)}" />`;
                       }
                       else if (att.type === 'text') {
-                          attachmentsHtml += `<div class="kaiz-msg-attachment-text"><i class="fa-solid fa-file-lines"></i> <b>${escapeHtml$1(att.name)}</b></div>`;
+                          attachmentsHtml += `<div class="kaiz-msg-attachment-text"><i class="fa-solid fa-file-lines"></i> <b>${escapeHtml$2(att.name)}</b></div>`;
                       }
                   }
                   attachmentsHtml += '</div>';
@@ -12483,7 +12556,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const html = `
                         <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
                             <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
-                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml$1(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
+                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml$2(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
                             <div style="display: flex; gap: 10px; margin-top: 10px;">
                                 <button id="kaiz-allow-${confirmId}" style="background: #2ecc71; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-check"></i> Allow</button>
                                 <button id="kaiz-deny-${confirmId}" style="background: #e74c3c; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Deny</button>
@@ -12495,7 +12568,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           if (!loop.isRunning)
                               return;
                           $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                          $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml$1(call.name)}</div>`);
+                          $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml$2(call.name)}</div>`);
                           btnIcon.addClass('kaiz-icon-spin');
                           btnFloat.removeClass('kaiz-btn-blink');
                           resolveFn(true);
@@ -12504,7 +12577,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           if (!loop.isRunning)
                               return;
                           $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                          $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml$1(call.name)}</div>`);
+                          $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml$2(call.name)}</div>`);
                           btnIcon.removeClass('kaiz-icon-spin');
                           btnFloat.removeClass('kaiz-btn-blink');
                           resolveFn(false);
@@ -12514,10 +12587,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       lastStreamEvent = null;
                       streamUpdatePending = false;
                       if (agentContentBox) {
-                          agentContentBox.append(`<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          agentContentBox.append(`<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$2(event.text || '')}</div>`);
                       }
                       else {
-                          agentMsgId = addMessageToDOM('agent', `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          agentMsgId = addMessageToDOM('agent', `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$2(event.text || '')}</div>`);
                           agentContentBox = $(`#${agentMsgId}`);
                       }
                   }
@@ -12526,11 +12599,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       streamUpdatePending = false;
                       let errDomId = null;
                       if (agentContentBox) {
-                          agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$2(event.text || '')}</div>`);
                           agentContentBox = null;
                       }
                       else {
-                          errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$2(event.text || '')}</div>`);
                       }
                       const errMsgId = await stateManager.addMessage('agent', `[Error] ${event.text}`);
                       if (errDomId) {
@@ -12830,7 +12903,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
-  const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$1 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class ToolCheckerUI {
       static init(registry, adapter) {
           const $ = jQuery;
@@ -12873,7 +12946,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const tools = registry.getAllTools();
               list.empty();
               for (const t of tools) {
-                  const name = escapeHtml(t.schema.name);
+                  const name = escapeHtml$1(t.schema.name);
                   list.append(`
                     <div id="checker-tool-${name}" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px 12px; border-radius:5px;">
                         <span><i class="fa-solid fa-wrench" style="margin-right:8px; opacity:0.7"></i>${name}</span>
@@ -14621,6 +14694,513 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
+  const escapeHtml = (str) => (str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  const formatBytes = (bytes) => {
+      if (!bytes || bytes <= 0)
+          return '0 B';
+      if (bytes < 1024)
+          return `${bytes} B`;
+      if (bytes < 1024 * 1024)
+          return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+  class PresetGitModal {
+      db;
+      manager = PresetGitManager.getInstance();
+      currentSelectedPreset = '';
+      commitsCache = [];
+      searchQuery = '';
+      constructor(db) {
+          this.db = db;
+          this.bindEvents();
+      }
+      isModalOpen() {
+          const modal = document.getElementById('kaiz-preset-git-modal');
+          return !!(modal && modal.open);
+      }
+      bindEvents() {
+          const $ = jQuery;
+          // 1. Mở Modal từ Header Tools Dropdown
+          $('#kaiz-chat-preset-git-btn')
+              .off('click')
+              .on('click', async () => {
+              $('#kaiz-chat-tools-menu').hide();
+              await this.open();
+          });
+          // 2. Mở Modal từ Settings Quick Toolbar
+          $('#kaiz-settings-preset-git-btn')
+              .off('click')
+              .on('click', async () => {
+              await this.open();
+          });
+          // 3. Đóng Modal
+          $('#kaiz-pg-close-btn')
+              .off('click')
+              .on('click', () => {
+              this.close();
+          });
+          // 4. Nút Làm Mới
+          $('#kaiz-pg-refresh-btn')
+              .off('click')
+              .on('click', async () => {
+              await this.refresh();
+              if (typeof toastr !== 'undefined')
+                  toastr.info('Đã làm mới dữ liệu Git Preset.');
+          });
+          // 5. Thay đổi Preset trong Selector Dropdown
+          $('#kaiz-pg-preset-select')
+              .off('change')
+              .on('change', async (e) => {
+              const val = $(e.target).val();
+              if (val) {
+                  this.currentSelectedPreset = val;
+                  await this.loadAndRender();
+              }
+          });
+          // 6. Tìm kiếm Timeline
+          $('#kaiz-pg-timeline-search')
+              .off('input')
+              .on('input', (e) => {
+              this.searchQuery = ($(e.target).val() || '').trim().toLowerCase();
+              this.renderCommitList();
+          });
+          // 7. Hủy Nháp (Discard)
+          $('#kaiz-pg-discard-staged-btn')
+              .off('click')
+              .on('click', async () => {
+              if (confirm('Bạn có chắc muốn hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox không?')) {
+                  this.manager.discard();
+                  await this.loadAndRender();
+                  if (typeof toastr !== 'undefined')
+                      toastr.warning('Đã hủy bỏ toàn bộ nháp. Working tree đã sạch.');
+              }
+          });
+          // 8. Xem Diff Nháp (Staged Diff)
+          $('#kaiz-pg-view-staged-diff-btn')
+              .off('click')
+              .on('click', () => {
+              const diff = this.manager.calculateDiff();
+              this.openDiffModal('Thay đổi trong Vùng Nháp (Staging Diff)', diff.items);
+          });
+          // 9. Manual Commit (Tiết kiệm API)
+          $('#kaiz-pg-manual-commit-btn')
+              .off('click')
+              .on('click', async () => {
+              await this.handleManualCommit();
+          });
+          // 10. Prune Commits (Cắt tỉa bộ nhớ)
+          $('#kaiz-pg-prune-btn')
+              .off('click')
+              .on('click', async () => {
+              if (confirm(`Bạn có muốn cắt tỉa lịch sử của preset "${this.currentSelectedPreset}", chỉ giữ lại 30 commit gần nhất để giải phóng bộ nhớ?`)) {
+                  const res = await this.manager.pruneCommits(30);
+                  await this.loadAndRender();
+                  if (typeof toastr !== 'undefined')
+                      toastr.success(res.summary);
+              }
+          });
+          // 11. Xóa toàn bộ lịch sử commit của preset này
+          $('#kaiz-pg-clear-history-btn')
+              .off('click')
+              .on('click', async () => {
+              if (confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn XÓA SẠCH toàn bộ lịch sử commit của preset "${this.currentSelectedPreset}" không? Hành động này sẽ giải phóng toàn bộ bộ nhớ của preset này nhưng không thể hoàn tác.`)) {
+                  await this.db.deletePresetCommits(this.currentSelectedPreset);
+                  await this.loadAndRender();
+                  if (typeof toastr !== 'undefined')
+                      toastr.success(`Đã xóa sạch lịch sử commit của preset "${this.currentSelectedPreset}".`);
+              }
+          });
+          // 12. Đóng Diff Modal
+          $('#kaiz-pg-diff-close')
+              .off('click')
+              .on('click', () => {
+              const diffModal = $('#kaiz-preset-diff-modal')[0];
+              if (diffModal)
+                  diffModal.close();
+          });
+      }
+      async open() {
+          const $ = jQuery;
+          const modal = $('#kaiz-preset-git-modal')[0];
+          if (modal) {
+              modal.style.display = 'flex';
+              modal.showModal();
+              await this.refresh();
+          }
+      }
+      close() {
+          const $ = jQuery;
+          const modal = $('#kaiz-preset-git-modal')[0];
+          if (modal && modal.open) {
+              modal.close();
+              modal.style.display = 'none';
+          }
+      }
+      async refresh() {
+          const activeName = this.manager.getActivePresetName();
+          if (!this.currentSelectedPreset) {
+              this.currentSelectedPreset = activeName;
+          }
+          // 1. Nạp danh sách Presets
+          await this.populatePresetSelector();
+          // 2. Nạp dữ liệu và render
+          await this.loadAndRender();
+      }
+      async populatePresetSelector() {
+          const $ = jQuery;
+          const select = $('#kaiz-pg-preset-select');
+          const activeName = this.manager.getActivePresetName();
+          const savedPresets = await this.db.getDistinctPresetNames();
+          const presetSet = new Set();
+          if (activeName)
+              presetSet.add(activeName);
+          for (const p of savedPresets) {
+              if (p)
+                  presetSet.add(p);
+          }
+          select.empty();
+          for (const p of presetSet) {
+              const isLive = p === activeName;
+              const label = isLive ? `⭐ ${p} (Đang dùng)` : `📦 ${p}`;
+              const opt = $('<option>').val(p).text(label);
+              if (p === this.currentSelectedPreset) {
+                  opt.prop('selected', true);
+              }
+              select.append(opt);
+          }
+      }
+      async loadAndRender() {
+          const $ = jQuery;
+          const activeName = this.manager.getActivePresetName();
+          const isCurrentActive = this.currentSelectedPreset === activeName;
+          // Cập nhật badge Live Active
+          if (isCurrentActive) {
+              $('#kaiz-pg-active-badge')
+                  .text('Live Active')
+                  .removeClass('badge-neutral')
+                  .addClass('badge-success')
+                  .show();
+              $('#kaiz-pg-staging-card').show();
+          }
+          else {
+              $('#kaiz-pg-active-badge')
+                  .text('Archived History')
+                  .removeClass('badge-success')
+                  .addClass('badge-neutral')
+                  .show();
+              $('#kaiz-pg-staging-card').hide(); // Staging chỉ áp dụng cho preset đang active
+          }
+          // 1. Thống kê bộ nhớ & metrics
+          await this.renderStorageMetrics();
+          // 2. Render Staging Sandbox
+          if (isCurrentActive) {
+              this.renderStagingSandbox();
+          }
+          // 3. Render Lịch sử Commit
+          this.commitsCache = await this.db.getPresetCommits(this.currentSelectedPreset, 100);
+          this.renderCommitList();
+      }
+      async renderStorageMetrics() {
+          const $ = jQuery;
+          const stats = await this.db.getPresetStorageStats();
+          const headHash = await this.manager.getHeadCommitHash(this.currentSelectedPreset);
+          const currentPresetStats = stats.byPreset[this.currentSelectedPreset] || { commits: 0, bytes: 0 };
+          $('#kaiz-pg-stat-memory').text(`${formatBytes(currentPresetStats.bytes)} (Tổng: ${formatBytes(stats.totalBytes)})`);
+          $('#kaiz-pg-stat-commits').text(`${currentPresetStats.commits} (Toàn hệ thống: ${stats.totalCommits})`);
+          $('#kaiz-pg-stat-presets').text(`${stats.presetCount} presets`);
+          $('#kaiz-pg-stat-head').text(headHash ? headHash.substring(0, 8) : 'none');
+      }
+      renderStagingSandbox() {
+          const $ = jQuery;
+          const isDirty = this.manager.hasStagingChanges();
+          const diff = this.manager.calculateDiff();
+          if (isDirty) {
+              $('#kaiz-pg-staging-badge')
+                  .text(`● ${diff.totalChanges} thay đổi nháp`)
+                  .removeClass('badge-neutral badge-success')
+                  .addClass('badge-warning');
+              $('#kaiz-pg-staging-summary').html(`<b>Có ${diff.totalChanges} thay đổi chưa commit:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. (Dữ liệu SillyTavern gốc chưa bị đè)`);
+              $('#kaiz-pg-staging-actions').css('display', 'flex');
+              // Render staged items preview
+              const list = $('#kaiz-pg-staged-list');
+              list.empty().css('display', 'flex');
+              for (const item of diff.items.slice(0, 5)) {
+                  let badgeColor = '#38bdf8';
+                  let icon = 'fa-pen';
+                  if (item.type === 'create') {
+                      badgeColor = '#2ecc71';
+                      icon = 'fa-plus';
+                  }
+                  else if (item.type === 'delete') {
+                      badgeColor = '#e74c3c';
+                      icon = 'fa-trash';
+                  }
+                  list.append(`
+                    <div style="font-size: 11px; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; border-left: 3px solid ${badgeColor}">
+                        <i class="fa-solid ${icon}" style="color: ${badgeColor}; font-size: 10px"></i>
+                        <span style="font-weight: 500">${escapeHtml(item.name || item.identifier || item.type)}:</span>
+                        <span style="opacity: 0.8">${escapeHtml(item.summary)}</span>
+                    </div>
+                `);
+              }
+              if (diff.items.length > 5) {
+                  list.append(`<div style="font-size: 10px; opacity: 0.6; padding-left: 8px">...và còn ${diff.items.length - 5} thay đổi khác (bấm "Xem Diff Nháp" để xem hết)</div>`);
+              }
+          }
+          else {
+              $('#kaiz-pg-staging-badge')
+                  .text('Clean')
+                  .removeClass('badge-warning badge-danger')
+                  .addClass('badge-success');
+              $('#kaiz-pg-staging-summary').text('Working tree sạch — Không có thay đổi nháp nào. Toàn bộ prompt blocks đang đồng bộ với commit HEAD.');
+              $('#kaiz-pg-staging-actions').hide();
+              $('#kaiz-pg-staged-list').empty().hide();
+          }
+      }
+      async handleManualCommit() {
+          const $ = jQuery;
+          const msg = ($('#kaiz-pg-commit-msg-input').val() || '').trim();
+          const tag = ($('#kaiz-pg-commit-tag-input').val() || '').trim();
+          if (!msg) {
+              if (typeof toastr !== 'undefined')
+                  toastr.warning('Vui lòng nhập Commit Message mô tả thay đổi trước khi lưu!');
+              $('#kaiz-pg-commit-msg-input').focus();
+              return;
+          }
+          if (!this.manager.hasStagingChanges()) {
+              if (typeof toastr !== 'undefined')
+                  toastr.warning('Không có thay đổi nháp nào trong Staging để commit!');
+              return;
+          }
+          try {
+              const result = await this.manager.manualCommit(msg, tag || undefined);
+              $('#kaiz-pg-commit-msg-input').val('');
+              $('#kaiz-pg-commit-tag-input').val('');
+              await this.loadAndRender();
+              if (typeof toastr !== 'undefined') {
+                  toastr.success(`Đã commit thành công [${result.hash}]! Dữ liệu đã được lưu và cập nhật SillyTavern.`);
+              }
+          }
+          catch (e) {
+              console.error('[PresetGitModal] Commit thất bại:', e);
+              if (typeof toastr !== 'undefined')
+                  toastr.error(`Lỗi khi commit: ${e.message}`);
+          }
+      }
+      renderCommitList() {
+          const $ = jQuery;
+          const container = $('#kaiz-pg-commit-list');
+          container.empty();
+          let filtered = this.commitsCache;
+          if (this.searchQuery) {
+              filtered = this.commitsCache.filter((c) => c.hash.toLowerCase().includes(this.searchQuery) ||
+                  (c.message || '').toLowerCase().includes(this.searchQuery) ||
+                  (c.tag || '').toLowerCase().includes(this.searchQuery) ||
+                  (c.author || '').toLowerCase().includes(this.searchQuery));
+          }
+          if (filtered.length === 0) {
+              container.append(`
+                <div style="text-align: center; padding: 40px 20px; opacity: 0.6">
+                    <i class="fa-solid fa-code-commit" style="font-size: 32px; margin-bottom: 10px; display: block; opacity: 0.4"></i>
+                    <div style="font-size: 13px">Không có commit nào ${this.searchQuery ? 'khớp với tìm kiếm' : 'cho preset này'}.</div>
+                    <div style="font-size: 11px; margin-top: 4px; opacity: 0.7">
+                        Mọi thay đổi qua Agent hoặc nút "Lưu Commit Thủ Công" đều sẽ tạo thành các node lịch sử tại đây.
+                    </div>
+                </div>
+            `);
+              return;
+          }
+          filtered.forEach((commit, idx) => {
+              const isHead = idx === 0 && !this.searchQuery;
+              const dateStr = new Date(commit.timestamp).toLocaleString();
+              const author = commit.author || 'Kaiz Agent';
+              const isManual = author.toLowerCase().includes('manual') || author.toLowerCase().includes('user');
+              const authorBadge = isManual
+                  ? `<span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-user"></i> Manual</span>`
+                  : `<span style="background: rgba(167, 139, 250, 0.15); color: #a78bfa; padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-robot"></i> Agent</span>`;
+              const tagBadge = commit.tag
+                  ? `<span style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 500"><i class="fa-solid fa-tag"></i> ${escapeHtml(commit.tag)}</span>`
+                  : '';
+              const headPill = isHead
+                  ? `<span style="background: #2ecc71; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 700">HEAD</span>`
+                  : '';
+              const promptCount = commit.tree?.prompts?.length || 0;
+              const diffSummary = commit.diffSummary || commit.diff?.summary || `${promptCount} blocks`;
+              const card = $(`
+                <div class="kaiz-pg-commit-card" data-hash="${commit.hash}" style="
+                    background: rgba(255, 255, 255, 0.03);
+                    border: 1px solid ${isHead ? 'rgba(46, 204, 113, 0.3)' : 'rgba(255, 255, 255, 0.06)'};
+                    border-radius: 8px;
+                    padding: 10px 12px;
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                    transition: all 0.15s ease;
+                ">
+                    <!-- Row 1: Header (Hash, Badges, Date) -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
+                        <div style="display: flex; align-items: center; gap: 8px">
+                            <span class="kaiz-pg-hash-btn" title="Mã Commit Hash (Bấm để copy)" style="
+                                font-family: monospace;
+                                font-size: 11px;
+                                font-weight: 600;
+                                background: rgba(0, 0, 0, 0.4);
+                                padding: 2px 7px;
+                                border-radius: 4px;
+                                border: 1px solid rgba(255, 255, 255, 0.1);
+                                cursor: pointer;
+                                color: #38bdf8;
+                            "><i class="fa-regular fa-copy" style="font-size: 10px; margin-right: 3px; opacity: 0.7"></i>${commit.hash}</span>
+                            ${headPill}
+                            ${authorBadge}
+                            ${tagBadge}
+                        </div>
+                        <div style="font-size: 11px; opacity: 0.55">
+                            <i class="fa-regular fa-clock" style="margin-right: 3px"></i>${dateStr}
+                        </div>
+                    </div>
+
+                    <!-- Row 2: Message & Summary -->
+                    <div style="font-size: 13px; font-weight: 500; color: #fff; line-height: 1.4">
+                        ${escapeHtml(commit.message)}
+                    </div>
+                    <div style="font-size: 11px; opacity: 0.65; display: flex; align-items: center; gap: 10px">
+                        <span><i class="fa-solid fa-layer-group" style="font-size: 10px; margin-right: 4px"></i>${escapeHtml(diffSummary)}</span>
+                        ${commit.parentHash ? `<span style="font-family: monospace; font-size: 10px"><i class="fa-solid fa-arrow-turn-up" style="transform: rotate(90deg); margin-right: 2px"></i>parent: ${commit.parentHash.substring(0, 8)}</span>` : '<span style="font-size: 10px; opacity: 0.5">(root commit)</span>'}
+                    </div>
+
+                    <!-- Row 3: Action Buttons -->
+                    <div style="display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.04); padding-top: 6px">
+                        <button class="kaiz-pg-btn-diff menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)" title="Xem chi tiết các thay đổi trong commit này">
+                            <i class="fa-solid fa-code-compare"></i> Xem Diff
+                        </button>
+                        <button class="kaiz-pg-btn-tag menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #fbbf24; border-color: rgba(251, 191, 36, 0.3)" title="Gán nhãn phiên bản (Tag) cho commit này">
+                            <i class="fa-solid fa-tag"></i> Tag
+                        </button>
+                        <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #2ecc71; border-color: rgba(46, 204, 113, 0.3)" title="Hoàn tác SillyTavern về điểm này (vẫn giữ lịch sử để redo)">
+                            <i class="fa-solid fa-rotate-left"></i> Rollback
+                        </button>
+                        <button class="kaiz-pg-btn-hard-reset menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)" title="Rollback về điểm này VÀ XÓA BỎ các commit phía sau để giải phóng bộ nhớ">
+                            <i class="fa-solid fa-fire"></i> Hard Reset
+                        </button>
+                    </div>
+                </div>
+            `);
+              // Event Copy Hash
+              card.find('.kaiz-pg-hash-btn').on('click', () => {
+                  navigator.clipboard.writeText(commit.hash);
+                  if (typeof toastr !== 'undefined')
+                      toastr.info(`Đã copy mã hash: ${commit.hash}`);
+              });
+              // Event View Diff
+              card.find('.kaiz-pg-btn-diff').on('click', () => {
+                  this.viewCommitDiff(commit);
+              });
+              // Event Add Tag
+              card.find('.kaiz-pg-btn-tag').on('click', async () => {
+                  const newTag = prompt(`Nhập tên nhãn (Tag) cho commit [${commit.hash}]:`, commit.tag || 'v1.0');
+                  if (newTag && newTag.trim()) {
+                      await this.manager.tagCommit(commit.hash, newTag.trim());
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined') {
+                          toastr.success(`Đã gắn tag "${newTag}" cho commit [${commit.hash}]!`);
+                      }
+                  }
+              });
+              // Event Rollback Safe
+              card.find('.kaiz-pg-btn-rollback').on('click', async () => {
+                  if (confirm(`Bạn có chắc chắn muốn Rollback preset về commit [${commit.hash}] ("${commit.message}") không?\n(Lịch sử các commit vẫn sẽ được giữ lại an toàn)`)) {
+                      const res = await this.manager.rollback(commit.hash, false);
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined')
+                          toastr.success(res.summary);
+                  }
+              });
+              // Event Hard Reset
+              card.find('.kaiz-pg-btn-hard-reset').on('click', async () => {
+                  if (confirm(`⚠️ CẢNH BÁO HARD RESET:\nBạn có chắc muốn rollback về commit [${commit.hash}] VÀ XÓA SỔ toàn bộ các commit sinh ra sau thời điểm này khỏi database để giải phóng bộ nhớ không?`)) {
+                      const res = await this.manager.rollback(commit.hash, true);
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined')
+                          toastr.warning(res.summary);
+                  }
+              });
+              container.append(card);
+          });
+      }
+      viewCommitDiff(commit) {
+          const title = `Commit [${commit.hash}] Diff: "${commit.message}"`;
+          const items = commit.diffItems || commit.diff?.items || [];
+          this.openDiffModal(title, items, commit.tree?.prompts || []);
+      }
+      openDiffModal(title, items, fullPrompts) {
+          const $ = jQuery;
+          $('#kaiz-pg-diff-modal-title').text(title);
+          const body = $('#kaiz-pg-diff-body');
+          body.empty();
+          if (!items || items.length === 0) {
+              if (fullPrompts && fullPrompts.length > 0) {
+                  body.append(`
+                    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px">
+                        <div style="color: #38bdf8; font-weight: bold; margin-bottom: 6px">Root / Snapshot Content (${fullPrompts.length} blocks):</div>
+                        ${fullPrompts
+                    .map((p, i) => `
+                            <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px">
+                                <div style="color: #4ade80">#${i + 1} [${p.identifier}] ${escapeHtml(p.name)} (${p.role || 'system'})</div>
+                                <div style="color: #aaa; font-size: 11px; white-space: pre-wrap; max-height: 80px; overflow-y: auto; margin-top: 2px">${escapeHtml((p.content || '').substring(0, 300))}</div>
+                            </div>
+                        `)
+                    .join('')}
+                    </div>
+                `);
+              }
+              else {
+                  body.append(`<div style="text-align: center; padding: 30px; opacity: 0.6">Không có thông tin diff chi tiết được ghi nhận cho mốc này.</div>`);
+              }
+          }
+          else {
+              items.forEach((item, index) => {
+                  let badgeColor = '#38bdf8';
+                  if (item.type === 'create')
+                      badgeColor = '#2ecc71';
+                  else if (item.type === 'delete')
+                      badgeColor = '#e74c3c';
+                  else if (item.type === 'update')
+                      badgeColor = '#f39c12';
+                  body.append(`
+                    <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 10px">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px">
+                            <span style="background: ${badgeColor}22; color: ${badgeColor}; border: 1px solid ${badgeColor}44; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px">
+                                #${index + 1} ${item.type.toUpperCase()}
+                            </span>
+                            <span style="font-size: 11px; color: #888">[${escapeHtml(item.identifier || '')}]</span>
+                        </div>
+                        <div style="font-size: 12px; color: #fff; margin-bottom: 4px">${escapeHtml(item.summary || '')}</div>
+                        ${item.oldValue !== undefined || item.newValue !== undefined
+                    ? `
+                            <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 11px">
+                                ${item.oldValue !== undefined ? `<div style="background: rgba(231, 76, 60, 0.15); color: #ff8b8b; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap">- ${escapeHtml(String(item.oldValue).substring(0, 400))}</div>` : ''}
+                                ${item.newValue !== undefined ? `<div style="background: rgba(46, 204, 113, 0.15); color: #8bffb8; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap">+ ${escapeHtml(String(item.newValue).substring(0, 400))}</div>` : ''}
+                            </div>
+                        `
+                    : ''}
+                    </div>
+                `);
+              });
+          }
+          const diffModal = $('#kaiz-preset-diff-modal')[0];
+          if (diffModal) {
+              diffModal.style.display = 'flex';
+              diffModal.showModal();
+          }
+      }
+  }
+
   const EXT_NAME = 'kaiz_agent';
   console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
   // Tìm chính xác thư mục extension
@@ -14809,7 +15389,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               initInjectElementTool(uiEngine);
               new UICustomizationModal(stateManager.db, uiEngine);
               new ImageGalleryModal(stateManager.db);
-              console.log('[KaizAgent] UI Customization Engine & Image Gallery initialized.');
+              new PresetGitModal(stateManager.db);
+              console.log('[KaizAgent] UI Customization Engine, Image Gallery & Preset Git initialized.');
               // Bắt đầu Auto Tasks sau khi DB đã init
               const allTasks = await stateManager.db.getAllAutoTasks();
               await autoTaskScheduler.start(allTasks);

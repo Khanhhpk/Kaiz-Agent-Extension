@@ -115,6 +115,7 @@ export interface PresetCommitEntry {
         totalBlocks: number;
     };
     diffSummary: string;
+    diffItems?: any[];
 }
 
 export class KaizDB {
@@ -1157,6 +1158,74 @@ export class KaizDB {
                     cursor.continue();
                 } else {
                     resolve(deletedCount);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getDistinctPresetNames(): Promise<string[]> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const names = new Set<string>();
+            const request = index.openKeyCursor();
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursor;
+                if (cursor) {
+                    names.add(cursor.key as string);
+                    cursor.continue();
+                } else {
+                    resolve(Array.from(names));
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetStorageStats(): Promise<{
+        totalCommits: number;
+        totalBytes: number;
+        presetCount: number;
+        byPreset: Record<string, { commits: number; bytes: number }>;
+    }> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+
+            let totalCommits = 0;
+            let totalBytes = 0;
+            const byPreset: Record<string, { commits: number; bytes: number }> = {};
+
+            const request = store.openCursor();
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    totalCommits++;
+                    const entry = cursor.value as PresetCommitEntry;
+                    const pName = entry.presetName || 'unknown';
+                    const str = JSON.stringify(entry);
+                    const bytes = str.length * 2; // rough UTF-16 bytes in memory
+                    totalBytes += bytes;
+
+                    if (!byPreset[pName]) byPreset[pName] = { commits: 0, bytes: 0 };
+                    byPreset[pName].commits++;
+                    byPreset[pName].bytes += bytes;
+
+                    cursor.continue();
+                } else {
+                    resolve({
+                        totalCommits,
+                        totalBytes,
+                        presetCount: Object.keys(byPreset).length,
+                        byPreset,
+                    });
                 }
             };
             request.onerror = () => reject(request.error);
