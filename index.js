@@ -7214,6 +7214,45 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const presetName = this.getActivePresetName();
           return await this.db.getPresetCommits(presetName, limit);
       }
+      async traceCommitChain(fromHash, toHash) {
+          if (!fromHash || fromHash === toHash) {
+              const target = await this.db.getPresetCommitByHash(toHash);
+              return { direction: 'same', chain: target ? [target] : [] };
+          }
+          const presetName = this.getActivePresetName();
+          const allCommits = await this.db.getPresetCommits(presetName, 500);
+          const commitMap = new Map(allCommits.map((c) => [c.hash, c]));
+          // Check if moving backward: walk parents from fromHash to toHash
+          const backwardChain = [];
+          let curr = fromHash;
+          while (curr && curr !== toHash) {
+              const node = commitMap.get(curr);
+              if (!node)
+                  break;
+              backwardChain.push(node);
+              curr = node.parentHash;
+          }
+          if (curr === toHash) {
+              const targetNode = commitMap.get(toHash);
+              if (targetNode)
+                  backwardChain.push(targetNode);
+              return { direction: 'backward', chain: backwardChain };
+          }
+          // Check if moving forward: walk parents from toHash down to fromHash
+          const forwardChain = [];
+          curr = toHash;
+          while (curr && curr !== fromHash) {
+              const node = commitMap.get(curr);
+              if (!node)
+                  break;
+              forwardChain.unshift(node);
+              curr = node.parentHash;
+          }
+          if (curr === fromHash) {
+              return { direction: 'forward', chain: forwardChain };
+          }
+          return { direction: 'diverged', chain: [] };
+      }
       async rollback(target, hard = false) {
           const presetName = this.getActivePresetName();
           let targetCommit = await this.db.getPresetCommitByHash(target);
@@ -7224,6 +7263,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (!targetCommit) {
               throw new Error(`Không tìm thấy commit hoặc tag nào với mã: "${target}"`);
           }
+          const currentHead = await this.getHeadCommitHash(presetName);
+          const chainInfo = await this.traceCommitChain(currentHead, targetCommit.hash);
           // Unpack tree to SillyTavern Live Context
           const targetPrompts = targetCommit.tree.prompts || [];
           const targetOrder = targetCommit.tree.prompt_order || [];
@@ -7235,6 +7276,27 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (hard) {
               prunedCount = await this.db.deletePresetCommitsAfter(presetName, targetCommit.timestamp);
           }
+          let chainSummary;
+          if (chainInfo.direction === 'backward') {
+              const steps = chainInfo.chain.map((c) => c.hash.substring(0, 8)).join(' ➔ ');
+              const revertedCount = Math.max(1, chainInfo.chain.length - 1);
+              chainSummary = `🔄 Revert chuỗi (${steps}): Đã hoàn tác toàn bộ thay đổi của ${revertedCount} commit(s), đưa preset về đúng mốc [${targetCommit.hash}].`;
+          }
+          else if (chainInfo.direction === 'forward') {
+              const steps = [
+                  currentHead ? currentHead.substring(0, 8) : null,
+                  ...chainInfo.chain.map((c) => c.hash.substring(0, 8)),
+              ]
+                  .filter(Boolean)
+                  .join(' ➔ ');
+              chainSummary = `⏩ Fast-forward tiến chuỗi (${steps}): Đã áp dụng toàn bộ thay đổi tích lũy của ${chainInfo.chain.length} commit(s), đưa preset lên mốc [${targetCommit.hash}].`;
+          }
+          else if (chainInfo.direction === 'diverged') {
+              chainSummary = `🔀 Chuyển nhánh (Diverged branch): Đã chuyển trạng thái preset từ [${currentHead ? currentHead.substring(0, 8) : 'HEAD'}] sang [${targetCommit.hash}].`;
+          }
+          else {
+              chainSummary = `🔄 Đã đồng bộ lại về mốc [${targetCommit.hash}].`;
+          }
           const hardMsg = hard
               ? ` (Hard reset: Đã dọn dẹp và xóa ${prunedCount} commit mới hơn khỏi bộ nhớ)`
               : ' (Soft reset: Giữ nguyên lịch sử commit trong DB)';
@@ -7242,8 +7304,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               ok: true,
               hash: targetCommit.hash,
               pruned_count: prunedCount,
-              summary: `🔄 Rollback thành công về commit [${targetCommit.hash}]: "${targetCommit.message}". Đã phục hồi ${targetPrompts.length} prompt blocks.${hardMsg}`,
+              summary: `${chainSummary} Đã phục hồi ${targetPrompts.length} prompt blocks.${hardMsg}`,
           };
+      }
+      async checkout(target) {
+          return await this.rollback(target, false);
       }
       async pruneCommits(keepCount = 30) {
           const presetName = this.getActivePresetName();
@@ -7781,6 +7846,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               '  - "diff": So sánh chi tiết sự khác biệt giữa Staging nháp với commit HEAD (hoặc xem danh sách thay đổi đang chờ commit).\n' +
               '  - "commit": MỞ HỘP VÀ LƯU THẬT — Đóng gói toàn bộ Staging thành 1 commit node mới, lưu vào IndexedDB và áp dụng vào SillyTavern (bắt buộc data: { message: string }, tùy chọn data: { tag?: string }).\n' +
               '  - "log": Xem danh sách lịch sử commit của preset hiện tại (data: { limit?: number }).\n' +
+              '  - "checkout": Chuyển trạng thái preset về bất kỳ commit hoặc tag nào (hỗ trợ cả revert chuỗi lẫn fast-forward tiến chuỗi tích lũy) (data: { target: string }).\n' +
               '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string, hard?: boolean } - nếu hard: true, xóa sạch vĩnh viễn các commit mới hơn khỏi DB để giải phóng bộ nhớ).\n' +
               '  - "discard": Hủy toàn bộ nháp đang có trong Staging, đưa Sandbox về bằng với HEAD.\n' +
               '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).\n' +
@@ -7809,6 +7875,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           'diff',
                           'commit',
                           'log',
+                          'checkout',
                           'rollback',
                           'discard',
                           'tag',
@@ -8169,20 +8236,21 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           }, null, 2),
                       };
                   }
+                  case 'checkout':
                   case 'rollback': {
                       const target = data.target || data.commitId || data.tag || identifier;
                       if (!target) {
                           return {
                               isError: true,
-                              content: 'Action "rollback" yêu cầu cung cấp mã commit hash hoặc tên tag trong `data.target`.',
+                              content: `Action "${action}" yêu cầu cung cấp mã commit hash hoặc tên tag trong \`data.target\`.`,
                           };
                       }
-                      const isHard = Boolean(data.hard || data.prune_newer);
+                      const isHard = action === 'rollback' && Boolean(data.hard || data.prune_newer);
                       const result = await manager.rollback(target, isHard);
                       return {
                           content: JSON.stringify({
                               ok: true,
-                              action: 'rollback',
+                              action,
                               restored_commit: result.hash,
                               hard: isHard,
                               pruned_count: result.pruned_count || 0,
@@ -14903,7 +14971,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           // 3. Render Lịch sử Commit
           this.commitsCache = await this.db.getPresetCommits(this.currentSelectedPreset, 100);
-          this.renderCommitList();
+          await this.renderCommitList();
       }
       async renderStorageMetrics() {
           const $ = jQuery;
@@ -14992,10 +15060,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   toastr.error(`Lỗi khi commit: ${e.message}`);
           }
       }
-      renderCommitList() {
+      async renderCommitList() {
           const $ = jQuery;
           const container = $('#kaiz-pg-commit-list');
           container.empty();
+          const headHash = await this.manager.getHeadCommitHash(this.currentSelectedPreset);
+          const headCommit = this.commitsCache.find((c) => c.hash === headHash);
+          const headTimestamp = headCommit ? headCommit.timestamp : 0;
           let filtered = this.commitsCache;
           if (this.searchQuery) {
               filtered = this.commitsCache.filter((c) => c.hash.toLowerCase().includes(this.searchQuery) ||
@@ -15015,8 +15086,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             `);
               return;
           }
-          filtered.forEach((commit, idx) => {
-              const isHead = idx === 0 && !this.searchQuery;
+          filtered.forEach((commit) => {
+              const isHead = commit.hash === headHash;
+              const isOlder = headCommit ? commit.timestamp < headTimestamp : false;
+              const isNewer = headCommit ? commit.timestamp > headTimestamp : false;
               const dateStr = new Date(commit.timestamp).toLocaleString();
               const author = commit.author || 'Kaiz Agent';
               const isManual = author.toLowerCase().includes('manual') || author.toLowerCase().includes('user');
@@ -15027,14 +15100,42 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   ? `<span style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 500"><i class="fa-solid fa-tag"></i> ${escapeHtml(commit.tag)}</span>`
                   : '';
               const headPill = isHead
-                  ? `<span style="background: #2ecc71; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 700">HEAD</span>`
+                  ? `<span style="background: #2ecc71; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 700">CURRENT HEAD</span>`
                   : '';
               const promptCount = commit.tree?.prompts?.length || 0;
               const diffSummary = commit.diffSummary || commit.diff?.summary || `${promptCount} blocks`;
+              let navActionBtn;
+              if (isHead) {
+                  navActionBtn = `<button class="menu_button" disabled style="font-size: 11px; padding: 3px 8px; opacity: 0.55; color: #2ecc71"><i class="fa-solid fa-check"></i> Đang ở HEAD</button>`;
+              }
+              else if (isOlder) {
+                  navActionBtn = `
+                    <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)" title="Hoàn tác toàn bộ chuỗi commit mới hơn để lùi về mốc này (Safe Revert)">
+                        <i class="fa-solid fa-rotate-left"></i> Revert Chuỗi
+                    </button>
+                    <button class="kaiz-pg-btn-hard-reset menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)" title="Rollback về điểm này VÀ XÓA BỎ các commit phía sau để giải phóng bộ nhớ">
+                        <i class="fa-solid fa-fire"></i> Hard Reset
+                    </button>
+                `;
+              }
+              else if (isNewer) {
+                  navActionBtn = `
+                    <button class="kaiz-pg-btn-forward menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #a78bfa; border-color: rgba(167, 139, 250, 0.3)" title="Áp dụng toàn bộ các commit tích lũy để tiến tới mốc này (Fast-Forward)">
+                        <i class="fa-solid fa-forward"></i> Tiến Chuỗi
+                    </button>
+                `;
+              }
+              else {
+                  navActionBtn = `
+                    <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)">
+                        <i class="fa-solid fa-rotate-left"></i> Rollback
+                    </button>
+                `;
+              }
               const card = $(`
                 <div class="kaiz-pg-commit-card" data-hash="${commit.hash}" style="
                     background: rgba(255, 255, 255, 0.03);
-                    border: 1px solid ${isHead ? 'rgba(46, 204, 113, 0.3)' : 'rgba(255, 255, 255, 0.06)'};
+                    border: 1px solid ${isHead ? 'rgba(46, 204, 113, 0.35)' : 'rgba(255, 255, 255, 0.06)'};
                     border-radius: 8px;
                     padding: 10px 12px;
                     display: flex;
@@ -15082,12 +15183,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         <button class="kaiz-pg-btn-tag menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #fbbf24; border-color: rgba(251, 191, 36, 0.3)" title="Gán nhãn phiên bản (Tag) cho commit này">
                             <i class="fa-solid fa-tag"></i> Tag
                         </button>
-                        <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #2ecc71; border-color: rgba(46, 204, 113, 0.3)" title="Hoàn tác SillyTavern về điểm này (vẫn giữ lịch sử để redo)">
-                            <i class="fa-solid fa-rotate-left"></i> Rollback
-                        </button>
-                        <button class="kaiz-pg-btn-hard-reset menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)" title="Rollback về điểm này VÀ XÓA BỎ các commit phía sau để giải phóng bộ nhớ">
-                            <i class="fa-solid fa-fire"></i> Hard Reset
-                        </button>
+                        ${navActionBtn}
                     </div>
                 </div>
             `);
@@ -15112,9 +15208,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       }
                   }
               });
-              // Event Rollback Safe
+              // Event Rollback (Older)
               card.find('.kaiz-pg-btn-rollback').on('click', async () => {
-                  if (confirm(`Bạn có chắc chắn muốn Rollback preset về commit [${commit.hash}] ("${commit.message}") không?\n(Lịch sử các commit vẫn sẽ được giữ lại an toàn)`)) {
+                  if (confirm(`Bạn có chắc chắn muốn hoàn tác toàn bộ chuỗi commit mới hơn để lùi về mốc [${commit.hash}] ("${commit.message}") không?\n(Dữ liệu các commit vẫn được lưu an toàn)`)) {
+                      const res = await this.manager.rollback(commit.hash, false);
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined')
+                          toastr.success(res.summary);
+                  }
+              });
+              // Event Forward (Newer)
+              card.find('.kaiz-pg-btn-forward').on('click', async () => {
+                  if (confirm(`Bạn có chắc chắn muốn áp dụng toàn bộ chuỗi commit tích lũy để tiến tới mốc [${commit.hash}] ("${commit.message}") không?`)) {
                       const res = await this.manager.rollback(commit.hash, false);
                       await this.loadAndRender();
                       if (typeof toastr !== 'undefined')

@@ -240,7 +240,7 @@ export class PresetGitModal {
 
         // 3. Render Lịch sử Commit
         this.commitsCache = await this.db.getPresetCommits(this.currentSelectedPreset, 100);
-        this.renderCommitList();
+        await this.renderCommitList();
     }
 
     private async renderStorageMetrics(): Promise<void> {
@@ -352,10 +352,14 @@ export class PresetGitModal {
         }
     }
 
-    private renderCommitList(): void {
+    private async renderCommitList(): Promise<void> {
         const $ = jQuery;
         const container = $('#kaiz-pg-commit-list');
         container.empty();
+
+        const headHash = await this.manager.getHeadCommitHash(this.currentSelectedPreset);
+        const headCommit = this.commitsCache.find((c) => c.hash === headHash);
+        const headTimestamp = headCommit ? headCommit.timestamp : 0;
 
         let filtered = this.commitsCache;
         if (this.searchQuery) {
@@ -381,8 +385,11 @@ export class PresetGitModal {
             return;
         }
 
-        filtered.forEach((commit, idx) => {
-            const isHead = idx === 0 && !this.searchQuery;
+        filtered.forEach((commit) => {
+            const isHead = commit.hash === headHash;
+            const isOlder = headCommit ? commit.timestamp < headTimestamp : false;
+            const isNewer = headCommit ? commit.timestamp > headTimestamp : false;
+
             const dateStr = new Date(commit.timestamp).toLocaleString();
             const author = commit.author || 'Kaiz Agent';
             const isManual = author.toLowerCase().includes('manual') || author.toLowerCase().includes('user');
@@ -395,16 +402,42 @@ export class PresetGitModal {
                 : '';
 
             const headPill = isHead
-                ? `<span style="background: #2ecc71; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 700">HEAD</span>`
+                ? `<span style="background: #2ecc71; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 700">CURRENT HEAD</span>`
                 : '';
 
             const promptCount = commit.tree?.prompts?.length || 0;
             const diffSummary = commit.diffSummary || (commit as any).diff?.summary || `${promptCount} blocks`;
 
+            let navActionBtn: string;
+            if (isHead) {
+                navActionBtn = `<button class="menu_button" disabled style="font-size: 11px; padding: 3px 8px; opacity: 0.55; color: #2ecc71"><i class="fa-solid fa-check"></i> Đang ở HEAD</button>`;
+            } else if (isOlder) {
+                navActionBtn = `
+                    <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)" title="Hoàn tác toàn bộ chuỗi commit mới hơn để lùi về mốc này (Safe Revert)">
+                        <i class="fa-solid fa-rotate-left"></i> Revert Chuỗi
+                    </button>
+                    <button class="kaiz-pg-btn-hard-reset menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)" title="Rollback về điểm này VÀ XÓA BỎ các commit phía sau để giải phóng bộ nhớ">
+                        <i class="fa-solid fa-fire"></i> Hard Reset
+                    </button>
+                `;
+            } else if (isNewer) {
+                navActionBtn = `
+                    <button class="kaiz-pg-btn-forward menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #a78bfa; border-color: rgba(167, 139, 250, 0.3)" title="Áp dụng toàn bộ các commit tích lũy để tiến tới mốc này (Fast-Forward)">
+                        <i class="fa-solid fa-forward"></i> Tiến Chuỗi
+                    </button>
+                `;
+            } else {
+                navActionBtn = `
+                    <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)">
+                        <i class="fa-solid fa-rotate-left"></i> Rollback
+                    </button>
+                `;
+            }
+
             const card = $(`
                 <div class="kaiz-pg-commit-card" data-hash="${commit.hash}" style="
                     background: rgba(255, 255, 255, 0.03);
-                    border: 1px solid ${isHead ? 'rgba(46, 204, 113, 0.3)' : 'rgba(255, 255, 255, 0.06)'};
+                    border: 1px solid ${isHead ? 'rgba(46, 204, 113, 0.35)' : 'rgba(255, 255, 255, 0.06)'};
                     border-radius: 8px;
                     padding: 10px 12px;
                     display: flex;
@@ -452,12 +485,7 @@ export class PresetGitModal {
                         <button class="kaiz-pg-btn-tag menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #fbbf24; border-color: rgba(251, 191, 36, 0.3)" title="Gán nhãn phiên bản (Tag) cho commit này">
                             <i class="fa-solid fa-tag"></i> Tag
                         </button>
-                        <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #2ecc71; border-color: rgba(46, 204, 113, 0.3)" title="Hoàn tác SillyTavern về điểm này (vẫn giữ lịch sử để redo)">
-                            <i class="fa-solid fa-rotate-left"></i> Rollback
-                        </button>
-                        <button class="kaiz-pg-btn-hard-reset menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)" title="Rollback về điểm này VÀ XÓA BỎ các commit phía sau để giải phóng bộ nhớ">
-                            <i class="fa-solid fa-fire"></i> Hard Reset
-                        </button>
+                        ${navActionBtn}
                     </div>
                 </div>
             `);
@@ -485,11 +513,24 @@ export class PresetGitModal {
                 }
             });
 
-            // Event Rollback Safe
+            // Event Rollback (Older)
             card.find('.kaiz-pg-btn-rollback').on('click', async () => {
                 if (
                     confirm(
-                        `Bạn có chắc chắn muốn Rollback preset về commit [${commit.hash}] ("${commit.message}") không?\n(Lịch sử các commit vẫn sẽ được giữ lại an toàn)`,
+                        `Bạn có chắc chắn muốn hoàn tác toàn bộ chuỗi commit mới hơn để lùi về mốc [${commit.hash}] ("${commit.message}") không?\n(Dữ liệu các commit vẫn được lưu an toàn)`,
+                    )
+                ) {
+                    const res = await this.manager.rollback(commit.hash, false);
+                    await this.loadAndRender();
+                    if (typeof toastr !== 'undefined') toastr.success(res.summary);
+                }
+            });
+
+            // Event Forward (Newer)
+            card.find('.kaiz-pg-btn-forward').on('click', async () => {
+                if (
+                    confirm(
+                        `Bạn có chắc chắn muốn áp dụng toàn bộ chuỗi commit tích lũy để tiến tới mốc [${commit.hash}] ("${commit.message}") không?`,
                     )
                 ) {
                     const res = await this.manager.rollback(commit.hash, false);

@@ -28,6 +28,7 @@ export const managePresetPromptTool: ITool = {
             '  - "diff": So sánh chi tiết sự khác biệt giữa Staging nháp với commit HEAD (hoặc xem danh sách thay đổi đang chờ commit).\n' +
             '  - "commit": MỞ HỘP VÀ LƯU THẬT — Đóng gói toàn bộ Staging thành 1 commit node mới, lưu vào IndexedDB và áp dụng vào SillyTavern (bắt buộc data: { message: string }, tùy chọn data: { tag?: string }).\n' +
             '  - "log": Xem danh sách lịch sử commit của preset hiện tại (data: { limit?: number }).\n' +
+            '  - "checkout": Chuyển trạng thái preset về bất kỳ commit hoặc tag nào (hỗ trợ cả revert chuỗi lẫn fast-forward tiến chuỗi tích lũy) (data: { target: string }).\n' +
             '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string, hard?: boolean } - nếu hard: true, xóa sạch vĩnh viễn các commit mới hơn khỏi DB để giải phóng bộ nhớ).\n' +
             '  - "discard": Hủy toàn bộ nháp đang có trong Staging, đưa Sandbox về bằng với HEAD.\n' +
             '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).\n' +
@@ -56,6 +57,7 @@ export const managePresetPromptTool: ITool = {
                         'diff',
                         'commit',
                         'log',
+                        'checkout',
                         'rollback',
                         'discard',
                         'tag',
@@ -513,22 +515,22 @@ export const managePresetPromptTool: ITool = {
                     };
                 }
 
+                case 'checkout':
                 case 'rollback': {
                     const target = data.target || data.commitId || data.tag || identifier;
                     if (!target) {
                         return {
                             isError: true,
-                            content:
-                                'Action "rollback" yêu cầu cung cấp mã commit hash hoặc tên tag trong `data.target`.',
+                            content: `Action "${action}" yêu cầu cung cấp mã commit hash hoặc tên tag trong \`data.target\`.`,
                         };
                     }
-                    const isHard = Boolean(data.hard || data.prune_newer);
+                    const isHard = action === 'rollback' && Boolean(data.hard || data.prune_newer);
                     const result = await manager.rollback(target, isHard);
                     return {
                         content: JSON.stringify(
                             {
                                 ok: true,
-                                action: 'rollback',
+                                action,
                                 restored_commit: result.hash,
                                 hard: isHard,
                                 pruned_count: result.pruned_count || 0,

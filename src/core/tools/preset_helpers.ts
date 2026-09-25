@@ -877,6 +877,52 @@ export class PresetGitManager {
         return await this.db.getPresetCommits(presetName, limit);
     }
 
+    public async traceCommitChain(
+        fromHash: string | null,
+        toHash: string,
+    ): Promise<{ direction: 'backward' | 'forward' | 'same' | 'diverged'; chain: PresetCommitEntry[] }> {
+        if (!fromHash || fromHash === toHash) {
+            const target = await this.db.getPresetCommitByHash(toHash);
+            return { direction: 'same', chain: target ? [target] : [] };
+        }
+
+        const presetName = this.getActivePresetName();
+        const allCommits = await this.db.getPresetCommits(presetName, 500);
+        const commitMap = new Map<string, PresetCommitEntry>(allCommits.map((c) => [c.hash, c]));
+
+        // Check if moving backward: walk parents from fromHash to toHash
+        const backwardChain: PresetCommitEntry[] = [];
+        let curr: string | null = fromHash;
+        while (curr && curr !== toHash) {
+            const node = commitMap.get(curr);
+            if (!node) break;
+            backwardChain.push(node);
+            curr = node.parentHash;
+        }
+
+        if (curr === toHash) {
+            const targetNode = commitMap.get(toHash);
+            if (targetNode) backwardChain.push(targetNode);
+            return { direction: 'backward', chain: backwardChain };
+        }
+
+        // Check if moving forward: walk parents from toHash down to fromHash
+        const forwardChain: PresetCommitEntry[] = [];
+        curr = toHash;
+        while (curr && curr !== fromHash) {
+            const node = commitMap.get(curr);
+            if (!node) break;
+            forwardChain.unshift(node);
+            curr = node.parentHash;
+        }
+
+        if (curr === fromHash) {
+            return { direction: 'forward', chain: forwardChain };
+        }
+
+        return { direction: 'diverged', chain: [] };
+    }
+
     public async rollback(
         target: string,
         hard: boolean = false,
@@ -893,6 +939,9 @@ export class PresetGitManager {
             throw new Error(`Không tìm thấy commit hoặc tag nào với mã: "${target}"`);
         }
 
+        const currentHead = await this.getHeadCommitHash(presetName);
+        const chainInfo = await this.traceCommitChain(currentHead, targetCommit.hash);
+
         // Unpack tree to SillyTavern Live Context
         const targetPrompts = targetCommit.tree.prompts || [];
         const targetOrder = targetCommit.tree.prompt_order || [];
@@ -908,6 +957,25 @@ export class PresetGitManager {
             prunedCount = await this.db.deletePresetCommitsAfter(presetName, targetCommit.timestamp);
         }
 
+        let chainSummary: string;
+        if (chainInfo.direction === 'backward') {
+            const steps = chainInfo.chain.map((c) => c.hash.substring(0, 8)).join(' ➔ ');
+            const revertedCount = Math.max(1, chainInfo.chain.length - 1);
+            chainSummary = `🔄 Revert chuỗi (${steps}): Đã hoàn tác toàn bộ thay đổi của ${revertedCount} commit(s), đưa preset về đúng mốc [${targetCommit.hash}].`;
+        } else if (chainInfo.direction === 'forward') {
+            const steps = [
+                currentHead ? currentHead.substring(0, 8) : null,
+                ...chainInfo.chain.map((c) => c.hash.substring(0, 8)),
+            ]
+                .filter(Boolean)
+                .join(' ➔ ');
+            chainSummary = `⏩ Fast-forward tiến chuỗi (${steps}): Đã áp dụng toàn bộ thay đổi tích lũy của ${chainInfo.chain.length} commit(s), đưa preset lên mốc [${targetCommit.hash}].`;
+        } else if (chainInfo.direction === 'diverged') {
+            chainSummary = `🔀 Chuyển nhánh (Diverged branch): Đã chuyển trạng thái preset từ [${currentHead ? currentHead.substring(0, 8) : 'HEAD'}] sang [${targetCommit.hash}].`;
+        } else {
+            chainSummary = `🔄 Đã đồng bộ lại về mốc [${targetCommit.hash}].`;
+        }
+
         const hardMsg = hard
             ? ` (Hard reset: Đã dọn dẹp và xóa ${prunedCount} commit mới hơn khỏi bộ nhớ)`
             : ' (Soft reset: Giữ nguyên lịch sử commit trong DB)';
@@ -916,8 +984,14 @@ export class PresetGitManager {
             ok: true,
             hash: targetCommit.hash,
             pruned_count: prunedCount,
-            summary: `🔄 Rollback thành công về commit [${targetCommit.hash}]: "${targetCommit.message}". Đã phục hồi ${targetPrompts.length} prompt blocks.${hardMsg}`,
+            summary: `${chainSummary} Đã phục hồi ${targetPrompts.length} prompt blocks.${hardMsg}`,
         };
+    }
+
+    public async checkout(
+        target: string,
+    ): Promise<{ ok: boolean; hash: string; summary: string; pruned_count?: number }> {
+        return await this.rollback(target, false);
     }
 
     public async pruneCommits(keepCount: number = 30): Promise<{ ok: boolean; pruned_count: number; summary: string }> {
