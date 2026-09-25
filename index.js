@@ -5163,7 +5163,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return KaizDB.instance;
       }
       dbName = 'KaizAgentDB';
-      dbVersion = 6;
+      dbVersion = 7;
       db = null;
       constructor() {
           if (!KaizDB.instance) {
@@ -5226,6 +5226,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           autoIncrement: true,
                       });
                       galleryStore.createIndex('timestamp', 'timestamp', { unique: false });
+                  }
+                  // --- PRESET COMMITS (DB v7) ---
+                  if (!db.objectStoreNames.contains('preset_commits')) {
+                      const commitStore = db.createObjectStore('preset_commits', {
+                          keyPath: 'id',
+                          autoIncrement: true,
+                      });
+                      commitStore.createIndex('hash', 'hash', { unique: true });
+                      commitStore.createIndex('presetName', 'presetName', { unique: false });
+                      commitStore.createIndex('timestamp', 'timestamp', { unique: false });
+                      commitStore.createIndex('parentHash', 'parentHash', { unique: false });
+                      commitStore.createIndex('tag', 'tag', { unique: false });
                   }
               };
               request.onsuccess = async (event) => {
@@ -5969,6 +5981,98 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               request.onerror = () => reject(request.error);
           });
       }
+      // =========================================================================
+      // PRESET COMMITS (GIT CONTROL VERSION)
+      // =========================================================================
+      async addPresetCommit(commit) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const request = store.add(commit);
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetCommits(presetName, limit = 30) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const request = index.getAll(presetName);
+              request.onsuccess = () => {
+                  const results = request.result || [];
+                  // Sort newest first
+                  results.sort((a, b) => b.timestamp - a.timestamp);
+                  resolve(results.slice(0, limit));
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetCommitByHash(hash) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('hash');
+              const request = index.get(hash);
+              request.onsuccess = () => {
+                  resolve(request.result || null);
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetCommitByTag(presetName, tag) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const request = index.getAll(presetName);
+              request.onsuccess = () => {
+                  const results = request.result || [];
+                  const found = results.find(c => c.tag === tag);
+                  resolve(found || null);
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async deletePresetCommits(presetName) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const request = index.openCursor(presetName);
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      cursor.delete();
+                      cursor.continue();
+                  }
+                  else {
+                      resolve();
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
   }
 
   class WebImageBridge {
@@ -6297,6 +6401,1612 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
   };
 
   /**
+   * preset_helpers.ts
+   * Core Git Engine & Staging Sandbox cho Preset Tools trong Kaiz Agent Extension.
+   * Lấy cảm hứng từ kiến trúc Git Internals kết hợp tinh hoa của ST Multitool Preset Editor Agency.
+   */
+  // ─── PresetGitManager Singleton ─────────────────────────────────────────────
+  class PresetGitManager {
+      static instance = null;
+      static getInstance() {
+          if (!PresetGitManager.instance) {
+              PresetGitManager.instance = new PresetGitManager();
+          }
+          return PresetGitManager.instance;
+      }
+      // ─── Staging Sandbox State ──────────────────────────────────────────────
+      _stagingMap = new Map(); // identifier -> changes
+      _stagingCreates = [];
+      _stagingDeletes = new Set(); // set of identifiers
+      _stagingOrder = null; // custom reordered identifiers
+      _stagingVars = {};
+      _stagingVarRenames = {}; // oldName -> newName
+      _activeHeads = new Map(); // presetName -> commitHash
+      db = KaizDB.getInstance();
+      // ─── SillyTavern Context Accessors ──────────────────────────────────────
+      getContainer() {
+          const win = window;
+          if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+              const ctx = win.SillyTavern.getContext();
+              if (ctx?.chatCompletionSettings && Array.isArray(ctx.chatCompletionSettings.prompts)) {
+                  return ctx.chatCompletionSettings;
+              }
+              if (ctx?.power_user?.instruct && Array.isArray(ctx.power_user.instruct.prompts)) {
+                  return ctx.power_user.instruct;
+              }
+          }
+          if (win.chatCompletionSettings && Array.isArray(win.chatCompletionSettings.prompts)) {
+              return win.chatCompletionSettings;
+          }
+          return null;
+      }
+      getActivePresetName() {
+          const container = this.getContainer();
+          const win = window;
+          if (container?.preset_settings_openai) {
+              return String(container.preset_settings_openai);
+          }
+          const $el = (win.$ ? win.$('#chat_completion_preset') : null) || (win.$ ? win.$('#openai_preset') : null);
+          if ($el && $el.length && $el.val()) {
+              return String($el.val());
+          }
+          return 'Default Preset';
+      }
+      getRawLivePrompts() {
+          const container = this.getContainer();
+          return (container?.prompts || []).map(p => ({ ...p }));
+      }
+      getRawLiveOrder() {
+          const container = this.getContainer();
+          if (!container)
+              return [];
+          const raw = container.prompt_order || [];
+          if (!Array.isArray(raw) || raw.length === 0) {
+              return (container.prompts || []).map(p => p.identifier);
+          }
+          if (typeof raw[0] === 'object' && Array.isArray(raw[0].order)) {
+              const win = window;
+              const ctx = win.SillyTavern?.getContext?.() || {};
+              const charId = ctx.characterId;
+              const targetObj = raw.find((o) => String(o.character_id) === String(charId)) || raw[0];
+              const orderList = targetObj?.order || [];
+              return orderList.map((o) => (typeof o === 'string' ? o : o.identifier)).filter(Boolean);
+          }
+          return raw.map((o) => (typeof o === 'string' ? o : o.identifier)).filter(Boolean);
+      }
+      // ─── Staging / Sandbox Overlay Read ─────────────────────────────────────
+      getPrompts() {
+          const basePrompts = this.getRawLivePrompts();
+          // 1. Map existing blocks with staging changes & filter deleted
+          const prompts = basePrompts
+              .map(p => {
+              if (this._stagingDeletes.has(p.identifier))
+                  return null;
+              if (this._stagingMap.has(p.identifier)) {
+                  const stagedFields = this._stagingMap.get(p.identifier);
+                  return { ...p, ...stagedFields, identifier: p.identifier };
+              }
+              return { ...p };
+          })
+              .filter((p) => p !== null);
+          // 2. Add staged new blocks
+          for (const created of this._stagingCreates) {
+              if (!this._stagingDeletes.has(created.block.identifier)) {
+                  prompts.push({ ...created.block });
+              }
+          }
+          return prompts;
+      }
+      getPromptOrder() {
+          if (this._stagingOrder && Array.isArray(this._stagingOrder)) {
+              return this._stagingOrder.filter(id => id && !this._stagingDeletes.has(id));
+          }
+          const rawLiveOrder = this.getRawLiveOrder();
+          const filteredLive = rawLiveOrder.filter(id => id && !this._stagingDeletes.has(id));
+          // Append created blocks that have addToLinked = true
+          for (const created of this._stagingCreates) {
+              if (created.addToLinked && !this._stagingDeletes.has(created.block.identifier)) {
+                  if (!filteredLive.includes(created.block.identifier)) {
+                      if (typeof created.position === 'number' && created.position >= 0 && created.position <= filteredLive.length) {
+                          filteredLive.splice(created.position, 0, created.block.identifier);
+                      }
+                      else {
+                          filteredLive.push(created.block.identifier);
+                      }
+                  }
+              }
+          }
+          return filteredLive;
+      }
+      findPrompt(identifier) {
+          return this.getPrompts().find(p => p.identifier === identifier) || null;
+      }
+      findRawPrompt(identifier) {
+          return this.getRawLivePrompts().find(p => p.identifier === identifier) || null;
+      }
+      // ─── Staging Actions (Working Tree Sandbox) ─────────────────────────────
+      hasStagingChanges() {
+          return (this._stagingMap.size > 0 ||
+              this._stagingCreates.length > 0 ||
+              this._stagingDeletes.size > 0 ||
+              this._stagingOrder !== null ||
+              Object.keys(this._stagingVars).length > 0 ||
+              Object.keys(this._stagingVarRenames).length > 0);
+      }
+      clearStaging() {
+          this._stagingMap.clear();
+          this._stagingCreates = [];
+          this._stagingDeletes.clear();
+          this._stagingOrder = null;
+          this._stagingVars = {};
+          this._stagingVarRenames = {};
+      }
+      stageCreate(args) {
+          const identifier = 'block_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+          const newBlock = {
+              identifier,
+              id: identifier,
+              name: args.name || 'New Block',
+              content: args.content || '',
+              role: args.role || 'system',
+              enabled: true,
+              injection_position: args.injection_position ?? 0,
+              injection_depth: args.injection_depth ?? 4,
+              injection_order: args.injection_order ?? 100,
+          };
+          const addToLinked = args.addToLinked ?? true;
+          this._stagingCreates.push({ block: newBlock, addToLinked, position: args.position });
+          return {
+              ok: true,
+              identifier,
+              summary: `[Staged] Đã tạo block mới "${newBlock.name}" (${addToLinked ? 'Linked' : 'Unlinked'}) [ID: ${identifier}]`,
+          };
+      }
+      stageUpdateContent(identifier, content) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          if (!this._stagingMap.has(identifier))
+              this._stagingMap.set(identifier, {});
+          this._stagingMap.get(identifier).content = content;
+          return {
+              ok: true,
+              summary: `[Staged] Đã cập nhật toàn bộ nội dung của block "${p.name}" (${content.length} ký tự).`,
+          };
+      }
+      stageReplaceText(identifier, target_string, replacement_string, isGlobal = false, onlyLinked = false) {
+          if (!target_string)
+              throw new Error('Tham số target_string không được để trống.');
+          const prompts = this.getPrompts();
+          const linkedSet = new Set(this.getPromptOrder());
+          let modifiedCount = 0;
+          const modifiedNames = [];
+          if (isGlobal || !identifier) {
+              for (const p of prompts) {
+                  if (onlyLinked && !linkedSet.has(p.identifier))
+                      continue;
+                  if (!this._stagingMap.has(p.identifier))
+                      this._stagingMap.set(p.identifier, {});
+                  const currentContent = this._stagingMap.get(p.identifier).content !== undefined
+                      ? this._stagingMap.get(p.identifier).content
+                      : (p.content || '');
+                  if (currentContent.includes(target_string)) {
+                      this._stagingMap.get(p.identifier).content = currentContent.split(target_string).join(replacement_string);
+                      modifiedCount++;
+                      modifiedNames.push(p.name);
+                  }
+              }
+              if (modifiedCount === 0) {
+                  return { ok: true, summary: `Không tìm thấy đoạn "${target_string}" trong bất kỳ block nào.`, modified_count: 0 };
+              }
+              return {
+                  ok: true,
+                  summary: `[Staged] Đã thay thế toàn cục trong ${modifiedCount} block: ${modifiedNames.join(', ')}`,
+                  modified_count: modifiedCount,
+              };
+          }
+          else {
+              const p = this.findPrompt(identifier);
+              if (!p)
+                  throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+              if (!this._stagingMap.has(identifier))
+                  this._stagingMap.set(identifier, {});
+              const currentContent = this._stagingMap.get(identifier).content !== undefined
+                  ? this._stagingMap.get(identifier).content
+                  : (p.content || '');
+              if (!currentContent.includes(target_string)) {
+                  throw new Error(`Không tìm thấy đoạn "${target_string}" trong nội dung của block "${p.name}".`);
+              }
+              this._stagingMap.get(identifier).content = currentContent.split(target_string).join(replacement_string);
+              return {
+                  ok: true,
+                  summary: `[Staged] Đã thay thế đoạn văn bản trong block "${p.name}".`,
+                  modified_count: 1,
+              };
+          }
+      }
+      stageAppendContent(identifier, append_text) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          if (!this._stagingMap.has(identifier))
+              this._stagingMap.set(identifier, {});
+          const currentContent = this._stagingMap.get(identifier).content !== undefined
+              ? this._stagingMap.get(identifier).content
+              : (p.content || '');
+          this._stagingMap.get(identifier).content = currentContent + (currentContent && append_text ? '\n' : '') + append_text;
+          return {
+              ok: true,
+              summary: `[Staged] Đã nối thêm ${append_text.length} ký tự vào block "${p.name}".`,
+          };
+      }
+      stageUpdateMeta(identifier, meta) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const allowedKeys = [
+              'name',
+              'role',
+              'enabled',
+              'injection_position',
+              'injection_depth',
+              'injection_order',
+              'system_prompt',
+              'marker',
+              'forbid_overrides',
+          ];
+          const updates = {};
+          for (const k of allowedKeys) {
+              if (meta[k] !== undefined)
+                  updates[k] = meta[k];
+          }
+          if (!this._stagingMap.has(identifier))
+              this._stagingMap.set(identifier, {});
+          Object.assign(this._stagingMap.get(identifier), updates);
+          return {
+              ok: true,
+              summary: `[Staged] Đã cập nhật metadata [${Object.keys(updates).join(', ')}] cho block "${p.name}".`,
+          };
+      }
+      stageToggle(identifier, enabled) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const newEnabled = enabled !== undefined ? Boolean(enabled) : !p.enabled;
+          if (!this._stagingMap.has(identifier))
+              this._stagingMap.set(identifier, {});
+          this._stagingMap.get(identifier).enabled = newEnabled;
+          return {
+              ok: true,
+              enabled: newEnabled,
+              summary: `[Staged] Đã ${newEnabled ? 'BẬT' : 'TẮT'} block "${p.name}".`,
+          };
+      }
+      stageSetLinked(identifier, linked, position) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const currentOrder = this.getPromptOrder().slice();
+          const idx = currentOrder.indexOf(identifier);
+          if (linked) {
+              if (idx === -1) {
+                  if (typeof position === 'number' && position >= 0 && position <= currentOrder.length) {
+                      currentOrder.splice(position, 0, identifier);
+                  }
+                  else {
+                      currentOrder.push(identifier);
+                  }
+              }
+              else if (typeof position === 'number' && position >= 0 && position < currentOrder.length && position !== idx) {
+                  currentOrder.splice(idx, 1);
+                  currentOrder.splice(position, 0, identifier);
+              }
+          }
+          else {
+              if (idx !== -1) {
+                  currentOrder.splice(idx, 1);
+              }
+          }
+          this._stagingOrder = currentOrder;
+          return {
+              ok: true,
+              summary: `[Staged] Đã chuyển block "${p.name}" thành ${linked ? `Linked (Vị trí #${currentOrder.indexOf(identifier) + 1})` : 'Unlinked'}.`,
+          };
+      }
+      stageReorder(order) {
+          if (!Array.isArray(order))
+              throw new Error('Tham số order phải là một mảng identifier.');
+          const allPrompts = this.getPrompts();
+          const missing = order.filter(id => !allPrompts.some(p => p.identifier === id));
+          if (missing.length > 0) {
+              throw new Error(`Các ID sau không tồn tại trong preset: ${missing.join(', ')}`);
+          }
+          this._stagingOrder = order.slice();
+          return {
+              ok: true,
+              summary: `[Staged] Đã sắp xếp lại thứ tự của ${order.length} prompt blocks.`,
+          };
+      }
+      stageDuplicate(identifier, newName) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const duplicateName = newName || `${p.name} (Copy)`;
+          const isLinked = this.getPromptOrder().includes(identifier);
+          return this.stageCreate({
+              name: duplicateName,
+              content: p.content,
+              role: p.role,
+              injection_position: p.injection_position,
+              injection_depth: p.injection_depth,
+              injection_order: p.injection_order,
+              addToLinked: isLinked,
+          });
+      }
+      stageDelete(identifier) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          // If it was created in this staging session, remove it directly
+          const createdIdx = this._stagingCreates.findIndex(c => c.block.identifier === identifier);
+          if (createdIdx !== -1) {
+              this._stagingCreates.splice(createdIdx, 1);
+          }
+          else {
+              this._stagingDeletes.add(identifier);
+          }
+          if (this._stagingOrder) {
+              this._stagingOrder = this._stagingOrder.filter(id => id !== identifier);
+          }
+          return {
+              ok: true,
+              summary: `[Staged] Đã đánh dấu xóa block "${p.name}" [ID: ${identifier}].`,
+          };
+      }
+      stageBatchUpdate(updates) {
+          if (!Array.isArray(updates))
+              throw new Error('Tham số updates phải là một mảng.');
+          const results = [];
+          let successCount = 0;
+          for (const upd of updates) {
+              const { identifier, ...fields } = upd;
+              if (!this.findPrompt(identifier)) {
+                  results.push({ identifier, ok: false, error: 'Không tìm thấy ID' });
+                  continue;
+              }
+              if (!this._stagingMap.has(identifier))
+                  this._stagingMap.set(identifier, {});
+              const allowed = [
+                  'name',
+                  'content',
+                  'role',
+                  'enabled',
+                  'injection_position',
+                  'injection_depth',
+                  'injection_order',
+                  'system_prompt',
+                  'marker',
+                  'forbid_overrides',
+              ];
+              for (const k of allowed) {
+                  if (fields[k] !== undefined)
+                      this._stagingMap.get(identifier)[k] = fields[k];
+              }
+              results.push({ identifier, ok: true });
+              successCount++;
+          }
+          return {
+              ok: true,
+              summary: `[Staged] Đã cập nhật thành công ${successCount}/${updates.length} blocks trong batch.`,
+              results,
+          };
+      }
+      stageUpdateVar(args) {
+          const { varName, newValue, promptId, oldValueMatch } = args;
+          if (!varName || newValue === undefined)
+              throw new Error('Thiếu varName hoặc newValue.');
+          const prompts = this.getPrompts();
+          let targetBlock = null;
+          let matchStr = oldValueMatch || '';
+          for (const p of prompts) {
+              if (promptId && p.identifier !== promptId)
+                  continue;
+              const content = p.content || '';
+              if (matchStr && content.includes(matchStr)) {
+                  targetBlock = p;
+                  break;
+              }
+              const regex = new RegExp(`\\{\\{(setvar|addvar|setglobalvar|addglobalvar)::${varName}::([\\s\\S]*?)\\}\\}`, 'i');
+              const m = content.match(regex);
+              if (m) {
+                  targetBlock = p;
+                  matchStr = m[0];
+                  break;
+              }
+          }
+          if (!targetBlock || !matchStr) {
+              throw new Error(`Không tìm thấy khai báo biến "${varName}" trong các prompt blocks.`);
+          }
+          const stId = `${targetBlock.identifier}::${varName}`;
+          this._stagingVars[stId] = {
+              promptId: targetBlock.identifier,
+              varName,
+              oldValueMatch: matchStr,
+              newValue: String(newValue),
+          };
+          // Also reflect into staging content immediately
+          if (!this._stagingMap.has(targetBlock.identifier))
+              this._stagingMap.set(targetBlock.identifier, {});
+          const curContent = this._stagingMap.get(targetBlock.identifier).content !== undefined
+              ? this._stagingMap.get(targetBlock.identifier).content
+              : (targetBlock.content || '');
+          const replaced = matchStr.replace(/::([^\}]*)\}\}$/, `::${newValue}\}\}`);
+          this._stagingMap.get(targetBlock.identifier).content = curContent.replace(matchStr, replaced);
+          return {
+              ok: true,
+              summary: `[Staged] Đã cập nhật biến "${varName}" = "${newValue}" trong block "${targetBlock.name}".`,
+          };
+      }
+      stageRenameVar(oldName, newName) {
+          if (!oldName || !newName)
+              throw new Error('Thiếu oldName hoặc newName.');
+          this._stagingVarRenames[oldName] = newName;
+          const prompts = this.getPrompts();
+          let affected = 0;
+          for (const p of prompts) {
+              const content = p.content || '';
+              const regex = new RegExp(`\\{\\{(setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::${oldName}::`, 'gi');
+              if (regex.test(content)) {
+                  if (!this._stagingMap.has(p.identifier))
+                      this._stagingMap.set(p.identifier, {});
+                  const cur = this._stagingMap.get(p.identifier).content !== undefined
+                      ? this._stagingMap.get(p.identifier).content
+                      : content;
+                  this._stagingMap.get(p.identifier).content = cur.replace(regex, `{{$1::${newName}::`);
+                  affected++;
+              }
+          }
+          return {
+              ok: true,
+              summary: `[Staged] Đã đổi tên biến "${oldName}" -> "${newName}" trên ${affected} blocks.`,
+          };
+      }
+      // ─── Git Diff Engine ────────────────────────────────────────────────────
+      calculateDiff() {
+          const livePrompts = this.getRawLivePrompts();
+          const liveOrder = this.getRawLiveOrder();
+          const stagedPrompts = this.getPrompts();
+          const stagedOrder = this.getPromptOrder();
+          const items = [];
+          let added = 0;
+          let modified = 0;
+          let deleted = 0;
+          const liveMap = new Map(livePrompts.map(p => [p.identifier, p]));
+          const stagedMap = new Map(stagedPrompts.map(p => [p.identifier, p]));
+          // Check creates
+          for (const [id, sBlock] of stagedMap.entries()) {
+              if (!liveMap.has(id)) {
+                  added++;
+                  items.push({
+                      type: 'create',
+                      identifier: id,
+                      name: sBlock.name,
+                      newValue: sBlock,
+                      summary: `+ [CREATE] "${sBlock.name}" (${sBlock.role}, ${sBlock.content.length} chars)`,
+                  });
+              }
+              else {
+                  // Check updates
+                  const lBlock = liveMap.get(id);
+                  const changes = [];
+                  if (sBlock.name !== lBlock.name)
+                      changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
+                  if (sBlock.content !== lBlock.content)
+                      changes.push(`content (${lBlock.content.length} -> ${sBlock.content.length} chars)`);
+                  if (sBlock.role !== lBlock.role)
+                      changes.push(`role: ${lBlock.role} -> ${sBlock.role}`);
+                  if (sBlock.enabled !== lBlock.enabled)
+                      changes.push(`enabled: ${lBlock.enabled} -> ${sBlock.enabled}`);
+                  if (sBlock.injection_depth !== lBlock.injection_depth)
+                      changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
+                  if (changes.length > 0) {
+                      modified++;
+                      items.push({
+                          type: 'update',
+                          identifier: id,
+                          name: sBlock.name,
+                          oldValue: lBlock,
+                          newValue: sBlock,
+                          summary: `~ [MODIFY] "${sBlock.name}": ${changes.join(', ')}`,
+                      });
+                  }
+              }
+          }
+          // Check deletes
+          for (const [id, lBlock] of liveMap.entries()) {
+              if (!stagedMap.has(id) || this._stagingDeletes.has(id)) {
+                  deleted++;
+                  items.push({
+                      type: 'delete',
+                      identifier: id,
+                      name: lBlock.name,
+                      oldValue: lBlock,
+                      summary: `- [DELETE] "${lBlock.name}" [ID: ${id}]`,
+                  });
+              }
+          }
+          // Check reorders
+          if (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder)) {
+              items.push({
+                  type: 'reorder',
+                  oldValue: liveOrder,
+                  newValue: stagedOrder,
+                  summary: `↺ [REORDER] Thứ tự linked blocks thay đổi (${liveOrder.length} -> ${stagedOrder.length} items)`,
+              });
+          }
+          const totalChanges = added + modified + deleted + (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder) ? 1 : 0);
+          const isDirty = totalChanges > 0;
+          const summary = isDirty
+              ? `Preset có ${totalChanges} thay đổi đang staged: +${added} tạo mới, ~${modified} chỉnh sửa, -${deleted} xóa bỏ.`
+              : 'Working tree clean. Không có thay đổi nào trong Staging Sandbox.';
+          return {
+              isDirty,
+              totalChanges,
+              added,
+              modified,
+              deleted,
+              summary,
+              items,
+          };
+      }
+      // ─── Git Hash Generator ─────────────────────────────────────────────────
+      async generateCommitHash(content) {
+          try {
+              if (crypto?.subtle?.digest) {
+                  const encoder = new TextEncoder();
+                  const data = encoder.encode(content);
+                  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                  const hashArray = Array.from(new Uint8Array(hashBuffer));
+                  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                  return hashHex.substring(0, 8);
+              }
+          }
+          catch {
+              // fallback
+          }
+          // Fallback FNV-1a hash
+          let hash = 2166136261;
+          for (let i = 0; i < content.length; i++) {
+              hash ^= content.charCodeAt(i);
+              hash = Math.imul(hash, 16777619);
+          }
+          return (hash >>> 0).toString(16).padStart(8, '0').substring(0, 8);
+      }
+      // ─── Git Commit & Rollback ──────────────────────────────────────────────
+      async getHeadCommitHash(presetName) {
+          if (this._activeHeads.has(presetName)) {
+              return this._activeHeads.get(presetName);
+          }
+          const commits = await this.db.getPresetCommits(presetName, 1);
+          if (commits.length > 0) {
+              this._activeHeads.set(presetName, commits[0].hash);
+              return commits[0].hash;
+          }
+          return null;
+      }
+      async ensureInitialCommit(presetName) {
+          const head = await this.getHeadCommitHash(presetName);
+          if (head)
+              return head;
+          const livePrompts = this.getRawLivePrompts();
+          const liveOrder = this.getRawLiveOrder();
+          const timestamp = Date.now();
+          const hash = await this.generateCommitHash(`root:${presetName}:${timestamp}:${JSON.stringify(liveOrder)}`);
+          const rootCommit = {
+              hash,
+              parentHash: null,
+              presetName,
+              message: 'Initial preset snapshot',
+              author: 'user',
+              timestamp,
+              tree: {
+                  prompts: JSON.parse(JSON.stringify(livePrompts)),
+                  prompt_order: JSON.parse(JSON.stringify(liveOrder)),
+              },
+              stats: {
+                  added: livePrompts.length,
+                  modified: 0,
+                  deleted: 0,
+                  totalBlocks: livePrompts.length,
+              },
+              diffSummary: `Initial snapshot with ${livePrompts.length} prompt blocks`,
+          };
+          await this.db.addPresetCommit(rootCommit);
+          this._activeHeads.set(presetName, hash);
+          return hash;
+      }
+      async commit(message, author = 'agent', tag) {
+          const presetName = this.getActivePresetName();
+          const diff = this.calculateDiff();
+          if (!diff.isDirty) {
+              return {
+                  ok: true,
+                  hash: (await this.getHeadCommitHash(presetName)) || 'HEAD',
+                  summary: 'Working tree clean. Không có thay đổi nào để commit.',
+              };
+          }
+          const parentHash = await this.ensureInitialCommit(presetName);
+          const finalPrompts = this.getPrompts();
+          const finalOrder = this.getPromptOrder();
+          const timestamp = Date.now();
+          const hashSeed = `${parentHash}:${timestamp}:${message}:${JSON.stringify(finalOrder)}`;
+          const commitHash = await this.generateCommitHash(hashSeed);
+          const newCommit = {
+              hash: commitHash,
+              parentHash,
+              presetName,
+              message: message || 'Update preset prompts',
+              author,
+              timestamp,
+              tag,
+              tree: {
+                  prompts: JSON.parse(JSON.stringify(finalPrompts)),
+                  prompt_order: JSON.parse(JSON.stringify(finalOrder)),
+              },
+              stats: {
+                  added: diff.added,
+                  modified: diff.modified,
+                  deleted: diff.deleted,
+                  totalBlocks: finalPrompts.length,
+              },
+              diffSummary: diff.summary,
+          };
+          // 1. Save commit to IndexedDB
+          await this.db.addPresetCommit(newCommit);
+          this._activeHeads.set(presetName, commitHash);
+          // 2. Flush to SillyTavern Live Context
+          await this.flushToSillyTavern(finalPrompts, finalOrder);
+          // 3. Clear Staging Sandbox
+          this.clearStaging();
+          return {
+              ok: true,
+              hash: commitHash,
+              summary: `✅ Commit thành công [${commitHash}]: "${message}" (${diff.summary})`,
+          };
+      }
+      async getLog(limit = 20) {
+          const presetName = this.getActivePresetName();
+          return await this.db.getPresetCommits(presetName, limit);
+      }
+      async rollback(target) {
+          const presetName = this.getActivePresetName();
+          let targetCommit = await this.db.getPresetCommitByHash(target);
+          if (!targetCommit) {
+              // Try lookup by tag
+              targetCommit = await this.db.getPresetCommitByTag(presetName, target);
+          }
+          if (!targetCommit) {
+              throw new Error(`Không tìm thấy commit hoặc tag nào với mã: "${target}"`);
+          }
+          // Unpack tree to SillyTavern Live Context
+          const targetPrompts = targetCommit.tree.prompts || [];
+          const targetOrder = targetCommit.tree.prompt_order || [];
+          await this.flushToSillyTavern(targetPrompts, targetOrder);
+          // Update HEAD and reset Staging
+          this._activeHeads.set(presetName, targetCommit.hash);
+          this.clearStaging();
+          return {
+              ok: true,
+              hash: targetCommit.hash,
+              summary: `🔄 Rollback thành công về commit [${targetCommit.hash}]: "${targetCommit.message}". Đã phục hồi ${targetPrompts.length} prompt blocks.`,
+          };
+      }
+      discard() {
+          const hasChanges = this.hasStagingChanges();
+          this.clearStaging();
+          return {
+              ok: true,
+              summary: hasChanges
+                  ? 'Đã hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox. Đưa working tree về bằng HEAD.'
+                  : 'Working tree vốn đã sạch, không có thay đổi nào cần hủy.',
+          };
+      }
+      async tagCommit(target, tagName) {
+          const presetName = this.getActivePresetName();
+          let commit = await this.db.getPresetCommitByHash(target);
+          if (!commit) {
+              const head = await this.getHeadCommitHash(presetName);
+              if (head)
+                  commit = await this.db.getPresetCommitByHash(head);
+          }
+          if (!commit)
+              throw new Error(`Không tìm thấy commit hợp lệ để gắn tag "${tagName}".`);
+          commit.tag = tagName;
+          // Re-save commit with tag
+          await this.db.addPresetCommit(commit);
+          return {
+              ok: true,
+              summary: `🏷️ Đã gắn nhãn tag "${tagName}" cho commit [${commit.hash}].`,
+          };
+      }
+      // ─── SillyTavern Synchronization (Save to Disk & Emit Events) ───────────
+      async flushToSillyTavern(prompts, order) {
+          const container = this.getContainer();
+          if (!container || !Array.isArray(container.prompts)) {
+              console.warn('[PresetGitManager] Không tìm thấy ST container để ghi.');
+              return false;
+          }
+          // 1. Ghi prompts vào ST memory
+          container.prompts.length = 0;
+          prompts.forEach(p => container.prompts.push(JSON.parse(JSON.stringify(p))));
+          // 2. Ghi prompt_order (xử lý cả ST 1.18+ nested format lẫn flat format)
+          if (Array.isArray(container.prompt_order) &&
+              container.prompt_order.length > 0 &&
+              typeof container.prompt_order[0] === 'object' &&
+              Array.isArray(container.prompt_order[0]?.order)) {
+              const win = window;
+              const ctx = win.SillyTavern?.getContext?.() || {};
+              const charId = ctx.characterId;
+              const targetObj = container.prompt_order.find((o) => String(o.character_id) === String(charId)) || container.prompt_order[0];
+              if (targetObj) {
+                  targetObj.order = order.map(id => {
+                      const found = prompts.find(p => p.identifier === id);
+                      return { identifier: id, enabled: found ? found.enabled : true };
+                  });
+              }
+          }
+          else {
+              container.prompt_order = order.slice();
+          }
+          // 3. Emit events and trigger SillyTavern UI Save
+          const win = window;
+          if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+              const stCtx = win.SillyTavern.getContext();
+              stCtx?.eventSource?.emit?.('oai_preset_changed_after');
+              setTimeout(() => {
+                  const saveBtn = document.querySelector('#update_oai_preset') ||
+                      document.querySelector('#chat_completion_save_preset') ||
+                      document.querySelector('#preset_save_button');
+                  if (saveBtn && typeof saveBtn.click === 'function') {
+                      saveBtn.click();
+                  }
+                  (stCtx?.saveSettingsDebounced || win.saveSettingsDebounced)?.();
+              }, 500);
+          }
+          return true;
+      }
+      // ─── Syntax Validator ───────────────────────────────────────────────────
+      validatePresetSyntax() {
+          const prompts = this.getPrompts();
+          const errors = [];
+          const warnings = [];
+          for (const p of prompts) {
+              const content = p.content || '';
+              const openMatches = content.match(/\{\{/g) || [];
+              const closeMatches = content.match(/\}\}/g) || [];
+              if (openMatches.length !== closeMatches.length) {
+                  errors.push({
+                      identifier: p.identifier,
+                      name: p.name,
+                      error: `Lệch dấu ngoặc nhọn: Số dấu mở {{ (${openMatches.length}) không khớp số dấu đóng }} (${closeMatches.length}).`,
+                  });
+              }
+              const lines = content.split('\n');
+              lines.forEach((line, idx) => {
+                  if (/\{\{(setvr|setva|getvr|setvar::[^:}]+$|\/getvar)/i.test(line)) {
+                      warnings.push({
+                          identifier: p.identifier,
+                          name: p.name,
+                          line: idx + 1,
+                          warning: `Nghi vấn sai cú pháp biến macro: "${line.trim()}"`,
+                      });
+                  }
+              });
+              if (p.injection_depth !== undefined && p.injection_depth < 0) {
+                  warnings.push({
+                      identifier: p.identifier,
+                      name: p.name,
+                      warning: `Injection depth âm (${p.injection_depth}), có thể không hoạt động đúng chuẩn ST.`,
+                  });
+              }
+          }
+          return {
+              ok: errors.length === 0,
+              totalBlocksChecked: prompts.length,
+              errorCount: errors.length,
+              warningCount: warnings.length,
+              errors,
+              warnings,
+              status: errors.length === 0 ? 'SYNTAX_OK' : 'SYNTAX_ERRORS_FOUND',
+          };
+      }
+      // ─── Variable Scanner ───────────────────────────────────────────────────
+      scanVariables() {
+          const prompts = this.getPrompts();
+          const refs = [];
+          for (const p of prompts) {
+              const content = p.content || '';
+              const macroRegex = /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
+              let match;
+              while ((match = macroRegex.exec(content)) !== null) {
+                  const fullMatch = match[0];
+                  const type = match[1].toLowerCase();
+                  const name = (match[2] || '').trim();
+                  const value = (match[3] || '').trim();
+                  const scope = type.includes('global') ? 'global' : 'chat';
+                  if (name) {
+                      refs.push({
+                          id: `${p.identifier}::${name}::${type}::${refs.length}`,
+                          name,
+                          type,
+                          value,
+                          scope,
+                          promptName: p.name,
+                          promptId: p.identifier,
+                          fullMatch,
+                      });
+                  }
+              }
+          }
+          return refs;
+      }
+  }
+
+  const getPresetInfoTool = {
+      schema: {
+          name: 'get_preset_info',
+          description: 'Lấy thông tin tổng quan về AI Prompt Preset đang kích hoạt trong SillyTavern.\n' +
+              'Bao gồm: Tên Preset, commit HEAD hiện tại (Git control version), trạng thái nháp trong Sandbox (is_dirty), ' +
+              'danh sách tóm tắt các prompt blocks (ID, tên, vai trò, trạng thái bật/tắt, thứ tự liên kết, độ sâu injection), ' +
+              'và danh sách các biến macro {{setvar}} nếu yêu cầu.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  include_vars: {
+                      type: 'boolean',
+                      description: 'Nếu true, quét và liệt kê tất cả các biến macro {{setvar}} / {{getvar}} có trong preset.',
+                  },
+                  raw_live_only: {
+                      type: 'boolean',
+                      description: 'Nếu true, chỉ đọc dữ liệu gốc của SillyTavern, bỏ qua các thay đổi nháp đang có trong Sandbox.',
+                  },
+              },
+          },
+      },
+      execute: async (args) => {
+          try {
+              const manager = PresetGitManager.getInstance();
+              const container = manager.getContainer();
+              if (!container) {
+                  return {
+                      isError: true,
+                      content: 'Không tìm thấy cấu trúc ChatCompletion / Instruct Preset của SillyTavern trong bộ nhớ.',
+                  };
+              }
+              const rawLiveOnly = Boolean(args.raw_live_only);
+              const includeVars = Boolean(args.include_vars);
+              const presetName = manager.getActivePresetName();
+              const headCommitHash = await manager.getHeadCommitHash(presetName);
+              const diff = manager.calculateDiff();
+              const prompts = rawLiveOnly ? manager.getRawLivePrompts() : manager.getPrompts();
+              const order = rawLiveOnly ? manager.getRawLiveOrder() : manager.getPromptOrder();
+              const linkedSet = new Set(order);
+              const blocksSummary = prompts.map((p, index) => {
+                  const isLinked = linkedSet.has(p.identifier);
+                  const orderIndex = isLinked ? order.indexOf(p.identifier) + 1 : null;
+                  const preview = (p.content || '').replace(/\s+/g, ' ').trim().substring(0, 70);
+                  return {
+                      index: index + 1,
+                      identifier: p.identifier,
+                      name: p.name,
+                      role: p.role || 'system',
+                      enabled: p.enabled !== false,
+                      linked: isLinked,
+                      linked_order: orderIndex,
+                      injection_position: p.injection_position ?? 0,
+                      injection_depth: p.injection_depth ?? 4,
+                      injection_order: p.injection_order ?? 100,
+                      char_count: (p.content || '').length,
+                      preview: preview ? `${preview}${p.content.length > 70 ? '...' : ''}` : '(Empty)',
+                  };
+              });
+              // Sort: Linked blocks first by order, then unlinked
+              blocksSummary.sort((a, b) => {
+                  if (a.linked && b.linked)
+                      return (a.linked_order || 0) - (b.linked_order || 0);
+                  if (a.linked && !b.linked)
+                      return -1;
+                  if (!a.linked && b.linked)
+                      return 1;
+                  return a.index - b.index;
+              });
+              const result = {
+                  active_preset: presetName,
+                  git_status: {
+                      head_commit: headCommitHash || 'Chưa có commit nào (Initial)',
+                      is_dirty: diff.isDirty,
+                      staging_summary: diff.summary,
+                      staged_stats: {
+                          added: diff.added,
+                          modified: diff.modified,
+                          deleted: diff.deleted,
+                          total_changes: diff.totalChanges,
+                      },
+                  },
+                  stats: {
+                      total_blocks: prompts.length,
+                      linked_blocks: order.length,
+                      unlinked_blocks: prompts.length - order.length,
+                  },
+                  linked_order: order,
+                  blocks: blocksSummary,
+              };
+              if (includeVars) {
+                  result.variables = manager.scanVariables().map(v => ({
+                      name: v.name,
+                      type: v.type,
+                      value: v.value,
+                      scope: v.scope,
+                      prompt_name: v.promptName,
+                      prompt_id: v.promptId,
+                  }));
+                  result.variables_total = result.variables.length;
+              }
+              return {
+                  content: JSON.stringify(result, null, 2),
+              };
+          }
+          catch (e) {
+              console.error('[getPresetInfoTool] Error:', e);
+              return {
+                  isError: true,
+                  content: `Lỗi khi lấy thông tin Preset: ${e.message}`,
+              };
+          }
+      },
+  };
+
+  const getPromptBlockTool = {
+      schema: {
+          name: 'get_prompt_block',
+          description: 'Đọc nội dung chi tiết đầy đủ (văn bản content và cấu hình injection) của một hoặc nhiều prompt blocks trong Preset.\n' +
+              '- identifier: ID của block cụ thể cần đọc nội dung.\n' +
+              '- all_linked: Nếu true, lấy toàn bộ chi tiết tất cả các block đang liên kết (linked) theo đúng thứ tự chuỗi prompt gửi lên LLM. Cực kỳ hữu dụng khi Agent cần thẩm định, audit hoặc tối ưu toàn diện preset.\n' +
+              '- include_unlinked: Kết hợp với all_linked để lấy thêm cả các block chưa liên kết.\n' +
+              '- query: Tìm kiếm từ khóa bên trong các block, trả về danh sách các block khớp kèm trích đoạn dòng văn bản.\n' +
+              '- commit_hash: Tùy chọn đọc dữ liệu từ một mốc commit trong quá khứ (Git version) thay vì trạng thái hiện tại.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  identifier: {
+                      type: 'string',
+                      description: 'ID của prompt block cần đọc (bắt đầu bằng "block_..." hoặc id chuẩn như "main", "jailbreak").',
+                  },
+                  all_linked: {
+                      type: 'boolean',
+                      description: 'Nếu true, trả về toàn bộ nội dung của tất cả các block đang linked theo đúng thứ tự thực thi.',
+                  },
+                  include_unlinked: {
+                      type: 'boolean',
+                      description: 'Kết hợp cùng all_linked để lấy cả các block unlinked (chưa liên kết).',
+                  },
+                  query: {
+                      type: 'string',
+                      description: 'Từ khóa tìm kiếm bên trong tên hoặc nội dung các block.',
+                  },
+                  commit_hash: {
+                      type: 'string',
+                      description: 'Mã hash của một commit trong quá khứ để đọc nội dung tại thời điểm đó.',
+                  },
+              },
+          },
+      },
+      execute: async (args) => {
+          try {
+              const manager = PresetGitManager.getInstance();
+              const { identifier, all_linked, include_unlinked, query, commit_hash } = args;
+              let prompts = [];
+              let order = [];
+              let sourceNote = 'Trạng thái hiện tại (bao gồm Staging Sandbox nếu có)';
+              // 1. Kiểm tra nếu yêu cầu đọc từ commit cũ
+              if (commit_hash) {
+                  const db = KaizDB.getInstance();
+                  const commit = await db.getPresetCommitByHash(commit_hash);
+                  if (!commit) {
+                      return {
+                          isError: true,
+                          content: `Không tìm thấy commit nào với mã hash: "${commit_hash}"`,
+                      };
+                  }
+                  prompts = (commit.tree?.prompts || []).map(p => ({ ...p }));
+                  prompts.forEach(p => {
+                      if (!p.identifier && p.id)
+                          p.identifier = p.id;
+                  });
+                  order = commit.tree?.prompt_order || [];
+                  sourceNote = `Commit [${commit.hash}]: "${commit.message}" (${new Date(commit.timestamp).toLocaleString()})`;
+              }
+              else {
+                  prompts = manager.getPrompts();
+                  order = manager.getPromptOrder();
+              }
+              // 2. Chế độ tìm kiếm (Search Query)
+              if (query && typeof query === 'string' && query.trim()) {
+                  const q = query.trim().toLowerCase();
+                  const searchResults = [];
+                  for (const p of prompts) {
+                      const matches = [];
+                      const lines = (p.content || '').split('\n');
+                      lines.forEach((line, idx) => {
+                          if (line.toLowerCase().includes(q)) {
+                              matches.push({
+                                  line: idx + 1,
+                                  excerpt: line.trim().substring(0, 150),
+                              });
+                          }
+                      });
+                      if (p.name.toLowerCase().includes(q)) {
+                          matches.unshift({
+                              line: 0,
+                              excerpt: `[Khớp tên block]: ${p.name}`,
+                          });
+                      }
+                      if (matches.length > 0) {
+                          searchResults.push({
+                              identifier: p.identifier,
+                              name: p.name,
+                              role: p.role,
+                              enabled: p.enabled,
+                              matched_lines: matches,
+                          });
+                      }
+                  }
+                  return {
+                      content: JSON.stringify({
+                          ok: true,
+                          source: sourceNote,
+                          query,
+                          total_matching_blocks: searchResults.length,
+                          results: searchResults,
+                      }, null, 2),
+                  };
+              }
+              // 3. Chế độ lấy toàn bộ linked prompts (all_linked)
+              if (all_linked) {
+                  const promptMap = new Map(prompts.map(p => [p.identifier, p]));
+                  const linkedFull = [];
+                  order.forEach((id, index) => {
+                      const p = promptMap.get(id);
+                      if (p) {
+                          linkedFull.push({
+                              order_index: index + 1,
+                              identifier: p.identifier,
+                              name: p.name,
+                              role: p.role || 'system',
+                              enabled: p.enabled !== false,
+                              injection_position: p.injection_position ?? 0,
+                              injection_depth: p.injection_depth ?? 4,
+                              injection_order: p.injection_order ?? 100,
+                              system_prompt: p.system_prompt ?? false,
+                              marker: p.marker ?? false,
+                              content: p.content || '',
+                          });
+                      }
+                  });
+                  let unlinkedFull = undefined;
+                  if (include_unlinked) {
+                      const linkedSet = new Set(order);
+                      unlinkedFull = prompts
+                          .filter(p => !linkedSet.has(p.identifier))
+                          .map(p => ({
+                          identifier: p.identifier,
+                          name: p.name,
+                          role: p.role || 'system',
+                          enabled: p.enabled !== false,
+                          injection_position: p.injection_position ?? 0,
+                          injection_depth: p.injection_depth ?? 4,
+                          injection_order: p.injection_order ?? 100,
+                          content: p.content || '',
+                      }));
+                  }
+                  return {
+                      content: JSON.stringify({
+                          ok: true,
+                          source: sourceNote,
+                          total_linked: linkedFull.length,
+                          total_unlinked: unlinkedFull ? unlinkedFull.length : undefined,
+                          linked_prompts: linkedFull,
+                          unlinked_prompts: unlinkedFull,
+                      }, null, 2),
+                  };
+              }
+              // 4. Chế độ lấy 1 block cụ thể theo identifier
+              if (identifier && typeof identifier === 'string') {
+                  const target = prompts.find(p => p.identifier === identifier || p.id === identifier);
+                  if (!target) {
+                      return {
+                          isError: true,
+                          content: `Không tìm thấy prompt block nào có ID: "${identifier}". Vui lòng dùng 'get_preset_info' để kiểm tra danh sách ID hợp lệ.`,
+                      };
+                  }
+                  const isLinked = order.includes(target.identifier);
+                  const orderIndex = isLinked ? order.indexOf(target.identifier) + 1 : null;
+                  return {
+                      content: JSON.stringify({
+                          ok: true,
+                          source: sourceNote,
+                          block: {
+                              identifier: target.identifier,
+                              name: target.name,
+                              role: target.role || 'system',
+                              enabled: target.enabled !== false,
+                              linked: isLinked,
+                              linked_order: orderIndex,
+                              injection_position: target.injection_position ?? 0,
+                              injection_depth: target.injection_depth ?? 4,
+                              injection_order: target.injection_order ?? 100,
+                              system_prompt: target.system_prompt ?? false,
+                              marker: target.marker ?? false,
+                              forbid_overrides: target.forbid_overrides ?? false,
+                              content: target.content || '',
+                          },
+                      }, null, 2),
+                  };
+              }
+              return {
+                  isError: true,
+                  content: 'Cần cung cấp ít nhất một tham số: `identifier` (ID block cụ thể), `all_linked: true` (lấy toàn bộ), hoặc `query` (tìm kiếm từ khóa).',
+              };
+          }
+          catch (e) {
+              console.error('[getPromptBlockTool] Error:', e);
+              return {
+                  isError: true,
+                  content: `Lỗi khi đọc nội dung Prompt Block: ${e.message}`,
+              };
+          }
+      },
+  };
+
+  const managePresetPromptTool = {
+      schema: {
+          name: 'manage_preset_prompt',
+          description: 'Công cụ toàn năng quản trị AI Prompt Preset theo kiến trúc Git Control Version và Sandbox Staging:\n' +
+              'Mọi thay đổi (sửa, tạo, xóa, thay thế) đều được lưu tạm an toàn trong Staging Sandbox. ' +
+              'Khi hoàn tất, gọi action "commit" để ghi mốc lịch sử (Git Commit) và lưu thật vào SillyTavern.\n\n' +
+              'CÁC HÀNH ĐỘNG (action):\n' +
+              '1. Nhóm Thao Tác Sandbox (Nháp an toàn):\n' +
+              '  - "create": Tạo block mới (data: { name, content, role, addToLinked, position }).\n' +
+              '  - "edit_content": Sửa toàn bộ văn bản của 1 block (yêu cầu identifier, data: { content }).\n' +
+              '  - "replace_text": Thay thế chuỗi target_string bằng replacement_string trong 1 block hoặc toàn bộ preset nếu data.global=true (kỹ thuật kháng Safety Filter & chống cắt cụt).\n' +
+              '  - "append_content": Nối thêm văn bản vào cuối block (yêu cầu identifier, data: { append_text }).\n' +
+              '  - "edit_meta": Sửa thông số (role, injection_position, injection_depth, injection_order, system_prompt, marker, forbid_overrides).\n' +
+              '  - "toggle": Bật/tắt block (yêu cầu identifier, data: { enabled? }).\n' +
+              '  - "set_linked": Chuyển đổi trạng thái Linked/Unlinked hoặc di chuyển vị trí của 1 block (data: { linked: boolean, position?: number }).\n' +
+              '  - "reorder": Sắp xếp lại thứ tự toàn bộ mảng ID Linked blocks (data: { order: string[] }).\n' +
+              '  - "duplicate": Nhân bản 1 block kèm 100% nội dung và meta (yêu cầu identifier, data: { newName? }).\n' +
+              '  - "delete": Đánh dấu xóa 1 block (yêu cầu identifier).\n' +
+              '  - "batch_update": Cập nhật đồng thời nhiều block cùng lúc (data: { updates: [...] }).\n' +
+              '  - "update_var": Sửa giá trị biến macro {{setvar}} (data: { varName, newValue, promptId? }).\n' +
+              '  - "rename_var": Đổi tên biến trên toàn bộ preset (data: { oldName, newName }).\n' +
+              '  - "validate_syntax": Quét toàn bộ preset phát hiện lỗi ngoặc {{...}}, sai cú pháp macro, injection depth âm.\n\n' +
+              '2. Nhóm Quản Trị Git Control Version:\n' +
+              '  - "diff": So sánh chi tiết sự khác biệt giữa Staging nháp với commit HEAD (hoặc xem danh sách thay đổi đang chờ commit).\n' +
+              '  - "commit": MỞ HỘP VÀ LƯU THẬT — Đóng gói toàn bộ Staging thành 1 commit node mới, lưu vào IndexedDB và áp dụng vào SillyTavern (bắt buộc data: { message: string }, tùy chọn data: { tag?: string }).\n' +
+              '  - "log": Xem danh sách lịch sử commit của preset hiện tại (data: { limit?: number }).\n' +
+              '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string } - nhận mã hash hoặc tên tag).\n' +
+              '  - "discard": Hủy toàn bộ nháp đang có trong Staging, đưa Sandbox về bằng với HEAD.\n' +
+              '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).',
+          parameters: {
+              type: 'object',
+              properties: {
+                  action: {
+                      type: 'string',
+                      enum: [
+                          'create',
+                          'edit_content',
+                          'replace_text',
+                          'append_content',
+                          'edit_meta',
+                          'toggle',
+                          'set_linked',
+                          'reorder',
+                          'duplicate',
+                          'delete',
+                          'batch_update',
+                          'update_var',
+                          'rename_var',
+                          'validate_syntax',
+                          'diff',
+                          'commit',
+                          'log',
+                          'rollback',
+                          'discard',
+                          'tag',
+                      ],
+                      description: 'Hành động cần thực hiện.',
+                  },
+                  identifier: {
+                      type: 'string',
+                      description: 'ID của prompt block mục tiêu (bắt buộc đối với các hành động can thiệp block đơn lẻ).',
+                  },
+                  data: {
+                      type: 'object',
+                      description: 'Dữ liệu payload đi kèm tương ứng với từng action.',
+                  },
+              },
+              required: ['action'],
+          },
+      },
+      execute: async (args) => {
+          try {
+              const manager = PresetGitManager.getInstance();
+              const { action, identifier, data = {} } = args;
+              switch (action) {
+                  // ─── 1. NHÓM STAGING / SANDBOX ──────────────────────────────────────────
+                  case 'create': {
+                      const result = manager.stageCreate({
+                          name: data.name,
+                          content: data.content,
+                          role: data.role,
+                          injection_position: data.injection_position,
+                          injection_depth: data.injection_depth,
+                          injection_order: data.injection_order,
+                          addToLinked: data.addToLinked,
+                          position: data.position,
+                      });
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'create',
+                              created_id: result.identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'edit_content': {
+                      if (!identifier) {
+                          return { isError: true, content: 'Action "edit_content" yêu cầu truyền tham số `identifier` của block.' };
+                      }
+                      if (data.content === undefined) {
+                          return { isError: true, content: 'Action "edit_content" yêu cầu truyền `data.content`.' };
+                      }
+                      const result = manager.stageUpdateContent(identifier, String(data.content));
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'edit_content',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'replace_text': {
+                      if (!data.target_string) {
+                          return { isError: true, content: 'Action "replace_text" yêu cầu truyền `data.target_string` cần tìm.' };
+                      }
+                      const replacement = data.replacement_string !== undefined ? String(data.replacement_string) : '';
+                      const isGlobal = Boolean(data.global);
+                      const onlyLinked = Boolean(data.only_linked);
+                      const result = manager.stageReplaceText(identifier || null, data.target_string, replacement, isGlobal, onlyLinked);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'replace_text',
+                              message: result.summary,
+                              modified_count: result.modified_count,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'append_content': {
+                      if (!identifier) {
+                          return { isError: true, content: 'Action "append_content" yêu cầu truyền tham số `identifier` của block.' };
+                      }
+                      if (data.append_text === undefined) {
+                          return { isError: true, content: 'Action "append_content" yêu cầu truyền `data.append_text`.' };
+                      }
+                      const result = manager.stageAppendContent(identifier, String(data.append_text));
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'append_content',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'edit_meta': {
+                      if (!identifier) {
+                          return { isError: true, content: 'Action "edit_meta" yêu cầu truyền tham số `identifier` của block.' };
+                      }
+                      const result = manager.stageUpdateMeta(identifier, data);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'edit_meta',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'toggle': {
+                      if (!identifier) {
+                          return { isError: true, content: 'Action "toggle" yêu cầu truyền tham số `identifier` của block.' };
+                      }
+                      const result = manager.stageToggle(identifier, data.enabled);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'toggle',
+                              identifier,
+                              enabled: result.enabled,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'set_linked': {
+                      if (!identifier) {
+                          return { isError: true, content: 'Action "set_linked" yêu cầu truyền tham số `identifier` của block.' };
+                      }
+                      if (typeof data.linked !== 'boolean') {
+                          return { isError: true, content: 'Action "set_linked" yêu cầu truyền `data.linked` (true hoặc false).' };
+                      }
+                      const result = manager.stageSetLinked(identifier, data.linked, data.position);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'set_linked',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'reorder': {
+                      if (!Array.isArray(data.order)) {
+                          return { isError: true, content: 'Action "reorder" yêu cầu truyền mảng `data.order` chứa danh sách ID.' };
+                      }
+                      const result = manager.stageReorder(data.order);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'reorder',
+                              new_order: data.order,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'duplicate': {
+                      if (!identifier) {
+                          return { isError: true, content: 'Action "duplicate" yêu cầu truyền tham số `identifier` của block gốc.' };
+                      }
+                      const result = manager.stageDuplicate(identifier, data.newName);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'duplicate',
+                              created_id: result.identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'delete': {
+                      if (!identifier) {
+                          return { isError: true, content: 'Action "delete" yêu cầu truyền tham số `identifier` của block cần xóa.' };
+                      }
+                      const result = manager.stageDelete(identifier);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'delete',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'batch_update': {
+                      if (!Array.isArray(data.updates)) {
+                          return { isError: true, content: 'Action "batch_update" yêu cầu truyền mảng `data.updates`.' };
+                      }
+                      const result = manager.stageBatchUpdate(data.updates);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'batch_update',
+                              message: result.summary,
+                              results: result.results,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'update_var': {
+                      const result = manager.stageUpdateVar({
+                          varName: data.varName,
+                          newValue: data.newValue,
+                          promptId: data.promptId || identifier,
+                          oldValueMatch: data.oldValueMatch,
+                      });
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'update_var',
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'rename_var': {
+                      const result = manager.stageRenameVar(data.oldName, data.newName);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'rename_var',
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'validate_syntax': {
+                      const syntax = manager.validatePresetSyntax();
+                      return {
+                          content: JSON.stringify({
+                              ok: syntax.ok,
+                              action: 'validate_syntax',
+                              status: syntax.status,
+                              total_blocks_checked: syntax.totalBlocksChecked,
+                              error_count: syntax.errorCount,
+                              warning_count: syntax.warningCount,
+                              errors: syntax.errors,
+                              warnings: syntax.warnings,
+                          }, null, 2),
+                      };
+                  }
+                  // ─── 2. NHÓM QUẢN TRỊ GIT VERSION CONTROL ────────────────────────────────
+                  case 'diff': {
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'diff',
+                              is_dirty: diff.isDirty,
+                              summary: diff.summary,
+                              stats: {
+                                  added: diff.added,
+                                  modified: diff.modified,
+                                  deleted: diff.deleted,
+                                  total_changes: diff.totalChanges,
+                              },
+                              changes: diff.items,
+                          }, null, 2),
+                      };
+                  }
+                  case 'commit': {
+                      if (!data.message || typeof data.message !== 'string' || !data.message.trim()) {
+                          return {
+                              isError: true,
+                              content: 'Action "commit" bắt buộc phải có `data.message` mô tả mục đích thay đổi (vd: "feat: bổ sung hướng dẫn CoT").',
+                          };
+                      }
+                      const result = await manager.commit(data.message.trim(), 'agent', data.tag);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'commit',
+                              commit_hash: result.hash,
+                              message: result.summary,
+                              note: 'Thay đổi đã được mở hộp và lưu đồng bộ thành công vào SillyTavern.',
+                          }, null, 2),
+                      };
+                  }
+                  case 'log': {
+                      const limit = typeof data.limit === 'number' ? data.limit : 15;
+                      const commits = await manager.getLog(limit);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'log',
+                              preset_name: manager.getActivePresetName(),
+                              total_commits: commits.length,
+                              history: commits.map(c => ({
+                                  hash: c.hash,
+                                  parent: c.parentHash,
+                                  message: c.message,
+                                  author: c.author,
+                                  tag: c.tag || undefined,
+                                  timestamp: new Date(c.timestamp).toLocaleString(),
+                                  stats: c.stats,
+                                  summary: c.diffSummary,
+                              })),
+                          }, null, 2),
+                      };
+                  }
+                  case 'rollback': {
+                      const target = data.target || data.commitId || data.tag || identifier;
+                      if (!target) {
+                          return {
+                              isError: true,
+                              content: 'Action "rollback" yêu cầu cung cấp mã commit hash hoặc tên tag trong `data.target`.',
+                          };
+                      }
+                      const result = await manager.rollback(target);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'rollback',
+                              restored_commit: result.hash,
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'discard': {
+                      const result = manager.discard();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'discard',
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'tag': {
+                      const tagName = data.tag || data.tagName;
+                      if (!tagName) {
+                          return {
+                              isError: true,
+                              content: 'Action "tag" yêu cầu cung cấp tên nhãn trong `data.tag` (vd: "v1.0-stable").',
+                          };
+                      }
+                      const targetCommit = data.target || identifier || 'HEAD';
+                      const result = await manager.tagCommit(targetCommit, tagName);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'tag',
+                              tag_name: tagName,
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  default:
+                      return {
+                          isError: true,
+                          content: `Hành động action="${action}" không được hỗ trợ. Vui lòng kiểm tra lại schema của manage_preset_prompt.`,
+                      };
+              }
+          }
+          catch (e) {
+              console.error('[managePresetPromptTool] Error:', e);
+              return {
+                  isError: true,
+                  content: `Lỗi khi thực thi lệnh manage_preset_prompt: ${e.message}`,
+              };
+          }
+      },
+  };
+
+  /**
    * Đăng ký tất cả các tools mặc định vào Registry
    */
   function registerDefaultTools(registry) {
@@ -6343,6 +8053,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       registry.registerTool(stCSSManagerTool);
       registry.registerTool(stInjectElementTool);
       registry.registerTool(generateWebImageTool);
+      registry.registerTool(getPresetInfoTool);
+      registry.registerTool(getPromptBlockTool);
+      registry.registerTool(managePresetPromptTool);
   }
 
   /**
