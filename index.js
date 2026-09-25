@@ -7007,9 +7007,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           };
       }
       // ─── Git Diff Engine ────────────────────────────────────────────────────
-      calculateDiff() {
-          const livePrompts = this.getRawLivePrompts();
-          const liveOrder = this.getRawLiveOrder();
+      calculateDiff(baseline) {
+          const livePrompts = baseline ? baseline.prompts : this.getRawLivePrompts();
+          const liveOrder = baseline ? baseline.prompt_order : this.getRawLiveOrder();
           const stagedPrompts = this.getPrompts();
           const stagedOrder = this.getPromptOrder();
           const items = [];
@@ -7094,6 +7094,27 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               items,
           };
       }
+      async isDirtyAgainstHead() {
+          const hasStaging = this.hasStagingChanges();
+          if (hasStaging) {
+              const diff = this.calculateDiff();
+              return { isDirty: diff.isDirty, isStaged: true, diff };
+          }
+          const presetName = this.getActivePresetName();
+          const headHash = await this.getHeadCommitHash(presetName);
+          if (!headHash) {
+              return { isDirty: false, isStaged: false, diff: this.calculateDiff() };
+          }
+          const headCommit = await this.db.getPresetCommitByHash(headHash);
+          if (!headCommit?.tree) {
+              return { isDirty: false, isStaged: false, diff: this.calculateDiff() };
+          }
+          const diff = this.calculateDiff({
+              prompts: headCommit.tree.prompts || [],
+              prompt_order: headCommit.tree.prompt_order || [],
+          });
+          return { isDirty: diff.isDirty, isStaged: false, diff };
+      }
       // ─── Git Hash Generator ─────────────────────────────────────────────────
       async generateCommitHash(content) {
           try {
@@ -7122,9 +7143,28 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (this._activeHeads.has(presetName)) {
               return this._activeHeads.get(presetName);
           }
+          try {
+              const saved = localStorage.getItem(`kaiz_preset_head_${presetName}`);
+              if (saved) {
+                  const commit = await this.db.getPresetCommitByHash(saved);
+                  if (commit) {
+                      this._activeHeads.set(presetName, commit.hash);
+                      return commit.hash;
+                  }
+              }
+          }
+          catch {
+              // ignore
+          }
           const commits = await this.db.getPresetCommits(presetName, 1);
           if (commits.length > 0) {
               this._activeHeads.set(presetName, commits[0].hash);
+              try {
+                  localStorage.setItem(`kaiz_preset_head_${presetName}`, commits[0].hash);
+              }
+              catch {
+                  // ignore
+              }
               return commits[0].hash;
           }
           return null;
@@ -7158,12 +7198,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           };
           await this.db.addPresetCommit(rootCommit);
           this._activeHeads.set(presetName, hash);
+          try {
+              localStorage.setItem(`kaiz_preset_head_${presetName}`, hash);
+          }
+          catch {
+              // ignore
+          }
           return hash;
       }
-      async commit(message, author = 'agent', tag) {
+      async commit(message, author = 'agent', tag, allowEmpty = false) {
           const presetName = this.getActivePresetName();
-          const diff = this.calculateDiff();
-          if (!diff.isDirty) {
+          const dirtyInfo = await this.isDirtyAgainstHead();
+          const diff = dirtyInfo.diff;
+          if (!diff.isDirty && !allowEmpty && !tag) {
               return {
                   ok: true,
                   hash: (await this.getHeadCommitHash(presetName)) || 'HEAD',
@@ -7200,6 +7247,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           // 1. Save commit to IndexedDB
           await this.db.addPresetCommit(newCommit);
           this._activeHeads.set(presetName, commitHash);
+          try {
+              localStorage.setItem(`kaiz_preset_head_${presetName}`, commitHash);
+          }
+          catch {
+              // ignore
+          }
           // 2. Flush to SillyTavern Live Context
           await this.flushToSillyTavern(finalPrompts, finalOrder);
           // 3. Clear Staging Sandbox
@@ -7271,6 +7324,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           await this.flushToSillyTavern(targetPrompts, targetOrder);
           // Update HEAD and reset Staging
           this._activeHeads.set(presetName, targetCommit.hash);
+          try {
+              localStorage.setItem(`kaiz_preset_head_${presetName}`, targetCommit.hash);
+          }
+          catch {
+              // ignore
+          }
           this.clearStaging();
           let prunedCount = 0;
           if (hard) {
@@ -7323,6 +7382,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const presetName = this.getActivePresetName();
           await this.db.deletePresetCommits(presetName);
           this._activeHeads.delete(presetName);
+          try {
+              localStorage.removeItem(`kaiz_preset_head_${presetName}`);
+          }
+          catch {
+              // ignore
+          }
           return {
               ok: true,
               summary: `Đã xóa sạch toàn bộ lịch sử commit của preset "${presetName}".`,
@@ -7334,8 +7399,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       async getDistinctPresetNames() {
           return await this.db.getDistinctPresetNames();
       }
-      async manualCommit(message, tag) {
-          return await this.commit(message, 'user', tag);
+      async manualCommit(message, tag, allowEmpty = true) {
+          return await this.commit(message, 'user', tag, allowEmpty);
       }
       discard() {
           const hasChanges = this.hasStagingChanges();
@@ -14967,7 +15032,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           await this.renderStorageMetrics();
           // 2. Render Staging Sandbox
           if (isCurrentActive) {
-              this.renderStagingSandbox();
+              await this.renderStagingSandbox();
           }
           // 3. Render Lịch sử Commit
           this.commitsCache = await this.db.getPresetCommits(this.currentSelectedPreset, 100);
@@ -14983,16 +15048,24 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           $('#kaiz-pg-stat-presets').text(`${stats.presetCount} presets`);
           $('#kaiz-pg-stat-head').text(headHash ? headHash.substring(0, 8) : 'none');
       }
-      renderStagingSandbox() {
+      async renderStagingSandbox() {
           const $ = jQuery;
-          const isDirty = this.manager.hasStagingChanges();
-          const diff = this.manager.calculateDiff();
+          const dirtyInfo = await this.manager.isDirtyAgainstHead();
+          const isDirty = dirtyInfo.isDirty;
+          const diff = dirtyInfo.diff;
+          const isStaged = dirtyInfo.isStaged;
           if (isDirty) {
+              const badgeLabel = isStaged
+                  ? `● ${diff.totalChanges} thay đổi nháp (Sandbox)`
+                  : `● ${diff.totalChanges} thay đổi SillyTavern`;
               $('#kaiz-pg-staging-badge')
-                  .text(`● ${diff.totalChanges} thay đổi nháp`)
+                  .text(badgeLabel)
                   .removeClass('badge-neutral badge-success')
                   .addClass('badge-warning');
-              $('#kaiz-pg-staging-summary').html(`<b>Có ${diff.totalChanges} thay đổi chưa commit:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. (Dữ liệu SillyTavern gốc chưa bị đè)`);
+              const sourceText = isStaged
+                  ? '(Dữ liệu SillyTavern gốc chưa bị đè)'
+                  : '(Thay đổi từ giao diện SillyTavern chưa tạo commit)';
+              $('#kaiz-pg-staging-summary').html(`<b>Có ${diff.totalChanges} thay đổi chưa commit:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. ${sourceText}`);
               $('#kaiz-pg-staging-actions').css('display', 'flex');
               // Render staged items preview
               const list = $('#kaiz-pg-staged-list');
@@ -15025,7 +15098,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   .text('Clean')
                   .removeClass('badge-warning badge-danger')
                   .addClass('badge-success');
-              $('#kaiz-pg-staging-summary').text('Working tree sạch — Không có thay đổi nháp nào. Toàn bộ prompt blocks đang đồng bộ với commit HEAD.');
+              $('#kaiz-pg-staging-summary').text('Working tree sạch — Không có thay đổi nào. Toàn bộ prompt blocks đang đồng bộ với commit HEAD.');
               $('#kaiz-pg-staging-actions').hide();
               $('#kaiz-pg-staged-list').empty().hide();
           }
@@ -15040,13 +15113,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               $('#kaiz-pg-commit-msg-input').focus();
               return;
           }
-          if (!this.manager.hasStagingChanges()) {
+          const dirtyInfo = await this.manager.isDirtyAgainstHead();
+          if (!dirtyInfo.isDirty && !tag) {
               if (typeof toastr !== 'undefined')
-                  toastr.warning('Không có thay đổi nháp nào trong Staging để commit!');
+                  toastr.warning('Working tree sạch — Không có thay đổi nào giữa preset và commit HEAD!');
               return;
           }
           try {
-              const result = await this.manager.manualCommit(msg, tag || undefined);
+              const result = await this.manager.manualCommit(msg, tag || undefined, true);
               $('#kaiz-pg-commit-msg-input').val('');
               $('#kaiz-pg-commit-tag-input').val('');
               await this.loadAndRender();

@@ -645,9 +645,9 @@ export class PresetGitManager {
 
     // ─── Git Diff Engine ────────────────────────────────────────────────────
 
-    public calculateDiff(): PresetDiffResult {
-        const livePrompts = this.getRawLivePrompts();
-        const liveOrder = this.getRawLiveOrder();
+    public calculateDiff(baseline?: { prompts: PromptBlock[]; prompt_order: string[] }): PresetDiffResult {
+        const livePrompts = baseline ? baseline.prompts : this.getRawLivePrompts();
+        const liveOrder = baseline ? baseline.prompt_order : this.getRawLiveOrder();
         const stagedPrompts = this.getPrompts();
         const stagedOrder = this.getPromptOrder();
 
@@ -738,6 +738,32 @@ export class PresetGitManager {
         };
     }
 
+    public async isDirtyAgainstHead(): Promise<{ isDirty: boolean; isStaged: boolean; diff: PresetDiffResult }> {
+        const hasStaging = this.hasStagingChanges();
+        if (hasStaging) {
+            const diff = this.calculateDiff();
+            return { isDirty: diff.isDirty, isStaged: true, diff };
+        }
+
+        const presetName = this.getActivePresetName();
+        const headHash = await this.getHeadCommitHash(presetName);
+        if (!headHash) {
+            return { isDirty: false, isStaged: false, diff: this.calculateDiff() };
+        }
+
+        const headCommit = await this.db.getPresetCommitByHash(headHash);
+        if (!headCommit?.tree) {
+            return { isDirty: false, isStaged: false, diff: this.calculateDiff() };
+        }
+
+        const diff = this.calculateDiff({
+            prompts: headCommit.tree.prompts || [],
+            prompt_order: headCommit.tree.prompt_order || [],
+        });
+
+        return { isDirty: diff.isDirty, isStaged: false, diff };
+    }
+
     // ─── Git Hash Generator ─────────────────────────────────────────────────
 
     public async generateCommitHash(content: string): Promise<string> {
@@ -768,9 +794,26 @@ export class PresetGitManager {
         if (this._activeHeads.has(presetName)) {
             return this._activeHeads.get(presetName)!;
         }
+        try {
+            const saved = localStorage.getItem(`kaiz_preset_head_${presetName}`);
+            if (saved) {
+                const commit = await this.db.getPresetCommitByHash(saved);
+                if (commit) {
+                    this._activeHeads.set(presetName, commit.hash);
+                    return commit.hash;
+                }
+            }
+        } catch {
+            // ignore
+        }
         const commits = await this.db.getPresetCommits(presetName, 1);
         if (commits.length > 0) {
             this._activeHeads.set(presetName, commits[0].hash);
+            try {
+                localStorage.setItem(`kaiz_preset_head_${presetName}`, commits[0].hash);
+            } catch {
+                // ignore
+            }
             return commits[0].hash;
         }
         return null;
@@ -807,6 +850,11 @@ export class PresetGitManager {
 
         await this.db.addPresetCommit(rootCommit);
         this._activeHeads.set(presetName, hash);
+        try {
+            localStorage.setItem(`kaiz_preset_head_${presetName}`, hash);
+        } catch {
+            // ignore
+        }
         return hash;
     }
 
@@ -814,11 +862,13 @@ export class PresetGitManager {
         message: string,
         author: 'agent' | 'user' = 'agent',
         tag?: string,
+        allowEmpty: boolean = false,
     ): Promise<{ ok: boolean; hash: string; summary: string }> {
         const presetName = this.getActivePresetName();
-        const diff = this.calculateDiff();
+        const dirtyInfo = await this.isDirtyAgainstHead();
+        const diff = dirtyInfo.diff;
 
-        if (!diff.isDirty) {
+        if (!diff.isDirty && !allowEmpty && !tag) {
             return {
                 ok: true,
                 hash: (await this.getHeadCommitHash(presetName)) || 'HEAD',
@@ -858,6 +908,11 @@ export class PresetGitManager {
         // 1. Save commit to IndexedDB
         await this.db.addPresetCommit(newCommit);
         this._activeHeads.set(presetName, commitHash);
+        try {
+            localStorage.setItem(`kaiz_preset_head_${presetName}`, commitHash);
+        } catch {
+            // ignore
+        }
 
         // 2. Flush to SillyTavern Live Context
         await this.flushToSillyTavern(finalPrompts, finalOrder);
@@ -950,6 +1005,11 @@ export class PresetGitManager {
 
         // Update HEAD and reset Staging
         this._activeHeads.set(presetName, targetCommit.hash);
+        try {
+            localStorage.setItem(`kaiz_preset_head_${presetName}`, targetCommit.hash);
+        } catch {
+            // ignore
+        }
         this.clearStaging();
 
         let prunedCount = 0;
@@ -1008,6 +1068,11 @@ export class PresetGitManager {
         const presetName = this.getActivePresetName();
         await this.db.deletePresetCommits(presetName);
         this._activeHeads.delete(presetName);
+        try {
+            localStorage.removeItem(`kaiz_preset_head_${presetName}`);
+        } catch {
+            // ignore
+        }
         return {
             ok: true,
             summary: `Đã xóa sạch toàn bộ lịch sử commit của preset "${presetName}".`,
@@ -1022,8 +1087,12 @@ export class PresetGitManager {
         return await this.db.getDistinctPresetNames();
     }
 
-    public async manualCommit(message: string, tag?: string): Promise<{ ok: boolean; hash: string; summary: string }> {
-        return await this.commit(message, 'user', tag);
+    public async manualCommit(
+        message: string,
+        tag?: string,
+        allowEmpty: boolean = true,
+    ): Promise<{ ok: boolean; hash: string; summary: string }> {
+        return await this.commit(message, 'user', tag, allowEmpty);
     }
 
     public discard(): { ok: boolean; summary: string } {

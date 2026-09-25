@@ -235,7 +235,7 @@ export class PresetGitModal {
 
         // 2. Render Staging Sandbox
         if (isCurrentActive) {
-            this.renderStagingSandbox();
+            await this.renderStagingSandbox();
         }
 
         // 3. Render Lịch sử Commit
@@ -258,19 +258,29 @@ export class PresetGitModal {
         $('#kaiz-pg-stat-head').text(headHash ? headHash.substring(0, 8) : 'none');
     }
 
-    private renderStagingSandbox(): void {
+    private async renderStagingSandbox(): Promise<void> {
         const $ = jQuery;
-        const isDirty = this.manager.hasStagingChanges();
-        const diff = this.manager.calculateDiff();
+        const dirtyInfo = await this.manager.isDirtyAgainstHead();
+        const isDirty = dirtyInfo.isDirty;
+        const diff = dirtyInfo.diff;
+        const isStaged = dirtyInfo.isStaged;
 
         if (isDirty) {
+            const badgeLabel = isStaged
+                ? `● ${diff.totalChanges} thay đổi nháp (Sandbox)`
+                : `● ${diff.totalChanges} thay đổi SillyTavern`;
+
             $('#kaiz-pg-staging-badge')
-                .text(`● ${diff.totalChanges} thay đổi nháp`)
+                .text(badgeLabel)
                 .removeClass('badge-neutral badge-success')
                 .addClass('badge-warning');
 
+            const sourceText = isStaged
+                ? '(Dữ liệu SillyTavern gốc chưa bị đè)'
+                : '(Thay đổi từ giao diện SillyTavern chưa tạo commit)';
+
             $('#kaiz-pg-staging-summary').html(
-                `<b>Có ${diff.totalChanges} thay đổi chưa commit:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. (Dữ liệu SillyTavern gốc chưa bị đè)`,
+                `<b>Có ${diff.totalChanges} thay đổi chưa commit:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. ${sourceText}`,
             );
 
             $('#kaiz-pg-staging-actions').css('display', 'flex');
@@ -311,7 +321,7 @@ export class PresetGitModal {
                 .addClass('badge-success');
 
             $('#kaiz-pg-staging-summary').text(
-                'Working tree sạch — Không có thay đổi nháp nào. Toàn bộ prompt blocks đang đồng bộ với commit HEAD.',
+                'Working tree sạch — Không có thay đổi nào. Toàn bộ prompt blocks đang đồng bộ với commit HEAD.',
             );
 
             $('#kaiz-pg-staging-actions').hide();
@@ -331,13 +341,15 @@ export class PresetGitModal {
             return;
         }
 
-        if (!this.manager.hasStagingChanges()) {
-            if (typeof toastr !== 'undefined') toastr.warning('Không có thay đổi nháp nào trong Staging để commit!');
+        const dirtyInfo = await this.manager.isDirtyAgainstHead();
+        if (!dirtyInfo.isDirty && !tag) {
+            if (typeof toastr !== 'undefined')
+                toastr.warning('Working tree sạch — Không có thay đổi nào giữa preset và commit HEAD!');
             return;
         }
 
         try {
-            const result = await this.manager.manualCommit(msg, tag || undefined);
+            const result = await this.manager.manualCommit(msg, tag || undefined, true);
             $('#kaiz-pg-commit-msg-input').val('');
             $('#kaiz-pg-commit-tag-input').val('');
 
