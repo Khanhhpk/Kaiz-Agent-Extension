@@ -192,6 +192,9 @@ jQuery(async () => {
     const adapter = new SillyTavernAdapter();
     const registry = new ToolRegistry();
     registerDefaultTools(registry);
+    if (typeof window !== 'undefined') {
+        (window as any).KaizRegistry = registry;
+    }
 
     // 1. Nạp giao diện Khung Chat Độc Lập
     try {

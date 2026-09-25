@@ -25,6 +25,12 @@ export const getPresetInfoTool: ITool = {
             },
         },
     },
+    validate: () => {
+        const manager = PresetGitManager.getInstance();
+        if (!manager.getContainer()) {
+            throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+        }
+    },
     execute: async (args: Record<string, any>): Promise<ToolResult> => {
         try {
             const manager = PresetGitManager.getInstance();

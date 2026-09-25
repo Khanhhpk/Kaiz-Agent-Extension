@@ -1091,7 +1091,7 @@ export class KaizDB {
             const store = transaction.objectStore('preset_commits');
             const index = store.index('presetName');
 
-            const request = index.openCursor(presetName);
+            const request = index.openCursor(IDBKeyRange.only(presetName));
             request.onsuccess = (event: Event) => {
                 const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
                 if (cursor) {
@@ -1099,6 +1099,64 @@ export class KaizDB {
                     cursor.continue();
                 } else {
                     resolve();
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deletePresetCommitsAfter(presetName: string, timestamp: number): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            let deletedCount = 0;
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    const entry = cursor.value as PresetCommitEntry;
+                    if (entry.timestamp > timestamp) {
+                        cursor.delete();
+                        deletedCount++;
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(deletedCount);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async prunePresetCommits(presetName: string, keepCount: number = 30): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        const allCommits = await this.getPresetCommits(presetName, 1000);
+        if (allCommits.length <= keepCount) return 0;
+
+        const toDeleteHashes = new Set(allCommits.slice(keepCount).map((c) => c.hash));
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            let deletedCount = 0;
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    const entry = cursor.value as PresetCommitEntry;
+                    if (toDeleteHashes.has(entry.hash)) {
+                        cursor.delete();
+                        deletedCount++;
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(deletedCount);
                 }
             };
             request.onerror = () => reject(request.error);

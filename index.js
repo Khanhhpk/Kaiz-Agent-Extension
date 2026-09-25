@@ -6059,7 +6059,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const transaction = this.db.transaction(['preset_commits'], 'readwrite');
               const store = transaction.objectStore('preset_commits');
               const index = store.index('presetName');
-              const request = index.openCursor(presetName);
+              const request = index.openCursor(IDBKeyRange.only(presetName));
               request.onsuccess = (event) => {
                   const cursor = event.target.result;
                   if (cursor) {
@@ -6068,6 +6068,66 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   else {
                       resolve();
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async deletePresetCommitsAfter(presetName, timestamp) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              let deletedCount = 0;
+              const request = index.openCursor(IDBKeyRange.only(presetName));
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      const entry = cursor.value;
+                      if (entry.timestamp > timestamp) {
+                          cursor.delete();
+                          deletedCount++;
+                      }
+                      cursor.continue();
+                  }
+                  else {
+                      resolve(deletedCount);
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async prunePresetCommits(presetName, keepCount = 30) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          const allCommits = await this.getPresetCommits(presetName, 1000);
+          if (allCommits.length <= keepCount)
+              return 0;
+          const toDeleteHashes = new Set(allCommits.slice(keepCount).map((c) => c.hash));
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              let deletedCount = 0;
+              const request = index.openCursor(IDBKeyRange.only(presetName));
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      const entry = cursor.value;
+                      if (toDeleteHashes.has(entry.hash)) {
+                          cursor.delete();
+                          deletedCount++;
+                      }
+                      cursor.continue();
+                  }
+                  else {
+                      resolve(deletedCount);
                   }
               };
               request.onerror = () => reject(request.error);
@@ -7090,7 +7150,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const presetName = this.getActivePresetName();
           return await this.db.getPresetCommits(presetName, limit);
       }
-      async rollback(target) {
+      async rollback(target, hard = false) {
           const presetName = this.getActivePresetName();
           let targetCommit = await this.db.getPresetCommitByHash(target);
           if (!targetCommit) {
@@ -7107,10 +7167,36 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           // Update HEAD and reset Staging
           this._activeHeads.set(presetName, targetCommit.hash);
           this.clearStaging();
+          let prunedCount = 0;
+          if (hard) {
+              prunedCount = await this.db.deletePresetCommitsAfter(presetName, targetCommit.timestamp);
+          }
+          const hardMsg = hard
+              ? ` (Hard reset: Đã dọn dẹp và xóa ${prunedCount} commit mới hơn khỏi bộ nhớ)`
+              : ' (Soft reset: Giữ nguyên lịch sử commit trong DB)';
           return {
               ok: true,
               hash: targetCommit.hash,
-              summary: `🔄 Rollback thành công về commit [${targetCommit.hash}]: "${targetCommit.message}". Đã phục hồi ${targetPrompts.length} prompt blocks.`,
+              pruned_count: prunedCount,
+              summary: `🔄 Rollback thành công về commit [${targetCommit.hash}]: "${targetCommit.message}". Đã phục hồi ${targetPrompts.length} prompt blocks.${hardMsg}`,
+          };
+      }
+      async pruneCommits(keepCount = 30) {
+          const presetName = this.getActivePresetName();
+          const pruned = await this.db.prunePresetCommits(presetName, keepCount);
+          return {
+              ok: true,
+              pruned_count: pruned,
+              summary: `Đã dọn dẹp lịch sử: Xóa ${pruned} commit cũ hơn giới hạn ${keepCount} commit gần nhất.`,
+          };
+      }
+      async clearHistory() {
+          const presetName = this.getActivePresetName();
+          await this.db.deletePresetCommits(presetName);
+          this._activeHeads.delete(presetName);
+          return {
+              ok: true,
+              summary: `Đã xóa sạch toàn bộ lịch sử commit của preset "${presetName}".`,
           };
       }
       discard() {
@@ -7264,6 +7350,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return refs;
       }
   }
+  if (typeof window !== 'undefined') {
+      window.PresetGitManager = PresetGitManager;
+  }
 
   const getPresetInfoTool = {
       schema: {
@@ -7285,6 +7374,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   },
               },
           },
+      },
+      validate: () => {
+          const manager = PresetGitManager.getInstance();
+          if (!manager.getContainer()) {
+              throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+          }
       },
       execute: async (args) => {
           try {
@@ -7413,6 +7508,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   },
               },
           },
+      },
+      validate: () => {
+          const manager = PresetGitManager.getInstance();
+          if (!manager.getContainer()) {
+              throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+          }
       },
       execute: async (args) => {
           try {
@@ -7607,9 +7708,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               '  - "diff": So sánh chi tiết sự khác biệt giữa Staging nháp với commit HEAD (hoặc xem danh sách thay đổi đang chờ commit).\n' +
               '  - "commit": MỞ HỘP VÀ LƯU THẬT — Đóng gói toàn bộ Staging thành 1 commit node mới, lưu vào IndexedDB và áp dụng vào SillyTavern (bắt buộc data: { message: string }, tùy chọn data: { tag?: string }).\n' +
               '  - "log": Xem danh sách lịch sử commit của preset hiện tại (data: { limit?: number }).\n' +
-              '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string } - nhận mã hash hoặc tên tag).\n' +
+              '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string, hard?: boolean } - nếu hard: true, xóa sạch vĩnh viễn các commit mới hơn khỏi DB để giải phóng bộ nhớ).\n' +
               '  - "discard": Hủy toàn bộ nháp đang có trong Staging, đưa Sandbox về bằng với HEAD.\n' +
-              '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).',
+              '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).\n' +
+              '  - "prune_commits": Dọn dẹp các commit cũ, chỉ giữ lại N commit gần nhất (data: { keep_count?: number }).\n' +
+              '  - "clear_history": Xóa sạch toàn bộ lịch sử commit của preset hiện tại để làm mới.',
           parameters: {
               type: 'object',
               properties: {
@@ -7636,6 +7739,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           'rollback',
                           'discard',
                           'tag',
+                          'prune_commits',
+                          'clear_history',
                       ],
                       description: 'Hành động cần thực hiện.',
                   },
@@ -7650,6 +7755,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               },
               required: ['action'],
           },
+      },
+      validate: () => {
+          const manager = PresetGitManager.getInstance();
+          if (!manager.getContainer()) {
+              throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+          }
       },
       execute: async (args) => {
           try {
@@ -7993,12 +8104,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                               content: 'Action "rollback" yêu cầu cung cấp mã commit hash hoặc tên tag trong `data.target`.',
                           };
                       }
-                      const result = await manager.rollback(target);
+                      const isHard = Boolean(data.hard || data.prune_newer);
+                      const result = await manager.rollback(target, isHard);
                       return {
                           content: JSON.stringify({
                               ok: true,
                               action: 'rollback',
                               restored_commit: result.hash,
+                              hard: isHard,
+                              pruned_count: result.pruned_count || 0,
                               message: result.summary,
                           }, null, 2),
                       };
@@ -8028,6 +8142,29 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                               ok: true,
                               action: 'tag',
                               tag_name: tagName,
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'prune_commits': {
+                      const keepCount = typeof data.keep_count === 'number' ? data.keep_count : 30;
+                      const result = await manager.pruneCommits(keepCount);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'prune_commits',
+                              keep_count: keepCount,
+                              pruned_count: result.pruned_count,
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'clear_history': {
+                      const result = await manager.clearHistory();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'clear_history',
                               message: result.summary,
                           }, null, 2),
                       };
@@ -14645,6 +14782,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       const adapter = new SillyTavernAdapter();
       const registry = new ToolRegistry();
       registerDefaultTools(registry);
+      if (typeof window !== 'undefined') {
+          window.KaizRegistry = registry;
+      }
       // 1. Nạp giao diện Khung Chat Độc Lập
       try {
           const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');

@@ -28,9 +28,11 @@ export const managePresetPromptTool: ITool = {
             '  - "diff": So sánh chi tiết sự khác biệt giữa Staging nháp với commit HEAD (hoặc xem danh sách thay đổi đang chờ commit).\n' +
             '  - "commit": MỞ HỘP VÀ LƯU THẬT — Đóng gói toàn bộ Staging thành 1 commit node mới, lưu vào IndexedDB và áp dụng vào SillyTavern (bắt buộc data: { message: string }, tùy chọn data: { tag?: string }).\n' +
             '  - "log": Xem danh sách lịch sử commit của preset hiện tại (data: { limit?: number }).\n' +
-            '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string } - nhận mã hash hoặc tên tag).\n' +
+            '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string, hard?: boolean } - nếu hard: true, xóa sạch vĩnh viễn các commit mới hơn khỏi DB để giải phóng bộ nhớ).\n' +
             '  - "discard": Hủy toàn bộ nháp đang có trong Staging, đưa Sandbox về bằng với HEAD.\n' +
-            '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).',
+            '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).\n' +
+            '  - "prune_commits": Dọn dẹp các commit cũ, chỉ giữ lại N commit gần nhất (data: { keep_count?: number }).\n' +
+            '  - "clear_history": Xóa sạch toàn bộ lịch sử commit của preset hiện tại để làm mới.',
         parameters: {
             type: 'object',
             properties: {
@@ -57,6 +59,8 @@ export const managePresetPromptTool: ITool = {
                         'rollback',
                         'discard',
                         'tag',
+                        'prune_commits',
+                        'clear_history',
                     ],
                     description: 'Hành động cần thực hiện.',
                 },
@@ -72,6 +76,12 @@ export const managePresetPromptTool: ITool = {
             },
             required: ['action'],
         },
+    },
+    validate: () => {
+        const manager = PresetGitManager.getInstance();
+        if (!manager.getContainer()) {
+            throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+        }
     },
     execute: async (args: Record<string, any>): Promise<ToolResult> => {
         try {
@@ -512,13 +522,16 @@ export const managePresetPromptTool: ITool = {
                                 'Action "rollback" yêu cầu cung cấp mã commit hash hoặc tên tag trong `data.target`.',
                         };
                     }
-                    const result = await manager.rollback(target);
+                    const isHard = Boolean(data.hard || data.prune_newer);
+                    const result = await manager.rollback(target, isHard);
                     return {
                         content: JSON.stringify(
                             {
                                 ok: true,
                                 action: 'rollback',
                                 restored_commit: result.hash,
+                                hard: isHard,
+                                pruned_count: result.pruned_count || 0,
                                 message: result.summary,
                             },
                             null,
@@ -558,6 +571,39 @@ export const managePresetPromptTool: ITool = {
                                 ok: true,
                                 action: 'tag',
                                 tag_name: tagName,
+                                message: result.summary,
+                            },
+                            null,
+                            2,
+                        ),
+                    };
+                }
+
+                case 'prune_commits': {
+                    const keepCount = typeof data.keep_count === 'number' ? data.keep_count : 30;
+                    const result = await manager.pruneCommits(keepCount);
+                    return {
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'prune_commits',
+                                keep_count: keepCount,
+                                pruned_count: result.pruned_count,
+                                message: result.summary,
+                            },
+                            null,
+                            2,
+                        ),
+                    };
+                }
+
+                case 'clear_history': {
+                    const result = await manager.clearHistory();
+                    return {
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'clear_history',
                                 message: result.summary,
                             },
                             null,

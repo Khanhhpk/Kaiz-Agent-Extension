@@ -876,7 +876,10 @@ export class PresetGitManager {
         return await this.db.getPresetCommits(presetName, limit);
     }
 
-    public async rollback(target: string): Promise<{ ok: boolean; hash: string; summary: string }> {
+    public async rollback(
+        target: string,
+        hard: boolean = false,
+    ): Promise<{ ok: boolean; hash: string; summary: string; pruned_count?: number }> {
         const presetName = this.getActivePresetName();
         let targetCommit = await this.db.getPresetCommitByHash(target);
 
@@ -899,10 +902,42 @@ export class PresetGitManager {
         this._activeHeads.set(presetName, targetCommit.hash);
         this.clearStaging();
 
+        let prunedCount = 0;
+        if (hard) {
+            prunedCount = await this.db.deletePresetCommitsAfter(presetName, targetCommit.timestamp);
+        }
+
+        const hardMsg = hard
+            ? ` (Hard reset: Đã dọn dẹp và xóa ${prunedCount} commit mới hơn khỏi bộ nhớ)`
+            : ' (Soft reset: Giữ nguyên lịch sử commit trong DB)';
+
         return {
             ok: true,
             hash: targetCommit.hash,
-            summary: `🔄 Rollback thành công về commit [${targetCommit.hash}]: "${targetCommit.message}". Đã phục hồi ${targetPrompts.length} prompt blocks.`,
+            pruned_count: prunedCount,
+            summary: `🔄 Rollback thành công về commit [${targetCommit.hash}]: "${targetCommit.message}". Đã phục hồi ${targetPrompts.length} prompt blocks.${hardMsg}`,
+        };
+    }
+
+    public async pruneCommits(
+        keepCount: number = 30,
+    ): Promise<{ ok: boolean; pruned_count: number; summary: string }> {
+        const presetName = this.getActivePresetName();
+        const pruned = await this.db.prunePresetCommits(presetName, keepCount);
+        return {
+            ok: true,
+            pruned_count: pruned,
+            summary: `Đã dọn dẹp lịch sử: Xóa ${pruned} commit cũ hơn giới hạn ${keepCount} commit gần nhất.`,
+        };
+    }
+
+    public async clearHistory(): Promise<{ ok: boolean; summary: string }> {
+        const presetName = this.getActivePresetName();
+        await this.db.deletePresetCommits(presetName);
+        this._activeHeads.delete(presetName);
+        return {
+            ok: true,
+            summary: `Đã xóa sạch toàn bộ lịch sử commit của preset "${presetName}".`,
         };
     }
 
@@ -1083,4 +1118,8 @@ export class PresetGitManager {
 
         return refs;
     }
+}
+
+if (typeof window !== 'undefined') {
+    (window as any).PresetGitManager = PresetGitManager;
 }
