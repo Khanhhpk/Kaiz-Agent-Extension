@@ -14,11 +14,13 @@ export const getPresetInfoTool: ITool = {
             properties: {
                 include_vars: {
                     type: 'boolean',
-                    description: 'Nếu true, quét và liệt kê tất cả các biến macro {{setvar}} / {{getvar}} có trong preset.',
+                    description:
+                        'Nếu true, quét và liệt kê tất cả các biến macro {{setvar}} / {{getvar}} có trong preset.',
                 },
                 raw_live_only: {
                     type: 'boolean',
-                    description: 'Nếu true, chỉ đọc dữ liệu gốc của SillyTavern, bỏ qua các thay đổi nháp đang có trong Sandbox.',
+                    description:
+                        'Nếu true, chỉ đọc dữ liệu gốc của SillyTavern, bỏ qua các thay đổi nháp đang có trong Sandbox.',
                 },
             },
         },
@@ -98,7 +100,7 @@ export const getPresetInfoTool: ITool = {
             };
 
             if (includeVars) {
-                result.variables = manager.scanVariables().map(v => ({
+                result.variables = manager.scanVariables().map((v) => ({
                     name: v.name,
                     type: v.type,
                     value: v.value,

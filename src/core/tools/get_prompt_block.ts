@@ -17,11 +17,13 @@ export const getPromptBlockTool: ITool = {
             properties: {
                 identifier: {
                     type: 'string',
-                    description: 'ID của prompt block cần đọc (bắt đầu bằng "block_..." hoặc id chuẩn như "main", "jailbreak").',
+                    description:
+                        'ID của prompt block cần đọc (bắt đầu bằng "block_..." hoặc id chuẩn như "main", "jailbreak").',
                 },
                 all_linked: {
                     type: 'boolean',
-                    description: 'Nếu true, trả về toàn bộ nội dung của tất cả các block đang linked theo đúng thứ tự thực thi.',
+                    description:
+                        'Nếu true, trả về toàn bộ nội dung của tất cả các block đang linked theo đúng thứ tự thực thi.',
                 },
                 include_unlinked: {
                     type: 'boolean',
@@ -57,8 +59,8 @@ export const getPromptBlockTool: ITool = {
                         content: `Không tìm thấy commit nào với mã hash: "${commit_hash}"`,
                     };
                 }
-                prompts = (commit.tree?.prompts || []).map(p => ({ ...p }));
-                prompts.forEach(p => {
+                prompts = (commit.tree?.prompts || []).map((p) => ({ ...p }));
+                prompts.forEach((p) => {
                     if (!p.identifier && (p as any).id) p.identifier = (p as any).id;
                 });
                 order = commit.tree?.prompt_order || [];
@@ -114,14 +116,14 @@ export const getPromptBlockTool: ITool = {
                             results: searchResults,
                         },
                         null,
-                        2
+                        2,
                     ),
                 };
             }
 
             // 3. Chế độ lấy toàn bộ linked prompts (all_linked)
             if (all_linked) {
-                const promptMap = new Map(prompts.map(p => [p.identifier, p]));
+                const promptMap = new Map(prompts.map((p) => [p.identifier, p]));
                 const linkedFull: any[] = [];
 
                 order.forEach((id, index) => {
@@ -147,8 +149,8 @@ export const getPromptBlockTool: ITool = {
                 if (include_unlinked) {
                     const linkedSet = new Set(order);
                     unlinkedFull = prompts
-                        .filter(p => !linkedSet.has(p.identifier))
-                        .map(p => ({
+                        .filter((p) => !linkedSet.has(p.identifier))
+                        .map((p) => ({
                             identifier: p.identifier,
                             name: p.name,
                             role: p.role || 'system',
@@ -171,14 +173,14 @@ export const getPromptBlockTool: ITool = {
                             unlinked_prompts: unlinkedFull,
                         },
                         null,
-                        2
+                        2,
                     ),
                 };
             }
 
             // 4. Chế độ lấy 1 block cụ thể theo identifier
             if (identifier && typeof identifier === 'string') {
-                const target = prompts.find(p => p.identifier === identifier || (p as any).id === identifier);
+                const target = prompts.find((p) => p.identifier === identifier || (p as any).id === identifier);
                 if (!target) {
                     return {
                         isError: true,
@@ -211,7 +213,7 @@ export const getPromptBlockTool: ITool = {
                             },
                         },
                         null,
-                        2
+                        2,
                     ),
                 };
             }

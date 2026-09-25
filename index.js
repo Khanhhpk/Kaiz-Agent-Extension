@@ -6044,7 +6044,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const request = index.getAll(presetName);
               request.onsuccess = () => {
                   const results = request.result || [];
-                  const found = results.find(c => c.tag === tag);
+                  const found = results.find((c) => c.tag === tag);
                   resolve(found || null);
               };
               request.onerror = () => reject(request.error);
@@ -6454,7 +6454,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       }
       getRawLivePrompts() {
           const container = this.getContainer();
-          return (container?.prompts || []).map(p => ({ ...p }));
+          return (container?.prompts || []).map((p) => ({ ...p }));
       }
       getRawLiveOrder() {
           const container = this.getContainer();
@@ -6462,7 +6462,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               return [];
           const raw = container.prompt_order || [];
           if (!Array.isArray(raw) || raw.length === 0) {
-              return (container.prompts || []).map(p => p.identifier);
+              return (container.prompts || []).map((p) => p.identifier);
           }
           if (typeof raw[0] === 'object' && Array.isArray(raw[0].order)) {
               const win = window;
@@ -6479,7 +6479,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const basePrompts = this.getRawLivePrompts();
           // 1. Map existing blocks with staging changes & filter deleted
           const prompts = basePrompts
-              .map(p => {
+              .map((p) => {
               if (this._stagingDeletes.has(p.identifier))
                   return null;
               if (this._stagingMap.has(p.identifier)) {
@@ -6499,15 +6499,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       }
       getPromptOrder() {
           if (this._stagingOrder && Array.isArray(this._stagingOrder)) {
-              return this._stagingOrder.filter(id => id && !this._stagingDeletes.has(id));
+              return this._stagingOrder.filter((id) => id && !this._stagingDeletes.has(id));
           }
           const rawLiveOrder = this.getRawLiveOrder();
-          const filteredLive = rawLiveOrder.filter(id => id && !this._stagingDeletes.has(id));
+          const filteredLive = rawLiveOrder.filter((id) => id && !this._stagingDeletes.has(id));
           // Append created blocks that have addToLinked = true
           for (const created of this._stagingCreates) {
               if (created.addToLinked && !this._stagingDeletes.has(created.block.identifier)) {
                   if (!filteredLive.includes(created.block.identifier)) {
-                      if (typeof created.position === 'number' && created.position >= 0 && created.position <= filteredLive.length) {
+                      if (typeof created.position === 'number' &&
+                          created.position >= 0 &&
+                          created.position <= filteredLive.length) {
                           filteredLive.splice(created.position, 0, created.block.identifier);
                       }
                       else {
@@ -6519,10 +6521,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return filteredLive;
       }
       findPrompt(identifier) {
-          return this.getPrompts().find(p => p.identifier === identifier) || null;
+          return this.getPrompts().find((p) => p.identifier === identifier) || null;
       }
       findRawPrompt(identifier) {
-          return this.getRawLivePrompts().find(p => p.identifier === identifier) || null;
+          return this.getRawLivePrompts().find((p) => p.identifier === identifier) || null;
       }
       // ─── Staging Actions (Working Tree Sandbox) ─────────────────────────────
       hasStagingChanges() {
@@ -6589,15 +6591,21 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       this._stagingMap.set(p.identifier, {});
                   const currentContent = this._stagingMap.get(p.identifier).content !== undefined
                       ? this._stagingMap.get(p.identifier).content
-                      : (p.content || '');
+                      : p.content || '';
                   if (currentContent.includes(target_string)) {
-                      this._stagingMap.get(p.identifier).content = currentContent.split(target_string).join(replacement_string);
+                      this._stagingMap.get(p.identifier).content = currentContent
+                          .split(target_string)
+                          .join(replacement_string);
                       modifiedCount++;
                       modifiedNames.push(p.name);
                   }
               }
               if (modifiedCount === 0) {
-                  return { ok: true, summary: `Không tìm thấy đoạn "${target_string}" trong bất kỳ block nào.`, modified_count: 0 };
+                  return {
+                      ok: true,
+                      summary: `Không tìm thấy đoạn "${target_string}" trong bất kỳ block nào.`,
+                      modified_count: 0,
+                  };
               }
               return {
                   ok: true,
@@ -6613,7 +6621,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   this._stagingMap.set(identifier, {});
               const currentContent = this._stagingMap.get(identifier).content !== undefined
                   ? this._stagingMap.get(identifier).content
-                  : (p.content || '');
+                  : p.content || '';
               if (!currentContent.includes(target_string)) {
                   throw new Error(`Không tìm thấy đoạn "${target_string}" trong nội dung của block "${p.name}".`);
               }
@@ -6633,8 +6641,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               this._stagingMap.set(identifier, {});
           const currentContent = this._stagingMap.get(identifier).content !== undefined
               ? this._stagingMap.get(identifier).content
-              : (p.content || '');
-          this._stagingMap.get(identifier).content = currentContent + (currentContent && append_text ? '\n' : '') + append_text;
+              : p.content || '';
+          this._stagingMap.get(identifier).content =
+              currentContent + (currentContent && append_text ? '\n' : '') + append_text;
           return {
               ok: true,
               summary: `[Staged] Đã nối thêm ${append_text.length} ký tự vào block "${p.name}".`,
@@ -6697,7 +6706,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       currentOrder.push(identifier);
                   }
               }
-              else if (typeof position === 'number' && position >= 0 && position < currentOrder.length && position !== idx) {
+              else if (typeof position === 'number' &&
+                  position >= 0 &&
+                  position < currentOrder.length &&
+                  position !== idx) {
                   currentOrder.splice(idx, 1);
                   currentOrder.splice(position, 0, identifier);
               }
@@ -6717,7 +6729,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (!Array.isArray(order))
               throw new Error('Tham số order phải là một mảng identifier.');
           const allPrompts = this.getPrompts();
-          const missing = order.filter(id => !allPrompts.some(p => p.identifier === id));
+          const missing = order.filter((id) => !allPrompts.some((p) => p.identifier === id));
           if (missing.length > 0) {
               throw new Error(`Các ID sau không tồn tại trong preset: ${missing.join(', ')}`);
           }
@@ -6748,7 +6760,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
           // If it was created in this staging session, remove it directly
-          const createdIdx = this._stagingCreates.findIndex(c => c.block.identifier === identifier);
+          const createdIdx = this._stagingCreates.findIndex((c) => c.block.identifier === identifier);
           if (createdIdx !== -1) {
               this._stagingCreates.splice(createdIdx, 1);
           }
@@ -6756,7 +6768,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               this._stagingDeletes.add(identifier);
           }
           if (this._stagingOrder) {
-              this._stagingOrder = this._stagingOrder.filter(id => id !== identifier);
+              this._stagingOrder = this._stagingOrder.filter((id) => id !== identifier);
           }
           return {
               ok: true,
@@ -6839,8 +6851,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               this._stagingMap.set(targetBlock.identifier, {});
           const curContent = this._stagingMap.get(targetBlock.identifier).content !== undefined
               ? this._stagingMap.get(targetBlock.identifier).content
-              : (targetBlock.content || '');
-          const replaced = matchStr.replace(/::([^\}]*)\}\}$/, `::${newValue}\}\}`);
+              : targetBlock.content || '';
+          const replaced = matchStr.replace(/::([^}]*)\}\}$/, `::${newValue}}}`);
           this._stagingMap.get(targetBlock.identifier).content = curContent.replace(matchStr, replaced);
           return {
               ok: true,
@@ -6881,8 +6893,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           let added = 0;
           let modified = 0;
           let deleted = 0;
-          const liveMap = new Map(livePrompts.map(p => [p.identifier, p]));
-          const stagedMap = new Map(stagedPrompts.map(p => [p.identifier, p]));
+          const liveMap = new Map(livePrompts.map((p) => [p.identifier, p]));
+          const stagedMap = new Map(stagedPrompts.map((p) => [p.identifier, p]));
           // Check creates
           for (const [id, sBlock] of stagedMap.entries()) {
               if (!liveMap.has(id)) {
@@ -6967,7 +6979,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   const data = encoder.encode(content);
                   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
                   const hashArray = Array.from(new Uint8Array(hashBuffer));
-                  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
                   return hashHex.substring(0, 8);
               }
           }
@@ -7138,7 +7150,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           }
           // 1. Ghi prompts vào ST memory
           container.prompts.length = 0;
-          prompts.forEach(p => container.prompts.push(JSON.parse(JSON.stringify(p))));
+          prompts.forEach((p) => container.prompts.push(JSON.parse(JSON.stringify(p))));
           // 2. Ghi prompt_order (xử lý cả ST 1.18+ nested format lẫn flat format)
           if (Array.isArray(container.prompt_order) &&
               container.prompt_order.length > 0 &&
@@ -7147,10 +7159,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const win = window;
               const ctx = win.SillyTavern?.getContext?.() || {};
               const charId = ctx.characterId;
-              const targetObj = container.prompt_order.find((o) => String(o.character_id) === String(charId)) || container.prompt_order[0];
+              const targetObj = container.prompt_order.find((o) => String(o.character_id) === String(charId)) ||
+                  container.prompt_order[0];
               if (targetObj) {
-                  targetObj.order = order.map(id => {
-                      const found = prompts.find(p => p.identifier === id);
+                  targetObj.order = order.map((id) => {
+                      const found = prompts.find((p) => p.identifier === id);
                       return { identifier: id, enabled: found ? found.enabled : true };
                   });
               }
@@ -7342,7 +7355,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   blocks: blocksSummary,
               };
               if (includeVars) {
-                  result.variables = manager.scanVariables().map(v => ({
+                  result.variables = manager.scanVariables().map((v) => ({
                       name: v.name,
                       type: v.type,
                       value: v.value,
@@ -7418,8 +7431,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           content: `Không tìm thấy commit nào với mã hash: "${commit_hash}"`,
                       };
                   }
-                  prompts = (commit.tree?.prompts || []).map(p => ({ ...p }));
-                  prompts.forEach(p => {
+                  prompts = (commit.tree?.prompts || []).map((p) => ({ ...p }));
+                  prompts.forEach((p) => {
                       if (!p.identifier && p.id)
                           p.identifier = p.id;
                   });
@@ -7473,7 +7486,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               // 3. Chế độ lấy toàn bộ linked prompts (all_linked)
               if (all_linked) {
-                  const promptMap = new Map(prompts.map(p => [p.identifier, p]));
+                  const promptMap = new Map(prompts.map((p) => [p.identifier, p]));
                   const linkedFull = [];
                   order.forEach((id, index) => {
                       const p = promptMap.get(id);
@@ -7497,8 +7510,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   if (include_unlinked) {
                       const linkedSet = new Set(order);
                       unlinkedFull = prompts
-                          .filter(p => !linkedSet.has(p.identifier))
-                          .map(p => ({
+                          .filter((p) => !linkedSet.has(p.identifier))
+                          .map((p) => ({
                           identifier: p.identifier,
                           name: p.name,
                           role: p.role || 'system',
@@ -7522,7 +7535,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               // 4. Chế độ lấy 1 block cụ thể theo identifier
               if (identifier && typeof identifier === 'string') {
-                  const target = prompts.find(p => p.identifier === identifier || p.id === identifier);
+                  const target = prompts.find((p) => p.identifier === identifier || p.id === identifier);
                   if (!target) {
                       return {
                           isError: true,
@@ -7668,7 +7681,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'edit_content': {
                       if (!identifier) {
-                          return { isError: true, content: 'Action "edit_content" yêu cầu truyền tham số `identifier` của block.' };
+                          return {
+                              isError: true,
+                              content: 'Action "edit_content" yêu cầu truyền tham số `identifier` của block.',
+                          };
                       }
                       if (data.content === undefined) {
                           return { isError: true, content: 'Action "edit_content" yêu cầu truyền `data.content`.' };
@@ -7687,7 +7703,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'replace_text': {
                       if (!data.target_string) {
-                          return { isError: true, content: 'Action "replace_text" yêu cầu truyền `data.target_string` cần tìm.' };
+                          return {
+                              isError: true,
+                              content: 'Action "replace_text" yêu cầu truyền `data.target_string` cần tìm.',
+                          };
                       }
                       const replacement = data.replacement_string !== undefined ? String(data.replacement_string) : '';
                       const isGlobal = Boolean(data.global);
@@ -7706,7 +7725,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'append_content': {
                       if (!identifier) {
-                          return { isError: true, content: 'Action "append_content" yêu cầu truyền tham số `identifier` của block.' };
+                          return {
+                              isError: true,
+                              content: 'Action "append_content" yêu cầu truyền tham số `identifier` của block.',
+                          };
                       }
                       if (data.append_text === undefined) {
                           return { isError: true, content: 'Action "append_content" yêu cầu truyền `data.append_text`.' };
@@ -7725,7 +7747,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'edit_meta': {
                       if (!identifier) {
-                          return { isError: true, content: 'Action "edit_meta" yêu cầu truyền tham số `identifier` của block.' };
+                          return {
+                              isError: true,
+                              content: 'Action "edit_meta" yêu cầu truyền tham số `identifier` của block.',
+                          };
                       }
                       const result = manager.stageUpdateMeta(identifier, data);
                       const diff = manager.calculateDiff();
@@ -7741,7 +7766,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'toggle': {
                       if (!identifier) {
-                          return { isError: true, content: 'Action "toggle" yêu cầu truyền tham số `identifier` của block.' };
+                          return {
+                              isError: true,
+                              content: 'Action "toggle" yêu cầu truyền tham số `identifier` của block.',
+                          };
                       }
                       const result = manager.stageToggle(identifier, data.enabled);
                       const diff = manager.calculateDiff();
@@ -7758,10 +7786,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'set_linked': {
                       if (!identifier) {
-                          return { isError: true, content: 'Action "set_linked" yêu cầu truyền tham số `identifier` của block.' };
+                          return {
+                              isError: true,
+                              content: 'Action "set_linked" yêu cầu truyền tham số `identifier` của block.',
+                          };
                       }
                       if (typeof data.linked !== 'boolean') {
-                          return { isError: true, content: 'Action "set_linked" yêu cầu truyền `data.linked` (true hoặc false).' };
+                          return {
+                              isError: true,
+                              content: 'Action "set_linked" yêu cầu truyền `data.linked` (true hoặc false).',
+                          };
                       }
                       const result = manager.stageSetLinked(identifier, data.linked, data.position);
                       const diff = manager.calculateDiff();
@@ -7777,7 +7811,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'reorder': {
                       if (!Array.isArray(data.order)) {
-                          return { isError: true, content: 'Action "reorder" yêu cầu truyền mảng `data.order` chứa danh sách ID.' };
+                          return {
+                              isError: true,
+                              content: 'Action "reorder" yêu cầu truyền mảng `data.order` chứa danh sách ID.',
+                          };
                       }
                       const result = manager.stageReorder(data.order);
                       const diff = manager.calculateDiff();
@@ -7793,7 +7830,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'duplicate': {
                       if (!identifier) {
-                          return { isError: true, content: 'Action "duplicate" yêu cầu truyền tham số `identifier` của block gốc.' };
+                          return {
+                              isError: true,
+                              content: 'Action "duplicate" yêu cầu truyền tham số `identifier` của block gốc.',
+                          };
                       }
                       const result = manager.stageDuplicate(identifier, data.newName);
                       const diff = manager.calculateDiff();
@@ -7809,7 +7849,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   case 'delete': {
                       if (!identifier) {
-                          return { isError: true, content: 'Action "delete" yêu cầu truyền tham số `identifier` của block cần xóa.' };
+                          return {
+                              isError: true,
+                              content: 'Action "delete" yêu cầu truyền tham số `identifier` của block cần xóa.',
+                          };
                       }
                       const result = manager.stageDelete(identifier);
                       const diff = manager.calculateDiff();
@@ -7929,7 +7972,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                               action: 'log',
                               preset_name: manager.getActivePresetName(),
                               total_commits: commits.length,
-                              history: commits.map(c => ({
+                              history: commits.map((c) => ({
                                   hash: c.hash,
                                   parent: c.parentHash,
                                   message: c.message,

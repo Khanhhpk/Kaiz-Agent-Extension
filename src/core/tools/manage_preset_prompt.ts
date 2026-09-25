@@ -62,7 +62,8 @@ export const managePresetPromptTool: ITool = {
                 },
                 identifier: {
                     type: 'string',
-                    description: 'ID của prompt block mục tiêu (bắt buộc đối với các hành động can thiệp block đơn lẻ).',
+                    description:
+                        'ID của prompt block mục tiêu (bắt buộc đối với các hành động can thiệp block đơn lẻ).',
                 },
                 data: {
                     type: 'object',
@@ -93,19 +94,26 @@ export const managePresetPromptTool: ITool = {
                     });
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'create',
-                            created_id: result.identifier,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'create',
+                                created_id: result.identifier,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'edit_content': {
                     if (!identifier) {
-                        return { isError: true, content: 'Action "edit_content" yêu cầu truyền tham số `identifier` của block.' };
+                        return {
+                            isError: true,
+                            content: 'Action "edit_content" yêu cầu truyền tham số `identifier` của block.',
+                        };
                     }
                     if (data.content === undefined) {
                         return { isError: true, content: 'Action "edit_content" yêu cầu truyền `data.content`.' };
@@ -113,40 +121,60 @@ export const managePresetPromptTool: ITool = {
                     const result = manager.stageUpdateContent(identifier, String(data.content));
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'edit_content',
-                            identifier,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'edit_content',
+                                identifier,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'replace_text': {
                     if (!data.target_string) {
-                        return { isError: true, content: 'Action "replace_text" yêu cầu truyền `data.target_string` cần tìm.' };
+                        return {
+                            isError: true,
+                            content: 'Action "replace_text" yêu cầu truyền `data.target_string` cần tìm.',
+                        };
                     }
                     const replacement = data.replacement_string !== undefined ? String(data.replacement_string) : '';
                     const isGlobal = Boolean(data.global);
                     const onlyLinked = Boolean(data.only_linked);
 
-                    const result = manager.stageReplaceText(identifier || null, data.target_string, replacement, isGlobal, onlyLinked);
+                    const result = manager.stageReplaceText(
+                        identifier || null,
+                        data.target_string,
+                        replacement,
+                        isGlobal,
+                        onlyLinked,
+                    );
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'replace_text',
-                            message: result.summary,
-                            modified_count: result.modified_count,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'replace_text',
+                                message: result.summary,
+                                modified_count: result.modified_count,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'append_content': {
                     if (!identifier) {
-                        return { isError: true, content: 'Action "append_content" yêu cầu truyền tham số `identifier` của block.' };
+                        return {
+                            isError: true,
+                            content: 'Action "append_content" yêu cầu truyền tham số `identifier` của block.',
+                        };
                     }
                     if (data.append_text === undefined) {
                         return { isError: true, content: 'Action "append_content" yêu cầu truyền `data.append_text`.' };
@@ -154,119 +182,168 @@ export const managePresetPromptTool: ITool = {
                     const result = manager.stageAppendContent(identifier, String(data.append_text));
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'append_content',
-                            identifier,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'append_content',
+                                identifier,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'edit_meta': {
                     if (!identifier) {
-                        return { isError: true, content: 'Action "edit_meta" yêu cầu truyền tham số `identifier` của block.' };
+                        return {
+                            isError: true,
+                            content: 'Action "edit_meta" yêu cầu truyền tham số `identifier` của block.',
+                        };
                     }
                     const result = manager.stageUpdateMeta(identifier, data);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'edit_meta',
-                            identifier,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'edit_meta',
+                                identifier,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'toggle': {
                     if (!identifier) {
-                        return { isError: true, content: 'Action "toggle" yêu cầu truyền tham số `identifier` của block.' };
+                        return {
+                            isError: true,
+                            content: 'Action "toggle" yêu cầu truyền tham số `identifier` của block.',
+                        };
                     }
                     const result = manager.stageToggle(identifier, data.enabled);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'toggle',
-                            identifier,
-                            enabled: result.enabled,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'toggle',
+                                identifier,
+                                enabled: result.enabled,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'set_linked': {
                     if (!identifier) {
-                        return { isError: true, content: 'Action "set_linked" yêu cầu truyền tham số `identifier` của block.' };
+                        return {
+                            isError: true,
+                            content: 'Action "set_linked" yêu cầu truyền tham số `identifier` của block.',
+                        };
                     }
                     if (typeof data.linked !== 'boolean') {
-                        return { isError: true, content: 'Action "set_linked" yêu cầu truyền `data.linked` (true hoặc false).' };
+                        return {
+                            isError: true,
+                            content: 'Action "set_linked" yêu cầu truyền `data.linked` (true hoặc false).',
+                        };
                     }
                     const result = manager.stageSetLinked(identifier, data.linked, data.position);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'set_linked',
-                            identifier,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'set_linked',
+                                identifier,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'reorder': {
                     if (!Array.isArray(data.order)) {
-                        return { isError: true, content: 'Action "reorder" yêu cầu truyền mảng `data.order` chứa danh sách ID.' };
+                        return {
+                            isError: true,
+                            content: 'Action "reorder" yêu cầu truyền mảng `data.order` chứa danh sách ID.',
+                        };
                     }
                     const result = manager.stageReorder(data.order);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'reorder',
-                            new_order: data.order,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'reorder',
+                                new_order: data.order,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'duplicate': {
                     if (!identifier) {
-                        return { isError: true, content: 'Action "duplicate" yêu cầu truyền tham số `identifier` của block gốc.' };
+                        return {
+                            isError: true,
+                            content: 'Action "duplicate" yêu cầu truyền tham số `identifier` của block gốc.',
+                        };
                     }
                     const result = manager.stageDuplicate(identifier, data.newName);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'duplicate',
-                            created_id: result.identifier,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'duplicate',
+                                created_id: result.identifier,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'delete': {
                     if (!identifier) {
-                        return { isError: true, content: 'Action "delete" yêu cầu truyền tham số `identifier` của block cần xóa.' };
+                        return {
+                            isError: true,
+                            content: 'Action "delete" yêu cầu truyền tham số `identifier` của block cần xóa.',
+                        };
                     }
                     const result = manager.stageDelete(identifier);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'delete',
-                            identifier,
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'delete',
+                                identifier,
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -277,13 +354,17 @@ export const managePresetPromptTool: ITool = {
                     const result = manager.stageBatchUpdate(data.updates);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'batch_update',
-                            message: result.summary,
-                            results: result.results,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'batch_update',
+                                message: result.summary,
+                                results: result.results,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -296,12 +377,16 @@ export const managePresetPromptTool: ITool = {
                     });
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'update_var',
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'update_var',
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -309,28 +394,36 @@ export const managePresetPromptTool: ITool = {
                     const result = manager.stageRenameVar(data.oldName, data.newName);
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'rename_var',
-                            message: result.summary,
-                            staging_status: diff.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'rename_var',
+                                message: result.summary,
+                                staging_status: diff.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'validate_syntax': {
                     const syntax = manager.validatePresetSyntax();
                     return {
-                        content: JSON.stringify({
-                            ok: syntax.ok,
-                            action: 'validate_syntax',
-                            status: syntax.status,
-                            total_blocks_checked: syntax.totalBlocksChecked,
-                            error_count: syntax.errorCount,
-                            warning_count: syntax.warningCount,
-                            errors: syntax.errors,
-                            warnings: syntax.warnings,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: syntax.ok,
+                                action: 'validate_syntax',
+                                status: syntax.status,
+                                total_blocks_checked: syntax.totalBlocksChecked,
+                                error_count: syntax.errorCount,
+                                warning_count: syntax.warningCount,
+                                errors: syntax.errors,
+                                warnings: syntax.warnings,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -339,19 +432,23 @@ export const managePresetPromptTool: ITool = {
                 case 'diff': {
                     const diff = manager.calculateDiff();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'diff',
-                            is_dirty: diff.isDirty,
-                            summary: diff.summary,
-                            stats: {
-                                added: diff.added,
-                                modified: diff.modified,
-                                deleted: diff.deleted,
-                                total_changes: diff.totalChanges,
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'diff',
+                                is_dirty: diff.isDirty,
+                                summary: diff.summary,
+                                stats: {
+                                    added: diff.added,
+                                    modified: diff.modified,
+                                    deleted: diff.deleted,
+                                    total_changes: diff.totalChanges,
+                                },
+                                changes: diff.items,
                             },
-                            changes: diff.items,
-                        }, null, 2),
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -359,18 +456,23 @@ export const managePresetPromptTool: ITool = {
                     if (!data.message || typeof data.message !== 'string' || !data.message.trim()) {
                         return {
                             isError: true,
-                            content: 'Action "commit" bắt buộc phải có `data.message` mô tả mục đích thay đổi (vd: "feat: bổ sung hướng dẫn CoT").',
+                            content:
+                                'Action "commit" bắt buộc phải có `data.message` mô tả mục đích thay đổi (vd: "feat: bổ sung hướng dẫn CoT").',
                         };
                     }
                     const result = await manager.commit(data.message.trim(), 'agent', data.tag);
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'commit',
-                            commit_hash: result.hash,
-                            message: result.summary,
-                            note: 'Thay đổi đã được mở hộp và lưu đồng bộ thành công vào SillyTavern.',
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'commit',
+                                commit_hash: result.hash,
+                                message: result.summary,
+                                note: 'Thay đổi đã được mở hộp và lưu đồng bộ thành công vào SillyTavern.',
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -378,22 +480,26 @@ export const managePresetPromptTool: ITool = {
                     const limit = typeof data.limit === 'number' ? data.limit : 15;
                     const commits = await manager.getLog(limit);
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'log',
-                            preset_name: manager.getActivePresetName(),
-                            total_commits: commits.length,
-                            history: commits.map(c => ({
-                                hash: c.hash,
-                                parent: c.parentHash,
-                                message: c.message,
-                                author: c.author,
-                                tag: c.tag || undefined,
-                                timestamp: new Date(c.timestamp).toLocaleString(),
-                                stats: c.stats,
-                                summary: c.diffSummary,
-                            })),
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'log',
+                                preset_name: manager.getActivePresetName(),
+                                total_commits: commits.length,
+                                history: commits.map((c) => ({
+                                    hash: c.hash,
+                                    parent: c.parentHash,
+                                    message: c.message,
+                                    author: c.author,
+                                    tag: c.tag || undefined,
+                                    timestamp: new Date(c.timestamp).toLocaleString(),
+                                    stats: c.stats,
+                                    summary: c.diffSummary,
+                                })),
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -402,28 +508,37 @@ export const managePresetPromptTool: ITool = {
                     if (!target) {
                         return {
                             isError: true,
-                            content: 'Action "rollback" yêu cầu cung cấp mã commit hash hoặc tên tag trong `data.target`.',
+                            content:
+                                'Action "rollback" yêu cầu cung cấp mã commit hash hoặc tên tag trong `data.target`.',
                         };
                     }
                     const result = await manager.rollback(target);
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'rollback',
-                            restored_commit: result.hash,
-                            message: result.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'rollback',
+                                restored_commit: result.hash,
+                                message: result.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
                 case 'discard': {
                     const result = manager.discard();
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'discard',
-                            message: result.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'discard',
+                                message: result.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 
@@ -438,12 +553,16 @@ export const managePresetPromptTool: ITool = {
                     const targetCommit = data.target || identifier || 'HEAD';
                     const result = await manager.tagCommit(targetCommit, tagName);
                     return {
-                        content: JSON.stringify({
-                            ok: true,
-                            action: 'tag',
-                            tag_name: tagName,
-                            message: result.summary,
-                        }, null, 2),
+                        content: JSON.stringify(
+                            {
+                                ok: true,
+                                action: 'tag',
+                                tag_name: tagName,
+                                message: result.summary,
+                            },
+                            null,
+                            2,
+                        ),
                     };
                 }
 

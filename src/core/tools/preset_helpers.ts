@@ -88,7 +88,10 @@ export class PresetGitManager {
     private _stagingCreates: Array<{ block: PromptBlock; addToLinked: boolean; position?: number }> = [];
     private _stagingDeletes = new Set<string>(); // set of identifiers
     private _stagingOrder: string[] | null = null; // custom reordered identifiers
-    private _stagingVars: Record<string, { promptId?: string; varName: string; oldValueMatch?: string; newValue: string; matchType?: string }> = {};
+    private _stagingVars: Record<
+        string,
+        { promptId?: string; varName: string; oldValueMatch?: string; newValue: string; matchType?: string }
+    > = {};
     private _stagingVarRenames: Record<string, string> = {}; // oldName -> newName
     private _activeHeads = new Map<string, string>(); // presetName -> commitHash
 
@@ -128,7 +131,7 @@ export class PresetGitManager {
 
     public getRawLivePrompts(): PromptBlock[] {
         const container = this.getContainer();
-        return (container?.prompts || []).map(p => ({ ...p }));
+        return (container?.prompts || []).map((p) => ({ ...p }));
     }
 
     public getRawLiveOrder(): string[] {
@@ -136,7 +139,7 @@ export class PresetGitManager {
         if (!container) return [];
         const raw = container.prompt_order || [];
         if (!Array.isArray(raw) || raw.length === 0) {
-            return (container.prompts || []).map(p => p.identifier);
+            return (container.prompts || []).map((p) => p.identifier);
         }
         if (typeof raw[0] === 'object' && Array.isArray(raw[0].order)) {
             const win = window as any;
@@ -156,7 +159,7 @@ export class PresetGitManager {
 
         // 1. Map existing blocks with staging changes & filter deleted
         const prompts: PromptBlock[] = basePrompts
-            .map(p => {
+            .map((p) => {
                 if (this._stagingDeletes.has(p.identifier)) return null;
                 if (this._stagingMap.has(p.identifier)) {
                     const stagedFields = this._stagingMap.get(p.identifier)!;
@@ -178,17 +181,21 @@ export class PresetGitManager {
 
     public getPromptOrder(): string[] {
         if (this._stagingOrder && Array.isArray(this._stagingOrder)) {
-            return this._stagingOrder.filter(id => id && !this._stagingDeletes.has(id));
+            return this._stagingOrder.filter((id) => id && !this._stagingDeletes.has(id));
         }
 
         const rawLiveOrder = this.getRawLiveOrder();
-        const filteredLive = rawLiveOrder.filter(id => id && !this._stagingDeletes.has(id));
+        const filteredLive = rawLiveOrder.filter((id) => id && !this._stagingDeletes.has(id));
 
         // Append created blocks that have addToLinked = true
         for (const created of this._stagingCreates) {
             if (created.addToLinked && !this._stagingDeletes.has(created.block.identifier)) {
                 if (!filteredLive.includes(created.block.identifier)) {
-                    if (typeof created.position === 'number' && created.position >= 0 && created.position <= filteredLive.length) {
+                    if (
+                        typeof created.position === 'number' &&
+                        created.position >= 0 &&
+                        created.position <= filteredLive.length
+                    ) {
                         filteredLive.splice(created.position, 0, created.block.identifier);
                     } else {
                         filteredLive.push(created.block.identifier);
@@ -201,11 +208,11 @@ export class PresetGitManager {
     }
 
     public findPrompt(identifier: string): PromptBlock | null {
-        return this.getPrompts().find(p => p.identifier === identifier) || null;
+        return this.getPrompts().find((p) => p.identifier === identifier) || null;
     }
 
     public findRawPrompt(identifier: string): PromptBlock | null {
-        return this.getRawLivePrompts().find(p => p.identifier === identifier) || null;
+        return this.getRawLivePrompts().find((p) => p.identifier === identifier) || null;
     }
 
     // ─── Staging Actions (Working Tree Sandbox) ─────────────────────────────
@@ -281,7 +288,7 @@ export class PresetGitManager {
         target_string: string,
         replacement_string: string,
         isGlobal: boolean = false,
-        onlyLinked: boolean = false
+        onlyLinked: boolean = false,
     ): { ok: boolean; summary: string; modified_count: number } {
         if (!target_string) throw new Error('Tham số target_string không được để trống.');
 
@@ -294,19 +301,26 @@ export class PresetGitManager {
             for (const p of prompts) {
                 if (onlyLinked && !linkedSet.has(p.identifier)) continue;
                 if (!this._stagingMap.has(p.identifier)) this._stagingMap.set(p.identifier, {});
-                const currentContent = this._stagingMap.get(p.identifier)!.content !== undefined
-                    ? this._stagingMap.get(p.identifier)!.content!
-                    : (p.content || '');
+                const currentContent =
+                    this._stagingMap.get(p.identifier)!.content !== undefined
+                        ? this._stagingMap.get(p.identifier)!.content!
+                        : p.content || '';
 
                 if (currentContent.includes(target_string)) {
-                    this._stagingMap.get(p.identifier)!.content = currentContent.split(target_string).join(replacement_string);
+                    this._stagingMap.get(p.identifier)!.content = currentContent
+                        .split(target_string)
+                        .join(replacement_string);
                     modifiedCount++;
                     modifiedNames.push(p.name);
                 }
             }
 
             if (modifiedCount === 0) {
-                return { ok: true, summary: `Không tìm thấy đoạn "${target_string}" trong bất kỳ block nào.`, modified_count: 0 };
+                return {
+                    ok: true,
+                    summary: `Không tìm thấy đoạn "${target_string}" trong bất kỳ block nào.`,
+                    modified_count: 0,
+                };
             }
             return {
                 ok: true,
@@ -318,9 +332,10 @@ export class PresetGitManager {
             if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
             if (!this._stagingMap.has(identifier)) this._stagingMap.set(identifier, {});
-            const currentContent = this._stagingMap.get(identifier)!.content !== undefined
-                ? this._stagingMap.get(identifier)!.content!
-                : (p.content || '');
+            const currentContent =
+                this._stagingMap.get(identifier)!.content !== undefined
+                    ? this._stagingMap.get(identifier)!.content!
+                    : p.content || '';
 
             if (!currentContent.includes(target_string)) {
                 throw new Error(`Không tìm thấy đoạn "${target_string}" trong nội dung của block "${p.name}".`);
@@ -340,11 +355,13 @@ export class PresetGitManager {
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
         if (!this._stagingMap.has(identifier)) this._stagingMap.set(identifier, {});
-        const currentContent = this._stagingMap.get(identifier)!.content !== undefined
-            ? this._stagingMap.get(identifier)!.content!
-            : (p.content || '');
+        const currentContent =
+            this._stagingMap.get(identifier)!.content !== undefined
+                ? this._stagingMap.get(identifier)!.content!
+                : p.content || '';
 
-        this._stagingMap.get(identifier)!.content = currentContent + (currentContent && append_text ? '\n' : '') + append_text;
+        this._stagingMap.get(identifier)!.content =
+            currentContent + (currentContent && append_text ? '\n' : '') + append_text;
 
         return {
             ok: true,
@@ -411,7 +428,12 @@ export class PresetGitManager {
                 } else {
                     currentOrder.push(identifier);
                 }
-            } else if (typeof position === 'number' && position >= 0 && position < currentOrder.length && position !== idx) {
+            } else if (
+                typeof position === 'number' &&
+                position >= 0 &&
+                position < currentOrder.length &&
+                position !== idx
+            ) {
                 currentOrder.splice(idx, 1);
                 currentOrder.splice(position, 0, identifier);
             }
@@ -432,7 +454,7 @@ export class PresetGitManager {
     public stageReorder(order: string[]): { ok: boolean; summary: string } {
         if (!Array.isArray(order)) throw new Error('Tham số order phải là một mảng identifier.');
         const allPrompts = this.getPrompts();
-        const missing = order.filter(id => !allPrompts.some(p => p.identifier === id));
+        const missing = order.filter((id) => !allPrompts.some((p) => p.identifier === id));
         if (missing.length > 0) {
             throw new Error(`Các ID sau không tồn tại trong preset: ${missing.join(', ')}`);
         }
@@ -467,7 +489,7 @@ export class PresetGitManager {
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
         // If it was created in this staging session, remove it directly
-        const createdIdx = this._stagingCreates.findIndex(c => c.block.identifier === identifier);
+        const createdIdx = this._stagingCreates.findIndex((c) => c.block.identifier === identifier);
         if (createdIdx !== -1) {
             this._stagingCreates.splice(createdIdx, 1);
         } else {
@@ -475,7 +497,7 @@ export class PresetGitManager {
         }
 
         if (this._stagingOrder) {
-            this._stagingOrder = this._stagingOrder.filter(id => id !== identifier);
+            this._stagingOrder = this._stagingOrder.filter((id) => id !== identifier);
         }
 
         return {
@@ -530,12 +552,10 @@ export class PresetGitManager {
         };
     }
 
-    public stageUpdateVar(args: {
-        varName: string;
-        newValue: string;
-        promptId?: string;
-        oldValueMatch?: string;
-    }): { ok: boolean; summary: string } {
+    public stageUpdateVar(args: { varName: string; newValue: string; promptId?: string; oldValueMatch?: string }): {
+        ok: boolean;
+        summary: string;
+    } {
         const { varName, newValue, promptId, oldValueMatch } = args;
         if (!varName || newValue === undefined) throw new Error('Thiếu varName hoặc newValue.');
 
@@ -552,7 +572,10 @@ export class PresetGitManager {
                 break;
             }
 
-            const regex = new RegExp(`\\{\\{(setvar|addvar|setglobalvar|addglobalvar)::${varName}::([\\s\\S]*?)\\}\\}`, 'i');
+            const regex = new RegExp(
+                `\\{\\{(setvar|addvar|setglobalvar|addglobalvar)::${varName}::([\\s\\S]*?)\\}\\}`,
+                'i',
+            );
             const m = content.match(regex);
             if (m) {
                 targetBlock = p;
@@ -575,11 +598,12 @@ export class PresetGitManager {
 
         // Also reflect into staging content immediately
         if (!this._stagingMap.has(targetBlock.identifier)) this._stagingMap.set(targetBlock.identifier, {});
-        const curContent = this._stagingMap.get(targetBlock.identifier)!.content !== undefined
-            ? this._stagingMap.get(targetBlock.identifier)!.content!
-            : (targetBlock.content || '');
+        const curContent =
+            this._stagingMap.get(targetBlock.identifier)!.content !== undefined
+                ? this._stagingMap.get(targetBlock.identifier)!.content!
+                : targetBlock.content || '';
 
-        const replaced = matchStr.replace(/::([^\}]*)\}\}$/, `::${newValue}\}\}`);
+        const replaced = matchStr.replace(/::([^}]*)\}\}$/, `::${newValue}}}`);
         this._stagingMap.get(targetBlock.identifier)!.content = curContent.replace(matchStr, replaced);
 
         return {
@@ -597,12 +621,16 @@ export class PresetGitManager {
 
         for (const p of prompts) {
             const content = p.content || '';
-            const regex = new RegExp(`\\{\\{(setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::${oldName}::`, 'gi');
+            const regex = new RegExp(
+                `\\{\\{(setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::${oldName}::`,
+                'gi',
+            );
             if (regex.test(content)) {
                 if (!this._stagingMap.has(p.identifier)) this._stagingMap.set(p.identifier, {});
-                const cur = this._stagingMap.get(p.identifier)!.content !== undefined
-                    ? this._stagingMap.get(p.identifier)!.content!
-                    : content;
+                const cur =
+                    this._stagingMap.get(p.identifier)!.content !== undefined
+                        ? this._stagingMap.get(p.identifier)!.content!
+                        : content;
 
                 this._stagingMap.get(p.identifier)!.content = cur.replace(regex, `{{$1::${newName}::`);
                 affected++;
@@ -628,8 +656,8 @@ export class PresetGitManager {
         let modified = 0;
         let deleted = 0;
 
-        const liveMap = new Map(livePrompts.map(p => [p.identifier, p]));
-        const stagedMap = new Map(stagedPrompts.map(p => [p.identifier, p]));
+        const liveMap = new Map(livePrompts.map((p) => [p.identifier, p]));
+        const stagedMap = new Map(stagedPrompts.map((p) => [p.identifier, p]));
 
         // Check creates
         for (const [id, sBlock] of stagedMap.entries()) {
@@ -647,10 +675,12 @@ export class PresetGitManager {
                 const lBlock = liveMap.get(id)!;
                 const changes: string[] = [];
                 if (sBlock.name !== lBlock.name) changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
-                if (sBlock.content !== lBlock.content) changes.push(`content (${lBlock.content.length} -> ${sBlock.content.length} chars)`);
+                if (sBlock.content !== lBlock.content)
+                    changes.push(`content (${lBlock.content.length} -> ${sBlock.content.length} chars)`);
                 if (sBlock.role !== lBlock.role) changes.push(`role: ${lBlock.role} -> ${sBlock.role}`);
                 if (sBlock.enabled !== lBlock.enabled) changes.push(`enabled: ${lBlock.enabled} -> ${sBlock.enabled}`);
-                if (sBlock.injection_depth !== lBlock.injection_depth) changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
+                if (sBlock.injection_depth !== lBlock.injection_depth)
+                    changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
 
                 if (changes.length > 0) {
                     modified++;
@@ -690,7 +720,8 @@ export class PresetGitManager {
             });
         }
 
-        const totalChanges = added + modified + deleted + (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder) ? 1 : 0);
+        const totalChanges =
+            added + modified + deleted + (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder) ? 1 : 0);
         const isDirty = totalChanges > 0;
         const summary = isDirty
             ? `Preset có ${totalChanges} thay đổi đang staged: +${added} tạo mới, ~${modified} chỉnh sửa, -${deleted} xóa bỏ.`
@@ -716,7 +747,7 @@ export class PresetGitManager {
                 const data = encoder.encode(content);
                 const hashBuffer = await crypto.subtle.digest('SHA-256', data);
                 const hashArray = Array.from(new Uint8Array(hashBuffer));
-                const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+                const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
                 return hashHex.substring(0, 8);
             }
         } catch {
@@ -782,7 +813,7 @@ export class PresetGitManager {
     public async commit(
         message: string,
         author: 'agent' | 'user' = 'agent',
-        tag?: string
+        tag?: string,
     ): Promise<{ ok: boolean; hash: string; summary: string }> {
         const presetName = this.getActivePresetName();
         const diff = this.calculateDiff();
@@ -917,7 +948,7 @@ export class PresetGitManager {
 
         // 1. Ghi prompts vào ST memory
         container.prompts.length = 0;
-        prompts.forEach(p => container.prompts.push(JSON.parse(JSON.stringify(p))));
+        prompts.forEach((p) => container.prompts.push(JSON.parse(JSON.stringify(p))));
 
         // 2. Ghi prompt_order (xử lý cả ST 1.18+ nested format lẫn flat format)
         if (
@@ -929,10 +960,12 @@ export class PresetGitManager {
             const win = window as any;
             const ctx = win.SillyTavern?.getContext?.() || {};
             const charId = ctx.characterId;
-            const targetObj = container.prompt_order.find((o: any) => String(o.character_id) === String(charId)) || container.prompt_order[0];
+            const targetObj =
+                container.prompt_order.find((o: any) => String(o.character_id) === String(charId)) ||
+                container.prompt_order[0];
             if (targetObj) {
-                targetObj.order = order.map(id => {
-                    const found = prompts.find(p => p.identifier === id);
+                targetObj.order = order.map((id) => {
+                    const found = prompts.find((p) => p.identifier === id);
                     return { identifier: id, enabled: found ? found.enabled : true };
                 });
             }
@@ -1020,22 +1053,10 @@ export class PresetGitManager {
     public scanVariables(): ScannedVarRef[] {
         const prompts = this.getPrompts();
         const refs: ScannedVarRef[] = [];
-        const varCmds = [
-            'setvar',
-            'addvar',
-            'setglobalvar',
-            'addglobalvar',
-            'getvar',
-            'getglobalvar',
-            'decvar',
-            'incvar',
-            'flushvar',
-            'deletevar',
-        ];
-
         for (const p of prompts) {
             const content = p.content || '';
-            const macroRegex = /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
+            const macroRegex =
+                /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
             let match: RegExpExecArray | null;
 
             while ((match = macroRegex.exec(content)) !== null) {

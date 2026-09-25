@@ -1076,7 +1076,7 @@ export class KaizDB {
             const request = index.getAll(presetName);
             request.onsuccess = () => {
                 const results = (request.result as PresetCommitEntry[]) || [];
-                const found = results.find(c => c.tag === tag);
+                const found = results.find((c) => c.tag === tag);
                 resolve(found || null);
             };
             request.onerror = () => reject(request.error);
