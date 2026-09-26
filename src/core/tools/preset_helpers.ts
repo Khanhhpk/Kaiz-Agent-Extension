@@ -129,27 +129,79 @@ export class PresetGitManager {
         return 'Default Preset';
     }
 
-    public getRawLivePrompts(): PromptBlock[] {
-        const container = this.getContainer();
-        return (container?.prompts || []).map((p) => ({ ...p }));
-    }
-
-    public getRawLiveOrder(): string[] {
+    public getRawLiveOrderEntries(): Array<{ identifier: string; enabled: boolean }> {
         const container = this.getContainer();
         if (!container) return [];
         const raw = container.prompt_order || [];
         if (!Array.isArray(raw) || raw.length === 0) {
-            return (container.prompts || []).map((p) => p.identifier);
+            return (container.prompts || []).map((p) => ({
+                identifier: p.identifier,
+                enabled: p.enabled !== false,
+            }));
         }
-        if (typeof raw[0] === 'object' && Array.isArray(raw[0].order)) {
+
+        // Handle nested order structure: [{ character_id: ..., order: [...] }]
+        if (typeof raw[0] === 'object' && raw[0] !== null && Array.isArray(raw[0].order)) {
             const win = window as any;
             const ctx = win.SillyTavern?.getContext?.() || {};
             const charId = ctx.characterId;
-            const targetObj = raw.find((o: any) => String(o.character_id) === String(charId)) || raw[0];
+            const targetObj =
+                charId !== undefined && charId !== null && charId !== ''
+                    ? raw.find((o: any) => String(o.character_id) === String(charId)) || raw[0]
+                    : raw[0];
             const orderList = targetObj?.order || [];
-            return orderList.map((o: any) => (typeof o === 'string' ? o : o.identifier)).filter(Boolean);
+            return orderList
+                .map((o: any) => {
+                    if (typeof o === 'string') {
+                        return { identifier: o, enabled: true };
+                    }
+                    if (o && typeof o === 'object' && o.identifier) {
+                        return { identifier: String(o.identifier), enabled: o.enabled !== false };
+                    }
+                    return null;
+                })
+                .filter((item: any): item is { identifier: string; enabled: boolean } => item !== null);
         }
-        return raw.map((o: any) => (typeof o === 'string' ? o : o.identifier)).filter(Boolean);
+
+        // Handle flat order structure: [ { identifier: 'main', enabled: true }, 'chat_history', ... ]
+        return raw
+            .map((o: any) => {
+                if (typeof o === 'string') {
+                    return { identifier: o, enabled: true };
+                }
+                if (o && typeof o === 'object' && o.identifier) {
+                    return { identifier: String(o.identifier), enabled: o.enabled !== false };
+                }
+                return null;
+            })
+            .filter((item: any): item is { identifier: string; enabled: boolean } => item !== null);
+    }
+
+    public getRawLiveOrder(): string[] {
+        return this.getRawLiveOrderEntries().map((e) => e.identifier);
+    }
+
+    public getRawLivePrompts(): PromptBlock[] {
+        const container = this.getContainer();
+        if (!container || !Array.isArray(container.prompts)) return [];
+
+        const orderEntries = this.getRawLiveOrderEntries();
+        const orderEnabledMap = new Map<string, boolean>();
+        for (const entry of orderEntries) {
+            orderEnabledMap.set(entry.identifier, entry.enabled);
+        }
+
+        return container.prompts.map((p) => {
+            const copy: PromptBlock = { ...p };
+            if (orderEnabledMap.has(p.identifier)) {
+                // For linked blocks, the prompt_order entry is canonical in SillyTavern
+                copy.enabled = orderEnabledMap.get(p.identifier)!;
+            } else {
+                // For unlinked blocks, preserve prompt's own enabled state or default to true
+                copy.enabled = copy.enabled !== false;
+            }
+            return copy;
+        });
     }
 
     // ─── Staging / Sandbox Overlay Read ─────────────────────────────────────
@@ -849,12 +901,24 @@ export class PresetGitManager {
                 const lBlock = liveMap.get(id)!;
                 const changes: string[] = [];
                 if (sBlock.name !== lBlock.name) changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
-                if (sBlock.content !== lBlock.content)
-                    changes.push(`content (${lBlock.content.length} -> ${sBlock.content.length} chars)`);
-                if (sBlock.role !== lBlock.role) changes.push(`role: ${lBlock.role} -> ${sBlock.role}`);
-                if (sBlock.enabled !== lBlock.enabled) changes.push(`enabled: ${lBlock.enabled} -> ${sBlock.enabled}`);
+                if ((sBlock.content || '') !== (lBlock.content || '')) {
+                    changes.push(
+                        `content (${(lBlock.content || '').length} -> ${(sBlock.content || '').length} chars)`,
+                    );
+                }
+                if ((sBlock.role || 'system') !== (lBlock.role || 'system'))
+                    changes.push(`role: ${lBlock.role || 'system'} -> ${sBlock.role || 'system'}`);
+
+                const sEnabled = sBlock.enabled !== false;
+                const lEnabled = lBlock.enabled !== false;
+                if (sEnabled !== lEnabled) changes.push(`enabled: ${lEnabled} -> ${sEnabled}`);
+
+                if (sBlock.injection_position !== lBlock.injection_position)
+                    changes.push(`position: ${lBlock.injection_position} -> ${sBlock.injection_position}`);
                 if (sBlock.injection_depth !== lBlock.injection_depth)
                     changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
+                if (sBlock.injection_order !== lBlock.injection_order)
+                    changes.push(`order: ${lBlock.injection_order} -> ${sBlock.injection_order}`);
 
                 if (changes.length > 0) {
                     modified++;
@@ -898,8 +962,8 @@ export class PresetGitManager {
             added + modified + deleted + (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder) ? 1 : 0);
         const isDirty = totalChanges > 0;
         const summary = isDirty
-            ? `Preset có ${totalChanges} thay đổi đang staged: +${added} tạo mới, ~${modified} chỉnh sửa, -${deleted} xóa bỏ.`
-            : 'Working tree clean. Không có thay đổi nào trong Staging Sandbox.';
+            ? `Preset có ${totalChanges} thay đổi chưa lưu: +${added} tạo mới, ~${modified} chỉnh sửa, -${deleted} xóa bỏ.`
+            : 'Working tree clean. Không có thay đổi nào.';
 
         return {
             isDirty,
@@ -920,9 +984,9 @@ export class PresetGitManager {
         }
 
         const presetName = this.getActivePresetName();
-        const headHash = await this.getHeadCommitHash(presetName);
+        let headHash = await this.getHeadCommitHash(presetName);
         if (!headHash) {
-            return { isDirty: false, isStaged: false, diff: this.calculateDiff() };
+            headHash = await this.ensureInitialCommit(presetName);
         }
 
         const headCommit = await this.db.getPresetCommitByHash(headHash);
@@ -1269,13 +1333,27 @@ export class PresetGitManager {
         return await this.commit(message, 'user', tag, allowEmpty);
     }
 
-    public discard(): { ok: boolean; summary: string } {
+    public async discard(): Promise<{ ok: boolean; summary: string }> {
         const hasChanges = this.hasStagingChanges();
         this.clearStaging();
+
+        const presetName = this.getActivePresetName();
+        const headHash = await this.getHeadCommitHash(presetName);
+        if (headHash) {
+            const headCommit = await this.db.getPresetCommitByHash(headHash);
+            if (headCommit?.tree) {
+                await this.flushToSillyTavern(headCommit.tree.prompts || [], headCommit.tree.prompt_order || []);
+                return {
+                    ok: true,
+                    summary: 'Đã hủy bỏ toàn bộ thay đổi và khôi phục preset về đúng trạng thái của commit HEAD.',
+                };
+            }
+        }
+
         return {
             ok: true,
             summary: hasChanges
-                ? 'Đã hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox. Đưa working tree về bằng HEAD.'
+                ? 'Đã hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox.'
                 : 'Working tree vốn đã sạch, không có thay đổi nào cần hủy.',
         };
     }
@@ -1324,12 +1402,14 @@ export class PresetGitManager {
             const ctx = win.SillyTavern?.getContext?.() || {};
             const charId = ctx.characterId;
             const targetObj =
-                container.prompt_order.find((o: any) => String(o.character_id) === String(charId)) ||
-                container.prompt_order[0];
+                charId !== undefined && charId !== null && charId !== ''
+                    ? container.prompt_order.find((o: any) => String(o.character_id) === String(charId)) ||
+                      container.prompt_order[0]
+                    : container.prompt_order[0];
             if (targetObj) {
                 targetObj.order = order.map((id) => {
                     const found = prompts.find((p) => p.identifier === id);
-                    return { identifier: id, enabled: found ? found.enabled : true };
+                    return { identifier: id, enabled: found ? found.enabled !== false : true };
                 });
             }
         } else {

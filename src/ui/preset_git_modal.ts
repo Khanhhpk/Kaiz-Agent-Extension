@@ -86,23 +86,31 @@ export class PresetGitModal {
                 this.renderCommitList();
             });
 
-        // 7. Hủy Nháp (Discard)
+        // 7. Hủy Nháp / Khôi phục về HEAD (Discard)
         $('#kaiz-pg-discard-staged-btn')
             .off('click')
             .on('click', async () => {
-                if (confirm('Bạn có chắc muốn hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox không?')) {
-                    this.manager.discard();
+                if (
+                    confirm(
+                        'Bạn có chắc muốn hủy bỏ toàn bộ các thay đổi chưa lưu để khôi phục preset về phiên bản gần nhất (HEAD) không?',
+                    )
+                ) {
+                    const res = await this.manager.discard();
                     await this.loadAndRender();
-                    if (typeof toastr !== 'undefined') toastr.warning('Đã hủy bỏ toàn bộ nháp. Working tree đã sạch.');
+                    if (typeof toastr !== 'undefined') toastr.warning(res.summary);
                 }
             });
 
-        // 8. Xem Diff Nháp (Staged Diff)
+        // 8. Xem Diff Chưa Lưu (Diff against HEAD / Staging)
         $('#kaiz-pg-view-staged-diff-btn')
             .off('click')
-            .on('click', () => {
-                const diff = this.manager.calculateDiff();
-                this.openDiffModal('Thay đổi trong Vùng Nháp (Staging Diff)', diff.items);
+            .on('click', async () => {
+                const dirtyInfo = await this.manager.isDirtyAgainstHead();
+                const diff = dirtyInfo.diff;
+                const title = dirtyInfo.isStaged
+                    ? 'Thay đổi trong Vùng Nháp (Staging Diff)'
+                    : 'Thay đổi chưa lưu so với phiên bản hiện tại (Working Tree Diff)';
+                this.openDiffModal(title, diff.items);
             });
 
         // 9. Manual Commit (Tiết kiệm API)
@@ -150,6 +158,27 @@ export class PresetGitModal {
                 const diffModal = $('#kaiz-preset-diff-modal')[0] as HTMLDialogElement;
                 if (diffModal) diffModal.close();
             });
+
+        // 13. Tự động đồng bộ khi quay lại cửa sổ hoặc SillyTavern cập nhật preset
+        window.addEventListener('focus', async () => {
+            if (this.isModalOpen()) {
+                await this.loadAndRender();
+            }
+        });
+
+        const win = window as any;
+        if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+            try {
+                const ctx = win.SillyTavern.getContext();
+                ctx?.eventSource?.on?.('oai_preset_changed_after', async () => {
+                    if (this.isModalOpen()) {
+                        await this.loadAndRender();
+                    }
+                });
+            } catch {
+                // ignore
+            }
+        }
     }
 
     public async open(): Promise<void> {
@@ -175,6 +204,11 @@ export class PresetGitModal {
         const activeName = this.manager.getActivePresetName();
         if (!this.currentSelectedPreset) {
             this.currentSelectedPreset = activeName;
+        }
+
+        // Đảm bảo preset đang kích hoạt luôn có mốc commit ban đầu để tính diff
+        if (this.currentSelectedPreset === activeName) {
+            await this.manager.ensureInitialCommit(activeName);
         }
 
         // 1. Nạp danh sách Presets

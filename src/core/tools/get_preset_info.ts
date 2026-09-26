@@ -48,7 +48,8 @@ export const getPresetInfoTool: ITool = {
 
             const presetName = manager.getActivePresetName();
             const headCommitHash = await manager.getHeadCommitHash(presetName);
-            const diff = manager.calculateDiff();
+            const dirtyInfo = await manager.isDirtyAgainstHead();
+            const diff = dirtyInfo.diff;
 
             const prompts = rawLiveOnly ? manager.getRawLivePrompts() : manager.getPrompts();
             const order = rawLiveOnly ? manager.getRawLiveOrder() : manager.getPromptOrder();
@@ -87,7 +88,8 @@ export const getPresetInfoTool: ITool = {
                 active_preset: presetName,
                 git_status: {
                     head_commit: headCommitHash || 'Chưa có commit nào (Initial)',
-                    is_dirty: diff.isDirty,
+                    is_dirty: dirtyInfo.isDirty,
+                    is_staged: dirtyInfo.isStaged,
                     staging_summary: diff.summary,
                     staged_stats: {
                         added: diff.added,

@@ -6575,27 +6575,75 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           }
           return 'Default Preset';
       }
-      getRawLivePrompts() {
-          const container = this.getContainer();
-          return (container?.prompts || []).map((p) => ({ ...p }));
-      }
-      getRawLiveOrder() {
+      getRawLiveOrderEntries() {
           const container = this.getContainer();
           if (!container)
               return [];
           const raw = container.prompt_order || [];
           if (!Array.isArray(raw) || raw.length === 0) {
-              return (container.prompts || []).map((p) => p.identifier);
+              return (container.prompts || []).map((p) => ({
+                  identifier: p.identifier,
+                  enabled: p.enabled !== false,
+              }));
           }
-          if (typeof raw[0] === 'object' && Array.isArray(raw[0].order)) {
+          // Handle nested order structure: [{ character_id: ..., order: [...] }]
+          if (typeof raw[0] === 'object' && raw[0] !== null && Array.isArray(raw[0].order)) {
               const win = window;
               const ctx = win.SillyTavern?.getContext?.() || {};
               const charId = ctx.characterId;
-              const targetObj = raw.find((o) => String(o.character_id) === String(charId)) || raw[0];
+              const targetObj = charId !== undefined && charId !== null && charId !== ''
+                  ? raw.find((o) => String(o.character_id) === String(charId)) || raw[0]
+                  : raw[0];
               const orderList = targetObj?.order || [];
-              return orderList.map((o) => (typeof o === 'string' ? o : o.identifier)).filter(Boolean);
+              return orderList
+                  .map((o) => {
+                  if (typeof o === 'string') {
+                      return { identifier: o, enabled: true };
+                  }
+                  if (o && typeof o === 'object' && o.identifier) {
+                      return { identifier: String(o.identifier), enabled: o.enabled !== false };
+                  }
+                  return null;
+              })
+                  .filter((item) => item !== null);
           }
-          return raw.map((o) => (typeof o === 'string' ? o : o.identifier)).filter(Boolean);
+          // Handle flat order structure: [ { identifier: 'main', enabled: true }, 'chat_history', ... ]
+          return raw
+              .map((o) => {
+              if (typeof o === 'string') {
+                  return { identifier: o, enabled: true };
+              }
+              if (o && typeof o === 'object' && o.identifier) {
+                  return { identifier: String(o.identifier), enabled: o.enabled !== false };
+              }
+              return null;
+          })
+              .filter((item) => item !== null);
+      }
+      getRawLiveOrder() {
+          return this.getRawLiveOrderEntries().map((e) => e.identifier);
+      }
+      getRawLivePrompts() {
+          const container = this.getContainer();
+          if (!container || !Array.isArray(container.prompts))
+              return [];
+          const orderEntries = this.getRawLiveOrderEntries();
+          const orderEnabledMap = new Map();
+          for (const entry of orderEntries) {
+              orderEnabledMap.set(entry.identifier, entry.enabled);
+          }
+          return container.prompts.map((p) => {
+              const copy = { ...p };
+              if (orderEnabledMap.has(p.identifier)) {
+                  // For linked blocks, the prompt_order entry is canonical in SillyTavern
+                  copy.enabled = orderEnabledMap.get(p.identifier);
+              }
+              else {
+                  // For unlinked blocks, preserve prompt's own enabled state or default to true
+                  copy.enabled = copy.enabled !== false;
+              }
+              return copy;
+          });
       }
       // ─── Staging / Sandbox Overlay Read ─────────────────────────────────────
       getPrompts() {
@@ -7197,14 +7245,21 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   const changes = [];
                   if (sBlock.name !== lBlock.name)
                       changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
-                  if (sBlock.content !== lBlock.content)
-                      changes.push(`content (${lBlock.content.length} -> ${sBlock.content.length} chars)`);
-                  if (sBlock.role !== lBlock.role)
-                      changes.push(`role: ${lBlock.role} -> ${sBlock.role}`);
-                  if (sBlock.enabled !== lBlock.enabled)
-                      changes.push(`enabled: ${lBlock.enabled} -> ${sBlock.enabled}`);
+                  if ((sBlock.content || '') !== (lBlock.content || '')) {
+                      changes.push(`content (${(lBlock.content || '').length} -> ${(sBlock.content || '').length} chars)`);
+                  }
+                  if ((sBlock.role || 'system') !== (lBlock.role || 'system'))
+                      changes.push(`role: ${lBlock.role || 'system'} -> ${sBlock.role || 'system'}`);
+                  const sEnabled = sBlock.enabled !== false;
+                  const lEnabled = lBlock.enabled !== false;
+                  if (sEnabled !== lEnabled)
+                      changes.push(`enabled: ${lEnabled} -> ${sEnabled}`);
+                  if (sBlock.injection_position !== lBlock.injection_position)
+                      changes.push(`position: ${lBlock.injection_position} -> ${sBlock.injection_position}`);
                   if (sBlock.injection_depth !== lBlock.injection_depth)
                       changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
+                  if (sBlock.injection_order !== lBlock.injection_order)
+                      changes.push(`order: ${lBlock.injection_order} -> ${sBlock.injection_order}`);
                   if (changes.length > 0) {
                       modified++;
                       items.push({
@@ -7243,8 +7298,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const totalChanges = added + modified + deleted + (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder) ? 1 : 0);
           const isDirty = totalChanges > 0;
           const summary = isDirty
-              ? `Preset có ${totalChanges} thay đổi đang staged: +${added} tạo mới, ~${modified} chỉnh sửa, -${deleted} xóa bỏ.`
-              : 'Working tree clean. Không có thay đổi nào trong Staging Sandbox.';
+              ? `Preset có ${totalChanges} thay đổi chưa lưu: +${added} tạo mới, ~${modified} chỉnh sửa, -${deleted} xóa bỏ.`
+              : 'Working tree clean. Không có thay đổi nào.';
           return {
               isDirty,
               totalChanges,
@@ -7262,9 +7317,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               return { isDirty: diff.isDirty, isStaged: true, diff };
           }
           const presetName = this.getActivePresetName();
-          const headHash = await this.getHeadCommitHash(presetName);
+          let headHash = await this.getHeadCommitHash(presetName);
           if (!headHash) {
-              return { isDirty: false, isStaged: false, diff: this.calculateDiff() };
+              headHash = await this.ensureInitialCommit(presetName);
           }
           const headCommit = await this.db.getPresetCommitByHash(headHash);
           if (!headCommit?.tree) {
@@ -7563,13 +7618,25 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       async manualCommit(message, tag, allowEmpty = true) {
           return await this.commit(message, 'user', tag, allowEmpty);
       }
-      discard() {
+      async discard() {
           const hasChanges = this.hasStagingChanges();
           this.clearStaging();
+          const presetName = this.getActivePresetName();
+          const headHash = await this.getHeadCommitHash(presetName);
+          if (headHash) {
+              const headCommit = await this.db.getPresetCommitByHash(headHash);
+              if (headCommit?.tree) {
+                  await this.flushToSillyTavern(headCommit.tree.prompts || [], headCommit.tree.prompt_order || []);
+                  return {
+                      ok: true,
+                      summary: 'Đã hủy bỏ toàn bộ thay đổi và khôi phục preset về đúng trạng thái của commit HEAD.',
+                  };
+              }
+          }
           return {
               ok: true,
               summary: hasChanges
-                  ? 'Đã hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox. Đưa working tree về bằng HEAD.'
+                  ? 'Đã hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox.'
                   : 'Working tree vốn đã sạch, không có thay đổi nào cần hủy.',
           };
       }
@@ -7609,12 +7676,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const win = window;
               const ctx = win.SillyTavern?.getContext?.() || {};
               const charId = ctx.characterId;
-              const targetObj = container.prompt_order.find((o) => String(o.character_id) === String(charId)) ||
-                  container.prompt_order[0];
+              const targetObj = charId !== undefined && charId !== null && charId !== ''
+                  ? container.prompt_order.find((o) => String(o.character_id) === String(charId)) ||
+                      container.prompt_order[0]
+                  : container.prompt_order[0];
               if (targetObj) {
                   targetObj.order = order.map((id) => {
                       const found = prompts.find((p) => p.identifier === id);
-                      return { identifier: id, enabled: found ? found.enabled : true };
+                      return { identifier: id, enabled: found ? found.enabled !== false : true };
                   });
               }
           }
@@ -7759,7 +7828,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const includeVars = Boolean(args.include_vars);
               const presetName = manager.getActivePresetName();
               const headCommitHash = await manager.getHeadCommitHash(presetName);
-              const diff = manager.calculateDiff();
+              const dirtyInfo = await manager.isDirtyAgainstHead();
+              const diff = dirtyInfo.diff;
               const prompts = rawLiveOnly ? manager.getRawLivePrompts() : manager.getPrompts();
               const order = rawLiveOnly ? manager.getRawLiveOrder() : manager.getPromptOrder();
               const linkedSet = new Set(order);
@@ -7796,7 +7866,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   active_preset: presetName,
                   git_status: {
                       head_commit: headCommitHash || 'Chưa có commit nào (Initial)',
-                      is_dirty: diff.isDirty,
+                      is_dirty: dirtyInfo.isDirty,
+                      is_staged: dirtyInfo.isStaged,
                       staging_summary: diff.summary,
                       staged_stats: {
                           added: diff.added,
@@ -8409,12 +8480,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
                   // ─── 2. NHÓM QUẢN TRỊ GIT VERSION CONTROL ────────────────────────────────
                   case 'diff': {
-                      const diff = manager.calculateDiff();
+                      const dirtyInfo = await manager.isDirtyAgainstHead();
+                      const diff = dirtyInfo.diff;
                       return {
                           content: JSON.stringify({
                               ok: true,
                               action: 'diff',
-                              is_dirty: diff.isDirty,
+                              is_dirty: dirtyInfo.isDirty,
+                              is_staged: dirtyInfo.isStaged,
                               summary: diff.summary,
                               stats: {
                                   added: diff.added,
@@ -8489,7 +8562,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       };
                   }
                   case 'discard': {
-                      const result = manager.discard();
+                      const result = await manager.discard();
                       return {
                           content: JSON.stringify({
                               ok: true,
@@ -15067,23 +15140,27 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               this.searchQuery = ($(e.target).val() || '').trim().toLowerCase();
               this.renderCommitList();
           });
-          // 7. Hủy Nháp (Discard)
+          // 7. Hủy Nháp / Khôi phục về HEAD (Discard)
           $('#kaiz-pg-discard-staged-btn')
               .off('click')
               .on('click', async () => {
-              if (confirm('Bạn có chắc muốn hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox không?')) {
-                  this.manager.discard();
+              if (confirm('Bạn có chắc muốn hủy bỏ toàn bộ các thay đổi chưa lưu để khôi phục preset về phiên bản gần nhất (HEAD) không?')) {
+                  const res = await this.manager.discard();
                   await this.loadAndRender();
                   if (typeof toastr !== 'undefined')
-                      toastr.warning('Đã hủy bỏ toàn bộ nháp. Working tree đã sạch.');
+                      toastr.warning(res.summary);
               }
           });
-          // 8. Xem Diff Nháp (Staged Diff)
+          // 8. Xem Diff Chưa Lưu (Diff against HEAD / Staging)
           $('#kaiz-pg-view-staged-diff-btn')
               .off('click')
-              .on('click', () => {
-              const diff = this.manager.calculateDiff();
-              this.openDiffModal('Thay đổi trong Vùng Nháp (Staging Diff)', diff.items);
+              .on('click', async () => {
+              const dirtyInfo = await this.manager.isDirtyAgainstHead();
+              const diff = dirtyInfo.diff;
+              const title = dirtyInfo.isStaged
+                  ? 'Thay đổi trong Vùng Nháp (Staging Diff)'
+                  : 'Thay đổi chưa lưu so với phiên bản hiện tại (Working Tree Diff)';
+              this.openDiffModal(title, diff.items);
           });
           // 9. Manual Commit (Tiết kiệm API)
           $('#kaiz-pg-manual-commit-btn')
@@ -15121,6 +15198,26 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (diffModal)
                   diffModal.close();
           });
+          // 13. Tự động đồng bộ khi quay lại cửa sổ hoặc SillyTavern cập nhật preset
+          window.addEventListener('focus', async () => {
+              if (this.isModalOpen()) {
+                  await this.loadAndRender();
+              }
+          });
+          const win = window;
+          if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+              try {
+                  const ctx = win.SillyTavern.getContext();
+                  ctx?.eventSource?.on?.('oai_preset_changed_after', async () => {
+                      if (this.isModalOpen()) {
+                          await this.loadAndRender();
+                      }
+                  });
+              }
+              catch {
+                  // ignore
+              }
+          }
       }
       async open() {
           const $ = jQuery;
@@ -15143,6 +15240,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const activeName = this.manager.getActivePresetName();
           if (!this.currentSelectedPreset) {
               this.currentSelectedPreset = activeName;
+          }
+          // Đảm bảo preset đang kích hoạt luôn có mốc commit ban đầu để tính diff
+          if (this.currentSelectedPreset === activeName) {
+              await this.manager.ensureInitialCommit(activeName);
           }
           // 1. Nạp danh sách Presets
           await this.populatePresetSelector();

@@ -446,13 +446,15 @@ export const managePresetPromptTool: ITool = {
                 // ─── 2. NHÓM QUẢN TRỊ GIT VERSION CONTROL ────────────────────────────────
 
                 case 'diff': {
-                    const diff = manager.calculateDiff();
+                    const dirtyInfo = await manager.isDirtyAgainstHead();
+                    const diff = dirtyInfo.diff;
                     return {
                         content: JSON.stringify(
                             {
                                 ok: true,
                                 action: 'diff',
-                                is_dirty: diff.isDirty,
+                                is_dirty: dirtyInfo.isDirty,
+                                is_staged: dirtyInfo.isStaged,
                                 summary: diff.summary,
                                 stats: {
                                     added: diff.added,
@@ -547,7 +549,7 @@ export const managePresetPromptTool: ITool = {
                 }
 
                 case 'discard': {
-                    const result = manager.discard();
+                    const result = await manager.discard();
                     return {
                         content: JSON.stringify(
                             {
