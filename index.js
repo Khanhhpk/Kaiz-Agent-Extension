@@ -12219,11 +12219,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const milestoneBtnBottom = $('#kaiz-milestone-btn-bottom');
           const milestoneActiveThumb = $('#kaiz-milestone-active-thumb');
           let currentMilestones = [];
+          let currentMarkerEls = [];
           let milestoneDebounceTimer = null;
           let isScrubbingMilestones = false;
           let activeMilestoneIndex = -1;
           let scrollTrackerRafId = null;
           let hudHideTimeout = null;
+          let cachedTrackRect = null;
+          let cachedRailRect = null;
           // Quick Jump buttons
           milestoneBtnTop.on('click', (e) => {
               e.stopPropagation();
@@ -12248,11 +12251,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 <div class="kaiz-milestone-tt-body">${escapeHtml$2(item.excerpt)}</div>
                 <div class="kaiz-milestone-tt-hint"><i class="fa-solid fa-arrows-up-down"></i> Kéo để duyệt các lượt chat</div>
             `);
-              const trackEl = milestoneTrack[0];
-              if (!trackEl)
+              const trackRect = cachedTrackRect || milestoneTrack[0]?.getBoundingClientRect();
+              const railRect = cachedRailRect || milestoneRail[0]?.getBoundingClientRect();
+              if (!trackRect || !railRect)
                   return;
-              const trackRect = trackEl.getBoundingClientRect();
-              const railRect = milestoneRail[0].getBoundingClientRect();
               let targetY;
               if (clientY !== undefined) {
                   targetY = clientY - railRect.top;
@@ -12277,14 +12279,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   milestoneTooltip.hide();
               }
           };
-          // Hàm cuộn tới tin nhắn của milestone
+          // Hàm cuộn tới tin nhắn của milestone (sử dụng offsetTop được cache sẵn, KHÔNG layout thrash)
           const scrollToMilestone = (item, smooth = true) => {
               const hEl = history[0];
               if (!hEl)
                   return;
-              const curTargetRect = item.msgEl.getBoundingClientRect();
-              const curHistoryRect = hEl.getBoundingClientRect();
-              const targetTop = curTargetRect.top - curHistoryRect.top + hEl.scrollTop - 16;
+              const targetTop = item.relativeTop - 16;
               hEl.scrollTo({
                   top: Math.max(0, targetTop),
                   behavior: smooth ? 'smooth' : 'instant',
@@ -12301,15 +12301,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
               let bestIndex = 0;
               if (currentScroll >= maxScroll - 30) {
-                  // Đã cuộn gần sát đáy -> milestone cuối cùng
                   bestIndex = currentMilestones.length - 1;
               }
               else if (currentScroll <= 30) {
-                  // Đang ở đỉnh -> milestone đầu tiên
                   bestIndex = 0;
               }
               else {
-                  // Tìm tin nhắn nằm gần vùng 25% phía trên của viewport
                   const thresholdY = currentScroll + hEl.clientHeight * 0.25;
                   for (let i = 0; i < currentMilestones.length; i++) {
                       if (currentMilestones[i].relativeTop <= thresholdY) {
@@ -12321,9 +12318,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               }
               if (bestIndex !== activeMilestoneIndex) {
+                  if (activeMilestoneIndex >= 0 && currentMarkerEls[activeMilestoneIndex]) {
+                      currentMarkerEls[activeMilestoneIndex].classList.remove('is-active');
+                  }
+                  if (currentMarkerEls[bestIndex]) {
+                      currentMarkerEls[bestIndex].classList.add('is-active');
+                  }
                   activeMilestoneIndex = bestIndex;
-                  milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-active');
-                  milestoneTrack.find(`.kaiz-milestone-marker[data-index="${bestIndex}"]`).addClass('is-active');
                   const activeItem = currentMilestones[bestIndex];
                   if (activeItem) {
                       milestoneActiveThumb.css({
@@ -12358,6 +12359,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   .toArray();
               if (userMsgs.length === 0) {
                   currentMilestones = [];
+                  currentMarkerEls = [];
                   activeMilestoneIndex = -1;
                   milestoneTrack.find('.kaiz-milestone-marker').remove();
                   milestoneActiveThumb.hide();
@@ -12368,11 +12370,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               milestoneRail.css('opacity', '1');
               const historyEl = history[0];
               const scrollHeight = Math.max(historyEl.scrollHeight, 1);
-              const historyRect = historyEl.getBoundingClientRect();
-              const currentScroll = historyEl.scrollTop;
               currentMilestones = userMsgs.map((msgEl, index) => {
-                  const targetRect = msgEl.getBoundingClientRect();
-                  const relativeTop = targetRect.top - historyRect.top + currentScroll;
+                  const relativeTop = msgEl.offsetTop;
                   const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
                   const rawText = $(msgEl).find('.kaiz-msg-content').text().trim();
                   const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
@@ -12386,6 +12385,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               });
               // Giữ lại activeThumb, xóa các markers cũ
               milestoneTrack.find('.kaiz-milestone-marker').remove();
+              currentMarkerEls = [];
               currentMilestones.forEach((item) => {
                   const marker = $(`
                     <div class="kaiz-milestone-marker" style="top: ${item.posPercent.toFixed(2)}%;" data-index="${item.index}"></div>
@@ -12413,6 +12413,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       }, 1500);
                   });
                   milestoneTrack.append(marker);
+                  currentMarkerEls.push(marker[0]);
               });
               updateActiveMilestone();
           };
@@ -12427,10 +12428,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const getClosestMilestoneByY = (clientY) => {
               if (currentMilestones.length === 0)
                   return null;
-              const trackEl = milestoneTrack[0];
-              if (!trackEl)
+              const trackRect = cachedTrackRect || milestoneTrack[0]?.getBoundingClientRect();
+              if (!trackRect)
                   return null;
-              const trackRect = trackEl.getBoundingClientRect();
               const clickY = clientY - trackRect.top;
               const percent = Math.max(0, Math.min(100, (clickY / Math.max(trackRect.height, 1)) * 100));
               let closest = currentMilestones[0];
@@ -12454,21 +12454,35 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   top: `${target.posPercent.toFixed(2)}%`,
                   display: 'block',
               });
-              milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-hovered is-proximity');
-              const targetMarker = milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index}"]`);
-              targetMarker.addClass('is-hovered');
-              // Proximity effect cho các marker lân cận (trong bán kính ±1 nấc)
-              milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index - 1}"]`).addClass('is-proximity');
-              milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index + 1}"]`).addClass('is-proximity');
+              for (let i = 0; i < currentMarkerEls.length; i++) {
+                  const el = currentMarkerEls[i];
+                  if (!el)
+                      continue;
+                  if (i === target.index) {
+                      el.classList.add('is-hovered');
+                      el.classList.remove('is-proximity');
+                  }
+                  else if (Math.abs(i - target.index) <= 1) {
+                      el.classList.add('is-proximity');
+                      el.classList.remove('is-hovered');
+                  }
+                  else {
+                      el.classList.remove('is-hovered', 'is-proximity');
+                  }
+              }
               showMilestoneHUD(target, clientY);
-              // Live scroll khi đang kéo
+              // Live scroll tức thì khi đang kéo mà không layout thrash
               scrollToMilestone(target, false);
           };
           const handleScrubEnd = (clientY) => {
               isScrubbingMilestones = false;
+              cachedTrackRect = null;
+              cachedRailRect = null;
               milestoneRail.removeClass('is-scrubbing');
               $(document).off('.kaiz_milestone_scrub');
-              milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-hovered is-proximity');
+              for (let i = 0; i < currentMarkerEls.length; i++) {
+                  currentMarkerEls[i]?.classList.remove('is-hovered', 'is-proximity');
+              }
               const target = getClosestMilestoneByY(clientY);
               if (target) {
                   scrollToMilestone(target, true);
@@ -12489,6 +12503,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   return;
               isScrubbingMilestones = true;
               milestoneRail.addClass('is-scrubbing');
+              cachedTrackRect = milestoneTrack[0]?.getBoundingClientRect() || null;
+              cachedRailRect = milestoneRail[0]?.getBoundingClientRect() || null;
               const clientY = e.type.startsWith('touch') ? e.originalEvent.touches[0].clientY : e.clientY;
               handleScrubMove(clientY);
               $(document)
@@ -12532,22 +12548,29 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           let activeMatchIndex = -1;
           let searchDebounceTimer = null;
           const clearSearchHighlights = () => {
-              history.find('mark.kaiz-search-mark').each(function () {
-                  const parent = this.parentNode;
+              if (currentSearchMatches.length === 0)
+                  return;
+              const parentsToNormalize = new Set();
+              for (const mark of currentSearchMatches) {
+                  const parent = mark.parentNode;
                   if (parent) {
-                      parent.replaceChild(document.createTextNode(this.textContent || ''), this);
-                      parent.normalize();
+                      parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+                      parentsToNormalize.add(parent);
                   }
-              });
+              }
+              for (const p of parentsToNormalize) {
+                  p.normalize();
+              }
               currentSearchMatches = [];
               activeMatchIndex = -1;
           };
-          const highlightCurrentMatch = () => {
+          const highlightCurrentMatch = (hitCap = false) => {
               currentSearchMatches.forEach((m) => m.classList.remove('kaiz-search-mark-active'));
               if (activeMatchIndex >= 0 && activeMatchIndex < currentSearchMatches.length) {
                   const currentEl = currentSearchMatches[activeMatchIndex];
                   currentEl.classList.add('kaiz-search-mark-active');
-                  searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}`);
+                  const suffix = hitCap ? '+' : '';
+                  searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}${suffix}`);
                   const historyEl = history[0];
                   if (historyEl) {
                       const targetRect = currentEl.getBoundingClientRect();
@@ -12575,8 +12598,21 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }
               const matches = [];
               const queryLower = cleanQuery.toLowerCase();
-              const msgContents = history.find('.kaiz-msg-content').toArray();
-              for (const contentEl of msgContents) {
+              // Capped highlights để giữ DOM luôn nhẹ, tránh giật lag khi query ngắn
+              const MAX_MATCHES = cleanQuery.length < 2 ? 100 : 250;
+              let hitCap = false;
+              const historyEl = history[0];
+              if (!historyEl)
+                  return;
+              // Dùng getElementsByClassName nguyên bản nhanh hơn nhiều so với jQuery find
+              const msgContents = historyEl.getElementsByClassName('kaiz-msg-content');
+              for (let i = 0; i < msgContents.length; i++) {
+                  const contentEl = msgContents[i];
+                  const textContent = contentEl.textContent || '';
+                  // SPEED BOOSTER: Nếu tin nhắn không chứa từ khóa, bỏ qua ngay lập tức!
+                  if (!textContent.toLowerCase().includes(queryLower)) {
+                      continue;
+                  }
                   const walker = document.createTreeWalker(contentEl, 4 /* NodeFilter.SHOW_TEXT */, {
                       acceptNode: (node) => {
                           if (node.parentElement?.tagName === 'MARK')
@@ -12607,6 +12643,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           mark.textContent = text.substring(matchIndex, matchIndex + cleanQuery.length);
                           frag.appendChild(mark);
                           matches.push(mark);
+                          if (matches.length >= MAX_MATCHES) {
+                              hitCap = true;
+                              break;
+                          }
                           lastIdx = matchIndex + cleanQuery.length;
                           matchIndex = textLower.indexOf(queryLower, lastIdx);
                       }
@@ -12614,12 +12654,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           frag.appendChild(document.createTextNode(text.substring(lastIdx)));
                       }
                       textNode.parentNode?.replaceChild(frag, textNode);
+                      if (hitCap)
+                          break;
                   }
+                  if (hitCap)
+                      break;
               }
               currentSearchMatches = matches;
               if (matches.length > 0) {
                   activeMatchIndex = 0;
-                  highlightCurrentMatch();
+                  highlightCurrentMatch(hitCap);
                   searchPrevBtn.prop('disabled', false);
                   searchNextBtn.prop('disabled', false);
               }
@@ -12662,9 +12706,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           searchInput.on('input', function () {
               clearTimeout(searchDebounceTimer);
               const val = this.value;
+              // Debounce 220ms: Độ trễ tối ưu cho phản hồi gõ bàn phím mượt mà
               searchDebounceTimer = setTimeout(() => {
                   performSearch(val);
-              }, 150);
+              }, 220);
           });
           const nextSearchMatch = () => {
               if (currentSearchMatches.length === 0)
@@ -12683,7 +12728,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           searchInput.on('keydown', (e) => {
               if (e.key === 'Enter') {
                   e.preventDefault();
-                  if (e.shiftKey) {
+                  if (searchDebounceTimer) {
+                      clearTimeout(searchDebounceTimer);
+                      searchDebounceTimer = null;
+                      performSearch(String(searchInput.val() || ''));
+                  }
+                  else if (e.shiftKey) {
                       prevSearchMatch();
                   }
                   else {

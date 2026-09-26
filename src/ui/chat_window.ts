@@ -344,11 +344,14 @@ export class ChatWindowUI {
         }
 
         let currentMilestones: MilestoneData[] = [];
+        let currentMarkerEls: HTMLElement[] = [];
         let milestoneDebounceTimer: any = null;
         let isScrubbingMilestones = false;
         let activeMilestoneIndex = -1;
         let scrollTrackerRafId: number | null = null;
         let hudHideTimeout: any = null;
+        let cachedTrackRect: DOMRect | null = null;
+        let cachedRailRect: DOMRect | null = null;
 
         // Quick Jump buttons
         milestoneBtnTop.on('click', (e: any) => {
@@ -377,10 +380,9 @@ export class ChatWindowUI {
                 <div class="kaiz-milestone-tt-hint"><i class="fa-solid fa-arrows-up-down"></i> Kéo để duyệt các lượt chat</div>
             `);
 
-            const trackEl = milestoneTrack[0];
-            if (!trackEl) return;
-            const trackRect = trackEl.getBoundingClientRect();
-            const railRect = milestoneRail[0].getBoundingClientRect();
+            const trackRect = cachedTrackRect || milestoneTrack[0]?.getBoundingClientRect();
+            const railRect = cachedRailRect || milestoneRail[0]?.getBoundingClientRect();
+            if (!trackRect || !railRect) return;
 
             let targetY: number;
             if (clientY !== undefined) {
@@ -407,14 +409,11 @@ export class ChatWindowUI {
             }
         };
 
-        // Hàm cuộn tới tin nhắn của milestone
+        // Hàm cuộn tới tin nhắn của milestone (sử dụng offsetTop được cache sẵn, KHÔNG layout thrash)
         const scrollToMilestone = (item: MilestoneData, smooth: boolean = true) => {
             const hEl = history[0];
             if (!hEl) return;
-            const curTargetRect = item.msgEl.getBoundingClientRect();
-            const curHistoryRect = hEl.getBoundingClientRect();
-            const targetTop = curTargetRect.top - curHistoryRect.top + hEl.scrollTop - 16;
-
+            const targetTop = item.relativeTop - 16;
             hEl.scrollTo({
                 top: Math.max(0, targetTop),
                 behavior: smooth ? 'smooth' : 'instant',
@@ -432,13 +431,10 @@ export class ChatWindowUI {
 
             let bestIndex = 0;
             if (currentScroll >= maxScroll - 30) {
-                // Đã cuộn gần sát đáy -> milestone cuối cùng
                 bestIndex = currentMilestones.length - 1;
             } else if (currentScroll <= 30) {
-                // Đang ở đỉnh -> milestone đầu tiên
                 bestIndex = 0;
             } else {
-                // Tìm tin nhắn nằm gần vùng 25% phía trên của viewport
                 const thresholdY = currentScroll + hEl.clientHeight * 0.25;
                 for (let i = 0; i < currentMilestones.length; i++) {
                     if (currentMilestones[i].relativeTop <= thresholdY) {
@@ -450,9 +446,13 @@ export class ChatWindowUI {
             }
 
             if (bestIndex !== activeMilestoneIndex) {
+                if (activeMilestoneIndex >= 0 && currentMarkerEls[activeMilestoneIndex]) {
+                    currentMarkerEls[activeMilestoneIndex].classList.remove('is-active');
+                }
+                if (currentMarkerEls[bestIndex]) {
+                    currentMarkerEls[bestIndex].classList.add('is-active');
+                }
                 activeMilestoneIndex = bestIndex;
-                milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-active');
-                milestoneTrack.find(`.kaiz-milestone-marker[data-index="${bestIndex}"]`).addClass('is-active');
 
                 const activeItem = currentMilestones[bestIndex];
                 if (activeItem) {
@@ -489,6 +489,7 @@ export class ChatWindowUI {
 
             if (userMsgs.length === 0) {
                 currentMilestones = [];
+                currentMarkerEls = [];
                 activeMilestoneIndex = -1;
                 milestoneTrack.find('.kaiz-milestone-marker').remove();
                 milestoneActiveThumb.hide();
@@ -500,12 +501,9 @@ export class ChatWindowUI {
             milestoneRail.css('opacity', '1');
             const historyEl = history[0];
             const scrollHeight = Math.max(historyEl.scrollHeight, 1);
-            const historyRect = historyEl.getBoundingClientRect();
-            const currentScroll = historyEl.scrollTop;
 
             currentMilestones = userMsgs.map((msgEl: HTMLElement, index: number) => {
-                const targetRect = msgEl.getBoundingClientRect();
-                const relativeTop = targetRect.top - historyRect.top + currentScroll;
+                const relativeTop = msgEl.offsetTop;
                 const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
                 const rawText = $(msgEl).find('.kaiz-msg-content').text().trim();
                 const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
@@ -520,6 +518,7 @@ export class ChatWindowUI {
 
             // Giữ lại activeThumb, xóa các markers cũ
             milestoneTrack.find('.kaiz-milestone-marker').remove();
+            currentMarkerEls = [];
 
             currentMilestones.forEach((item) => {
                 const marker = $(`
@@ -551,6 +550,7 @@ export class ChatWindowUI {
                 });
 
                 milestoneTrack.append(marker);
+                currentMarkerEls.push(marker[0]);
             });
 
             updateActiveMilestone();
@@ -566,9 +566,8 @@ export class ChatWindowUI {
         // --- HÀM TÌM MILESTONE GẦN NHẤT VỚI TỌA ĐỘ Y ---
         const getClosestMilestoneByY = (clientY: number): MilestoneData | null => {
             if (currentMilestones.length === 0) return null;
-            const trackEl = milestoneTrack[0];
-            if (!trackEl) return null;
-            const trackRect = trackEl.getBoundingClientRect();
+            const trackRect = cachedTrackRect || milestoneTrack[0]?.getBoundingClientRect();
+            if (!trackRect) return null;
             const clickY = clientY - trackRect.top;
             const percent = Math.max(0, Math.min(100, (clickY / Math.max(trackRect.height, 1)) * 100));
 
@@ -595,25 +594,36 @@ export class ChatWindowUI {
                 display: 'block',
             });
 
-            milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-hovered is-proximity');
-            const targetMarker = milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index}"]`);
-            targetMarker.addClass('is-hovered');
-
-            // Proximity effect cho các marker lân cận (trong bán kính ±1 nấc)
-            milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index - 1}"]`).addClass('is-proximity');
-            milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index + 1}"]`).addClass('is-proximity');
+            for (let i = 0; i < currentMarkerEls.length; i++) {
+                const el = currentMarkerEls[i];
+                if (!el) continue;
+                if (i === target.index) {
+                    el.classList.add('is-hovered');
+                    el.classList.remove('is-proximity');
+                } else if (Math.abs(i - target.index) <= 1) {
+                    el.classList.add('is-proximity');
+                    el.classList.remove('is-hovered');
+                } else {
+                    el.classList.remove('is-hovered', 'is-proximity');
+                }
+            }
 
             showMilestoneHUD(target, clientY);
-            // Live scroll khi đang kéo
+            // Live scroll tức thì khi đang kéo mà không layout thrash
             scrollToMilestone(target, false);
         };
 
         const handleScrubEnd = (clientY: number) => {
             isScrubbingMilestones = false;
+            cachedTrackRect = null;
+            cachedRailRect = null;
             milestoneRail.removeClass('is-scrubbing');
             $(document).off('.kaiz_milestone_scrub');
 
-            milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-hovered is-proximity');
+            for (let i = 0; i < currentMarkerEls.length; i++) {
+                currentMarkerEls[i]?.classList.remove('is-hovered', 'is-proximity');
+            }
+
             const target = getClosestMilestoneByY(clientY);
             if (target) {
                 scrollToMilestone(target, true);
@@ -635,6 +645,8 @@ export class ChatWindowUI {
 
             isScrubbingMilestones = true;
             milestoneRail.addClass('is-scrubbing');
+            cachedTrackRect = milestoneTrack[0]?.getBoundingClientRect() || null;
+            cachedRailRect = milestoneRail[0]?.getBoundingClientRect() || null;
 
             const clientY = e.type.startsWith('touch') ? e.originalEvent.touches[0].clientY : e.clientY;
             handleScrubMove(clientY);
@@ -683,23 +695,29 @@ export class ChatWindowUI {
         let searchDebounceTimer: any = null;
 
         const clearSearchHighlights = () => {
-            history.find('mark.kaiz-search-mark').each(function (this: HTMLElement) {
-                const parent = this.parentNode;
+            if (currentSearchMatches.length === 0) return;
+            const parentsToNormalize = new Set<Node>();
+            for (const mark of currentSearchMatches) {
+                const parent = mark.parentNode;
                 if (parent) {
-                    parent.replaceChild(document.createTextNode(this.textContent || ''), this);
-                    parent.normalize();
+                    parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+                    parentsToNormalize.add(parent);
                 }
-            });
+            }
+            for (const p of parentsToNormalize) {
+                p.normalize();
+            }
             currentSearchMatches = [];
             activeMatchIndex = -1;
         };
 
-        const highlightCurrentMatch = () => {
+        const highlightCurrentMatch = (hitCap: boolean = false) => {
             currentSearchMatches.forEach((m) => m.classList.remove('kaiz-search-mark-active'));
             if (activeMatchIndex >= 0 && activeMatchIndex < currentSearchMatches.length) {
                 const currentEl = currentSearchMatches[activeMatchIndex];
                 currentEl.classList.add('kaiz-search-mark-active');
-                searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}`);
+                const suffix = hitCap ? '+' : '';
+                searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}${suffix}`);
 
                 const historyEl = history[0];
                 if (historyEl) {
@@ -732,9 +750,23 @@ export class ChatWindowUI {
 
             const matches: HTMLElement[] = [];
             const queryLower = cleanQuery.toLowerCase();
-            const msgContents = history.find('.kaiz-msg-content').toArray();
+            // Capped highlights để giữ DOM luôn nhẹ, tránh giật lag khi query ngắn
+            const MAX_MATCHES = cleanQuery.length < 2 ? 100 : 250;
+            let hitCap = false;
 
-            for (const contentEl of msgContents) {
+            const historyEl = history[0];
+            if (!historyEl) return;
+            // Dùng getElementsByClassName nguyên bản nhanh hơn nhiều so với jQuery find
+            const msgContents = historyEl.getElementsByClassName('kaiz-msg-content');
+
+            for (let i = 0; i < msgContents.length; i++) {
+                const contentEl = msgContents[i] as HTMLElement;
+                const textContent = contentEl.textContent || '';
+                // SPEED BOOSTER: Nếu tin nhắn không chứa từ khóa, bỏ qua ngay lập tức!
+                if (!textContent.toLowerCase().includes(queryLower)) {
+                    continue;
+                }
+
                 const walker = document.createTreeWalker(contentEl, 4 /* NodeFilter.SHOW_TEXT */, {
                     acceptNode: (node: Node) => {
                         if (node.parentElement?.tagName === 'MARK') return 2; /* NodeFilter.FILTER_REJECT */
@@ -769,6 +801,11 @@ export class ChatWindowUI {
                         frag.appendChild(mark);
                         matches.push(mark);
 
+                        if (matches.length >= MAX_MATCHES) {
+                            hitCap = true;
+                            break;
+                        }
+
                         lastIdx = matchIndex + cleanQuery.length;
                         matchIndex = textLower.indexOf(queryLower, lastIdx);
                     }
@@ -778,13 +815,16 @@ export class ChatWindowUI {
                     }
 
                     textNode.parentNode?.replaceChild(frag, textNode);
+                    if (hitCap) break;
                 }
+
+                if (hitCap) break;
             }
 
             currentSearchMatches = matches;
             if (matches.length > 0) {
                 activeMatchIndex = 0;
-                highlightCurrentMatch();
+                highlightCurrentMatch(hitCap);
                 searchPrevBtn.prop('disabled', false);
                 searchNextBtn.prop('disabled', false);
             } else {
@@ -829,9 +869,10 @@ export class ChatWindowUI {
         searchInput.on('input', function (this: HTMLInputElement) {
             clearTimeout(searchDebounceTimer);
             const val = this.value;
+            // Debounce 220ms: Độ trễ tối ưu cho phản hồi gõ bàn phím mượt mà
             searchDebounceTimer = setTimeout(() => {
                 performSearch(val);
-            }, 150);
+            }, 220);
         });
 
         const nextSearchMatch = () => {
@@ -852,7 +893,11 @@ export class ChatWindowUI {
         searchInput.on('keydown', (e: any) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                if (e.shiftKey) {
+                if (searchDebounceTimer) {
+                    clearTimeout(searchDebounceTimer);
+                    searchDebounceTimer = null;
+                    performSearch(String(searchInput.val() || ''));
+                } else if (e.shiftKey) {
                     prevSearchMatch();
                 } else {
                     nextSearchMatch();
