@@ -15386,6 +15386,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               .on('click', async () => {
               await this.handleManualCommit();
           });
+          // Hỗ trợ phím Enter khi nhập tên mốc hoặc nhãn
+          $('#kaiz-pg-commit-msg-input, #kaiz-pg-commit-tag-input')
+              .off('keydown')
+              .on('keydown', async (e) => {
+              if (e.key === 'Enter') {
+                  e.preventDefault();
+                  await this.handleManualCommit();
+              }
+          });
           // 10. Prune Commits (Cắt tỉa bộ nhớ)
           $('#kaiz-pg-prune-btn')
               .off('click')
@@ -15527,8 +15536,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const stats = await this.db.getPresetStorageStats();
           const headHash = await this.manager.getHeadCommitHash(this.currentSelectedPreset);
           const currentPresetStats = stats.byPreset[this.currentSelectedPreset] || { commits: 0, bytes: 0 };
-          $('#kaiz-pg-stat-memory').text(`${formatBytes(currentPresetStats.bytes)} (Tổng: ${formatBytes(stats.totalBytes)})`);
-          $('#kaiz-pg-stat-commits').text(`${currentPresetStats.commits} (Toàn hệ thống: ${stats.totalCommits})`);
+          const memFormatted = formatBytes(currentPresetStats.bytes);
+          const totalMemFormatted = formatBytes(stats.totalBytes);
+          $('#kaiz-pg-stat-memory')
+              .text(memFormatted)
+              .attr('title', `Dung lượng preset này: ${memFormatted} (Toàn hệ thống: ${totalMemFormatted})`);
+          $('#kaiz-pg-stat-commits')
+              .text(`${currentPresetStats.commits}`)
+              .attr('title', `Preset này có ${currentPresetStats.commits} bản lưu (Toàn hệ thống: ${stats.totalCommits} bản lưu)`);
           $('#kaiz-pg-stat-presets').text(`${stats.presetCount} presets`);
           $('#kaiz-pg-stat-head').text(headHash ? headHash.substring(0, 8) : 'none');
       }
@@ -15540,7 +15555,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const isStaged = dirtyInfo.isStaged;
           if (isDirty) {
               const badgeLabel = isStaged
-                  ? `● ${diff.totalChanges} thay đổi chưa lưu (Nháp)`
+                  ? `● ${diff.totalChanges} thay đổi (Nháp)`
                   : `● ${diff.totalChanges} thay đổi chưa lưu`;
               $('#kaiz-pg-staging-badge')
                   .text(badgeLabel)
@@ -15548,8 +15563,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   .addClass('badge-warning');
               const sourceText = isStaged
                   ? '(Dữ liệu SillyTavern gốc chưa bị ghi đè)'
-                  : '(Thay đổi từ giao diện SillyTavern chưa được lưu thành mốc)';
-              $('#kaiz-pg-staging-summary').html(`<b>Có ${diff.totalChanges} thay đổi chưa lưu:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. ${sourceText}`);
+                  : '(Thay đổi chưa được lưu thành mốc)';
+              $('#kaiz-pg-staging-summary').html(`<b>${diff.totalChanges} thay đổi chưa lưu:</b> +${diff.added} tạo mới, ~${diff.modified} sửa, -${diff.deleted} xóa. <span style="opacity: 0.8">${sourceText}</span>`);
               $('#kaiz-pg-staging-actions').css('display', 'flex');
               // Render staged items preview
               const list = $('#kaiz-pg-staged-list');
@@ -15582,7 +15597,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   .text('Đồng bộ')
                   .removeClass('badge-warning badge-danger')
                   .addClass('badge-success');
-              $('#kaiz-pg-staging-summary').text('Trạng thái đồng bộ — Preset đang ở phiên bản mới nhất, không có chỉnh sửa dở dang.');
+              $('#kaiz-pg-staging-summary').text('Preset đang ở phiên bản mới nhất, không có chỉnh sửa dở dang.');
               $('#kaiz-pg-staging-actions').hide();
               $('#kaiz-pg-staged-list').empty().hide();
           }
@@ -15717,34 +15732,34 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     ${dotHtml}
                     <div class="kaiz-pg-commit-card ${isHead ? 'is-head' : ''}" data-hash="${commit.hash}">
                         <!-- Row 1: Message & Relative Time -->
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px">
-                            <div style="font-size: 13.5px; font-weight: 600; color: #f8fafc; line-height: 1.4; word-break: break-word">
+                        <div class="kaiz-pg-commit-row1">
+                            <div class="kaiz-pg-commit-title" title="${escapeHtml(commit.message)}">
                                 ${escapeHtml(commit.message)}
                             </div>
-                            <div style="font-size: 11px; opacity: 0.6; white-space: nowrap; flex-shrink: 0" title="${fullDateStr}">
+                            <div class="kaiz-pg-commit-time" title="${fullDateStr}">
                                 <i class="fa-regular fa-clock" style="margin-right: 3px"></i>${dateStr}
                             </div>
                         </div>
 
                         <!-- Row 2: Badges, Hash & Change Summary -->
-                        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11px">
+                        <div class="kaiz-pg-commit-badges">
                             <span class="kaiz-pg-hash-btn" title="Mã phiên bản (Bấm để sao chép)">
                                 <i class="fa-regular fa-copy" style="font-size: 9px; margin-right: 2px; opacity: 0.7"></i>#${shortHash}
                             </span>
                             ${headPill}
                             ${authorBadge}
                             ${tagBadge}
-                            <span style="opacity: 0.6; margin-left: 2px; font-size: 10.5px">
+                            <span class="kaiz-pg-diff-summary" title="${escapeHtml(diffSummary)}">
                                 <i class="fa-solid fa-layer-group" style="font-size: 10px; margin-right: 3px"></i>${escapeHtml(diffSummary)}
                             </span>
                         </div>
 
                         <!-- Row 3: Action Buttons -->
-                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; margin-top: 2px">
-                            <div>
+                        <div class="kaiz-pg-commit-actions">
+                            <div class="kaiz-pg-commit-primary-act">
                                 ${navActionBtn}
                             </div>
-                            <div style="display: flex; align-items: center; gap: 5px">
+                            <div class="kaiz-pg-commit-secondary-acts">
                                 <button class="kaiz-pg-btn-diff kaiz-pg-icon-btn menu_button interactable" title="Xem chi tiết các thay đổi">
                                     <i class="fa-solid fa-eye"></i>
                                 </button>

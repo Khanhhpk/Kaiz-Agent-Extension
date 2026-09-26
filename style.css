@@ -2546,69 +2546,415 @@
 /* ================= PRESET GIT MODAL & MODERN TIMELINE ================= */
 #kaiz-preset-git-modal::backdrop,
 #kaiz-preset-diff-modal::backdrop {
-    background: rgba(0, 0, 0, 0.75);
-    backdrop-filter: blur(8px);
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(10px);
+}
+
+/* Modal Dialog Frame */
+.kaiz-pg-dialog {
+    background: rgba(13, 17, 23, 0.97) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 12px !important;
+    box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.75),
+        0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+    color: #e6edf3 !important;
+    width: 860px;
+    max-width: 95vw;
+    height: 86vh;
+    max-height: 860px;
+    padding: 14px 18px;
+    display: none;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+}
+
+.kaiz-pg-diff-dialog {
+    background: rgba(13, 17, 23, 0.98) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8) !important;
+    color: #e6edf3 !important;
+    width: 800px;
+    max-width: 95vw;
+    height: 80vh;
+    max-height: 760px;
+    padding: 14px 18px;
+    display: none;
+    flex-direction: column;
+    box-sizing: border-box;
+    overflow: hidden;
+    backdrop-filter: blur(20px);
+}
+
+/* Modal Header */
+.kaiz-pg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.kaiz-pg-header-left {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 0;
+    flex: 1;
+}
+
+.kaiz-pg-header-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(52, 211, 153, 0.12);
+    color: #34d399;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    border: 1px solid rgba(52, 211, 153, 0.25);
+    flex-shrink: 0;
+}
+
+.kaiz-pg-header-titles {
+    min-width: 0;
+}
+
+.kaiz-pg-header-title {
+    margin: 0;
+    font-size: 14.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #f0f6fc;
+}
+
+.kaiz-pg-header-subtitle {
+    font-size: 11px;
+    color: #8b949e;
+    margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.kaiz-pg-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+#kaiz-pg-preset-select {
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+    background: rgba(22, 27, 34, 0.9);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e6edf3;
+    max-width: 240px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 0.15s ease;
+}
+
+#kaiz-pg-preset-select:focus {
+    border-color: #38bdf8;
+}
+
+.kaiz-pg-header-close {
+    cursor: pointer;
+    font-size: 16px;
+    color: #8b949e;
+    padding: 5px 6px;
+    border-radius: 6px;
+    transition: all 0.15s ease;
+}
+
+.kaiz-pg-header-close:hover {
+    color: #f0f6fc;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+/* Modal Body */
+.kaiz-pg-body {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-height: 0;
+    padding-right: 2px;
+}
+
+/* 1. Sleek Metrics & Maintenance Ribbon */
+.kaiz-pg-ribbon {
+    background: rgba(22, 27, 34, 0.65);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 6px 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex-shrink: 0;
+}
+
+.kaiz-pg-ribbon-stats {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
 }
 
 .kaiz-pg-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 6px;
-    padding: 3px 8px;
+    border-radius: 5px;
+    padding: 2px 7px;
     font-size: 11px;
     color: #cbd5e1;
     transition: all 0.15s ease;
+    cursor: default;
 }
 
 .kaiz-pg-chip:hover {
     background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.16);
 }
 
-/* Timeline Layout */
+.kaiz-pg-stat-val {
+    font-weight: 600;
+}
+
+.kaiz-pg-mono {
+    font-family: monospace;
+}
+
+.kaiz-pg-ribbon-actions {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.kaiz-pg-btn-sm {
+    font-size: 11px !important;
+    padding: 3px 8px !important;
+    border-radius: 5px !important;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: all 0.15s ease;
+}
+
+.kaiz-pg-btn-sm:hover {
+    transform: translateY(-1px);
+}
+
+/* 2. Staging Sandbox Card */
+.kaiz-pg-staging-box {
+    background: rgba(22, 27, 34, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.kaiz-pg-staging-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.kaiz-pg-staging-title {
+    font-size: 12px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #f0f6fc;
+}
+
+.kaiz-pg-staging-btns {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.kaiz-pg-staging-desc {
+    font-size: 11px;
+    color: #8b949e;
+    line-height: 1.35;
+}
+
+.kaiz-pg-staged-items {
+    flex-direction: column;
+    gap: 3px;
+    max-height: 90px;
+    overflow-y: auto;
+    padding-right: 2px;
+}
+
+.kaiz-pg-commit-form {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 6px;
+    padding: 4px 6px;
+}
+
+.kaiz-pg-commit-inputs {
+    flex: 1;
+    display: flex;
+    gap: 6px;
+    min-width: 0;
+}
+
+.kaiz-pg-input-msg {
+    flex: 1;
+    min-width: 120px;
+    font-size: 11.5px !important;
+    padding: 5px 9px !important;
+    border-radius: 5px !important;
+    background: rgba(0, 0, 0, 0.35) !important;
+}
+
+.kaiz-pg-input-tag {
+    width: 85px;
+    font-size: 11.5px !important;
+    padding: 5px 7px !important;
+    border-radius: 5px !important;
+    background: rgba(0, 0, 0, 0.35) !important;
+    flex-shrink: 0;
+}
+
+.kaiz-pg-btn-commit {
+    font-size: 11.5px !important;
+    padding: 5px 11px !important;
+    background: rgba(52, 211, 153, 0.15) !important;
+    color: #34d399 !important;
+    border-color: rgba(52, 211, 153, 0.35) !important;
+    font-weight: 500 !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 5px !important;
+    flex-shrink: 0;
+}
+
+.kaiz-pg-btn-commit:hover {
+    background: rgba(52, 211, 153, 0.25) !important;
+    border-color: #34d399 !important;
+    transform: translateY(-1px);
+}
+
+/* 3. Timeline Card */
+.kaiz-pg-timeline-card {
+    background: rgba(22, 27, 34, 0.45);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 10px 12px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 220px;
+    overflow: hidden;
+}
+
+.kaiz-pg-timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.kaiz-pg-timeline-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #f0f6fc;
+}
+
+.kaiz-pg-search-input {
+    font-size: 11px !important;
+    padding: 3px 8px !important;
+    width: 220px;
+    max-width: 45%;
+    border-radius: 5px !important;
+    background: rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Timeline Track */
 .kaiz-pg-timeline-container {
     position: relative;
-    padding-left: 30px;
+    padding-left: 22px;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding-right: 3px;
 }
 
 .kaiz-pg-timeline-container::before {
     content: '';
     position: absolute;
-    left: 11px;
-    top: 14px;
-    bottom: 14px;
+    left: 8px;
+    top: 12px;
+    bottom: 12px;
     width: 2px;
     background: linear-gradient(
         180deg,
         rgba(52, 211, 153, 0.6) 0%,
-        rgba(167, 139, 250, 0.3) 50%,
-        rgba(255, 255, 255, 0.06) 100%
+        rgba(167, 139, 250, 0.35) 50%,
+        rgba(255, 255, 255, 0.08) 100%
     );
     border-radius: 2px;
 }
 
 .kaiz-pg-timeline-node {
     position: relative;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .kaiz-pg-timeline-dot {
     position: absolute;
-    left: -30px;
-    top: 13px;
-    width: 24px;
-    height: 24px;
+    left: -22px;
+    top: 11px;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    background: #1e293b;
-    border: 2px solid #475569;
-    color: #94a3b8;
+    font-size: 9px;
+    background: #161b22;
+    border: 2px solid #484f58;
+    color: #8b949e;
     z-index: 2;
     transition: all 0.2s ease;
 }
@@ -2617,7 +2963,7 @@
     background: #059669;
     border-color: #34d399;
     color: #ffffff;
-    box-shadow: 0 0 14px rgba(52, 211, 153, 0.5);
+    box-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
 }
 
 .kaiz-pg-timeline-dot.is-agent {
@@ -2632,36 +2978,94 @@
     color: #7dd3fc;
 }
 
-/* Card inside node */
+/* Commit Card */
 .kaiz-pg-commit-card {
-    background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 10px;
-    padding: 12px 14px;
+    background: rgba(22, 27, 34, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 8px 11px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
     transition: all 0.15s ease;
 }
 
 .kaiz-pg-commit-card:hover {
-    border-color: rgba(255, 255, 255, 0.16) !important;
-    background: rgba(255, 255, 255, 0.045) !important;
-    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    background: rgba(30, 36, 46, 0.8) !important;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
     transform: translateY(-1px);
 }
 
 .kaiz-pg-commit-card.is-head {
-    border-color: rgba(52, 211, 153, 0.35) !important;
-    background: rgba(16, 185, 129, 0.04) !important;
+    border-color: rgba(52, 211, 153, 0.4) !important;
+    background: rgba(16, 185, 129, 0.06) !important;
+    box-shadow: 0 0 14px rgba(16, 185, 129, 0.08);
+}
+
+.kaiz-pg-commit-row1 {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.kaiz-pg-commit-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #f0f6fc;
+    line-height: 1.35;
+    word-break: break-word;
+}
+
+.kaiz-pg-commit-time {
+    font-size: 11px;
+    color: #8b949e;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.kaiz-pg-commit-badges {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    font-size: 11px;
+}
+
+.kaiz-pg-diff-summary {
+    color: #8b949e;
+    margin-left: 2px;
+    font-size: 10.5px;
+}
+
+.kaiz-pg-commit-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding-top: 5px;
+    margin-top: 1px;
+    gap: 8px;
+}
+
+.kaiz-pg-commit-primary-act {
+    display: flex;
+    align-items: center;
+}
+
+.kaiz-pg-commit-secondary-acts {
+    display: flex;
+    align-items: center;
+    gap: 5px;
 }
 
 .kaiz-pg-hash-btn {
     font-family: monospace;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 600;
     background: rgba(0, 0, 0, 0.35);
-    padding: 2px 7px;
+    padding: 1px 6px;
     border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.1);
     cursor: pointer;
@@ -2670,18 +3074,18 @@
 }
 
 .kaiz-pg-hash-btn:hover {
-    background: rgba(56, 189, 248, 0.18) !important;
+    background: rgba(56, 189, 248, 0.2) !important;
     border-color: #38bdf8 !important;
 }
 
 .kaiz-pg-btn-primary-action {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     font-size: 11px;
     font-weight: 500;
-    padding: 4px 11px;
-    border-radius: 6px;
+    padding: 3px 9px;
+    border-radius: 5px;
     cursor: pointer;
     transition: all 0.15s ease;
 }
@@ -2695,27 +3099,263 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 27px;
-    height: 27px;
-    border-radius: 6px;
+    width: 26px;
+    height: 26px;
+    border-radius: 5px;
     font-size: 11px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #94a3b8;
+    color: #8b949e;
     cursor: pointer;
     transition: all 0.15s ease;
 }
 
 .kaiz-pg-icon-btn:hover {
     background: rgba(255, 255, 255, 0.1);
-    color: #f1f5f9;
-    border-color: rgba(255, 255, 255, 0.22);
+    color: #f0f6fc;
+    border-color: rgba(255, 255, 255, 0.25);
 }
 
 .kaiz-pg-icon-btn.danger:hover {
     background: rgba(239, 68, 68, 0.15);
     color: #fca5a5;
     border-color: rgba(239, 68, 68, 0.4);
+}
+
+/* Diff Modal Header & Body */
+.kaiz-pg-diff-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.kaiz-pg-diff-title {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #f0f6fc;
+}
+
+.kaiz-pg-diff-body {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    padding-right: 2px;
+}
+
+/* ================= RESPONSIVE MOBILE BREAKPOINTS ================= */
+@media (max-width: 640px) {
+    /* Dialog frame takes full width and near full height */
+    .kaiz-pg-dialog,
+    #kaiz-preset-git-modal {
+        width: 98vw !important;
+        max-width: 98vw !important;
+        height: 96vh !important;
+        max-height: 96vh !important;
+        padding: 8px 8px !important;
+        border-radius: 8px !important;
+        margin: auto !important;
+    }
+
+    .kaiz-pg-diff-dialog,
+    #kaiz-preset-diff-modal {
+        width: 98vw !important;
+        max-width: 98vw !important;
+        height: 96vh !important;
+        max-height: 96vh !important;
+        padding: 8px 8px !important;
+        border-radius: 8px !important;
+        margin: auto !important;
+    }
+
+    /* Header 2-row layout on mobile */
+    .kaiz-pg-header {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        grid-template-rows: auto auto;
+        gap: 6px;
+        margin-bottom: 6px;
+        padding-bottom: 6px;
+    }
+
+    .kaiz-pg-header-left {
+        grid-column: 1 / 2;
+        grid-row: 1 / 2;
+        gap: 7px;
+    }
+
+    .kaiz-pg-header-icon {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    .kaiz-pg-header-title {
+        font-size: 13.5px;
+    }
+
+    .kaiz-pg-header-subtitle {
+        display: none; /* Hide subtitle on mobile to save vertical space */
+    }
+
+    .kaiz-pg-header-close {
+        grid-column: 2 / 3;
+        grid-row: 1 / 2;
+        justify-self: end;
+        font-size: 18px;
+        padding: 3px 6px;
+    }
+
+    .kaiz-pg-header-controls {
+        grid-column: 1 / 3;
+        grid-row: 2 / 3;
+        width: 100%;
+        display: flex;
+        gap: 6px;
+    }
+
+    #kaiz-pg-preset-select {
+        flex: 1;
+        max-width: none !important;
+        width: 100%;
+        font-size: 11.5px;
+    }
+
+    /* Ribbon layout on mobile */
+    .kaiz-pg-ribbon {
+        padding: 5px 8px;
+        gap: 5px;
+    }
+
+    .kaiz-pg-chip {
+        font-size: 10px;
+        padding: 2px 5px;
+        gap: 4px;
+    }
+
+    .kaiz-pg-chip-label {
+        display: none; /* Shorten 'Bản hiện tại:' on mobile */
+    }
+
+    /* Staging container on mobile */
+    .kaiz-pg-staging-box {
+        padding: 6px 8px;
+        gap: 4px;
+    }
+
+    .kaiz-pg-commit-form {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+        padding: 5px;
+    }
+
+    .kaiz-pg-commit-inputs {
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .kaiz-pg-input-tag {
+        width: 100%;
+    }
+
+    .kaiz-pg-btn-commit {
+        width: 100%;
+        justify-content: center;
+        padding: 6px 12px !important;
+    }
+
+    /* Timeline on mobile */
+    .kaiz-pg-timeline-card {
+        padding: 8px 8px;
+    }
+
+    .kaiz-pg-timeline-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 5px;
+    }
+
+    .kaiz-pg-search-input {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .kaiz-pg-timeline-container {
+        padding-left: 17px;
+    }
+
+    .kaiz-pg-timeline-container::before {
+        left: 5px;
+    }
+
+    .kaiz-pg-timeline-dot {
+        left: -17px;
+        top: 10px;
+        width: 14px;
+        height: 14px;
+        font-size: 7.5px;
+    }
+
+    .kaiz-pg-commit-card {
+        padding: 7px 9px;
+        gap: 5px;
+    }
+
+    .kaiz-pg-commit-title {
+        font-size: 12.5px;
+    }
+
+    .kaiz-pg-commit-time {
+        font-size: 10px;
+    }
+
+    .kaiz-pg-commit-actions {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .kaiz-pg-btn-primary-action {
+        font-size: 10.5px;
+        padding: 4px 8px;
+        min-height: 28px;
+    }
+
+    .kaiz-pg-icon-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 11.5px;
+    }
+}
+
+@media (max-width: 480px) {
+    /* Very small phones */
+    .kaiz-pg-dialog,
+    #kaiz-preset-git-modal,
+    .kaiz-pg-diff-dialog,
+    #kaiz-preset-diff-modal {
+        width: 100vw !important;
+        max-width: 100vw !important;
+        height: 100dvh !important;
+        max-height: 100dvh !important;
+        padding: 6px 6px !important;
+        border-radius: 0 !important;
+        border: none !important;
+    }
+
+    .kaiz-pg-btn-text {
+        display: none; /* In ribbon, show icon only on tiny screen */
+    }
 }
 
 /* ================= SMART DIFF VIEWER ================= */
@@ -2788,7 +3428,9 @@
     display: flex;
     flex-direction: column;
     gap: 4px;
-    transition: background 0.15s ease, border-color 0.15s ease;
+    transition:
+        background 0.15s ease,
+        border-color 0.15s ease;
 }
 
 .kaiz-diff-item.has-content:hover {
@@ -2864,11 +3506,11 @@
 }
 
 .kaiz-diff-item.kaiz-diff-collapsed .kaiz-diff-toggle-state-label::after {
-    content: "Mở chi tiết";
+    content: 'Mở chi tiết';
 }
 
 .kaiz-diff-item.kaiz-diff-expanded .kaiz-diff-toggle-state-label::after {
-    content: "Thu gọn";
+    content: 'Thu gọn';
 }
 
 .kaiz-diff-item-toggle:hover .kaiz-diff-toggle-state-label {
@@ -2880,7 +3522,9 @@
 .kaiz-diff-chevron {
     font-size: 10px;
     color: rgba(148, 163, 184, 0.65);
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s ease;
+    transition:
+        transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+        color 0.15s ease;
 }
 
 .kaiz-diff-item-toggle:hover .kaiz-diff-chevron {
