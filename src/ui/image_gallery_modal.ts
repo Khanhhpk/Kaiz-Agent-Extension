@@ -44,18 +44,24 @@ export class ImageGalleryModal {
                 if (modal) modal.close();
             });
 
-        // Tìm kiếm prompt thời gian thực
+        // Tìm kiếm prompt thời gian thực có debounce chống giật lag
+        let gallerySearchDebounce: any = null;
         $('#kaiz-gallery-search')
             .off('input')
             .on('input', (e: any) => {
+                clearTimeout(gallerySearchDebounce);
                 const query = (e.target.value || '').trim().toLowerCase();
-                if (!query) {
-                    this.filteredImages = [...this.images];
-                } else {
-                    this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
-                }
-                this.currentLimit = this.displayLimit;
-                this.renderGrid();
+                gallerySearchDebounce = setTimeout(() => {
+                    if (!query) {
+                        this.filteredImages = [...this.images];
+                    } else {
+                        this.filteredImages = this.images.filter((img) =>
+                            (img.prompt || '').toLowerCase().includes(query),
+                        );
+                    }
+                    this.currentLimit = this.displayLimit;
+                    this.renderGrid();
+                }, 180);
             });
 
         // Chọn tất cả / Bỏ chọn tất cả
@@ -216,6 +222,7 @@ export class ImageGalleryModal {
         emptyState.hide();
 
         const itemsToShow = this.filteredImages.slice(0, this.currentLimit);
+        const cardsToAppend: any[] = [];
 
         itemsToShow.forEach((img) => {
             const isSelected = img.id !== undefined && this.selectedIds.has(img.id);
@@ -303,8 +310,12 @@ export class ImageGalleryModal {
                 }
             });
 
-            grid.append(card);
+            cardsToAppend.push(card);
         });
+
+        if (cardsToAppend.length > 0) {
+            grid.append(cardsToAppend);
+        }
 
         // Nếu còn ảnh chưa hiển thị -> Hiện nút "Xem thêm ảnh"
         if (this.filteredImages.length > this.currentLimit) {

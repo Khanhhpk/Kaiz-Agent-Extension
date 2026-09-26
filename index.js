@@ -12386,35 +12386,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               // Giữ lại activeThumb, xóa các markers cũ
               milestoneTrack.find('.kaiz-milestone-marker').remove();
               currentMarkerEls = [];
-              currentMilestones.forEach((item) => {
-                  const marker = $(`
-                    <div class="kaiz-milestone-marker" style="top: ${item.posPercent.toFixed(2)}%;" data-index="${item.index}"></div>
-                `);
-                  marker.on('mouseenter', () => {
-                      if (isScrubbingMilestones)
-                          return;
-                      showMilestoneHUD(item);
-                  });
-                  marker.on('mouseleave', () => {
-                      if (isScrubbingMilestones)
-                          return;
-                      hideMilestoneHUD();
-                  });
-                  marker.on('click', (e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      hideMilestoneHUD();
-                      scrollToMilestone(item, true);
-                      $(item.msgEl).removeClass('kaiz-msg-highlight-pulse');
-                      void item.msgEl.offsetWidth; // Trigger reflow for animation restart
-                      $(item.msgEl).addClass('kaiz-msg-highlight-pulse');
-                      setTimeout(() => {
-                          $(item.msgEl).removeClass('kaiz-msg-highlight-pulse');
-                      }, 1500);
-                  });
-                  milestoneTrack.append(marker);
-                  currentMarkerEls.push(marker[0]);
-              });
+              const frag = document.createDocumentFragment();
+              for (let i = 0; i < currentMilestones.length; i++) {
+                  const item = currentMilestones[i];
+                  const marker = document.createElement('div');
+                  marker.className = 'kaiz-milestone-marker';
+                  marker.style.top = `${item.posPercent.toFixed(2)}%`;
+                  marker.setAttribute('data-index', String(item.index));
+                  frag.appendChild(marker);
+                  currentMarkerEls.push(marker);
+              }
+              milestoneTrack[0]?.appendChild(frag);
               updateActiveMilestone();
           };
           const requestUpdateMilestones = () => {
@@ -12533,6 +12515,21 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           });
           milestoneTrack.on('touchstart', (e) => {
               startScrubbing(e);
+          });
+          // Event delegation trên milestoneTrack cho hover hiển thị HUD
+          milestoneTrack
+              .on('mouseenter', '.kaiz-milestone-marker', function () {
+              if (isScrubbingMilestones)
+                  return;
+              const idx = parseInt(this.getAttribute('data-index') || '-1', 10);
+              const item = currentMilestones[idx];
+              if (item)
+                  showMilestoneHUD(item);
+          })
+              .on('mouseleave', '.kaiz-milestone-marker', function () {
+              if (isScrubbingMilestones)
+                  return;
+              hideMilestoneHUD();
           });
           // ==========================================
           // --- IN-CHAT SEARCH BAR LOGIC ---
@@ -15556,19 +15553,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (modal)
                   modal.close();
           });
-          // Tìm kiếm prompt thời gian thực
+          // Tìm kiếm prompt thời gian thực có debounce chống giật lag
+          let gallerySearchDebounce = null;
           $('#kaiz-gallery-search')
               .off('input')
               .on('input', (e) => {
+              clearTimeout(gallerySearchDebounce);
               const query = (e.target.value || '').trim().toLowerCase();
-              if (!query) {
-                  this.filteredImages = [...this.images];
-              }
-              else {
-                  this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
-              }
-              this.currentLimit = this.displayLimit;
-              this.renderGrid();
+              gallerySearchDebounce = setTimeout(() => {
+                  if (!query) {
+                      this.filteredImages = [...this.images];
+                  }
+                  else {
+                      this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
+                  }
+                  this.currentLimit = this.displayLimit;
+                  this.renderGrid();
+              }, 180);
           });
           // Chọn tất cả / Bỏ chọn tất cả
           $('#kaiz-gallery-select-all-btn')
@@ -15722,6 +15723,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           emptyState.hide();
           const itemsToShow = this.filteredImages.slice(0, this.currentLimit);
+          const cardsToAppend = [];
           itemsToShow.forEach((img) => {
               const isSelected = img.id !== undefined && this.selectedIds.has(img.id);
               const dateStr = this.formatDate(img.timestamp);
@@ -15808,8 +15810,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       await this.loadAndRender();
                   }
               });
-              grid.append(card);
+              cardsToAppend.push(card);
           });
+          if (cardsToAppend.length > 0) {
+              grid.append(cardsToAppend);
+          }
           // Nếu còn ảnh chưa hiển thị -> Hiện nút "Xem thêm ảnh"
           if (this.filteredImages.length > this.currentLimit) {
               const remaining = this.filteredImages.length - this.currentLimit;

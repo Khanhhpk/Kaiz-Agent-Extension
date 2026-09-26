@@ -520,38 +520,17 @@ export class ChatWindowUI {
             milestoneTrack.find('.kaiz-milestone-marker').remove();
             currentMarkerEls = [];
 
-            currentMilestones.forEach((item) => {
-                const marker = $(`
-                    <div class="kaiz-milestone-marker" style="top: ${item.posPercent.toFixed(2)}%;" data-index="${item.index}"></div>
-                `);
-
-                marker.on('mouseenter', () => {
-                    if (isScrubbingMilestones) return;
-                    showMilestoneHUD(item);
-                });
-
-                marker.on('mouseleave', () => {
-                    if (isScrubbingMilestones) return;
-                    hideMilestoneHUD();
-                });
-
-                marker.on('click', (e: any) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    hideMilestoneHUD();
-                    scrollToMilestone(item, true);
-
-                    $(item.msgEl).removeClass('kaiz-msg-highlight-pulse');
-                    void item.msgEl.offsetWidth; // Trigger reflow for animation restart
-                    $(item.msgEl).addClass('kaiz-msg-highlight-pulse');
-                    setTimeout(() => {
-                        $(item.msgEl).removeClass('kaiz-msg-highlight-pulse');
-                    }, 1500);
-                });
-
-                milestoneTrack.append(marker);
-                currentMarkerEls.push(marker[0]);
-            });
+            const frag = document.createDocumentFragment();
+            for (let i = 0; i < currentMilestones.length; i++) {
+                const item = currentMilestones[i];
+                const marker = document.createElement('div');
+                marker.className = 'kaiz-milestone-marker';
+                marker.style.top = `${item.posPercent.toFixed(2)}%`;
+                marker.setAttribute('data-index', String(item.index));
+                frag.appendChild(marker);
+                currentMarkerEls.push(marker);
+            }
+            milestoneTrack[0]?.appendChild(frag);
 
             updateActiveMilestone();
         };
@@ -678,6 +657,19 @@ export class ChatWindowUI {
         milestoneTrack.on('touchstart', (e: any) => {
             startScrubbing(e);
         });
+
+        // Event delegation trên milestoneTrack cho hover hiển thị HUD
+        milestoneTrack
+            .on('mouseenter', '.kaiz-milestone-marker', function (this: HTMLElement) {
+                if (isScrubbingMilestones) return;
+                const idx = parseInt(this.getAttribute('data-index') || '-1', 10);
+                const item = currentMilestones[idx];
+                if (item) showMilestoneHUD(item);
+            })
+            .on('mouseleave', '.kaiz-milestone-marker', function () {
+                if (isScrubbingMilestones) return;
+                hideMilestoneHUD();
+            });
 
         // ==========================================
         // --- IN-CHAT SEARCH BAR LOGIC ---
