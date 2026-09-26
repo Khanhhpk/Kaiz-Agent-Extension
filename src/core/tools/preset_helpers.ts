@@ -21,6 +21,7 @@ export interface PromptBlock {
     injection_position?: number;
     injection_depth?: number;
     injection_order?: number;
+    injection_trigger?: any[];
 }
 
 export interface PresetContainer {
@@ -145,10 +146,36 @@ export class PresetGitManager {
             const win = window as any;
             const ctx = win.SillyTavern?.getContext?.() || {};
             const charId = ctx.characterId;
-            const targetObj =
-                charId !== undefined && charId !== null && charId !== ''
-                    ? raw.find((o: any) => String(o.character_id) === String(charId)) || raw[0]
-                    : raw[0];
+
+            let targetObj: any = null;
+            // 1. If active character override exists with non-empty order
+            if (charId !== undefined && charId !== null && charId !== '') {
+                targetObj = raw.find(
+                    (o: any) =>
+                        String(o?.character_id) === String(charId) && Array.isArray(o?.order) && o.order.length > 0,
+                );
+            }
+            // 2. ChatCompletion standard dummyId 100001 (active preset configuration in ST)
+            if (!targetObj) {
+                targetObj = raw.find(
+                    (o: any) =>
+                        (Number(o?.character_id) === 100001 || String(o?.character_id) === '100001') &&
+                        Array.isArray(o?.order),
+                );
+            }
+            // 3. PromptManager fallback dummyId 100000
+            if (!targetObj) {
+                targetObj = raw.find(
+                    (o: any) =>
+                        (Number(o?.character_id) === 100000 || String(o?.character_id) === '100000') &&
+                        Array.isArray(o?.order),
+                );
+            }
+            // 4. Any entry with order array, or raw[0]
+            if (!targetObj) {
+                targetObj = raw.find((o: any) => o && Array.isArray(o?.order)) || raw[0];
+            }
+
             const orderList = targetObj?.order || [];
             return orderList
                 .map((o: any) => {
@@ -232,31 +259,33 @@ export class PresetGitManager {
     }
 
     public getPromptOrder(): string[] {
+        let baseOrder: string[];
         if (this._stagingOrder && Array.isArray(this._stagingOrder)) {
-            return this._stagingOrder.filter((id) => id && !this._stagingDeletes.has(id));
+            baseOrder = this._stagingOrder.slice();
+        } else {
+            baseOrder = this.getRawLiveOrder();
         }
 
-        const rawLiveOrder = this.getRawLiveOrder();
-        const filteredLive = rawLiveOrder.filter((id) => id && !this._stagingDeletes.has(id));
+        const filtered = baseOrder.filter((id) => id && !this._stagingDeletes.has(id));
 
         // Append created blocks that have addToLinked = true
         for (const created of this._stagingCreates) {
             if (created.addToLinked && !this._stagingDeletes.has(created.block.identifier)) {
-                if (!filteredLive.includes(created.block.identifier)) {
+                if (!filtered.includes(created.block.identifier)) {
                     if (
                         typeof created.position === 'number' &&
                         created.position >= 0 &&
-                        created.position <= filteredLive.length
+                        created.position <= filtered.length
                     ) {
-                        filteredLive.splice(created.position, 0, created.block.identifier);
+                        filtered.splice(created.position, 0, created.block.identifier);
                     } else {
-                        filteredLive.push(created.block.identifier);
+                        filtered.push(created.block.identifier);
                     }
                 }
             }
         }
 
-        return filteredLive;
+        return filtered;
     }
 
     public findPrompt(identifier: string): PromptBlock | null {
@@ -307,13 +336,27 @@ export class PresetGitManager {
             content: args.content || '',
             role: args.role || 'system',
             enabled: true,
+            // CRITICAL: SillyTavern requires explicit false for custom user prompts!
+            // If true or undefined, SillyTavern hides the unlink button and excludes the prompt from LLM completion.
+            system_prompt: false,
+            marker: false,
+            forbid_overrides: false,
             injection_position: args.injection_position ?? 0,
             injection_depth: args.injection_depth ?? 4,
             injection_order: args.injection_order ?? 100,
+            injection_trigger: [],
         };
 
         const addToLinked = args.addToLinked ?? true;
         this._stagingCreates.push({ block: newBlock, addToLinked, position: args.position });
+
+        if (addToLinked && this._stagingOrder && Array.isArray(this._stagingOrder)) {
+            if (typeof args.position === 'number' && args.position >= 0 && args.position <= this._stagingOrder.length) {
+                this._stagingOrder.splice(args.position, 0, identifier);
+            } else {
+                this._stagingOrder.push(identifier);
+            }
+        }
 
         return {
             ok: true,
@@ -441,10 +484,9 @@ export class PresetGitManager {
         const updates: Partial<PromptBlock> = {};
         for (const k of allowedKeys) {
             if (rawMeta[k] !== undefined) {
-                if (k === 'enabled') {
+                if (k === 'enabled' || k === 'system_prompt' || k === 'marker' || k === 'forbid_overrides') {
                     const raw = rawMeta[k];
-                    updates.enabled =
-                        typeof raw === 'string' ? raw.toLowerCase() === 'true' || raw === '1' : Boolean(raw);
+                    updates[k] = typeof raw === 'string' ? raw.toLowerCase() === 'true' || raw === '1' : Boolean(raw);
                 } else {
                     (updates as any)[k] = rawMeta[k];
                 }
@@ -541,6 +583,15 @@ export class PresetGitManager {
         const duplicateName = newName || `${p.name} (Copy)`;
         const isLinked = this.getPromptOrder().includes(identifier);
 
+        let targetPosition: number | undefined = undefined;
+        if (isLinked) {
+            const currentOrder = this.getPromptOrder();
+            const originalIdx = currentOrder.indexOf(identifier);
+            if (originalIdx !== -1) {
+                targetPosition = originalIdx + 1;
+            }
+        }
+
         return this.stageCreate({
             name: duplicateName,
             content: p.content,
@@ -549,6 +600,7 @@ export class PresetGitManager {
             injection_depth: p.injection_depth,
             injection_order: p.injection_order,
             addToLinked: isLinked,
+            position: targetPosition,
         });
     }
 
@@ -741,9 +793,9 @@ export class PresetGitManager {
 
                 for (const k of allowed) {
                     if (mergedFields[k] !== undefined) {
-                        if (k === 'enabled') {
+                        if (k === 'enabled' || k === 'system_prompt' || k === 'marker' || k === 'forbid_overrides') {
                             const raw = mergedFields[k];
-                            (targetStaging as any).enabled =
+                            (targetStaging as any)[k] =
                                 typeof raw === 'string' ? raw.toLowerCase() === 'true' || raw === '1' : Boolean(raw);
                         } else {
                             (targetStaging as any)[k] = mergedFields[k];
@@ -1387,9 +1439,25 @@ export class PresetGitManager {
             return false;
         }
 
-        // 1. Ghi prompts vào ST memory
+        // 1. Ghi prompts vào ST memory & chuẩn hóa system_prompt: false cho custom user prompts.
+        // SillyTavern requirement: User custom blocks MUST have system_prompt === false.
+        // If system_prompt is true or undefined, SillyTavern hides the unlink button and excludes the prompt from LLM completion.
+        const builtInSystemPrompts = new Set(['main', 'nsfw', 'jailbreak', 'enhanceDefinitions']);
+        const sanitizedPrompts = prompts.map((p) => {
+            const copy: PromptBlock = JSON.parse(JSON.stringify(p));
+            if (!builtInSystemPrompts.has(copy.identifier) && !copy.marker) {
+                if (copy.system_prompt !== false) {
+                    copy.system_prompt = false;
+                }
+            }
+            if (copy.marker === undefined) copy.marker = false;
+            if (copy.forbid_overrides === undefined) copy.forbid_overrides = false;
+            if (copy.injection_trigger === undefined) copy.injection_trigger = [];
+            return copy;
+        });
+
         container.prompts.length = 0;
-        prompts.forEach((p) => container.prompts.push(JSON.parse(JSON.stringify(p))));
+        sanitizedPrompts.forEach((p) => container.prompts.push(p));
 
         // 2. Ghi prompt_order (xử lý cả ST 1.18+ nested format lẫn flat format)
         if (
@@ -1401,26 +1469,65 @@ export class PresetGitManager {
             const win = window as any;
             const ctx = win.SillyTavern?.getContext?.() || {};
             const charId = ctx.characterId;
-            const targetObj =
-                charId !== undefined && charId !== null && charId !== ''
-                    ? container.prompt_order.find((o: any) => String(o.character_id) === String(charId)) ||
-                      container.prompt_order[0]
-                    : container.prompt_order[0];
-            if (targetObj) {
-                targetObj.order = order.map((id) => {
-                    const found = prompts.find((p) => p.identifier === id);
-                    return { identifier: id, enabled: found ? found.enabled !== false : true };
+
+            const newOrderEntries = order.map((id) => {
+                const found = sanitizedPrompts.find((p) => p.identifier === id);
+                return { identifier: id, enabled: found ? found.enabled !== false : true };
+            });
+
+            let updatedAny = false;
+            for (const entry of container.prompt_order) {
+                if (entry && Array.isArray(entry.order)) {
+                    // Update dummyId 100001 (ChatCompletion global active), 100000 (default fallback), or active character override
+                    if (
+                        Number(entry.character_id) === 100001 ||
+                        String(entry.character_id) === '100001' ||
+                        Number(entry.character_id) === 100000 ||
+                        String(entry.character_id) === '100000' ||
+                        (charId !== undefined &&
+                            charId !== null &&
+                            charId !== '' &&
+                            String(entry.character_id) === String(charId))
+                    ) {
+                        entry.order = JSON.parse(JSON.stringify(newOrderEntries));
+                        updatedAny = true;
+                    }
+                }
+            }
+
+            if (!updatedAny && container.prompt_order.length > 0 && Array.isArray(container.prompt_order[0]?.order)) {
+                container.prompt_order[0].order = JSON.parse(JSON.stringify(newOrderEntries));
+            }
+
+            // Ensure dummyId 100001 entry exists for SillyTavern ChatCompletion presets
+            const has100001 = container.prompt_order.some(
+                (entry: any) => Number(entry?.character_id) === 100001 || String(entry?.character_id) === '100001',
+            );
+            if (!has100001) {
+                container.prompt_order.push({
+                    character_id: 100001,
+                    order: JSON.parse(JSON.stringify(newOrderEntries)),
                 });
             }
         } else {
             container.prompt_order = order.slice();
         }
 
-        // 3. Emit events and trigger SillyTavern UI Save
+        // 3. Emit events and trigger SillyTavern UI Save & Re-render
         const win = window as any;
         if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
             const stCtx = win.SillyTavern.getContext();
-            stCtx?.eventSource?.emit?.('oai_preset_changed_after');
+            const evtName = stCtx?.eventTypes?.OAI_PRESET_CHANGED_AFTER || 'oai_preset_changed_after';
+            stCtx?.eventSource?.emit?.(evtName);
+
+            // Directly trigger prompt manager re-render if available
+            if (typeof win.promptManager?.render === 'function') {
+                try {
+                    win.promptManager.render(false);
+                } catch {
+                    // ignore
+                }
+            }
 
             setTimeout(() => {
                 const saveBtn =
