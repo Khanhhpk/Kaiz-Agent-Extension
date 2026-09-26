@@ -5163,7 +5163,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return KaizDB.instance;
       }
       dbName = 'KaizAgentDB';
-      dbVersion = 6;
+      dbVersion = 7;
       db = null;
       constructor() {
           if (!KaizDB.instance) {
@@ -5226,6 +5226,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           autoIncrement: true,
                       });
                       galleryStore.createIndex('timestamp', 'timestamp', { unique: false });
+                  }
+                  // --- PRESET COMMITS (DB v7) ---
+                  if (!db.objectStoreNames.contains('preset_commits')) {
+                      const commitStore = db.createObjectStore('preset_commits', {
+                          keyPath: 'id',
+                          autoIncrement: true,
+                      });
+                      commitStore.createIndex('hash', 'hash', { unique: true });
+                      commitStore.createIndex('presetName', 'presetName', { unique: false });
+                      commitStore.createIndex('timestamp', 'timestamp', { unique: false });
+                      commitStore.createIndex('parentHash', 'parentHash', { unique: false });
+                      commitStore.createIndex('tag', 'tag', { unique: false });
                   }
               };
               request.onsuccess = async (event) => {
@@ -5969,6 +5981,221 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               request.onerror = () => reject(request.error);
           });
       }
+      // =========================================================================
+      // PRESET COMMITS (GIT CONTROL VERSION)
+      // =========================================================================
+      async addPresetCommit(commit) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const request = store.add(commit);
+              request.onsuccess = () => resolve(request.result);
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetCommits(presetName, limit = 30) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const request = index.getAll(presetName);
+              request.onsuccess = () => {
+                  const results = request.result || [];
+                  // Sort newest first
+                  results.sort((a, b) => b.timestamp - a.timestamp);
+                  resolve(results.slice(0, limit));
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetCommitByHash(hash) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('hash');
+              const request = index.get(hash);
+              request.onsuccess = () => {
+                  resolve(request.result || null);
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetCommitByTag(presetName, tag) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const request = index.getAll(presetName);
+              request.onsuccess = () => {
+                  const results = request.result || [];
+                  const found = results.find((c) => c.tag === tag);
+                  resolve(found || null);
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async deletePresetCommits(presetName) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const request = index.openCursor(IDBKeyRange.only(presetName));
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      cursor.delete();
+                      cursor.continue();
+                  }
+                  else {
+                      resolve();
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async deletePresetCommitsAfter(presetName, timestamp) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              let deletedCount = 0;
+              const request = index.openCursor(IDBKeyRange.only(presetName));
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      const entry = cursor.value;
+                      if (entry.timestamp > timestamp) {
+                          cursor.delete();
+                          deletedCount++;
+                      }
+                      cursor.continue();
+                  }
+                  else {
+                      resolve(deletedCount);
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async prunePresetCommits(presetName, keepCount = 30) {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          const allCommits = await this.getPresetCommits(presetName, 1000);
+          if (allCommits.length <= keepCount)
+              return 0;
+          const toDeleteHashes = new Set(allCommits.slice(keepCount).map((c) => c.hash));
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readwrite');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              let deletedCount = 0;
+              const request = index.openCursor(IDBKeyRange.only(presetName));
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      const entry = cursor.value;
+                      if (toDeleteHashes.has(entry.hash)) {
+                          cursor.delete();
+                          deletedCount++;
+                      }
+                      cursor.continue();
+                  }
+                  else {
+                      resolve(deletedCount);
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getDistinctPresetNames() {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              const index = store.index('presetName');
+              const names = new Set();
+              const request = index.openKeyCursor();
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      names.add(cursor.key);
+                      cursor.continue();
+                  }
+                  else {
+                      resolve(Array.from(names));
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
+      async getPresetStorageStats() {
+          if (!this.db)
+              await this.init();
+          if (!this.db)
+              throw new Error('DB not initialized');
+          return new Promise((resolve, reject) => {
+              const transaction = this.db.transaction(['preset_commits'], 'readonly');
+              const store = transaction.objectStore('preset_commits');
+              let totalCommits = 0;
+              let totalBytes = 0;
+              const byPreset = {};
+              const request = store.openCursor();
+              request.onsuccess = (event) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      totalCommits++;
+                      const entry = cursor.value;
+                      const pName = entry.presetName || 'unknown';
+                      const str = JSON.stringify(entry);
+                      const bytes = str.length * 2; // rough UTF-16 bytes in memory
+                      totalBytes += bytes;
+                      if (!byPreset[pName])
+                          byPreset[pName] = { commits: 0, bytes: 0 };
+                      byPreset[pName].commits++;
+                      byPreset[pName].bytes += bytes;
+                      cursor.continue();
+                  }
+                  else {
+                      resolve({
+                          totalCommits,
+                          totalBytes,
+                          presetCount: Object.keys(byPreset).length,
+                          byPreset,
+                      });
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+      }
   }
 
   class WebImageBridge {
@@ -6297,6 +6524,2337 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
   };
 
   /**
+   * preset_helpers.ts
+   * Core Git Engine & Staging Sandbox cho Preset Tools trong Kaiz Agent Extension.
+   * Lấy cảm hứng từ kiến trúc Git Internals kết hợp tinh hoa của ST Multitool Preset Editor Agency.
+   */
+  // ─── PresetGitManager Singleton ─────────────────────────────────────────────
+  class PresetGitManager {
+      static instance = null;
+      static getInstance() {
+          if (!PresetGitManager.instance) {
+              PresetGitManager.instance = new PresetGitManager();
+          }
+          return PresetGitManager.instance;
+      }
+      // ─── Staging Sandbox State ──────────────────────────────────────────────
+      _stagingMap = new Map(); // identifier -> changes
+      _stagingCreates = [];
+      _stagingDeletes = new Set(); // set of identifiers
+      _stagingOrder = null; // custom reordered identifiers
+      _stagingVars = {};
+      _stagingVarRenames = {}; // oldName -> newName
+      _activeHeads = new Map(); // presetName -> commitHash
+      _lastPresetName = null;
+      db = KaizDB.getInstance();
+      checkPresetSwitch() {
+          const currentName = this.getActivePresetName();
+          if (this._lastPresetName && this._lastPresetName !== currentName) {
+              // Preset switched! Clear staging from previous preset to prevent cross-contamination
+              this.clearStaging();
+          }
+          this._lastPresetName = currentName;
+      }
+      // ─── SillyTavern Context Accessors ──────────────────────────────────────
+      getContainer() {
+          const win = window;
+          if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+              const ctx = win.SillyTavern.getContext();
+              if (ctx?.chatCompletionSettings && Array.isArray(ctx.chatCompletionSettings.prompts)) {
+                  return ctx.chatCompletionSettings;
+              }
+              if (ctx?.power_user?.instruct && Array.isArray(ctx.power_user.instruct.prompts)) {
+                  return ctx.power_user.instruct;
+              }
+          }
+          if (win.chatCompletionSettings && Array.isArray(win.chatCompletionSettings.prompts)) {
+              return win.chatCompletionSettings;
+          }
+          return null;
+      }
+      getActivePresetName() {
+          const container = this.getContainer();
+          const win = window;
+          if (container?.preset_settings_openai) {
+              return String(container.preset_settings_openai);
+          }
+          const $el = (win.$ ? win.$('#chat_completion_preset') : null) || (win.$ ? win.$('#openai_preset') : null);
+          if ($el && $el.length && $el.val()) {
+              return String($el.val());
+          }
+          return 'Default Preset';
+      }
+      getRawLiveOrderEntries() {
+          const container = this.getContainer();
+          if (!container)
+              return [];
+          const raw = container.prompt_order || [];
+          if (!Array.isArray(raw) || raw.length === 0) {
+              return (container.prompts || []).map((p) => ({
+                  identifier: p.identifier,
+                  enabled: p.enabled !== false,
+              }));
+          }
+          // Handle nested order structure: [{ character_id: ..., order: [...] }]
+          if (typeof raw[0] === 'object' && raw[0] !== null && Array.isArray(raw[0].order)) {
+              const win = window;
+              const ctx = win.SillyTavern?.getContext?.() || {};
+              const charId = ctx.characterId;
+              let targetObj = null;
+              // 1. If active character override exists with non-empty order
+              if (charId !== undefined && charId !== null && charId !== '') {
+                  targetObj = raw.find((o) => String(o?.character_id) === String(charId) && Array.isArray(o?.order) && o.order.length > 0);
+              }
+              // 2. ChatCompletion standard dummyId 100001 (active preset configuration in ST)
+              if (!targetObj) {
+                  targetObj = raw.find((o) => (Number(o?.character_id) === 100001 || String(o?.character_id) === '100001') &&
+                      Array.isArray(o?.order));
+              }
+              // 3. PromptManager fallback dummyId 100000
+              if (!targetObj) {
+                  targetObj = raw.find((o) => (Number(o?.character_id) === 100000 || String(o?.character_id) === '100000') &&
+                      Array.isArray(o?.order));
+              }
+              // 4. Any entry with order array, or raw[0]
+              if (!targetObj) {
+                  targetObj = raw.find((o) => o && Array.isArray(o?.order)) || raw[0];
+              }
+              const orderList = targetObj?.order || [];
+              return orderList
+                  .map((o) => {
+                  if (typeof o === 'string') {
+                      return { identifier: o, enabled: true };
+                  }
+                  if (o && typeof o === 'object' && o.identifier) {
+                      return { identifier: String(o.identifier), enabled: o.enabled !== false };
+                  }
+                  return null;
+              })
+                  .filter((item) => item !== null);
+          }
+          // Handle flat order structure: [ { identifier: 'main', enabled: true }, 'chat_history', ... ]
+          return raw
+              .map((o) => {
+              if (typeof o === 'string') {
+                  return { identifier: o, enabled: true };
+              }
+              if (o && typeof o === 'object' && o.identifier) {
+                  return { identifier: String(o.identifier), enabled: o.enabled !== false };
+              }
+              return null;
+          })
+              .filter((item) => item !== null);
+      }
+      getRawLiveOrder() {
+          return this.getRawLiveOrderEntries().map((e) => e.identifier);
+      }
+      getRawLivePrompts() {
+          const container = this.getContainer();
+          if (!container || !Array.isArray(container.prompts))
+              return [];
+          const orderEntries = this.getRawLiveOrderEntries();
+          const orderEnabledMap = new Map();
+          for (const entry of orderEntries) {
+              orderEnabledMap.set(entry.identifier, entry.enabled);
+          }
+          return container.prompts.map((p) => {
+              const copy = { ...p };
+              if (orderEnabledMap.has(p.identifier)) {
+                  // For linked blocks, the prompt_order entry is canonical in SillyTavern
+                  copy.enabled = orderEnabledMap.get(p.identifier);
+              }
+              else {
+                  // For unlinked blocks, preserve prompt's own enabled state or default to true
+                  copy.enabled = copy.enabled !== false;
+              }
+              return copy;
+          });
+      }
+      // ─── Staging / Sandbox Overlay Read ─────────────────────────────────────
+      getPrompts() {
+          this.checkPresetSwitch();
+          const basePrompts = this.getRawLivePrompts();
+          // 1. Map existing blocks with staging changes & filter deleted
+          const prompts = basePrompts
+              .map((p) => {
+              if (this._stagingDeletes.has(p.identifier))
+                  return null;
+              if (this._stagingMap.has(p.identifier)) {
+                  const stagedFields = this._stagingMap.get(p.identifier);
+                  return { ...p, ...stagedFields, identifier: p.identifier };
+              }
+              return { ...p };
+          })
+              .filter((p) => p !== null);
+          // 2. Add staged new blocks
+          for (const created of this._stagingCreates) {
+              if (!this._stagingDeletes.has(created.block.identifier)) {
+                  prompts.push({ ...created.block });
+              }
+          }
+          return prompts;
+      }
+      getPromptOrder() {
+          this.checkPresetSwitch();
+          let baseOrder;
+          if (this._stagingOrder && Array.isArray(this._stagingOrder)) {
+              baseOrder = this._stagingOrder.slice();
+          }
+          else {
+              baseOrder = this.getRawLiveOrder();
+          }
+          const filtered = baseOrder.filter((id) => id && !this._stagingDeletes.has(id));
+          // Append created blocks that have addToLinked = true
+          for (const created of this._stagingCreates) {
+              if (created.addToLinked && !this._stagingDeletes.has(created.block.identifier)) {
+                  if (!filtered.includes(created.block.identifier)) {
+                      if (typeof created.position === 'number' &&
+                          created.position >= 0 &&
+                          created.position <= filtered.length) {
+                          filtered.splice(created.position, 0, created.block.identifier);
+                      }
+                      else {
+                          filtered.push(created.block.identifier);
+                      }
+                  }
+              }
+          }
+          return filtered;
+      }
+      findPrompt(identifier) {
+          if (!identifier)
+              return null;
+          const needle = String(identifier).trim();
+          const prompts = this.getPrompts();
+          const exact = prompts.find((p) => p.identifier === needle || p.id === needle);
+          if (exact)
+              return exact;
+          const lower = needle.toLowerCase();
+          return prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower) || null;
+      }
+      findRawPrompt(identifier) {
+          if (!identifier)
+              return null;
+          const needle = String(identifier).trim();
+          const prompts = this.getRawLivePrompts();
+          const exact = prompts.find((p) => p.identifier === needle || p.id === needle);
+          if (exact)
+              return exact;
+          const lower = needle.toLowerCase();
+          return prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower) || null;
+      }
+      // ─── Staging Actions (Working Tree Sandbox) ─────────────────────────────
+      hasStagingChanges() {
+          return (this._stagingMap.size > 0 ||
+              this._stagingCreates.length > 0 ||
+              this._stagingDeletes.size > 0 ||
+              this._stagingOrder !== null ||
+              Object.keys(this._stagingVars).length > 0 ||
+              Object.keys(this._stagingVarRenames).length > 0);
+      }
+      clearStaging() {
+          this._stagingMap.clear();
+          this._stagingCreates = [];
+          this._stagingDeletes.clear();
+          this._stagingOrder = null;
+          this._stagingVars = {};
+          this._stagingVarRenames = {};
+      }
+      stageCreate(args) {
+          const identifier = 'block_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+          const newBlock = {
+              identifier,
+              id: identifier,
+              name: args.name || 'New Block',
+              content: args.content || '',
+              role: args.role || 'system',
+              enabled: true,
+              // CRITICAL: SillyTavern requires explicit false for custom user prompts!
+              // If true or undefined, SillyTavern hides the unlink button and excludes the prompt from LLM completion.
+              system_prompt: false,
+              marker: false,
+              forbid_overrides: false,
+              injection_position: args.injection_position ?? 0,
+              injection_depth: args.injection_depth ?? 4,
+              injection_order: args.injection_order ?? 100,
+              injection_trigger: [],
+          };
+          const addToLinked = args.addToLinked ?? true;
+          this._stagingCreates.push({ block: newBlock, addToLinked, position: args.position });
+          if (addToLinked && this._stagingOrder && Array.isArray(this._stagingOrder)) {
+              if (typeof args.position === 'number' && args.position >= 0 && args.position <= this._stagingOrder.length) {
+                  this._stagingOrder.splice(args.position, 0, identifier);
+              }
+              else {
+                  this._stagingOrder.push(identifier);
+              }
+          }
+          return {
+              ok: true,
+              identifier,
+              summary: `[Staged] Đã tạo block mới "${newBlock.name}" (${addToLinked ? 'Linked' : 'Unlinked'}) [ID: ${identifier}]`,
+          };
+      }
+      stageUpdateContent(identifier, content) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          this._stagingMap.get(canonicalId).content = content;
+          return {
+              ok: true,
+              summary: `[Staged] Đã cập nhật toàn bộ nội dung của block "${p.name}" (${content.length} ký tự).`,
+          };
+      }
+      stageReplaceText(identifier, target_string, replacement_string, isGlobal = false, onlyLinked = false) {
+          if (!target_string)
+              throw new Error('Tham số target_string không được để trống.');
+          const prompts = this.getPrompts();
+          const linkedSet = new Set(this.getPromptOrder());
+          let modifiedCount = 0;
+          const modifiedNames = [];
+          if (isGlobal || !identifier) {
+              for (const p of prompts) {
+                  if (onlyLinked && !linkedSet.has(p.identifier))
+                      continue;
+                  if (!this._stagingMap.has(p.identifier))
+                      this._stagingMap.set(p.identifier, {});
+                  const currentContent = this._stagingMap.get(p.identifier).content !== undefined
+                      ? this._stagingMap.get(p.identifier).content
+                      : p.content || '';
+                  if (currentContent.includes(target_string)) {
+                      this._stagingMap.get(p.identifier).content = currentContent
+                          .split(target_string)
+                          .join(replacement_string);
+                      modifiedCount++;
+                      modifiedNames.push(p.name);
+                  }
+              }
+              if (modifiedCount === 0) {
+                  return {
+                      ok: true,
+                      summary: `Không tìm thấy đoạn "${target_string}" trong bất kỳ block nào.`,
+                      modified_count: 0,
+                  };
+              }
+              return {
+                  ok: true,
+                  summary: `[Staged] Đã thay thế toàn cục trong ${modifiedCount} block: ${modifiedNames.join(', ')}`,
+                  modified_count: modifiedCount,
+              };
+          }
+          else {
+              const p = this.findPrompt(identifier);
+              if (!p)
+                  throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+              const canonicalId = p.identifier;
+              if (!this._stagingMap.has(canonicalId))
+                  this._stagingMap.set(canonicalId, {});
+              const currentContent = this._stagingMap.get(canonicalId).content !== undefined
+                  ? this._stagingMap.get(canonicalId).content
+                  : p.content || '';
+              if (!currentContent.includes(target_string)) {
+                  throw new Error(`Không tìm thấy đoạn "${target_string}" trong nội dung của block "${p.name}".`);
+              }
+              this._stagingMap.get(canonicalId).content = currentContent.split(target_string).join(replacement_string);
+              return {
+                  ok: true,
+                  summary: `[Staged] Đã thay thế đoạn văn bản trong block "${p.name}".`,
+                  modified_count: 1,
+              };
+          }
+      }
+      stageAppendContent(identifier, append_text) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          const currentContent = this._stagingMap.get(canonicalId).content !== undefined
+              ? this._stagingMap.get(canonicalId).content
+              : p.content || '';
+          this._stagingMap.get(canonicalId).content =
+              currentContent + (currentContent && append_text ? '\n' : '') + append_text;
+          return {
+              ok: true,
+              summary: `[Staged] Đã nối thêm ${append_text.length} ký tự vào block "${p.name}".`,
+          };
+      }
+      stageUpdateMeta(identifier, meta) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
+          const allowedKeys = [
+              'name',
+              'role',
+              'enabled',
+              'injection_position',
+              'injection_depth',
+              'injection_order',
+              'system_prompt',
+              'marker',
+              'forbid_overrides',
+          ];
+          const rawMeta = meta;
+          const updates = {};
+          for (const k of allowedKeys) {
+              if (rawMeta[k] !== undefined) {
+                  if (k === 'enabled' || k === 'system_prompt' || k === 'marker' || k === 'forbid_overrides') {
+                      const raw = rawMeta[k];
+                      updates[k] = typeof raw === 'string' ? raw.toLowerCase() === 'true' || raw === '1' : Boolean(raw);
+                  }
+                  else {
+                      updates[k] = rawMeta[k];
+                  }
+              }
+          }
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          Object.assign(this._stagingMap.get(canonicalId), updates);
+          return {
+              ok: true,
+              summary: `[Staged] Đã cập nhật metadata [${Object.keys(updates).join(', ')}] cho block "${p.name}".`,
+          };
+      }
+      stageToggle(identifier, enabled) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
+          let newEnabled;
+          if (enabled !== undefined) {
+              newEnabled =
+                  typeof enabled === 'string' ? enabled.toLowerCase() === 'true' || enabled === '1' : Boolean(enabled);
+          }
+          else {
+              const currentVal = this._stagingMap.get(canonicalId)?.enabled !== undefined
+                  ? this._stagingMap.get(canonicalId).enabled
+                  : p.enabled;
+              newEnabled = !currentVal;
+          }
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          this._stagingMap.get(canonicalId).enabled = newEnabled;
+          return {
+              ok: true,
+              enabled: newEnabled,
+              summary: `[Staged] Đã ${newEnabled ? 'BẬT' : 'TẮT'} block "${p.name}".`,
+          };
+      }
+      stageSetLinked(identifier, linked, position) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
+          const currentOrder = this.getPromptOrder().slice();
+          const idx = currentOrder.indexOf(canonicalId);
+          if (linked) {
+              if (idx === -1) {
+                  if (typeof position === 'number' && position >= 0 && position <= currentOrder.length) {
+                      currentOrder.splice(position, 0, canonicalId);
+                  }
+                  else {
+                      currentOrder.push(canonicalId);
+                  }
+              }
+              else if (typeof position === 'number' &&
+                  position >= 0 &&
+                  position < currentOrder.length &&
+                  position !== idx) {
+                  currentOrder.splice(idx, 1);
+                  currentOrder.splice(position, 0, canonicalId);
+              }
+          }
+          else {
+              if (idx !== -1) {
+                  currentOrder.splice(idx, 1);
+              }
+          }
+          this._stagingOrder = currentOrder;
+          return {
+              ok: true,
+              summary: `[Staged] Đã chuyển block "${p.name}" thành ${linked ? `Linked (Vị trí #${currentOrder.indexOf(canonicalId) + 1})` : 'Unlinked'}.`,
+          };
+      }
+      stageReorder(order) {
+          if (!Array.isArray(order))
+              throw new Error('Tham số order phải là một mảng identifier.');
+          const resolvedOrder = [];
+          const missing = [];
+          for (const item of order) {
+              const found = this.findPrompt(item);
+              if (found) {
+                  resolvedOrder.push(found.identifier);
+              }
+              else {
+                  missing.push(item);
+              }
+          }
+          if (missing.length > 0) {
+              throw new Error(`Các ID/tên sau không tồn tại trong preset: ${missing.join(', ')}`);
+          }
+          this._stagingOrder = resolvedOrder;
+          return {
+              ok: true,
+              summary: `[Staged] Đã sắp xếp lại thứ tự của ${resolvedOrder.length} prompt blocks.`,
+          };
+      }
+      stageDuplicate(identifier, newName) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
+          const duplicateName = newName || `${p.name} (Copy)`;
+          const isLinked = this.getPromptOrder().includes(canonicalId);
+          let targetPosition = undefined;
+          if (isLinked) {
+              const currentOrder = this.getPromptOrder();
+              const originalIdx = currentOrder.indexOf(canonicalId);
+              if (originalIdx !== -1) {
+                  targetPosition = originalIdx + 1;
+              }
+          }
+          const stagingMod = this._stagingMap.get(canonicalId) || {};
+          const effectiveContent = stagingMod.content !== undefined ? stagingMod.content : p.content;
+          const effectiveRole = stagingMod.role !== undefined ? stagingMod.role : p.role;
+          const effectiveInjPos = stagingMod.injection_position !== undefined ? stagingMod.injection_position : p.injection_position;
+          const effectiveInjDepth = stagingMod.injection_depth !== undefined ? stagingMod.injection_depth : p.injection_depth;
+          const effectiveInjOrder = stagingMod.injection_order !== undefined ? stagingMod.injection_order : p.injection_order;
+          return this.stageCreate({
+              name: duplicateName,
+              content: effectiveContent,
+              role: effectiveRole,
+              injection_position: effectiveInjPos,
+              injection_depth: effectiveInjDepth,
+              injection_order: effectiveInjOrder,
+              addToLinked: isLinked,
+              position: targetPosition,
+          });
+      }
+      stageDelete(identifier) {
+          const p = this.findPrompt(identifier);
+          if (!p)
+              throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
+          // If it was created in this staging session, remove it directly
+          const createdIdx = this._stagingCreates.findIndex((c) => c.block.identifier === canonicalId);
+          if (createdIdx !== -1) {
+              this._stagingCreates.splice(createdIdx, 1);
+          }
+          else {
+              this._stagingDeletes.add(canonicalId);
+          }
+          if (this._stagingMap.has(canonicalId)) {
+              this._stagingMap.delete(canonicalId);
+          }
+          if (this._stagingOrder) {
+              this._stagingOrder = this._stagingOrder.filter((id) => id !== canonicalId);
+          }
+          return {
+              ok: true,
+              summary: `[Staged] Đã đánh dấu xóa block "${p.name}" [ID: ${canonicalId}].`,
+          };
+      }
+      stageBatchUpdate(updates) {
+          if (!Array.isArray(updates))
+              throw new Error('Tham số updates phải là một mảng.');
+          const results = [];
+          let successCount = 0;
+          for (const upd of updates) {
+              if (!upd || typeof upd !== 'object') {
+                  results.push({ ok: false, error: 'Phần tử update không hợp lệ (phải là object)' });
+                  continue;
+              }
+              const rawId = upd.identifier !== undefined ? upd.identifier : upd.id !== undefined ? upd.id : upd.data?.identifier;
+              const subAction = (upd.action || upd.type || '').toLowerCase();
+              const payloadData = typeof upd.data === 'object' && upd.data !== null ? upd.data : {};
+              if (subAction === 'create') {
+                  try {
+                      const res = this.stageCreate({
+                          name: payloadData.name || upd.name,
+                          content: payloadData.content || upd.content,
+                          role: payloadData.role || upd.role,
+                          injection_position: payloadData.injection_position || upd.injection_position,
+                          injection_depth: payloadData.injection_depth ?? upd.injection_depth,
+                          injection_order: payloadData.injection_order ?? upd.injection_order,
+                          addToLinked: payloadData.addToLinked ?? upd.addToLinked,
+                          position: payloadData.position ?? upd.position,
+                      });
+                      results.push({ identifier: res.identifier, ok: true, action: 'create' });
+                      successCount++;
+                  }
+                  catch (err) {
+                      results.push({ ok: false, action: 'create', error: err.message });
+                  }
+                  continue;
+              }
+              if (!rawId) {
+                  results.push({ ok: false, error: 'Thiếu identifier của prompt block' });
+                  continue;
+              }
+              let p = this.findPrompt(String(rawId));
+              if (!p) {
+                  // Fallback: Tìm theo tên block (không phân biệt hoa thường)
+                  const needle = String(rawId).trim().toLowerCase();
+                  p = this.getPrompts().find((item) => item.name && item.name.trim().toLowerCase() === needle) || null;
+              }
+              if (!p) {
+                  results.push({
+                      identifier: rawId,
+                      ok: false,
+                      error: `Không tìm thấy block với ID hoặc tên: "${rawId}"`,
+                  });
+                  continue;
+              }
+              const resolvedId = p.identifier;
+              try {
+                  if (subAction === 'delete') {
+                      this.stageDelete(resolvedId);
+                      results.push({ identifier: resolvedId, ok: true, action: 'delete' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'toggle') {
+                      const rawEnabled = payloadData.enabled !== undefined ? payloadData.enabled : upd.enabled;
+                      let targetEnabled = undefined;
+                      if (rawEnabled !== undefined) {
+                          targetEnabled =
+                              typeof rawEnabled === 'string'
+                                  ? rawEnabled.toLowerCase() === 'true' || rawEnabled === '1'
+                                  : Boolean(rawEnabled);
+                      }
+                      const res = this.stageToggle(resolvedId, targetEnabled);
+                      results.push({ identifier: resolvedId, ok: true, action: 'toggle', enabled: res.enabled });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'edit_content') {
+                      const content = payloadData.content !== undefined
+                          ? String(payloadData.content)
+                          : upd.content !== undefined
+                              ? String(upd.content)
+                              : '';
+                      this.stageUpdateContent(resolvedId, content);
+                      results.push({ identifier: resolvedId, ok: true, action: 'edit_content' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'replace_text') {
+                      const target = payloadData.target_string || upd.target_string;
+                      const replacement = payloadData.replacement_string ?? upd.replacement_string ?? '';
+                      if (!target)
+                          throw new Error('Thiếu target_string');
+                      this.stageReplaceText(resolvedId, target, replacement);
+                      results.push({ identifier: resolvedId, ok: true, action: 'replace_text' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'append_content') {
+                      const appendText = payloadData.append_text || upd.append_text || '';
+                      this.stageAppendContent(resolvedId, appendText);
+                      results.push({ identifier: resolvedId, ok: true, action: 'append_content' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'set_linked') {
+                      const linked = payloadData.linked !== undefined ? Boolean(payloadData.linked) : Boolean(upd.linked);
+                      const position = typeof payloadData.position === 'number' ? payloadData.position : upd.position;
+                      this.stageSetLinked(resolvedId, linked, position);
+                      results.push({ identifier: resolvedId, ok: true, action: 'set_linked' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'duplicate') {
+                      const newName = payloadData.newName || upd.newName;
+                      const res = this.stageDuplicate(resolvedId, newName);
+                      results.push({
+                          identifier: resolvedId,
+                          duplicated_id: res.identifier,
+                          ok: true,
+                          action: 'duplicate',
+                      });
+                      successCount++;
+                      continue;
+                  }
+                  // Nhóm trực tiếp hoặc subAction là 'edit_meta' / 'update':
+                  const mergedFields = { ...upd, ...payloadData };
+                  delete mergedFields.action;
+                  delete mergedFields.type;
+                  delete mergedFields.data;
+                  delete mergedFields.identifier;
+                  delete mergedFields.id;
+                  const allowed = [
+                      'name',
+                      'content',
+                      'role',
+                      'enabled',
+                      'injection_position',
+                      'injection_depth',
+                      'injection_order',
+                      'system_prompt',
+                      'marker',
+                      'forbid_overrides',
+                  ];
+                  let hasAppliedAny = false;
+                  if (!this._stagingMap.has(resolvedId))
+                      this._stagingMap.set(resolvedId, {});
+                  const targetStaging = this._stagingMap.get(resolvedId);
+                  for (const k of allowed) {
+                      if (mergedFields[k] !== undefined) {
+                          if (k === 'enabled' || k === 'system_prompt' || k === 'marker' || k === 'forbid_overrides') {
+                              const raw = mergedFields[k];
+                              targetStaging[k] =
+                                  typeof raw === 'string' ? raw.toLowerCase() === 'true' || raw === '1' : Boolean(raw);
+                          }
+                          else {
+                              targetStaging[k] = mergedFields[k];
+                          }
+                          hasAppliedAny = true;
+                      }
+                  }
+                  if (hasAppliedAny) {
+                      const updatedKeys = Object.keys(mergedFields).filter((k) => allowed.includes(k));
+                      results.push({ identifier: resolvedId, ok: true, updated_fields: updatedKeys });
+                      successCount++;
+                  }
+                  else {
+                      if (Object.keys(targetStaging).length === 0) {
+                          this._stagingMap.delete(resolvedId);
+                      }
+                      results.push({
+                          identifier: resolvedId,
+                          ok: false,
+                          error: 'Không tìm thấy trường dữ liệu hợp lệ nào để cập nhật',
+                      });
+                  }
+              }
+              catch (err) {
+                  results.push({ identifier: resolvedId, ok: false, error: err.message });
+              }
+          }
+          return {
+              ok: successCount > 0,
+              summary: `[Staged] Đã cập nhật thành công ${successCount}/${updates.length} blocks trong batch.`,
+              results,
+          };
+      }
+      stageUpdateVar(args) {
+          const { varName, newValue, promptId, oldValueMatch } = args;
+          if (!varName || newValue === undefined)
+              throw new Error('Thiếu varName hoặc newValue.');
+          const prompts = this.getPrompts();
+          let targetBlock = null;
+          let matchStr = oldValueMatch || '';
+          const escapedVar = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const searchRegex = new RegExp(`\\{\\{(setvar|addvar|setglobalvar|addglobalvar)::${escapedVar}::([\\s\\S]*?)\\}\\}`, 'i');
+          for (const p of prompts) {
+              if (promptId) {
+                  const found = this.findPrompt(promptId);
+                  if (found && p.identifier !== found.identifier)
+                      continue;
+                  if (!found && p.identifier !== promptId)
+                      continue;
+              }
+              const content = p.content || '';
+              if (matchStr && content.includes(matchStr)) {
+                  targetBlock = p;
+                  break;
+              }
+              const m = content.match(searchRegex);
+              if (m) {
+                  targetBlock = p;
+                  matchStr = m[0];
+                  break;
+              }
+          }
+          if (!targetBlock || !matchStr) {
+              throw new Error(`Không tìm thấy khai báo biến "${varName}" trong các prompt blocks.`);
+          }
+          const canonicalId = targetBlock.identifier;
+          const stId = `${canonicalId}::${varName}`;
+          this._stagingVars[stId] = {
+              promptId: canonicalId,
+              varName,
+              oldValueMatch: matchStr,
+              newValue: String(newValue),
+          };
+          // Also reflect into staging content immediately
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          const curContent = this._stagingMap.get(canonicalId).content !== undefined
+              ? this._stagingMap.get(canonicalId).content
+              : targetBlock.content || '';
+          // Safely replace preserving the macro prefix {{setvar::varName::
+          const replaceRegex = new RegExp(`(\\{\\{(?:setvar|addvar|setglobalvar|addglobalvar)::${escapedVar}::)[\\s\\S]*?\\}\\}`, 'i');
+          let replaced = matchStr.replace(replaceRegex, `$1${newValue}}}`);
+          if (replaced === matchStr) {
+              // Fallback for corrupted/unmatched tags (e.g. {{setvar::val}} where varName was lost)
+              replaced = `{{setvar::${varName}::${newValue}}}`;
+          }
+          this._stagingMap.get(canonicalId).content = curContent.replace(matchStr, replaced);
+          return {
+              ok: true,
+              summary: `[Staged] Đã cập nhật biến "${varName}" = "${newValue}" trong block "${targetBlock.name}".`,
+          };
+      }
+      stageRenameVar(oldName, newName) {
+          if (!oldName || !newName)
+              throw new Error('Thiếu oldName hoặc newName.');
+          this._stagingVarRenames[oldName] = newName;
+          const prompts = this.getPrompts();
+          let affected = 0;
+          const escapedOld = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          // Match setter macros ({{setvar::oldName::) and getter macros ({{getvar::oldName}})
+          const regex = new RegExp(`(\\{\\{(?:setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::)${escapedOld}(::|\\}\\})`, 'gi');
+          for (const p of prompts) {
+              const content = p.content || '';
+              regex.lastIndex = 0;
+              if (regex.test(content)) {
+                  regex.lastIndex = 0;
+                  if (!this._stagingMap.has(p.identifier))
+                      this._stagingMap.set(p.identifier, {});
+                  const cur = this._stagingMap.get(p.identifier).content !== undefined
+                      ? this._stagingMap.get(p.identifier).content
+                      : content;
+                  this._stagingMap.get(p.identifier).content = cur.replace(regex, `$1${newName}$2`);
+                  affected++;
+              }
+          }
+          return {
+              ok: true,
+              summary: `[Staged] Đã đổi tên biến "${oldName}" -> "${newName}" trên ${affected} blocks.`,
+          };
+      }
+      // ─── Git Diff Engine ────────────────────────────────────────────────────
+      calculateDiff(baseline) {
+          const livePrompts = baseline ? baseline.prompts : this.getRawLivePrompts();
+          const liveOrder = baseline ? baseline.prompt_order : this.getRawLiveOrder();
+          const stagedPrompts = this.getPrompts();
+          const stagedOrder = this.getPromptOrder();
+          const items = [];
+          let added = 0;
+          let modified = 0;
+          let deleted = 0;
+          const liveMap = new Map(livePrompts.map((p) => [p.identifier, p]));
+          const stagedMap = new Map(stagedPrompts.map((p) => [p.identifier, p]));
+          // Check creates
+          for (const [id, sBlock] of stagedMap.entries()) {
+              if (!liveMap.has(id)) {
+                  added++;
+                  items.push({
+                      type: 'create',
+                      identifier: id,
+                      name: sBlock.name,
+                      newValue: sBlock,
+                      summary: `+ [CREATE] "${sBlock.name}" (${sBlock.role}, ${sBlock.content.length} chars)`,
+                  });
+              }
+              else {
+                  // Check updates
+                  const lBlock = liveMap.get(id);
+                  const changes = [];
+                  if ((sBlock.name || '') !== (lBlock.name || ''))
+                      changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
+                  const sContentNorm = (sBlock.content || '').replace(/\r\n/g, '\n');
+                  const lContentNorm = (lBlock.content || '').replace(/\r\n/g, '\n');
+                  if (sContentNorm !== lContentNorm) {
+                      changes.push(`content (${lContentNorm.length} -> ${sContentNorm.length} chars)`);
+                  }
+                  if ((sBlock.role || 'system') !== (lBlock.role || 'system'))
+                      changes.push(`role: ${lBlock.role || 'system'} -> ${sBlock.role || 'system'}`);
+                  const sEnabled = sBlock.enabled !== false;
+                  const lEnabled = lBlock.enabled !== false;
+                  if (sEnabled !== lEnabled)
+                      changes.push(`enabled: ${lEnabled} -> ${sEnabled}`);
+                  const sInjPos = sBlock.injection_position ?? 0;
+                  const lInjPos = lBlock.injection_position ?? 0;
+                  if (sInjPos !== lInjPos)
+                      changes.push(`position: ${lInjPos} -> ${sInjPos}`);
+                  const sInjDepth = sBlock.injection_depth ?? 4;
+                  const lInjDepth = lBlock.injection_depth ?? 4;
+                  if (sInjDepth !== lInjDepth)
+                      changes.push(`depth: ${lInjDepth} -> ${sInjDepth}`);
+                  const sInjOrder = sBlock.injection_order ?? 100;
+                  const lInjOrder = lBlock.injection_order ?? 100;
+                  if (sInjOrder !== lInjOrder)
+                      changes.push(`order: ${lInjOrder} -> ${sInjOrder}`);
+                  const sSys = Boolean(sBlock.system_prompt);
+                  const lSys = Boolean(lBlock.system_prompt);
+                  if (sSys !== lSys)
+                      changes.push(`system_prompt: ${lSys} -> ${sSys}`);
+                  const sMarker = Boolean(sBlock.marker);
+                  const lMarker = Boolean(lBlock.marker);
+                  if (sMarker !== lMarker)
+                      changes.push(`marker: ${lMarker} -> ${sMarker}`);
+                  const sForbid = Boolean(sBlock.forbid_overrides);
+                  const lForbid = Boolean(lBlock.forbid_overrides);
+                  if (sForbid !== lForbid)
+                      changes.push(`forbid_overrides: ${lForbid} -> ${sForbid}`);
+                  if (changes.length > 0) {
+                      modified++;
+                      items.push({
+                          type: 'update',
+                          identifier: id,
+                          name: sBlock.name,
+                          oldValue: lBlock,
+                          newValue: sBlock,
+                          summary: `~ [MODIFY] "${sBlock.name}": ${changes.join(', ')}`,
+                      });
+                  }
+              }
+          }
+          // Check deletes
+          for (const [id, lBlock] of liveMap.entries()) {
+              if (!stagedMap.has(id) || this._stagingDeletes.has(id)) {
+                  deleted++;
+                  items.push({
+                      type: 'delete',
+                      identifier: id,
+                      name: lBlock.name,
+                      oldValue: lBlock,
+                      summary: `- [DELETE] "${lBlock.name}" [ID: ${id}]`,
+                  });
+              }
+          }
+          // Check reorders
+          if (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder)) {
+              const mapReorderItem = (id, map1, map2) => {
+                  const b = map1.get(id) || map2.get(id);
+                  return {
+                      identifier: id,
+                      name: b?.name || id,
+                      role: b?.role || 'system',
+                      enabled: b?.enabled !== false,
+                  };
+              };
+              const reorderSummary = liveOrder.length === stagedOrder.length
+                  ? `↺ [REORDER] Thay đổi thứ tự ${liveOrder.length} linked blocks`
+                  : `↺ [REORDER] Thay đổi thứ tự linked blocks (${liveOrder.length} -> ${stagedOrder.length} items)`;
+              items.push({
+                  type: 'reorder',
+                  identifier: 'prompt_order',
+                  name: 'Thứ tự Prompt Blocks',
+                  oldValue: liveOrder.map((id) => mapReorderItem(id, liveMap, stagedMap)),
+                  newValue: stagedOrder.map((id) => mapReorderItem(id, stagedMap, liveMap)),
+                  summary: reorderSummary,
+              });
+          }
+          const totalChanges = added + modified + deleted + (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder) ? 1 : 0);
+          const isDirty = totalChanges > 0;
+          const summary = isDirty
+              ? `Preset có ${totalChanges} thay đổi chưa lưu: +${added} tạo mới, ~${modified} chỉnh sửa, -${deleted} xóa bỏ.`
+              : 'Working tree clean. Không có thay đổi nào.';
+          return {
+              isDirty,
+              totalChanges,
+              added,
+              modified,
+              deleted,
+              summary,
+              items,
+          };
+      }
+      async isDirtyAgainstHead() {
+          const hasStaging = this.hasStagingChanges();
+          if (hasStaging) {
+              const diff = this.calculateDiff();
+              return { isDirty: diff.isDirty, isStaged: true, diff };
+          }
+          const presetName = this.getActivePresetName();
+          let headHash = await this.getHeadCommitHash(presetName);
+          if (!headHash) {
+              headHash = await this.ensureInitialCommit(presetName);
+          }
+          const headCommit = await this.db.getPresetCommitByHash(headHash);
+          if (!headCommit?.tree) {
+              return { isDirty: false, isStaged: false, diff: this.calculateDiff() };
+          }
+          const diff = this.calculateDiff({
+              prompts: headCommit.tree.prompts || [],
+              prompt_order: headCommit.tree.prompt_order || [],
+          });
+          return { isDirty: diff.isDirty, isStaged: false, diff };
+      }
+      // ─── Git Hash Generator ─────────────────────────────────────────────────
+      async generateCommitHash(content) {
+          try {
+              if (crypto?.subtle?.digest) {
+                  const encoder = new TextEncoder();
+                  const data = encoder.encode(content);
+                  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                  const hashArray = Array.from(new Uint8Array(hashBuffer));
+                  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+                  return hashHex.substring(0, 8);
+              }
+          }
+          catch {
+              // fallback
+          }
+          // Fallback FNV-1a hash
+          let hash = 2166136261;
+          for (let i = 0; i < content.length; i++) {
+              hash ^= content.charCodeAt(i);
+              hash = Math.imul(hash, 16777619);
+          }
+          return (hash >>> 0).toString(16).padStart(8, '0').substring(0, 8);
+      }
+      // ─── Git Commit & Rollback ──────────────────────────────────────────────
+      async getHeadCommitHash(presetName) {
+          if (this._activeHeads.has(presetName)) {
+              return this._activeHeads.get(presetName);
+          }
+          try {
+              const saved = localStorage.getItem(`kaiz_preset_head_${presetName}`);
+              if (saved) {
+                  const commit = await this.db.getPresetCommitByHash(saved);
+                  if (commit) {
+                      this._activeHeads.set(presetName, commit.hash);
+                      return commit.hash;
+                  }
+              }
+          }
+          catch {
+              // ignore
+          }
+          const commits = await this.db.getPresetCommits(presetName, 1);
+          if (commits.length > 0) {
+              this._activeHeads.set(presetName, commits[0].hash);
+              try {
+                  localStorage.setItem(`kaiz_preset_head_${presetName}`, commits[0].hash);
+              }
+              catch {
+                  // ignore
+              }
+              return commits[0].hash;
+          }
+          return null;
+      }
+      async ensureInitialCommit(presetName) {
+          const head = await this.getHeadCommitHash(presetName);
+          if (head)
+              return head;
+          const livePrompts = this.getRawLivePrompts();
+          const liveOrder = this.getRawLiveOrder();
+          const timestamp = Date.now();
+          const hash = await this.generateCommitHash(`root:${presetName}:${timestamp}:${JSON.stringify(liveOrder)}`);
+          const rootCommit = {
+              hash,
+              parentHash: null,
+              presetName,
+              message: 'Initial preset snapshot',
+              author: 'user',
+              timestamp,
+              tree: {
+                  prompts: JSON.parse(JSON.stringify(livePrompts)),
+                  prompt_order: JSON.parse(JSON.stringify(liveOrder)),
+              },
+              stats: {
+                  added: livePrompts.length,
+                  modified: 0,
+                  deleted: 0,
+                  totalBlocks: livePrompts.length,
+              },
+              diffSummary: `Snapshot ban đầu (${livePrompts.length} blocks)`,
+          };
+          await this.db.addPresetCommit(rootCommit);
+          this._activeHeads.set(presetName, hash);
+          try {
+              localStorage.setItem(`kaiz_preset_head_${presetName}`, hash);
+          }
+          catch {
+              // ignore
+          }
+          return hash;
+      }
+      async commit(message, author = 'agent', tag, allowEmpty = false) {
+          const presetName = this.getActivePresetName();
+          const dirtyInfo = await this.isDirtyAgainstHead();
+          const diff = dirtyInfo.diff;
+          if (!diff.isDirty && !allowEmpty && !tag) {
+              return {
+                  ok: true,
+                  hash: (await this.getHeadCommitHash(presetName)) || 'HEAD',
+                  summary: 'Working tree clean. Không có thay đổi nào để commit.',
+              };
+          }
+          const parentHash = await this.ensureInitialCommit(presetName);
+          const finalPrompts = this.getPrompts();
+          const finalOrder = this.getPromptOrder();
+          const timestamp = Date.now();
+          const hashSeed = `${parentHash}:${timestamp}:${message}:${JSON.stringify(finalOrder)}`;
+          const commitHash = await this.generateCommitHash(hashSeed);
+          const changeParts = [
+              diff.added > 0 ? `+${diff.added} mới` : null,
+              diff.modified > 0 ? `~${diff.modified} sửa` : null,
+              diff.deleted > 0 ? `-${diff.deleted} xóa` : null,
+          ].filter(Boolean);
+          const commitDiffSummary = diff.totalChanges > 0
+              ? `${diff.totalChanges} thay đổi (${changeParts.join(', ') || 'thứ tự'})`
+              : 'Không có thay đổi';
+          const newCommit = {
+              hash: commitHash,
+              parentHash,
+              presetName,
+              message: message || 'Update preset prompts',
+              author,
+              timestamp,
+              tag,
+              tree: {
+                  prompts: JSON.parse(JSON.stringify(finalPrompts)),
+                  prompt_order: JSON.parse(JSON.stringify(finalOrder)),
+              },
+              stats: {
+                  added: diff.added,
+                  modified: diff.modified,
+                  deleted: diff.deleted,
+                  totalBlocks: finalPrompts.length,
+              },
+              diffSummary: commitDiffSummary,
+              diffItems: diff.items,
+          };
+          // 1. Save commit to IndexedDB
+          await this.db.addPresetCommit(newCommit);
+          this._activeHeads.set(presetName, commitHash);
+          try {
+              localStorage.setItem(`kaiz_preset_head_${presetName}`, commitHash);
+          }
+          catch {
+              // ignore
+          }
+          // 2. Flush to SillyTavern Live Context
+          await this.flushToSillyTavern(finalPrompts, finalOrder);
+          // 3. Clear Staging Sandbox
+          this.clearStaging();
+          return {
+              ok: true,
+              hash: commitHash,
+              summary: `✅ Commit thành công [${commitHash}]: "${message}" (${commitDiffSummary})`,
+          };
+      }
+      async getLog(limit = 20) {
+          const presetName = this.getActivePresetName();
+          return await this.db.getPresetCommits(presetName, limit);
+      }
+      async traceCommitChain(fromHash, toHash) {
+          if (!fromHash || fromHash === toHash) {
+              const target = await this.db.getPresetCommitByHash(toHash);
+              return { direction: 'same', chain: target ? [target] : [] };
+          }
+          const presetName = this.getActivePresetName();
+          const allCommits = await this.db.getPresetCommits(presetName, 500);
+          const commitMap = new Map(allCommits.map((c) => [c.hash, c]));
+          // Check if moving backward: walk parents from fromHash to toHash
+          const backwardChain = [];
+          let curr = fromHash;
+          while (curr && curr !== toHash) {
+              const node = commitMap.get(curr);
+              if (!node)
+                  break;
+              backwardChain.push(node);
+              curr = node.parentHash;
+          }
+          if (curr === toHash) {
+              const targetNode = commitMap.get(toHash);
+              if (targetNode)
+                  backwardChain.push(targetNode);
+              return { direction: 'backward', chain: backwardChain };
+          }
+          // Check if moving forward: walk parents from toHash down to fromHash
+          const forwardChain = [];
+          curr = toHash;
+          while (curr && curr !== fromHash) {
+              const node = commitMap.get(curr);
+              if (!node)
+                  break;
+              forwardChain.unshift(node);
+              curr = node.parentHash;
+          }
+          if (curr === fromHash) {
+              return { direction: 'forward', chain: forwardChain };
+          }
+          return { direction: 'diverged', chain: [] };
+      }
+      async rollback(target, hard = false) {
+          const presetName = this.getActivePresetName();
+          let targetCommit = await this.db.getPresetCommitByHash(target);
+          if (!targetCommit) {
+              // Try lookup by tag
+              targetCommit = await this.db.getPresetCommitByTag(presetName, target);
+          }
+          if (!targetCommit) {
+              throw new Error(`Không tìm thấy commit hoặc tag nào với mã: "${target}"`);
+          }
+          const currentHead = await this.getHeadCommitHash(presetName);
+          const chainInfo = await this.traceCommitChain(currentHead, targetCommit.hash);
+          // Unpack tree to SillyTavern Live Context
+          const targetPrompts = targetCommit.tree.prompts || [];
+          const targetOrder = targetCommit.tree.prompt_order || [];
+          await this.flushToSillyTavern(targetPrompts, targetOrder);
+          // Update HEAD and reset Staging
+          this._activeHeads.set(presetName, targetCommit.hash);
+          try {
+              localStorage.setItem(`kaiz_preset_head_${presetName}`, targetCommit.hash);
+          }
+          catch {
+              // ignore
+          }
+          this.clearStaging();
+          let prunedCount = 0;
+          if (hard) {
+              prunedCount = await this.db.deletePresetCommitsAfter(presetName, targetCommit.timestamp);
+          }
+          let chainSummary;
+          if (chainInfo.direction === 'backward') {
+              const steps = chainInfo.chain.map((c) => c.hash.substring(0, 8)).join(' ➔ ');
+              const revertedCount = Math.max(1, chainInfo.chain.length - 1);
+              chainSummary = `🔄 Revert chuỗi (${steps}): Đã hoàn tác toàn bộ thay đổi của ${revertedCount} commit(s), đưa preset về đúng mốc [${targetCommit.hash}].`;
+          }
+          else if (chainInfo.direction === 'forward') {
+              const steps = [
+                  currentHead ? currentHead.substring(0, 8) : null,
+                  ...chainInfo.chain.map((c) => c.hash.substring(0, 8)),
+              ]
+                  .filter(Boolean)
+                  .join(' ➔ ');
+              chainSummary = `⏩ Fast-forward tiến chuỗi (${steps}): Đã áp dụng toàn bộ thay đổi tích lũy của ${chainInfo.chain.length} commit(s), đưa preset lên mốc [${targetCommit.hash}].`;
+          }
+          else if (chainInfo.direction === 'diverged') {
+              chainSummary = `🔀 Chuyển nhánh (Diverged branch): Đã chuyển trạng thái preset từ [${currentHead ? currentHead.substring(0, 8) : 'HEAD'}] sang [${targetCommit.hash}].`;
+          }
+          else {
+              chainSummary = `🔄 Đã đồng bộ lại về mốc [${targetCommit.hash}].`;
+          }
+          const hardMsg = hard
+              ? ` (Hard reset: Đã dọn dẹp và xóa ${prunedCount} commit mới hơn khỏi bộ nhớ)`
+              : ' (Soft reset: Giữ nguyên lịch sử commit trong DB)';
+          return {
+              ok: true,
+              hash: targetCommit.hash,
+              pruned_count: prunedCount,
+              summary: `${chainSummary} Đã phục hồi ${targetPrompts.length} prompt blocks.${hardMsg}`,
+          };
+      }
+      async checkout(target) {
+          return await this.rollback(target, false);
+      }
+      async pruneCommits(keepCount = 30) {
+          const presetName = this.getActivePresetName();
+          const pruned = await this.db.prunePresetCommits(presetName, keepCount);
+          return {
+              ok: true,
+              pruned_count: pruned,
+              summary: `Đã dọn dẹp lịch sử: Xóa ${pruned} commit cũ hơn giới hạn ${keepCount} commit gần nhất.`,
+          };
+      }
+      async clearHistory() {
+          const presetName = this.getActivePresetName();
+          await this.db.deletePresetCommits(presetName);
+          this._activeHeads.delete(presetName);
+          try {
+              localStorage.removeItem(`kaiz_preset_head_${presetName}`);
+          }
+          catch {
+              // ignore
+          }
+          return {
+              ok: true,
+              summary: `Đã xóa sạch toàn bộ lịch sử commit của preset "${presetName}".`,
+          };
+      }
+      async getStorageStats() {
+          return await this.db.getPresetStorageStats();
+      }
+      async getDistinctPresetNames() {
+          return await this.db.getDistinctPresetNames();
+      }
+      async manualCommit(message, tag, allowEmpty = true) {
+          return await this.commit(message, 'user', tag, allowEmpty);
+      }
+      async discard() {
+          const hasChanges = this.hasStagingChanges();
+          this.clearStaging();
+          const presetName = this.getActivePresetName();
+          const headHash = await this.getHeadCommitHash(presetName);
+          if (headHash) {
+              const headCommit = await this.db.getPresetCommitByHash(headHash);
+              if (headCommit?.tree) {
+                  await this.flushToSillyTavern(headCommit.tree.prompts || [], headCommit.tree.prompt_order || []);
+                  return {
+                      ok: true,
+                      summary: 'Đã hủy bỏ toàn bộ thay đổi và khôi phục preset về đúng trạng thái của commit HEAD.',
+                  };
+              }
+          }
+          return {
+              ok: true,
+              summary: hasChanges
+                  ? 'Đã hủy bỏ toàn bộ các thay đổi nháp trong Staging Sandbox.'
+                  : 'Working tree vốn đã sạch, không có thay đổi nào cần hủy.',
+          };
+      }
+      async tagCommit(target, tagName) {
+          const presetName = this.getActivePresetName();
+          let commit = await this.db.getPresetCommitByHash(target);
+          if (!commit) {
+              const head = await this.getHeadCommitHash(presetName);
+              if (head)
+                  commit = await this.db.getPresetCommitByHash(head);
+          }
+          if (!commit)
+              throw new Error(`Không tìm thấy commit hợp lệ để gắn tag "${tagName}".`);
+          commit.tag = tagName;
+          // Re-save commit with tag
+          await this.db.addPresetCommit(commit);
+          return {
+              ok: true,
+              summary: `🏷️ Đã gắn nhãn tag "${tagName}" cho commit [${commit.hash}].`,
+          };
+      }
+      // ─── SillyTavern Synchronization (Save to Disk & Emit Events) ───────────
+      async flushToSillyTavern(prompts, order) {
+          const container = this.getContainer();
+          if (!container || !Array.isArray(container.prompts)) {
+              console.warn('[PresetGitManager] Không tìm thấy ST container để ghi.');
+              return false;
+          }
+          // 1. Ghi prompts vào ST memory & chuẩn hóa system_prompt: false cho custom user prompts.
+          // SillyTavern requirement: User custom blocks MUST have system_prompt === false.
+          // If system_prompt is true or undefined, SillyTavern hides the unlink button and excludes the prompt from LLM completion.
+          const builtInSystemPrompts = new Set(['main', 'nsfw', 'jailbreak', 'enhanceDefinitions']);
+          const sanitizedPrompts = prompts.map((p) => {
+              const copy = JSON.parse(JSON.stringify(p));
+              if (!builtInSystemPrompts.has(copy.identifier) && !copy.marker) {
+                  if (copy.system_prompt !== false) {
+                      copy.system_prompt = false;
+                  }
+              }
+              if (copy.marker === undefined)
+                  copy.marker = false;
+              if (copy.forbid_overrides === undefined)
+                  copy.forbid_overrides = false;
+              if (copy.injection_trigger === undefined)
+                  copy.injection_trigger = [];
+              return copy;
+          });
+          container.prompts.length = 0;
+          sanitizedPrompts.forEach((p) => container.prompts.push(p));
+          // 2. Ghi prompt_order (xử lý cả ST 1.18+ nested format lẫn flat format)
+          if (Array.isArray(container.prompt_order) &&
+              container.prompt_order.length > 0 &&
+              typeof container.prompt_order[0] === 'object' &&
+              Array.isArray(container.prompt_order[0]?.order)) {
+              const win = window;
+              const ctx = win.SillyTavern?.getContext?.() || {};
+              const charId = ctx.characterId;
+              const newOrderEntries = order.map((id) => {
+                  const found = sanitizedPrompts.find((p) => p.identifier === id);
+                  return { identifier: id, enabled: found ? found.enabled !== false : true };
+              });
+              let updatedAny = false;
+              for (const entry of container.prompt_order) {
+                  if (entry && Array.isArray(entry.order)) {
+                      // Update dummyId 100001 (ChatCompletion global active), 100000 (default fallback), or active character override
+                      if (Number(entry.character_id) === 100001 ||
+                          String(entry.character_id) === '100001' ||
+                          Number(entry.character_id) === 100000 ||
+                          String(entry.character_id) === '100000' ||
+                          (charId !== undefined &&
+                              charId !== null &&
+                              charId !== '' &&
+                              String(entry.character_id) === String(charId))) {
+                          entry.order = JSON.parse(JSON.stringify(newOrderEntries));
+                          updatedAny = true;
+                      }
+                  }
+              }
+              if (!updatedAny && container.prompt_order.length > 0 && Array.isArray(container.prompt_order[0]?.order)) {
+                  container.prompt_order[0].order = JSON.parse(JSON.stringify(newOrderEntries));
+              }
+              // Ensure dummyId 100001 entry exists for SillyTavern ChatCompletion presets
+              const has100001 = container.prompt_order.some((entry) => Number(entry?.character_id) === 100001 || String(entry?.character_id) === '100001');
+              if (!has100001) {
+                  container.prompt_order.push({
+                      character_id: 100001,
+                      order: JSON.parse(JSON.stringify(newOrderEntries)),
+                  });
+              }
+          }
+          else {
+              container.prompt_order = order.slice();
+          }
+          // 3. Emit events and trigger SillyTavern UI Save & Re-render
+          const win = window;
+          if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+              const stCtx = win.SillyTavern.getContext();
+              const evtName = stCtx?.eventTypes?.OAI_PRESET_CHANGED_AFTER || 'oai_preset_changed_after';
+              stCtx?.eventSource?.emit?.(evtName);
+              // Directly trigger prompt manager re-render if available
+              if (typeof win.promptManager?.render === 'function') {
+                  try {
+                      win.promptManager.render(false);
+                  }
+                  catch {
+                      // ignore
+                  }
+              }
+              setTimeout(() => {
+                  const saveBtn = document.querySelector('#update_oai_preset') ||
+                      document.querySelector('#chat_completion_save_preset') ||
+                      document.querySelector('#preset_save_button');
+                  if (saveBtn && typeof saveBtn.click === 'function') {
+                      saveBtn.click();
+                  }
+                  (stCtx?.saveSettingsDebounced || win.saveSettingsDebounced)?.();
+              }, 500);
+          }
+          return true;
+      }
+      // ─── Syntax Validator ───────────────────────────────────────────────────
+      validatePresetSyntax() {
+          const prompts = this.getPrompts();
+          const errors = [];
+          const warnings = [];
+          for (const p of prompts) {
+              const content = p.content || '';
+              const openMatches = content.match(/\{\{/g) || [];
+              const closeMatches = content.match(/\}\}/g) || [];
+              if (openMatches.length !== closeMatches.length) {
+                  errors.push({
+                      identifier: p.identifier,
+                      name: p.name,
+                      error: `Lệch dấu ngoặc nhọn: Số dấu mở {{ (${openMatches.length}) không khớp số dấu đóng }} (${closeMatches.length}).`,
+                  });
+              }
+              const lines = content.split('\n');
+              lines.forEach((line, idx) => {
+                  if (/\{\{(setvr|setva|getvr|setvar::[^:}]+$|\/getvar)/i.test(line)) {
+                      warnings.push({
+                          identifier: p.identifier,
+                          name: p.name,
+                          line: idx + 1,
+                          warning: `Nghi vấn sai cú pháp biến macro: "${line.trim()}"`,
+                      });
+                  }
+              });
+              if (p.injection_depth !== undefined && p.injection_depth < 0) {
+                  warnings.push({
+                      identifier: p.identifier,
+                      name: p.name,
+                      warning: `Injection depth âm (${p.injection_depth}), có thể không hoạt động đúng chuẩn ST.`,
+                  });
+              }
+              const builtInSystemPrompts = new Set(['main', 'nsfw', 'jailbreak', 'enhanceDefinitions']);
+              if (!builtInSystemPrompts.has(p.identifier) && !p.marker && p.system_prompt === true) {
+                  warnings.push({
+                      identifier: p.identifier,
+                      name: p.name,
+                      warning: `Block có 'system_prompt: true'. SillyTavern chỉ gửi vào completion và cho phép unlink nếu block là custom prompt với 'system_prompt: false'. (Hệ thống sẽ tự động chuyển thành false khi commit/flush).`,
+                  });
+              }
+          }
+          return {
+              ok: errors.length === 0,
+              totalBlocksChecked: prompts.length,
+              errorCount: errors.length,
+              warningCount: warnings.length,
+              errors,
+              warnings,
+              status: errors.length === 0 ? 'SYNTAX_OK' : 'SYNTAX_ERRORS_FOUND',
+          };
+      }
+      // ─── Variable Scanner ───────────────────────────────────────────────────
+      scanVariables() {
+          const prompts = this.getPrompts();
+          const refs = [];
+          for (const p of prompts) {
+              const content = p.content || '';
+              const macroRegex = /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
+              let match;
+              while ((match = macroRegex.exec(content)) !== null) {
+                  const fullMatch = match[0];
+                  const type = match[1].toLowerCase();
+                  const name = (match[2] || '').trim();
+                  const value = (match[3] || '').trim();
+                  const scope = type.includes('global') ? 'global' : 'chat';
+                  if (name) {
+                      refs.push({
+                          id: `${p.identifier}::${name}::${type}::${refs.length}`,
+                          name,
+                          type,
+                          value,
+                          scope,
+                          promptName: p.name,
+                          promptId: p.identifier,
+                          fullMatch,
+                      });
+                  }
+              }
+          }
+          return refs;
+      }
+  }
+  if (typeof window !== 'undefined') {
+      window.PresetGitManager = PresetGitManager;
+  }
+
+  const getPresetInfoTool = {
+      schema: {
+          name: 'get_preset_info',
+          description: 'Lấy thông tin tổng quan về AI Prompt Preset đang kích hoạt trong SillyTavern.\n' +
+              'Bao gồm: Tên Preset, commit HEAD hiện tại (Git control version), trạng thái nháp trong Sandbox (is_dirty), ' +
+              'danh sách tóm tắt các prompt blocks (ID, tên, vai trò, trạng thái bật/tắt, thứ tự liên kết, độ sâu injection), ' +
+              'và danh sách các biến macro {{setvar}} nếu yêu cầu.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  include_vars: {
+                      type: 'boolean',
+                      description: 'Nếu true, quét và liệt kê tất cả các biến macro {{setvar}} / {{getvar}} có trong preset.',
+                  },
+                  raw_live_only: {
+                      type: 'boolean',
+                      description: 'Nếu true, chỉ đọc dữ liệu gốc của SillyTavern, bỏ qua các thay đổi nháp đang có trong Sandbox.',
+                  },
+              },
+          },
+      },
+      validate: () => {
+          const manager = PresetGitManager.getInstance();
+          if (!manager.getContainer()) {
+              throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+          }
+      },
+      execute: async (args) => {
+          try {
+              const manager = PresetGitManager.getInstance();
+              const container = manager.getContainer();
+              if (!container) {
+                  return {
+                      isError: true,
+                      content: 'Không tìm thấy cấu trúc ChatCompletion / Instruct Preset của SillyTavern trong bộ nhớ.',
+                  };
+              }
+              const rawLiveOnly = Boolean(args.raw_live_only);
+              const includeVars = Boolean(args.include_vars);
+              const presetName = manager.getActivePresetName();
+              const headCommitHash = await manager.getHeadCommitHash(presetName);
+              const dirtyInfo = await manager.isDirtyAgainstHead();
+              const diff = dirtyInfo.diff;
+              const prompts = rawLiveOnly ? manager.getRawLivePrompts() : manager.getPrompts();
+              const order = rawLiveOnly ? manager.getRawLiveOrder() : manager.getPromptOrder();
+              const linkedSet = new Set(order);
+              const blocksSummary = prompts.map((p, index) => {
+                  const isLinked = linkedSet.has(p.identifier);
+                  const orderIndex = isLinked ? order.indexOf(p.identifier) + 1 : null;
+                  const preview = (p.content || '').replace(/\s+/g, ' ').trim().substring(0, 70);
+                  return {
+                      index: index + 1,
+                      identifier: p.identifier,
+                      name: p.name,
+                      role: p.role || 'system',
+                      enabled: p.enabled !== false,
+                      linked: isLinked,
+                      linked_order: orderIndex,
+                      injection_position: p.injection_position ?? 0,
+                      injection_depth: p.injection_depth ?? 4,
+                      injection_order: p.injection_order ?? 100,
+                      system_prompt: p.system_prompt ?? false,
+                      marker: p.marker ?? false,
+                      char_count: (p.content || '').length,
+                      preview: preview ? `${preview}${p.content.length > 70 ? '...' : ''}` : '(Empty)',
+                  };
+              });
+              // Sort: Linked blocks first by order, then unlinked
+              blocksSummary.sort((a, b) => {
+                  if (a.linked && b.linked)
+                      return (a.linked_order || 0) - (b.linked_order || 0);
+                  if (a.linked && !b.linked)
+                      return -1;
+                  if (!a.linked && b.linked)
+                      return 1;
+                  return a.index - b.index;
+              });
+              const result = {
+                  active_preset: presetName,
+                  git_status: {
+                      head_commit: headCommitHash || 'Chưa có commit nào (Initial)',
+                      is_dirty: dirtyInfo.isDirty,
+                      is_staged: dirtyInfo.isStaged,
+                      staging_summary: diff.summary,
+                      staged_stats: {
+                          added: diff.added,
+                          modified: diff.modified,
+                          deleted: diff.deleted,
+                          total_changes: diff.totalChanges,
+                      },
+                  },
+                  stats: {
+                      total_blocks: prompts.length,
+                      linked_blocks: order.length,
+                      unlinked_blocks: prompts.length - order.length,
+                  },
+                  linked_order: order,
+                  blocks: blocksSummary,
+              };
+              if (includeVars) {
+                  result.variables = manager.scanVariables().map((v) => ({
+                      name: v.name,
+                      type: v.type,
+                      value: v.value,
+                      scope: v.scope,
+                      prompt_name: v.promptName,
+                      prompt_id: v.promptId,
+                  }));
+                  result.variables_total = result.variables.length;
+              }
+              return {
+                  content: JSON.stringify(result, null, 2),
+              };
+          }
+          catch (e) {
+              console.error('[getPresetInfoTool] Error:', e);
+              return {
+                  isError: true,
+                  content: `Lỗi khi lấy thông tin Preset: ${e.message}`,
+              };
+          }
+      },
+  };
+
+  const getPromptBlockTool = {
+      schema: {
+          name: 'get_prompt_block',
+          description: 'Đọc nội dung chi tiết đầy đủ (văn bản content và cấu hình injection) của một hoặc nhiều prompt blocks trong Preset.\n' +
+              '- identifier: ID của block cụ thể cần đọc nội dung.\n' +
+              '- all_linked: Nếu true, lấy toàn bộ chi tiết tất cả các block đang liên kết (linked) theo đúng thứ tự chuỗi prompt gửi lên LLM. Cực kỳ hữu dụng khi Agent cần thẩm định, audit hoặc tối ưu toàn diện preset.\n' +
+              '- include_unlinked: Kết hợp với all_linked để lấy thêm cả các block chưa liên kết.\n' +
+              '- query: Tìm kiếm từ khóa bên trong các block, trả về danh sách các block khớp kèm trích đoạn dòng văn bản.\n' +
+              '- commit_hash: Tùy chọn đọc dữ liệu từ một mốc commit trong quá khứ (Git version) thay vì trạng thái hiện tại.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  identifier: {
+                      type: 'string',
+                      description: 'ID của prompt block cần đọc (bắt đầu bằng "block_..." hoặc id chuẩn như "main", "jailbreak").',
+                  },
+                  all_linked: {
+                      type: 'boolean',
+                      description: 'Nếu true, trả về toàn bộ nội dung của tất cả các block đang linked theo đúng thứ tự thực thi.',
+                  },
+                  include_unlinked: {
+                      type: 'boolean',
+                      description: 'Kết hợp cùng all_linked để lấy cả các block unlinked (chưa liên kết).',
+                  },
+                  query: {
+                      type: 'string',
+                      description: 'Từ khóa tìm kiếm bên trong tên hoặc nội dung các block.',
+                  },
+                  commit_hash: {
+                      type: 'string',
+                      description: 'Mã hash của một commit trong quá khứ để đọc nội dung tại thời điểm đó.',
+                  },
+              },
+          },
+      },
+      validate: () => {
+          const manager = PresetGitManager.getInstance();
+          if (!manager.getContainer()) {
+              throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+          }
+      },
+      execute: async (args) => {
+          try {
+              const manager = PresetGitManager.getInstance();
+              const { identifier, all_linked, include_unlinked, query, commit_hash } = args;
+              let prompts = [];
+              let order = [];
+              let sourceNote = 'Trạng thái hiện tại (bao gồm Staging Sandbox nếu có)';
+              // 1. Kiểm tra nếu yêu cầu đọc từ commit cũ
+              if (commit_hash) {
+                  const db = KaizDB.getInstance();
+                  const commit = await db.getPresetCommitByHash(commit_hash);
+                  if (!commit) {
+                      return {
+                          isError: true,
+                          content: `Không tìm thấy commit nào với mã hash: "${commit_hash}"`,
+                      };
+                  }
+                  prompts = (commit.tree?.prompts || []).map((p) => ({ ...p }));
+                  prompts.forEach((p) => {
+                      if (!p.identifier && p.id)
+                          p.identifier = p.id;
+                  });
+                  order = commit.tree?.prompt_order || [];
+                  sourceNote = `Commit [${commit.hash}]: "${commit.message}" (${new Date(commit.timestamp).toLocaleString()})`;
+              }
+              else {
+                  prompts = manager.getPrompts();
+                  order = manager.getPromptOrder();
+              }
+              // 2. Chế độ tìm kiếm (Search Query)
+              if (query && typeof query === 'string' && query.trim()) {
+                  const q = query.trim().toLowerCase();
+                  const searchResults = [];
+                  for (const p of prompts) {
+                      const matches = [];
+                      const lines = (p.content || '').split('\n');
+                      lines.forEach((line, idx) => {
+                          if (line.toLowerCase().includes(q)) {
+                              matches.push({
+                                  line: idx + 1,
+                                  excerpt: line.trim().substring(0, 150),
+                              });
+                          }
+                      });
+                      if (p.name.toLowerCase().includes(q)) {
+                          matches.unshift({
+                              line: 0,
+                              excerpt: `[Khớp tên block]: ${p.name}`,
+                          });
+                      }
+                      if (matches.length > 0) {
+                          searchResults.push({
+                              identifier: p.identifier,
+                              name: p.name,
+                              role: p.role,
+                              enabled: p.enabled,
+                              matched_lines: matches,
+                          });
+                      }
+                  }
+                  return {
+                      content: JSON.stringify({
+                          ok: true,
+                          source: sourceNote,
+                          query,
+                          total_matching_blocks: searchResults.length,
+                          results: searchResults,
+                      }, null, 2),
+                  };
+              }
+              // 3. Chế độ lấy toàn bộ linked prompts (all_linked)
+              if (all_linked) {
+                  const promptMap = new Map(prompts.map((p) => [p.identifier, p]));
+                  const linkedFull = [];
+                  order.forEach((id, index) => {
+                      const p = promptMap.get(id);
+                      if (p) {
+                          linkedFull.push({
+                              order_index: index + 1,
+                              identifier: p.identifier,
+                              name: p.name,
+                              role: p.role || 'system',
+                              enabled: p.enabled !== false,
+                              injection_position: p.injection_position ?? 0,
+                              injection_depth: p.injection_depth ?? 4,
+                              injection_order: p.injection_order ?? 100,
+                              system_prompt: p.system_prompt ?? false,
+                              marker: p.marker ?? false,
+                              content: p.content || '',
+                          });
+                      }
+                  });
+                  let unlinkedFull = undefined;
+                  if (include_unlinked) {
+                      const linkedSet = new Set(order);
+                      unlinkedFull = prompts
+                          .filter((p) => !linkedSet.has(p.identifier))
+                          .map((p) => ({
+                          identifier: p.identifier,
+                          name: p.name,
+                          role: p.role || 'system',
+                          enabled: p.enabled !== false,
+                          injection_position: p.injection_position ?? 0,
+                          injection_depth: p.injection_depth ?? 4,
+                          injection_order: p.injection_order ?? 100,
+                          system_prompt: p.system_prompt ?? false,
+                          marker: p.marker ?? false,
+                          forbid_overrides: p.forbid_overrides ?? false,
+                          content: p.content || '',
+                      }));
+                  }
+                  return {
+                      content: JSON.stringify({
+                          ok: true,
+                          source: sourceNote,
+                          total_linked: linkedFull.length,
+                          total_unlinked: unlinkedFull ? unlinkedFull.length : undefined,
+                          linked_prompts: linkedFull,
+                          unlinked_prompts: unlinkedFull,
+                      }, null, 2),
+                  };
+              }
+              // 4. Chế độ lấy 1 block cụ thể theo identifier (hoặc name)
+              if (identifier && typeof identifier === 'string') {
+                  const needle = identifier.trim();
+                  let target = prompts.find((p) => p.identifier === needle || p.id === needle);
+                  if (!target) {
+                      const lower = needle.toLowerCase();
+                      target = prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower);
+                  }
+                  if (!target) {
+                      return {
+                          isError: true,
+                          content: `Không tìm thấy prompt block nào có ID hoặc tên: "${identifier}". Vui lòng dùng 'get_preset_info' để kiểm tra danh sách ID hợp lệ.`,
+                      };
+                  }
+                  const isLinked = order.includes(target.identifier);
+                  const orderIndex = isLinked ? order.indexOf(target.identifier) + 1 : null;
+                  return {
+                      content: JSON.stringify({
+                          ok: true,
+                          source: sourceNote,
+                          block: {
+                              identifier: target.identifier,
+                              name: target.name,
+                              role: target.role || 'system',
+                              enabled: target.enabled !== false,
+                              linked: isLinked,
+                              linked_order: orderIndex,
+                              injection_position: target.injection_position ?? 0,
+                              injection_depth: target.injection_depth ?? 4,
+                              injection_order: target.injection_order ?? 100,
+                              system_prompt: target.system_prompt ?? false,
+                              marker: target.marker ?? false,
+                              forbid_overrides: target.forbid_overrides ?? false,
+                              content: target.content || '',
+                          },
+                      }, null, 2),
+                  };
+              }
+              return {
+                  isError: true,
+                  content: 'Cần cung cấp ít nhất một tham số: `identifier` (ID block cụ thể), `all_linked: true` (lấy toàn bộ), hoặc `query` (tìm kiếm từ khóa).',
+              };
+          }
+          catch (e) {
+              console.error('[getPromptBlockTool] Error:', e);
+              return {
+                  isError: true,
+                  content: `Lỗi khi đọc nội dung Prompt Block: ${e.message}`,
+              };
+          }
+      },
+  };
+
+  const managePresetPromptTool = {
+      schema: {
+          name: 'manage_preset_prompt',
+          description: 'Công cụ toàn năng quản trị AI Prompt Preset theo kiến trúc Git Control Version và Sandbox Staging:\n' +
+              'Mọi thay đổi (sửa, tạo, xóa, thay thế) đều được lưu tạm an toàn trong Staging Sandbox. ' +
+              'Khi hoàn tất, gọi action "commit" để ghi mốc lịch sử (Git Commit) và lưu thật vào SillyTavern.\n\n' +
+              'CÁC HÀNH ĐỘNG (action):\n' +
+              '1. Nhóm Thao Tác Sandbox (Nháp an toàn):\n' +
+              '  - "create": Tạo block mới (data: { name, content, role, addToLinked, position }).\n' +
+              '  - "edit_content": Sửa toàn bộ văn bản của 1 block (yêu cầu identifier, data: { content }).\n' +
+              '  - "replace_text": Thay thế chuỗi target_string bằng replacement_string trong 1 block hoặc toàn bộ preset nếu data.global=true (kỹ thuật kháng Safety Filter & chống cắt cụt).\n' +
+              '  - "append_content": Nối thêm văn bản vào cuối block (yêu cầu identifier, data: { append_text }).\n' +
+              '  - "edit_meta": Sửa thông số (role, injection_position, injection_depth, injection_order, system_prompt, marker, forbid_overrides).\n' +
+              '  - "toggle": Bật/tắt block (yêu cầu identifier, data: { enabled? }).\n' +
+              '  - "set_linked": Chuyển đổi trạng thái Linked/Unlinked hoặc di chuyển vị trí của 1 block (data: { linked: boolean, position?: number }).\n' +
+              '  - "reorder": Sắp xếp lại thứ tự toàn bộ mảng ID Linked blocks (data: { order: string[] }).\n' +
+              '  - "duplicate": Nhân bản 1 block kèm 100% nội dung và meta (yêu cầu identifier, data: { newName? }).\n' +
+              '  - "delete": Đánh dấu xóa 1 block (yêu cầu identifier).\n' +
+              '  - "batch_update": Cập nhật đồng thời nhiều block cùng lúc (data: { updates: Array<{ identifier: string, action?: "toggle"|"edit_meta"|"edit_content"|"replace_text"|"delete"|"set_linked", data?: object, enabled?: boolean, content?: string, ... }> }). Hỗ trợ cả định dạng phẳng lẫn action lồng nhau.\n' +
+              '  - "update_var": Sửa giá trị biến macro {{setvar}} (data: { varName, newValue, promptId? }).\n' +
+              '  - "rename_var": Đổi tên biến trên toàn bộ preset (data: { oldName, newName }).\n' +
+              '  - "validate_syntax": Quét toàn bộ preset phát hiện lỗi ngoặc {{...}}, sai cú pháp macro, injection depth âm.\n\n' +
+              '2. Nhóm Quản Trị Git Control Version:\n' +
+              '  - "diff": So sánh chi tiết sự khác biệt giữa Staging nháp với commit HEAD (hoặc xem danh sách thay đổi đang chờ commit).\n' +
+              '  - "commit": MỞ HỘP VÀ LƯU THẬT — Đóng gói toàn bộ Staging thành 1 commit node mới, lưu vào IndexedDB và áp dụng vào SillyTavern (bắt buộc data: { message: string }, tùy chọn data: { tag?: string }).\n' +
+              '  - "log": Xem danh sách lịch sử commit của preset hiện tại (data: { limit?: number }).\n' +
+              '  - "checkout": Chuyển trạng thái preset về bất kỳ commit hoặc tag nào (hỗ trợ cả revert chuỗi lẫn fast-forward tiến chuỗi tích lũy) (data: { target: string }).\n' +
+              '  - "rollback": Hoàn tác quay về một commit hoặc tag chỉ định trong quá khứ, lập tức khôi phục SillyTavern (data: { target: string, hard?: boolean } - nếu hard: true, xóa sạch vĩnh viễn các commit mới hơn khỏi DB để giải phóng bộ nhớ).\n' +
+              '  - "discard": Hủy toàn bộ nháp đang có trong Staging, đưa Sandbox về bằng với HEAD.\n' +
+              '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).\n' +
+              '  - "prune_commits": Dọn dẹp các commit cũ, chỉ giữ lại N commit gần nhất (data: { keep_count?: number }).\n' +
+              '  - "clear_history": Xóa sạch toàn bộ lịch sử commit của preset hiện tại để làm mới.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  action: {
+                      type: 'string',
+                      enum: [
+                          'create',
+                          'edit_content',
+                          'replace_text',
+                          'append_content',
+                          'edit_meta',
+                          'toggle',
+                          'set_linked',
+                          'reorder',
+                          'duplicate',
+                          'delete',
+                          'batch_update',
+                          'update_var',
+                          'rename_var',
+                          'validate_syntax',
+                          'diff',
+                          'commit',
+                          'log',
+                          'checkout',
+                          'rollback',
+                          'discard',
+                          'tag',
+                          'prune_commits',
+                          'clear_history',
+                      ],
+                      description: 'Hành động cần thực hiện.',
+                  },
+                  identifier: {
+                      type: 'string',
+                      description: 'ID của prompt block mục tiêu (bắt buộc đối với các hành động can thiệp block đơn lẻ).',
+                  },
+                  data: {
+                      type: 'object',
+                      description: 'Dữ liệu payload đi kèm tương ứng với từng action.',
+                  },
+              },
+              required: ['action'],
+          },
+      },
+      validate: () => {
+          const manager = PresetGitManager.getInstance();
+          if (!manager.getContainer()) {
+              throw new Error('Chưa chọn Chat Completion Preset nào hoặc SillyTavern chưa nạp preset.');
+          }
+      },
+      execute: async (args) => {
+          try {
+              const manager = PresetGitManager.getInstance();
+              const { action, identifier, data = {} } = args;
+              switch (action) {
+                  // ─── 1. NHÓM STAGING / SANDBOX ──────────────────────────────────────────
+                  case 'create': {
+                      const result = manager.stageCreate({
+                          name: data.name,
+                          content: data.content,
+                          role: data.role,
+                          injection_position: data.injection_position,
+                          injection_depth: data.injection_depth,
+                          injection_order: data.injection_order,
+                          addToLinked: data.addToLinked,
+                          position: data.position,
+                      });
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'create',
+                              created_id: result.identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'edit_content': {
+                      if (!identifier) {
+                          return {
+                              isError: true,
+                              content: 'Action "edit_content" yêu cầu truyền tham số `identifier` của block.',
+                          };
+                      }
+                      if (data.content === undefined) {
+                          return { isError: true, content: 'Action "edit_content" yêu cầu truyền `data.content`.' };
+                      }
+                      const result = manager.stageUpdateContent(identifier, String(data.content));
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'edit_content',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'replace_text': {
+                      if (!data.target_string) {
+                          return {
+                              isError: true,
+                              content: 'Action "replace_text" yêu cầu truyền `data.target_string` cần tìm.',
+                          };
+                      }
+                      const replacement = data.replacement_string !== undefined ? String(data.replacement_string) : '';
+                      const isGlobal = Boolean(data.global);
+                      const onlyLinked = Boolean(data.only_linked);
+                      const result = manager.stageReplaceText(identifier || null, data.target_string, replacement, isGlobal, onlyLinked);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'replace_text',
+                              message: result.summary,
+                              modified_count: result.modified_count,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'append_content': {
+                      if (!identifier) {
+                          return {
+                              isError: true,
+                              content: 'Action "append_content" yêu cầu truyền tham số `identifier` của block.',
+                          };
+                      }
+                      if (data.append_text === undefined) {
+                          return { isError: true, content: 'Action "append_content" yêu cầu truyền `data.append_text`.' };
+                      }
+                      const result = manager.stageAppendContent(identifier, String(data.append_text));
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'append_content',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'edit_meta': {
+                      if (!identifier) {
+                          return {
+                              isError: true,
+                              content: 'Action "edit_meta" yêu cầu truyền tham số `identifier` của block.',
+                          };
+                      }
+                      const result = manager.stageUpdateMeta(identifier, data);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'edit_meta',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'toggle': {
+                      if (!identifier) {
+                          return {
+                              isError: true,
+                              content: 'Action "toggle" yêu cầu truyền tham số `identifier` của block.',
+                          };
+                      }
+                      const result = manager.stageToggle(identifier, data.enabled);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'toggle',
+                              identifier,
+                              enabled: result.enabled,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'set_linked': {
+                      if (!identifier) {
+                          return {
+                              isError: true,
+                              content: 'Action "set_linked" yêu cầu truyền tham số `identifier` của block.',
+                          };
+                      }
+                      if (typeof data.linked !== 'boolean') {
+                          return {
+                              isError: true,
+                              content: 'Action "set_linked" yêu cầu truyền `data.linked` (true hoặc false).',
+                          };
+                      }
+                      const result = manager.stageSetLinked(identifier, data.linked, data.position);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'set_linked',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'reorder': {
+                      if (!Array.isArray(data.order)) {
+                          return {
+                              isError: true,
+                              content: 'Action "reorder" yêu cầu truyền mảng `data.order` chứa danh sách ID.',
+                          };
+                      }
+                      const result = manager.stageReorder(data.order);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'reorder',
+                              new_order: data.order,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'duplicate': {
+                      if (!identifier) {
+                          return {
+                              isError: true,
+                              content: 'Action "duplicate" yêu cầu truyền tham số `identifier` của block gốc.',
+                          };
+                      }
+                      const result = manager.stageDuplicate(identifier, data.newName);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'duplicate',
+                              created_id: result.identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'delete': {
+                      if (!identifier) {
+                          return {
+                              isError: true,
+                              content: 'Action "delete" yêu cầu truyền tham số `identifier` của block cần xóa.',
+                          };
+                      }
+                      const result = manager.stageDelete(identifier);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'delete',
+                              identifier,
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'batch_update': {
+                      const updatesList = Array.isArray(data.updates) ? data.updates : Array.isArray(data) ? data : null;
+                      if (!updatesList) {
+                          return {
+                              isError: true,
+                              content: 'Action "batch_update" yêu cầu truyền mảng `data.updates` hoặc `data` dạng mảng.',
+                          };
+                      }
+                      const result = manager.stageBatchUpdate(updatesList);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: result.ok,
+                              action: 'batch_update',
+                              message: result.summary,
+                              results: result.results,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'update_var': {
+                      const result = manager.stageUpdateVar({
+                          varName: data.varName,
+                          newValue: data.newValue,
+                          promptId: data.promptId || identifier,
+                          oldValueMatch: data.oldValueMatch,
+                      });
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'update_var',
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'rename_var': {
+                      const result = manager.stageRenameVar(data.oldName, data.newName);
+                      const diff = manager.calculateDiff();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'rename_var',
+                              message: result.summary,
+                              staging_status: diff.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'validate_syntax': {
+                      const syntax = manager.validatePresetSyntax();
+                      return {
+                          content: JSON.stringify({
+                              ok: syntax.ok,
+                              action: 'validate_syntax',
+                              status: syntax.status,
+                              total_blocks_checked: syntax.totalBlocksChecked,
+                              error_count: syntax.errorCount,
+                              warning_count: syntax.warningCount,
+                              errors: syntax.errors,
+                              warnings: syntax.warnings,
+                          }, null, 2),
+                      };
+                  }
+                  // ─── 2. NHÓM QUẢN TRỊ GIT VERSION CONTROL ────────────────────────────────
+                  case 'diff': {
+                      const dirtyInfo = await manager.isDirtyAgainstHead();
+                      const diff = dirtyInfo.diff;
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'diff',
+                              is_dirty: dirtyInfo.isDirty,
+                              is_staged: dirtyInfo.isStaged,
+                              summary: diff.summary,
+                              stats: {
+                                  added: diff.added,
+                                  modified: diff.modified,
+                                  deleted: diff.deleted,
+                                  total_changes: diff.totalChanges,
+                              },
+                              changes: diff.items,
+                          }, null, 2),
+                      };
+                  }
+                  case 'commit': {
+                      if (!data.message || typeof data.message !== 'string' || !data.message.trim()) {
+                          return {
+                              isError: true,
+                              content: 'Action "commit" bắt buộc phải có `data.message` mô tả mục đích thay đổi (vd: "feat: bổ sung hướng dẫn CoT").',
+                          };
+                      }
+                      const result = await manager.commit(data.message.trim(), 'agent', data.tag);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'commit',
+                              commit_hash: result.hash,
+                              message: result.summary,
+                              note: 'Thay đổi đã được mở hộp và lưu đồng bộ thành công vào SillyTavern.',
+                          }, null, 2),
+                      };
+                  }
+                  case 'log': {
+                      const limit = typeof data.limit === 'number' ? data.limit : 15;
+                      const commits = await manager.getLog(limit);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'log',
+                              preset_name: manager.getActivePresetName(),
+                              total_commits: commits.length,
+                              history: commits.map((c) => ({
+                                  hash: c.hash,
+                                  parent: c.parentHash,
+                                  message: c.message,
+                                  author: c.author,
+                                  tag: c.tag || undefined,
+                                  timestamp: new Date(c.timestamp).toLocaleString(),
+                                  stats: c.stats,
+                                  summary: c.diffSummary,
+                              })),
+                          }, null, 2),
+                      };
+                  }
+                  case 'checkout':
+                  case 'rollback': {
+                      const target = data.target || data.commitId || data.tag || identifier;
+                      if (!target) {
+                          return {
+                              isError: true,
+                              content: `Action "${action}" yêu cầu cung cấp mã commit hash hoặc tên tag trong \`data.target\`.`,
+                          };
+                      }
+                      const isHard = action === 'rollback' && Boolean(data.hard || data.prune_newer);
+                      const result = await manager.rollback(target, isHard);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action,
+                              restored_commit: result.hash,
+                              hard: isHard,
+                              pruned_count: result.pruned_count || 0,
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'discard': {
+                      const result = await manager.discard();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'discard',
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'tag': {
+                      const tagName = data.tag || data.tagName;
+                      if (!tagName) {
+                          return {
+                              isError: true,
+                              content: 'Action "tag" yêu cầu cung cấp tên nhãn trong `data.tag` (vd: "v1.0-stable").',
+                          };
+                      }
+                      const targetCommit = data.target || identifier || 'HEAD';
+                      const result = await manager.tagCommit(targetCommit, tagName);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'tag',
+                              tag_name: tagName,
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'prune_commits': {
+                      const keepCount = typeof data.keep_count === 'number' ? data.keep_count : 30;
+                      const result = await manager.pruneCommits(keepCount);
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'prune_commits',
+                              keep_count: keepCount,
+                              pruned_count: result.pruned_count,
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  case 'clear_history': {
+                      const result = await manager.clearHistory();
+                      return {
+                          content: JSON.stringify({
+                              ok: true,
+                              action: 'clear_history',
+                              message: result.summary,
+                          }, null, 2),
+                      };
+                  }
+                  default:
+                      return {
+                          isError: true,
+                          content: `Hành động action="${action}" không được hỗ trợ. Vui lòng kiểm tra lại schema của manage_preset_prompt.`,
+                      };
+              }
+          }
+          catch (e) {
+              console.error('[managePresetPromptTool] Error:', e);
+              return {
+                  isError: true,
+                  content: `Lỗi khi thực thi lệnh manage_preset_prompt: ${e.message}`,
+              };
+          }
+      },
+  };
+
+  /**
    * Đăng ký tất cả các tools mặc định vào Registry
    */
   function registerDefaultTools(registry) {
@@ -6343,13 +8901,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       registry.registerTool(stCSSManagerTool);
       registry.registerTool(stInjectElementTool);
       registry.registerTool(generateWebImageTool);
+      registry.registerTool(getPresetInfoTool);
+      registry.registerTool(getPromptBlockTool);
+      registry.registerTool(managePresetPromptTool);
   }
 
   /**
    * SillyTavern Adapter
    * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
    */
-  const escapeHtml$3 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$4 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SillyTavernAdapter {
       constructor() { }
       /**
@@ -6520,7 +9081,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 <div style="height:calc(100% - 55px); padding:15px; overflow-y:auto; background:#1e1e1e; box-sizing:border-box;">`;
           for (let i = 0; i < chat.length; i++) {
               const msg = chat[i];
-              const name = escapeHtml$3(msg.name || 'System');
+              const name = escapeHtml$4(msg.name || 'System');
               // Lấy safe_preview
               let preview = msg.mes || '';
               if (preview.length > 50)
@@ -8104,7 +10665,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       }
   }
 
-  const escapeHtml$2 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$3 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SettingsUI {
       static async init(extPath, EXT_NAME, registry) {
           const $ = jQuery;
@@ -8301,8 +10862,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               $safeToolsList.empty();
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
-                  const name = escapeHtml$2(tool.schema.name);
-                  const desc = escapeHtml$2(tool.schema.description);
+                  const name = escapeHtml$3(tool.schema.name);
+                  const desc = escapeHtml$3(tool.schema.description);
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
                       !desc.toLowerCase().includes(lowerFilter)) {
@@ -8467,7 +11028,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                             <button class="kaiz-qp-icon-btn interactable" data-index="${index}" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$2(qp.name || '')}" placeholder="Name (e.g. Analyze)">
+                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$3(qp.name || '')}" placeholder="Name (e.g. Analyze)">
                             <div class="kaiz-qp-actions">
                                 <button class="kaiz-qp-act-btn interactable kaiz-qp-up" data-index="${index}" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
                                 <button class="kaiz-qp-act-btn interactable kaiz-qp-down" data-index="${index}" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
@@ -8475,7 +11036,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$2(qp.prompt || '')}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$3(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -8758,8 +11319,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               $toolsList.empty();
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
-                  const name = escapeHtml$2(tool.schema.name);
-                  const desc = escapeHtml$2(tool.schema.description);
+                  const name = escapeHtml$3(tool.schema.name);
+                  const desc = escapeHtml$3(tool.schema.description);
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
                       !desc.toLowerCase().includes(lowerFilter)) {
@@ -9353,7 +11914,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
-  const escapeHtml$1 = (s) => s
+  const escapeHtml$2 = (s) => s
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -9527,12 +12088,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const item = $('<div class="kaiz-attachment-item"></div>');
                   if (att.type === 'image') {
                       item.addClass('is-image');
-                      item.append(`<img src="${att.data}" title="${escapeHtml$1(att.name)}" />`);
+                      item.append(`<img src="${att.data}" title="${escapeHtml$2(att.name)}" />`);
                   }
                   else {
                       item.addClass('is-file');
                       item.append(`<i class="fa-solid fa-file-lines"></i>`);
-                      item.append(`<span>${escapeHtml$1(att.name)}</span>`);
+                      item.append(`<span>${escapeHtml$2(att.name)}</span>`);
                   }
                   const removeBtn = $('<div class="kaiz-attachment-remove"><i class="fa-solid fa-xmark"></i></div>');
                   removeBtn.on('click', () => {
@@ -9818,7 +12379,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               wsSelect.empty();
               wsSelect.append('<option value="default">Default</option>');
               for (const ws of workspaces) {
-                  wsSelect.append(`<option value="${ws.id}">${escapeHtml$1(ws.name)}</option>`);
+                  wsSelect.append(`<option value="${ws.id}">${escapeHtml$2(ws.name)}</option>`);
               }
               if (stateManager.currentWorkspaceId) {
                   wsSelect.val(stateManager.currentWorkspaceId.toString());
@@ -9900,13 +12461,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   enabled.forEach((schema) => {
                       const chip = $(`
-                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$1(schema.name)}" style="
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$2(schema.name)}" style="
                             display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
                             background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
                             border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
                         ">
-                            ${escapeHtml$1(schema.name)}
-                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$1(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                            ${escapeHtml$2(schema.name)}
+                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$2(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
                         </span>
                     `);
                       chipsContainer.append(chip);
@@ -9926,12 +12487,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   matches.forEach((schema) => {
                       const item = $(`
-                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$1(schema.name)}" style="
+                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$2(schema.name)}" style="
                             padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
                             border-bottom:1px solid rgba(255,255,255,0.04);
                         ">
-                            <span style="color:#fff; font-weight:500;">${escapeHtml$1(schema.name)}</span>
-                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$1(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
+                            <span style="color:#fff; font-weight:500;">${escapeHtml$2(schema.name)}</span>
+                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$2(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
                         </div>
                     `);
                       item.on('mouseenter', function () {
@@ -10154,7 +12715,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const bg = isSelected ? 'rgba(0, 201, 255, 0.2)' : 'transparent';
                   htmlBuffer += `
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml$1(chat.name)}</span>
+                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml$2(chat.name)}</span>
                         <div>
                             <i class="fa-solid fa-pen kaiz-chat-edit" style="color:#f39c12; font-size:12px; margin-right:8px;" data-id="${chat.id}" data-name="${chat.name.replace(/"/g, '&quot;')}"></i>
                             <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
@@ -10169,7 +12730,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const toolCalls = [];
               let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
                   const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                  const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${escapeHtml$1(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
+                  const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${escapeHtml$2(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
                   toolCalls.push(toolHtml);
                   return `__TOOL_CALL_${toolCalls.length - 1}__`;
               });
@@ -10286,7 +12847,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
           const formatUserMessage = (text, attachments) => {
               const safeText = text || '';
-              const escapedText = escapeHtml$1(safeText).replace(/\n/g, '<br>');
+              const escapedText = escapeHtml$2(safeText).replace(/\n/g, '<br>');
               let finalHtml = escapedText;
               if (safeText.startsWith('[Tool Result')) {
                   // ... logic Tool Result ...
@@ -10310,10 +12871,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   let attachmentsHtml = '<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">';
                   for (const att of attachments) {
                       if (att.type === 'image') {
-                          attachmentsHtml += `<img src="${att.data}" class="kaiz-msg-attachment-img" title="${escapeHtml$1(att.name)}" />`;
+                          attachmentsHtml += `<img src="${att.data}" class="kaiz-msg-attachment-img" title="${escapeHtml$2(att.name)}" />`;
                       }
                       else if (att.type === 'text') {
-                          attachmentsHtml += `<div class="kaiz-msg-attachment-text"><i class="fa-solid fa-file-lines"></i> <b>${escapeHtml$1(att.name)}</b></div>`;
+                          attachmentsHtml += `<div class="kaiz-msg-attachment-text"><i class="fa-solid fa-file-lines"></i> <b>${escapeHtml$2(att.name)}</b></div>`;
                       }
                   }
                   attachmentsHtml += '</div>';
@@ -10590,7 +13151,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const html = `
                         <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
                             <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
-                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml$1(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
+                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml$2(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
                             <div style="display: flex; gap: 10px; margin-top: 10px;">
                                 <button id="kaiz-allow-${confirmId}" style="background: #2ecc71; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-check"></i> Allow</button>
                                 <button id="kaiz-deny-${confirmId}" style="background: #e74c3c; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Deny</button>
@@ -10602,7 +13163,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           if (!loop.isRunning)
                               return;
                           $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                          $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml$1(call.name)}</div>`);
+                          $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml$2(call.name)}</div>`);
                           btnIcon.addClass('kaiz-icon-spin');
                           btnFloat.removeClass('kaiz-btn-blink');
                           resolveFn(true);
@@ -10611,7 +13172,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           if (!loop.isRunning)
                               return;
                           $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                          $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml$1(call.name)}</div>`);
+                          $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml$2(call.name)}</div>`);
                           btnIcon.removeClass('kaiz-icon-spin');
                           btnFloat.removeClass('kaiz-btn-blink');
                           resolveFn(false);
@@ -10621,10 +13182,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       lastStreamEvent = null;
                       streamUpdatePending = false;
                       if (agentContentBox) {
-                          agentContentBox.append(`<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          agentContentBox.append(`<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$2(event.text || '')}</div>`);
                       }
                       else {
-                          agentMsgId = addMessageToDOM('agent', `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          agentMsgId = addMessageToDOM('agent', `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$2(event.text || '')}</div>`);
                           agentContentBox = $(`#${agentMsgId}`);
                       }
                   }
@@ -10633,11 +13194,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       streamUpdatePending = false;
                       let errDomId = null;
                       if (agentContentBox) {
-                          agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$2(event.text || '')}</div>`);
                           agentContentBox = null;
                       }
                       else {
-                          errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$1(event.text || '')}</div>`);
+                          errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$2(event.text || '')}</div>`);
                       }
                       const errMsgId = await stateManager.addMessage('agent', `[Error] ${event.text}`);
                       if (errDomId) {
@@ -10937,7 +13498,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
-  const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$1 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class ToolCheckerUI {
       static init(registry, adapter) {
           const $ = jQuery;
@@ -10980,7 +13541,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const tools = registry.getAllTools();
               list.empty();
               for (const t of tools) {
-                  const name = escapeHtml(t.schema.name);
+                  const name = escapeHtml$1(t.schema.name);
                   list.append(`
                     <div id="checker-tool-${name}" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px 12px; border-radius:5px;">
                         <span><i class="fa-solid fa-wrench" style="margin-right:8px; opacity:0.7"></i>${name}</span>
@@ -12728,6 +15289,1163 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
+  const escapeHtml = (str) => (str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  const formatBytes = (bytes) => {
+      if (!bytes || bytes <= 0)
+          return '0 B';
+      if (bytes < 1024)
+          return `${bytes} B`;
+      if (bytes < 1024 * 1024)
+          return `${(bytes / 1024).toFixed(1)} KB`;
+      return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+  class PresetGitModal {
+      db;
+      manager = PresetGitManager.getInstance();
+      currentSelectedPreset = '';
+      commitsCache = [];
+      searchQuery = '';
+      constructor(db) {
+          this.db = db;
+          this.bindEvents();
+      }
+      isModalOpen() {
+          const modal = document.getElementById('kaiz-preset-git-modal');
+          return !!(modal && modal.open);
+      }
+      bindEvents() {
+          const $ = jQuery;
+          // 1. Mở Modal từ Header Tools Dropdown
+          $('#kaiz-chat-preset-git-btn')
+              .off('click')
+              .on('click', async () => {
+              $('#kaiz-chat-tools-menu').hide();
+              await this.open();
+          });
+          // 2. Đóng Modal
+          $('#kaiz-pg-close-btn')
+              .off('click')
+              .on('click', () => {
+              this.close();
+          });
+          // 4. Nút Làm Mới
+          $('#kaiz-pg-refresh-btn')
+              .off('click')
+              .on('click', async () => {
+              await this.refresh();
+              if (typeof toastr !== 'undefined')
+                  toastr.info('Đã làm mới dữ liệu Git Preset.');
+          });
+          // 5. Thay đổi Preset trong Selector Dropdown
+          $('#kaiz-pg-preset-select')
+              .off('change')
+              .on('change', async (e) => {
+              const val = $(e.target).val();
+              if (val) {
+                  this.currentSelectedPreset = val;
+                  await this.loadAndRender();
+              }
+          });
+          // 6. Tìm kiếm Timeline
+          $('#kaiz-pg-timeline-search')
+              .off('input')
+              .on('input', (e) => {
+              this.searchQuery = ($(e.target).val() || '').trim().toLowerCase();
+              this.renderCommitList();
+          });
+          // 7. Hủy Nháp / Khôi phục về HEAD (Discard)
+          $('#kaiz-pg-discard-staged-btn')
+              .off('click')
+              .on('click', async () => {
+              if (confirm('Bạn có chắc muốn hủy bỏ toàn bộ các thay đổi chưa lưu để khôi phục preset về phiên bản gần nhất (HEAD) không?')) {
+                  const res = await this.manager.discard();
+                  await this.loadAndRender();
+                  if (typeof toastr !== 'undefined')
+                      toastr.warning(res.summary);
+              }
+          });
+          // 8. Xem Diff Chưa Lưu (Diff against HEAD / Staging)
+          $('#kaiz-pg-view-staged-diff-btn')
+              .off('click')
+              .on('click', async () => {
+              const dirtyInfo = await this.manager.isDirtyAgainstHead();
+              const diff = dirtyInfo.diff;
+              const title = dirtyInfo.isStaged
+                  ? 'Thay đổi trong Vùng Nháp (Staging Diff)'
+                  : 'Thay đổi chưa lưu so với phiên bản hiện tại (Working Tree Diff)';
+              this.openDiffModal(title, diff.items, this.manager.getPrompts());
+          });
+          // 9. Manual Commit (Tiết kiệm API)
+          $('#kaiz-pg-manual-commit-btn')
+              .off('click')
+              .on('click', async () => {
+              await this.handleManualCommit();
+          });
+          // Hỗ trợ phím Enter khi nhập tên mốc hoặc nhãn
+          $('#kaiz-pg-commit-msg-input, #kaiz-pg-commit-tag-input')
+              .off('keydown')
+              .on('keydown', async (e) => {
+              if (e.key === 'Enter') {
+                  e.preventDefault();
+                  await this.handleManualCommit();
+              }
+          });
+          // 10. Prune Commits (Cắt tỉa bộ nhớ)
+          $('#kaiz-pg-prune-btn')
+              .off('click')
+              .on('click', async () => {
+              if (confirm(`Bạn có muốn cắt tỉa lịch sử của preset "${this.currentSelectedPreset}", chỉ giữ lại 30 commit gần nhất để giải phóng bộ nhớ?`)) {
+                  const res = await this.manager.pruneCommits(30);
+                  await this.loadAndRender();
+                  if (typeof toastr !== 'undefined')
+                      toastr.success(res.summary);
+              }
+          });
+          // 11. Xóa toàn bộ lịch sử commit của preset này
+          $('#kaiz-pg-clear-history-btn')
+              .off('click')
+              .on('click', async () => {
+              if (confirm(`⚠️ CẢNH BÁO: Bạn có chắc chắn muốn XÓA SẠCH toàn bộ lịch sử commit của preset "${this.currentSelectedPreset}" không? Hành động này sẽ giải phóng toàn bộ bộ nhớ của preset này nhưng không thể hoàn tác.`)) {
+                  await this.db.deletePresetCommits(this.currentSelectedPreset);
+                  await this.loadAndRender();
+                  if (typeof toastr !== 'undefined')
+                      toastr.success(`Đã xóa sạch lịch sử commit của preset "${this.currentSelectedPreset}".`);
+              }
+          });
+          // 12. Đóng Diff Modal
+          $('#kaiz-pg-diff-close')
+              .off('click')
+              .on('click', () => {
+              const diffModal = $('#kaiz-preset-diff-modal')[0];
+              if (diffModal)
+                  diffModal.close();
+          });
+          // 13. Tự động đồng bộ khi quay lại cửa sổ hoặc SillyTavern cập nhật preset
+          window.addEventListener('focus', async () => {
+              if (this.isModalOpen()) {
+                  await this.loadAndRender();
+              }
+          });
+          const win = window;
+          if (win.SillyTavern && typeof win.SillyTavern.getContext === 'function') {
+              try {
+                  const ctx = win.SillyTavern.getContext();
+                  ctx?.eventSource?.on?.('oai_preset_changed_after', async () => {
+                      if (this.isModalOpen()) {
+                          await this.loadAndRender();
+                      }
+                  });
+              }
+              catch {
+                  // ignore
+              }
+          }
+      }
+      async open() {
+          const $ = jQuery;
+          const modal = $('#kaiz-preset-git-modal')[0];
+          if (modal) {
+              modal.style.display = 'flex';
+              modal.showModal();
+              await this.refresh();
+          }
+      }
+      close() {
+          const $ = jQuery;
+          const modal = $('#kaiz-preset-git-modal')[0];
+          if (modal && modal.open) {
+              modal.close();
+              modal.style.display = 'none';
+          }
+      }
+      async refresh() {
+          const activeName = this.manager.getActivePresetName();
+          if (!this.currentSelectedPreset) {
+              this.currentSelectedPreset = activeName;
+          }
+          // Đảm bảo preset đang kích hoạt luôn có mốc commit ban đầu để tính diff
+          if (this.currentSelectedPreset === activeName) {
+              await this.manager.ensureInitialCommit(activeName);
+          }
+          // 1. Nạp danh sách Presets
+          await this.populatePresetSelector();
+          // 2. Nạp dữ liệu và render
+          await this.loadAndRender();
+      }
+      async populatePresetSelector() {
+          const $ = jQuery;
+          const select = $('#kaiz-pg-preset-select');
+          const activeName = this.manager.getActivePresetName();
+          const savedPresets = await this.db.getDistinctPresetNames();
+          const presetSet = new Set();
+          if (activeName)
+              presetSet.add(activeName);
+          for (const p of savedPresets) {
+              if (p)
+                  presetSet.add(p);
+          }
+          select.empty();
+          for (const p of presetSet) {
+              const isLive = p === activeName;
+              const label = isLive ? `⭐ ${p} (Đang dùng)` : `📦 ${p}`;
+              const opt = $('<option>').val(p).text(label);
+              if (p === this.currentSelectedPreset) {
+                  opt.prop('selected', true);
+              }
+              select.append(opt);
+          }
+      }
+      async loadAndRender() {
+          const $ = jQuery;
+          const activeName = this.manager.getActivePresetName();
+          const isCurrentActive = this.currentSelectedPreset === activeName;
+          // Cập nhật badge Live Active
+          if (isCurrentActive) {
+              $('#kaiz-pg-active-badge')
+                  .text('Live Active')
+                  .removeClass('badge-neutral')
+                  .addClass('badge-success')
+                  .show();
+              $('#kaiz-pg-staging-card').show();
+          }
+          else {
+              $('#kaiz-pg-active-badge')
+                  .text('Archived History')
+                  .removeClass('badge-success')
+                  .addClass('badge-neutral')
+                  .show();
+              $('#kaiz-pg-staging-card').hide(); // Staging chỉ áp dụng cho preset đang active
+          }
+          // 1. Thống kê bộ nhớ & metrics
+          await this.renderStorageMetrics();
+          // 2. Render Staging Sandbox
+          if (isCurrentActive) {
+              await this.renderStagingSandbox();
+          }
+          // 3. Render Lịch sử Commit
+          this.commitsCache = await this.db.getPresetCommits(this.currentSelectedPreset, 100);
+          await this.renderCommitList();
+      }
+      async renderStorageMetrics() {
+          const $ = jQuery;
+          const stats = await this.db.getPresetStorageStats();
+          const headHash = await this.manager.getHeadCommitHash(this.currentSelectedPreset);
+          const currentPresetStats = stats.byPreset[this.currentSelectedPreset] || { commits: 0, bytes: 0 };
+          const memFormatted = formatBytes(currentPresetStats.bytes);
+          const totalMemFormatted = formatBytes(stats.totalBytes);
+          $('#kaiz-pg-stat-memory')
+              .text(memFormatted)
+              .attr('title', `Dung lượng preset này: ${memFormatted} (Toàn hệ thống: ${totalMemFormatted})`);
+          $('#kaiz-pg-stat-commits')
+              .text(`${currentPresetStats.commits}`)
+              .attr('title', `Preset này có ${currentPresetStats.commits} bản lưu (Toàn hệ thống: ${stats.totalCommits} bản lưu)`);
+          $('#kaiz-pg-stat-presets').text(`${stats.presetCount} presets`);
+          $('#kaiz-pg-stat-head').text(headHash ? headHash.substring(0, 8) : 'none');
+      }
+      async renderStagingSandbox() {
+          const $ = jQuery;
+          const dirtyInfo = await this.manager.isDirtyAgainstHead();
+          const isDirty = dirtyInfo.isDirty;
+          const diff = dirtyInfo.diff;
+          const isStaged = dirtyInfo.isStaged;
+          if (isDirty) {
+              const badgeLabel = isStaged
+                  ? `● ${diff.totalChanges} thay đổi (Nháp)`
+                  : `● ${diff.totalChanges} thay đổi chưa lưu`;
+              $('#kaiz-pg-staging-badge')
+                  .text(badgeLabel)
+                  .removeClass('badge-neutral badge-success')
+                  .addClass('badge-warning');
+              const sourceText = isStaged
+                  ? '(Dữ liệu SillyTavern gốc chưa bị ghi đè)'
+                  : '(Thay đổi chưa được lưu thành mốc)';
+              $('#kaiz-pg-staging-summary').html(`<b>${diff.totalChanges} thay đổi chưa lưu:</b> +${diff.added} tạo mới, ~${diff.modified} sửa, -${diff.deleted} xóa. <span style="opacity: 0.8">${sourceText}</span>`);
+              $('#kaiz-pg-staging-actions').css('display', 'flex');
+              // Render staged items preview
+              const list = $('#kaiz-pg-staged-list');
+              list.empty().css('display', 'flex');
+              for (const item of diff.items.slice(0, 5)) {
+                  let badgeColor = '#38bdf8';
+                  let icon = 'fa-pen';
+                  if (item.type === 'create') {
+                      badgeColor = '#2ecc71';
+                      icon = 'fa-plus';
+                  }
+                  else if (item.type === 'delete') {
+                      badgeColor = '#e74c3c';
+                      icon = 'fa-trash';
+                  }
+                  list.append(`
+                    <div style="font-size: 11px; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; border-left: 3px solid ${badgeColor}">
+                        <i class="fa-solid ${icon}" style="color: ${badgeColor}; font-size: 10px"></i>
+                        <span style="font-weight: 500">${escapeHtml(item.name || item.identifier || item.type)}:</span>
+                        <span style="opacity: 0.8">${escapeHtml(item.summary)}</span>
+                    </div>
+                `);
+              }
+              if (diff.items.length > 5) {
+                  list.append(`<div style="font-size: 10px; opacity: 0.6; padding-left: 8px">...và còn ${diff.items.length - 5} thay đổi khác (bấm "Xem Thay Đổi" để xem hết)</div>`);
+              }
+          }
+          else {
+              $('#kaiz-pg-staging-badge')
+                  .text('Đồng bộ')
+                  .removeClass('badge-warning badge-danger')
+                  .addClass('badge-success');
+              $('#kaiz-pg-staging-summary').text('Preset đang ở phiên bản mới nhất, không có chỉnh sửa dở dang.');
+              $('#kaiz-pg-staging-actions').hide();
+              $('#kaiz-pg-staged-list').empty().hide();
+          }
+      }
+      async handleManualCommit() {
+          const $ = jQuery;
+          const msg = ($('#kaiz-pg-commit-msg-input').val() || '').trim();
+          const tag = ($('#kaiz-pg-commit-tag-input').val() || '').trim();
+          if (!msg) {
+              if (typeof toastr !== 'undefined')
+                  toastr.warning('Vui lòng nhập tên hoặc mô tả mốc lưu trước khi bấm Lưu!');
+              $('#kaiz-pg-commit-msg-input').focus();
+              return;
+          }
+          const dirtyInfo = await this.manager.isDirtyAgainstHead();
+          if (!dirtyInfo.isDirty && !tag) {
+              if (typeof toastr !== 'undefined')
+                  toastr.warning('Preset hiện tại chưa có thay đổi nào mới để lưu!');
+              return;
+          }
+          try {
+              const result = await this.manager.manualCommit(msg, tag || undefined, true);
+              $('#kaiz-pg-commit-msg-input').val('');
+              $('#kaiz-pg-commit-tag-input').val('');
+              await this.loadAndRender();
+              if (typeof toastr !== 'undefined') {
+                  toastr.success(`Đã lưu phiên bản [#${result.hash.substring(0, 8)}] thành công!`);
+              }
+          }
+          catch (e) {
+              console.error('[PresetGitModal] Commit thất bại:', e);
+              if (typeof toastr !== 'undefined')
+                  toastr.error(`Lỗi khi lưu phiên bản: ${e.message}`);
+          }
+      }
+      async renderCommitList() {
+          const $ = jQuery;
+          const container = $('#kaiz-pg-commit-list');
+          container.empty();
+          const headHash = await this.manager.getHeadCommitHash(this.currentSelectedPreset);
+          const headCommit = this.commitsCache.find((c) => c.hash === headHash);
+          const headTimestamp = headCommit ? headCommit.timestamp : 0;
+          let filtered = this.commitsCache;
+          if (this.searchQuery) {
+              filtered = this.commitsCache.filter((c) => c.hash.toLowerCase().includes(this.searchQuery) ||
+                  (c.message || '').toLowerCase().includes(this.searchQuery) ||
+                  (c.tag || '').toLowerCase().includes(this.searchQuery) ||
+                  (c.author || '').toLowerCase().includes(this.searchQuery));
+          }
+          if (filtered.length === 0) {
+              container.append(`
+                <div style="text-align: center; padding: 45px 20px; opacity: 0.65; display: flex; flex-direction: column; align-items: center; gap: 8px">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(255, 255, 255, 0.04); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #a78bfa; margin-bottom: 4px">
+                        <i class="fa-solid fa-timeline"></i>
+                    </div>
+                    <div style="font-size: 13.5px; font-weight: 500; color: #f1f5f9">
+                        ${this.searchQuery ? 'Không tìm thấy phiên bản phù hợp' : 'Chưa có mốc lịch sử nào cho preset này'}
+                    </div>
+                    <div style="font-size: 11.5px; max-width: 380px; line-height: 1.5; opacity: 0.75">
+                        ${this.searchQuery ? 'Thử tìm với từ khóa khác như mã hash, tag hoặc tên thay đổi.' : 'Mọi thay đổi qua Kaiz Agent hoặc nút "Lưu phiên bản" phía trên sẽ tự động xuất hiện tại đây.'}
+                    </div>
+                </div>
+            `);
+              return;
+          }
+          filtered.forEach((commit) => {
+              const isHead = commit.hash === headHash;
+              const isOlder = headCommit ? commit.timestamp < headTimestamp : false;
+              const isNewer = headCommit ? commit.timestamp > headTimestamp : false;
+              const dateStr = formatRelativeTime(commit.timestamp);
+              const fullDateStr = new Date(commit.timestamp).toLocaleString();
+              const author = commit.author || 'Kaiz Agent';
+              const isManual = author.toLowerCase().includes('manual') || author.toLowerCase().includes('user');
+              const authorBadge = isManual
+                  ? `<span style="background: rgba(56, 189, 248, 0.12); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.25); padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-user"></i> Bạn lưu</span>`
+                  : `<span style="background: rgba(167, 139, 250, 0.12); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.25); padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-robot"></i> Agent</span>`;
+              const tagBadge = commit.tag
+                  ? `<span style="background: rgba(251, 191, 36, 0.12); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 500"><i class="fa-solid fa-tag"></i> ${escapeHtml(commit.tag)}</span>`
+                  : '';
+              const headPill = isHead
+                  ? `<span style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 600"><i class="fa-solid fa-check"></i> Đang dùng</span>`
+                  : '';
+              const promptCount = commit.tree?.prompts?.length || 0;
+              let diffSummary = commit.diffSummary || commit.diff?.summary || `${promptCount} blocks`;
+              if (diffSummary.includes('thay đổi chưa lưu')) {
+                  diffSummary = diffSummary.replace(/Preset có \d+ thay đổi chưa lưu:\s*/i, '');
+              }
+              // Node dot
+              let dotHtml;
+              if (isHead) {
+                  dotHtml = `<div class="kaiz-pg-timeline-dot is-head" title="Phiên bản đang kích hoạt"><i class="fa-solid fa-check"></i></div>`;
+              }
+              else if (isManual) {
+                  dotHtml = `<div class="kaiz-pg-timeline-dot is-manual" title="Mốc lưu thủ công"><i class="fa-solid fa-user"></i></div>`;
+              }
+              else {
+                  dotHtml = `<div class="kaiz-pg-timeline-dot is-agent" title="Kaiz Agent lưu"><i class="fa-solid fa-robot"></i></div>`;
+              }
+              // Navigation Main Button
+              let navActionBtn;
+              if (isHead) {
+                  navActionBtn = `<button class="kaiz-pg-btn-primary-action menu_button" disabled style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); opacity: 0.95; cursor: default"><i class="fa-solid fa-circle-check"></i> Đang sử dụng</button>`;
+              }
+              else if (isOlder) {
+                  navActionBtn = `
+                    <button class="kaiz-pg-btn-rollback kaiz-pg-btn-primary-action menu_button interactable" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3)" title="Khôi phục lại phiên bản này (Các mốc mới hơn vẫn được lưu an toàn trong lịch sử)">
+                        <i class="fa-solid fa-rotate-left"></i> Quay lại bản này
+                    </button>
+                `;
+              }
+              else if (isNewer) {
+                  navActionBtn = `
+                    <button class="kaiz-pg-btn-forward kaiz-pg-btn-primary-action menu_button interactable" style="background: rgba(167, 139, 250, 0.15); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.35)" title="Đi tới phiên bản này cùng các thay đổi tích lũy">
+                        <i class="fa-solid fa-forward"></i> Đi tới bản này
+                    </button>
+                `;
+              }
+              else {
+                  navActionBtn = `
+                    <button class="kaiz-pg-btn-rollback kaiz-pg-btn-primary-action menu_button interactable" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3)">
+                        <i class="fa-solid fa-rotate-left"></i> Khôi phục
+                    </button>
+                `;
+              }
+              // Subtle hard reset button for older commits
+              const hardResetBtn = isOlder
+                  ? `<button class="kaiz-pg-btn-hard-reset kaiz-pg-icon-btn danger menu_button interactable" title="Quay về mốc này và xóa các bản mới hơn phía sau để dọn bộ nhớ"><i class="fa-solid fa-trash-can"></i></button>`
+                  : '';
+              const shortHash = commit.hash.substring(0, 8);
+              const cardNode = $(`
+                <div class="kaiz-pg-timeline-node">
+                    ${dotHtml}
+                    <div class="kaiz-pg-commit-card ${isHead ? 'is-head' : ''}" data-hash="${commit.hash}">
+                        <!-- Row 1: Message & Relative Time -->
+                        <div class="kaiz-pg-commit-row1">
+                            <div class="kaiz-pg-commit-title" title="${escapeHtml(commit.message)}">
+                                ${escapeHtml(commit.message)}
+                            </div>
+                            <div class="kaiz-pg-commit-time" title="${fullDateStr}">
+                                <i class="fa-regular fa-clock" style="margin-right: 3px"></i>${dateStr}
+                            </div>
+                        </div>
+
+                        <!-- Row 2: Badges, Hash & Change Summary -->
+                        <div class="kaiz-pg-commit-badges">
+                            <span class="kaiz-pg-hash-btn" title="Mã phiên bản (Bấm để sao chép)">
+                                <i class="fa-regular fa-copy" style="font-size: 9px; margin-right: 2px; opacity: 0.7"></i>#${shortHash}
+                            </span>
+                            ${headPill}
+                            ${authorBadge}
+                            ${tagBadge}
+                            <span class="kaiz-pg-diff-summary" title="${escapeHtml(diffSummary)}">
+                                <i class="fa-solid fa-layer-group" style="font-size: 10px; margin-right: 3px"></i>${escapeHtml(diffSummary)}
+                            </span>
+                        </div>
+
+                        <!-- Row 3: Action Buttons -->
+                        <div class="kaiz-pg-commit-actions">
+                            <div class="kaiz-pg-commit-primary-act">
+                                ${navActionBtn}
+                            </div>
+                            <div class="kaiz-pg-commit-secondary-acts">
+                                <button class="kaiz-pg-btn-diff kaiz-pg-icon-btn menu_button interactable" title="Xem chi tiết các thay đổi">
+                                    <i class="fa-solid fa-eye"></i>
+                                </button>
+                                <button class="kaiz-pg-btn-tag kaiz-pg-icon-btn menu_button interactable" title="Gán nhãn mốc (Ví dụ: v1.0)">
+                                    <i class="fa-solid fa-tag"></i>
+                                </button>
+                                ${hardResetBtn}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+              // Event Copy Hash
+              cardNode.find('.kaiz-pg-hash-btn').on('click', () => {
+                  navigator.clipboard.writeText(commit.hash);
+                  if (typeof toastr !== 'undefined')
+                      toastr.info(`Đã sao chép mã commit: #${shortHash}`);
+              });
+              // Event View Diff
+              cardNode.find('.kaiz-pg-btn-diff').on('click', () => {
+                  this.viewCommitDiff(commit);
+              });
+              // Event Add Tag
+              cardNode.find('.kaiz-pg-btn-tag').on('click', async () => {
+                  const newTag = prompt(`Nhập tên nhãn cho mốc [#${shortHash}]:`, commit.tag || 'v1.0');
+                  if (newTag && newTag.trim()) {
+                      await this.manager.tagCommit(commit.hash, newTag.trim());
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined') {
+                          toastr.success(`Đã gắn tag "${newTag}" cho mốc [#${shortHash}]!`);
+                      }
+                  }
+              });
+              // Event Rollback (Older)
+              cardNode.find('.kaiz-pg-btn-rollback').on('click', async () => {
+                  if (confirm(`Bạn có chắc chắn muốn quay lại phiên bản [#${shortHash}] ("${commit.message}") không?\n(Toàn bộ các phiên bản mới hơn vẫn được lưu giữ an toàn, bạn có thể quay lại bất cứ lúc nào)`)) {
+                      const res = await this.manager.rollback(commit.hash, false);
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined')
+                          toastr.success(res.summary);
+                  }
+              });
+              // Event Forward (Newer)
+              cardNode.find('.kaiz-pg-btn-forward').on('click', async () => {
+                  if (confirm(`Bạn có chắc chắn muốn chuyển tiếp tới phiên bản [#${shortHash}] ("${commit.message}") không?`)) {
+                      const res = await this.manager.rollback(commit.hash, false);
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined')
+                          toastr.success(res.summary);
+                  }
+              });
+              // Event Hard Reset
+              cardNode.find('.kaiz-pg-btn-hard-reset').on('click', async () => {
+                  if (confirm(`⚠️ CẢNH BÁO DỌN DẸP BỘ NHỚ:\nBạn có chắc muốn quay về mốc [#${shortHash}] VÀ XÓA BỎ toàn bộ các mốc sinh ra sau thời điểm này để giải phóng dung lượng không?`)) {
+                      const res = await this.manager.rollback(commit.hash, true);
+                      await this.loadAndRender();
+                      if (typeof toastr !== 'undefined')
+                          toastr.warning(res.summary);
+                  }
+              });
+              container.append(cardNode);
+          });
+      }
+      viewCommitDiff(commit) {
+          const title = `Chi tiết thay đổi [#${commit.hash.substring(0, 8)}]: "${commit.message}"`;
+          const items = commit.diffItems || commit.diff?.items || [];
+          this.openDiffModal(title, items, commit.tree?.prompts || []);
+      }
+      openDiffModal(title, items, fullPrompts) {
+          const $ = jQuery;
+          $('#kaiz-pg-diff-modal-title').text(title);
+          const body = $('#kaiz-pg-diff-body');
+          body.empty();
+          if (!items || items.length === 0) {
+              if (fullPrompts && fullPrompts.length > 0) {
+                  body.append(`
+                    <div style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px">
+                        <div style="color: #38bdf8; font-weight: 600; margin-bottom: 8px; font-size: 13px">Nội dung Snapshot (${fullPrompts.length} prompt blocks):</div>
+                        ${fullPrompts
+                    .map((p, i) => `
+                            <div style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px">
+                                <div style="color: #34d399; font-weight: 500; font-size: 12px">#${i + 1} [${p.identifier}] ${escapeHtml(p.name)} <span style="opacity: 0.6; font-size: 11px">(${p.role || 'system'})</span></div>
+                                <div style="color: #cbd5e1; font-size: 11px; white-space: pre-wrap; overflow-y: auto; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px">${escapeHtml(p.content || '')}</div>
+                            </div>
+                        `)
+                    .join('')}
+                    </div>
+                `);
+              }
+              else {
+                  body.append(`<div style="text-align: center; padding: 35px 20px; opacity: 0.6">Không có thông tin thay đổi chi tiết được ghi nhận cho mốc này.</div>`);
+              }
+          }
+          else {
+              const promptMap = new Map();
+              if (Array.isArray(fullPrompts) && fullPrompts.length > 0) {
+                  fullPrompts.forEach((p) => {
+                      if (p?.identifier)
+                          promptMap.set(p.identifier, p);
+                  });
+              }
+              try {
+                  const mgrPrompts = this.manager.getPrompts();
+                  if (Array.isArray(mgrPrompts)) {
+                      mgrPrompts.forEach((p) => {
+                          if (p?.identifier && !promptMap.has(p.identifier)) {
+                              promptMap.set(p.identifier, p);
+                          }
+                      });
+                  }
+              }
+              catch {
+                  // ignore
+              }
+              body.append(`
+                <div class="kaiz-diff-toolbar">
+                    <div class="kaiz-diff-toolbar-info">
+                        <span class="kaiz-diff-toolbar-count">
+                            <i class="fa-solid fa-list-check" style="color: #38bdf8"></i>
+                            <strong>${items.length}</strong> mục thay đổi
+                        </span>
+                        <span class="kaiz-diff-toolbar-sub">(Mặc định thu gọn • Bấm vào để mở/đóng)</span>
+                    </div>
+                    <div class="kaiz-diff-toolbar-actions">
+                        <button id="kaiz-diff-expand-all-btn" class="kaiz-diff-btn-action interactable" type="button" title="Mở rộng tất cả các mục thay đổi">
+                            <i class="fa-solid fa-angles-down"></i> Mở rộng tất cả
+                        </button>
+                        <button id="kaiz-diff-collapse-all-btn" class="kaiz-diff-btn-action interactable" type="button" title="Thu gọn tất cả các mục thay đổi">
+                            <i class="fa-solid fa-angles-up"></i> Thu gọn tất cả
+                        </button>
+                    </div>
+                </div>
+            `);
+              items.forEach((item, index) => {
+                  let badgeColor = '#38bdf8';
+                  let typeLabel = 'THAY ĐỔI';
+                  if (item.type === 'create') {
+                      badgeColor = '#34d399';
+                      typeLabel = 'TẠO MỚI';
+                  }
+                  else if (item.type === 'delete') {
+                      badgeColor = '#f87171';
+                      typeLabel = 'XÓA BỎ';
+                  }
+                  else if (item.type === 'update') {
+                      badgeColor = '#fbbf24';
+                      typeLabel = 'CHỈNH SỬA';
+                  }
+                  else if (item.type === 'reorder') {
+                      badgeColor = '#818cf8';
+                      typeLabel = 'ĐỔI THỨ TỰ';
+                  }
+                  else if (item.type === 'varUpdate') {
+                      badgeColor = '#fb923c';
+                      typeLabel = 'CẬP NHẬT VAR';
+                  }
+                  else if (item.type === 'varRename') {
+                      badgeColor = '#a78bfa';
+                      typeLabel = 'ĐỔI TÊN VAR';
+                  }
+                  // Build card HTML
+                  let contentHtml = '';
+                  if (item.type === 'update' && item.oldValue && item.newValue) {
+                      // ── Separate metadata changes from content changes ──
+                      const oldBlock = item.oldValue;
+                      const newBlock = item.newValue;
+                      const oldContent = (oldBlock.content || '').replace(/\r\n/g, '\n');
+                      const newContent = (newBlock.content || '').replace(/\r\n/g, '\n');
+                      const contentChanged = oldContent !== newContent;
+                      // Metadata pills
+                      const metaPills = [];
+                      if ((oldBlock.name || '') !== (newBlock.name || ''))
+                          metaPills.push(`📝 Name: <span class="kaiz-diff-old">${escapeHtml(oldBlock.name || '')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.name || '')}</span>`);
+                      if ((oldBlock.role || 'system') !== (newBlock.role || 'system'))
+                          metaPills.push(`🎭 Role: <span class="kaiz-diff-old">${escapeHtml(oldBlock.role || 'system')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.role || 'system')}</span>`);
+                      if ((oldBlock.enabled !== false) !== (newBlock.enabled !== false))
+                          metaPills.push(`👁 Enabled: <span class="kaiz-diff-old">${oldBlock.enabled !== false}</span> → <span class="kaiz-diff-new">${newBlock.enabled !== false}</span>`);
+                      if ((oldBlock.injection_depth ?? 4) !== (newBlock.injection_depth ?? 4))
+                          metaPills.push(`📏 Depth: <span class="kaiz-diff-old">${oldBlock.injection_depth ?? 4}</span> → <span class="kaiz-diff-new">${newBlock.injection_depth ?? 4}</span>`);
+                      if ((oldBlock.injection_position ?? 0) !== (newBlock.injection_position ?? 0))
+                          metaPills.push(`📍 Position: <span class="kaiz-diff-old">${oldBlock.injection_position ?? 0}</span> → <span class="kaiz-diff-new">${newBlock.injection_position ?? 0}</span>`);
+                      if ((oldBlock.injection_order ?? 100) !== (newBlock.injection_order ?? 100))
+                          metaPills.push(`🔢 Order: <span class="kaiz-diff-old">${oldBlock.injection_order ?? 100}</span> → <span class="kaiz-diff-new">${newBlock.injection_order ?? 100}</span>`);
+                      if (Boolean(oldBlock.system_prompt) !== Boolean(newBlock.system_prompt))
+                          metaPills.push(`⚙ System: <span class="kaiz-diff-old">${Boolean(oldBlock.system_prompt)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.system_prompt)}</span>`);
+                      if (Boolean(oldBlock.forbid_overrides) !== Boolean(newBlock.forbid_overrides))
+                          metaPills.push(`🔒 ForbidOverrides: <span class="kaiz-diff-old">${Boolean(oldBlock.forbid_overrides)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.forbid_overrides)}</span>`);
+                      if (metaPills.length > 0) {
+                          contentHtml += `<div class="kaiz-diff-meta-pills">${metaPills.map((p) => `<span class="kaiz-diff-meta-pill">${p}</span>`).join('')}</div>`;
+                      }
+                      if (contentChanged) {
+                          contentHtml += buildUnifiedDiffHtml(oldContent, newContent);
+                      }
+                  }
+                  else if (item.type === 'create' && item.newValue) {
+                      const newBlock = item.newValue;
+                      const content = (newBlock.content || '').replace(/\r\n/g, '\n');
+                      if (content) {
+                          contentHtml += buildCreatedContentHtml(content);
+                      }
+                  }
+                  else if (item.type === 'delete' && item.oldValue) {
+                      const oldBlock = item.oldValue;
+                      const content = (oldBlock.content || '').replace(/\r\n/g, '\n');
+                      if (content) {
+                          contentHtml += buildDeletedContentHtml(content);
+                      }
+                  }
+                  else if (item.type === 'reorder') {
+                      contentHtml += buildReorderDiffHtml(item, promptMap);
+                  }
+                  else {
+                      // varUpdate, varRename, or unknown — simple old→new
+                      const oldStr = item.oldValue !== undefined && item.oldValue !== null ? String(item.oldValue) : '';
+                      const newStr = item.newValue !== undefined && item.newValue !== null ? String(item.newValue) : '';
+                      if (oldStr || newStr) {
+                          contentHtml += `<div class="kaiz-diff-simple">`;
+                          if (oldStr)
+                              contentHtml += `<div class="kaiz-diff-simple-old">- ${escapeHtml(oldStr)}</div>`;
+                          if (newStr)
+                              contentHtml += `<div class="kaiz-diff-simple-new">+ ${escapeHtml(newStr)}</div>`;
+                          contentHtml += `</div>`;
+                      }
+                  }
+                  const hasContent = Boolean(contentHtml && contentHtml.trim());
+                  body.append(`
+                    <div class="kaiz-diff-item ${hasContent ? 'kaiz-diff-collapsed has-content' : 'no-content'}">
+                        <div class="kaiz-diff-item-toggle ${hasContent ? 'interactable' : ''}" ${hasContent ? 'title="Bấm để mở rộng / thu gọn chi tiết"' : ''}>
+                            <div class="kaiz-diff-item-header">
+                                <div class="kaiz-diff-header-left">
+                                    <span class="kaiz-diff-badge" style="background: ${badgeColor}18; color: ${badgeColor}; border-color: ${badgeColor}35">
+                                        #${index + 1} ${typeLabel}
+                                    </span>
+                                    <span class="kaiz-diff-identifier">[${escapeHtml(item.identifier || item.name || '')}]</span>
+                                </div>
+                                ${hasContent
+                    ? `
+                                <div class="kaiz-diff-header-right">
+                                    <span class="kaiz-diff-toggle-state-label"></span>
+                                    <i class="fa-solid fa-chevron-right kaiz-diff-chevron"></i>
+                                </div>
+                                `
+                    : ''}
+                            </div>
+                            <div class="kaiz-diff-summary">${escapeHtml(item.summary || '')}</div>
+                        </div>
+                        ${hasContent
+                    ? `
+                        <div class="kaiz-diff-item-content" style="display: none">
+                            ${contentHtml}
+                        </div>
+                        `
+                    : ''}
+                    </div>
+                `);
+              });
+              // Toggle expand/collapse for individual diff items
+              body.find('.kaiz-diff-item.has-content .kaiz-diff-item-toggle')
+                  .off('click')
+                  .on('click', function () {
+                  const itemEl = $(this).closest('.kaiz-diff-item');
+                  const contentEl = itemEl.find('.kaiz-diff-item-content');
+                  const isCollapsed = itemEl.hasClass('kaiz-diff-collapsed');
+                  if (isCollapsed) {
+                      itemEl.removeClass('kaiz-diff-collapsed').addClass('kaiz-diff-expanded');
+                      contentEl.slideDown(150);
+                  }
+                  else {
+                      itemEl.removeClass('kaiz-diff-expanded').addClass('kaiz-diff-collapsed');
+                      contentEl.slideUp(150);
+                  }
+              });
+              // Global Expand All / Collapse All
+              body.find('#kaiz-diff-expand-all-btn')
+                  .off('click')
+                  .on('click', function () {
+                  const itemsWithContent = body.find('.kaiz-diff-item.has-content');
+                  itemsWithContent.removeClass('kaiz-diff-collapsed').addClass('kaiz-diff-expanded');
+                  itemsWithContent.find('.kaiz-diff-item-content').slideDown(150);
+              });
+              body.find('#kaiz-diff-collapse-all-btn')
+                  .off('click')
+                  .on('click', function () {
+                  const itemsWithContent = body.find('.kaiz-diff-item.has-content');
+                  itemsWithContent.removeClass('kaiz-diff-expanded').addClass('kaiz-diff-collapsed');
+                  itemsWithContent.find('.kaiz-diff-item-content').slideUp(150);
+              });
+              // Interactive cross-column highlight for reordered blocks
+              body.find('.kaiz-diff-reorder-block')
+                  .off('mouseenter mouseleave')
+                  .on('mouseenter', function () {
+                  const blockId = $(this).attr('data-block-id');
+                  if (blockId) {
+                      body.find(`.kaiz-diff-reorder-block[data-block-id="${blockId}"]`).addClass('kaiz-diff-reorder-highlight');
+                  }
+              })
+                  .on('mouseleave', function () {
+                  body.find('.kaiz-diff-reorder-block').removeClass('kaiz-diff-reorder-highlight');
+              });
+          }
+          const diffModal = $('#kaiz-preset-diff-modal')[0];
+          if (diffModal) {
+              diffModal.style.display = 'flex';
+              diffModal.showModal();
+          }
+      }
+  }
+  function formatRelativeTime(timestamp) {
+      const diff = Math.max(0, Date.now() - timestamp);
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 1)
+          return 'Vừa xong';
+      if (minutes < 60)
+          return `${minutes} phút trước`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24)
+          return `${hours} giờ trước`;
+      const days = Math.floor(hours / 24);
+      if (days < 7)
+          return `${days} ngày trước`;
+      return new Date(timestamp).toLocaleDateString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+      });
+  }
+  // ─── Unified Line Diff Engine ────────────────────────────────────────────────
+  /** Compute LCS table for two string arrays. */
+  function lcsTable(a, b) {
+      const m = a.length;
+      const n = b.length;
+      // Use two-row rolling array to save memory
+      let prev = new Array(n + 1).fill(0);
+      let curr;
+      const table = new Array(m + 1);
+      table[0] = prev.slice();
+      for (let i = 1; i <= m; i++) {
+          curr = new Array(n + 1).fill(0);
+          for (let j = 1; j <= n; j++) {
+              if (a[i - 1] === b[j - 1]) {
+                  curr[j] = prev[j - 1] + 1;
+              }
+              else {
+                  curr[j] = Math.max(prev[j], curr[j - 1]);
+              }
+          }
+          prev = curr.slice();
+          table[i] = prev.slice();
+      }
+      return table;
+  }
+  /** Generate a unified list of diff lines via LCS backtrack. */
+  function generateLineDiff(oldLines, newLines) {
+      const table = lcsTable(oldLines, newLines);
+      const result = [];
+      function backtrack(i, j) {
+          if (i === 0 && j === 0)
+              return;
+          if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+              backtrack(i - 1, j - 1);
+              result.push({ type: 'context', text: oldLines[i - 1], lineOld: i, lineNew: j });
+          }
+          else if (j > 0 && (i === 0 || table[i][j - 1] >= table[i - 1][j])) {
+              backtrack(i, j - 1);
+              result.push({ type: 'add', text: newLines[j - 1], lineNew: j });
+          }
+          else {
+              backtrack(i - 1, j);
+              result.push({ type: 'del', text: oldLines[i - 1], lineOld: i });
+          }
+      }
+      backtrack(oldLines.length, newLines.length);
+      return result;
+  }
+  const DIFF_CONTEXT_SIZE = 2; // lines of context around each change
+  /** Build escaped HTML for the unified diff viewer.
+   *
+   * Strategy to handle prompts of any length correctly:
+   * 1. Strip common prefix lines (O(n) pass) — these are always unchanged.
+   * 2. Strip common suffix lines (O(n) pass).
+   * 3. Run LCS only on the "changed middle" region — guarantees changes anywhere
+   *    in the file (e.g. line 800 of 1000) are always found and fully shown.
+   * 4. Render prefix/suffix as fold separators with absolute line numbers.
+   */
+  function buildUnifiedDiffHtml(oldText, newText) {
+      const oldLines = oldText.split('\n');
+      const newLines = newText.split('\n');
+      // ── Step 1: strip common prefix ──────────────────────────────────────────
+      let prefixLen = 0;
+      while (prefixLen < oldLines.length && prefixLen < newLines.length && oldLines[prefixLen] === newLines[prefixLen]) {
+          prefixLen++;
+      }
+      // ── Step 2: strip common suffix ──────────────────────────────────────────
+      let suffixLen = 0;
+      while (suffixLen < oldLines.length - prefixLen &&
+          suffixLen < newLines.length - prefixLen &&
+          oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]) {
+          suffixLen++;
+      }
+      // ── Step 3: extract middle (changed) region ───────────────────────────────
+      const oldEnd = suffixLen > 0 ? oldLines.length - suffixLen : oldLines.length;
+      const newEnd = suffixLen > 0 ? newLines.length - suffixLen : newLines.length;
+      const oldMiddle = oldLines.slice(prefixLen, oldEnd);
+      const newMiddle = newLines.slice(prefixLen, newEnd);
+      // ── Step 4: run LCS on middle only ────────────────────────────────────────
+      // LCS input is already limited to the changed region after prefix/suffix strip.
+      // No cap needed — show the full diff.
+      const diffLines = generateLineDiff(oldMiddle, newMiddle);
+      // Shift line numbers to absolute positions
+      diffLines.forEach((dl) => {
+          if (dl.lineOld !== undefined)
+              dl.lineOld += prefixLen;
+          if (dl.lineNew !== undefined)
+              dl.lineNew += prefixLen;
+      });
+      // ── Step 5: mark lines near changes for context folding ───────────────────
+      const visible = new Set();
+      diffLines.forEach((dl, idx) => {
+          if (dl.type !== 'context') {
+              for (let k = Math.max(0, idx - DIFF_CONTEXT_SIZE); k <= Math.min(diffLines.length - 1, idx + DIFF_CONTEXT_SIZE); k++) {
+                  visible.add(k);
+              }
+          }
+      });
+      // ── Step 6: render ─────────────────────────────────────────────────────────
+      let html = '<div class="kaiz-diff-unified">';
+      // Show common prefix fold
+      if (prefixLen >= 3) {
+          html += `<div class="kaiz-diff-fold">⸺ ${prefixLen} dòng đầu không đổi ⸺</div>`;
+      }
+      else if (prefixLen > 0) {
+          // Show the 1–2 prefix lines as context (with absolute line numbers)
+          for (let p = 0; p < prefixLen; p++) {
+              const ln = String(p + 1).padStart(3, ' ');
+              html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(ln)} ${escapeHtml(ln)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[p])}</span></div>`;
+          }
+      }
+      let i = 0;
+      while (i < diffLines.length) {
+          if (visible.has(i)) {
+              const dl = diffLines[i];
+              const lineNumOld = dl.lineOld !== undefined ? String(dl.lineOld).padStart(3, ' ') : '   ';
+              const lineNumNew = dl.lineNew !== undefined ? String(dl.lineNew).padStart(3, ' ') : '   ';
+              const lineNums = `<span class="kaiz-diff-ln">${escapeHtml(lineNumOld)} ${escapeHtml(lineNumNew)}</span>`;
+              if (dl.type === 'del') {
+                  html += `<div class="kaiz-diff-line kaiz-diff-del">${lineNums}<span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+              }
+              else if (dl.type === 'add') {
+                  html += `<div class="kaiz-diff-line kaiz-diff-add">${lineNums}<span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+              }
+              else {
+                  html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+              }
+              i++;
+          }
+          else {
+              // Count consecutive hidden context lines
+              let j = i;
+              while (j < diffLines.length && !visible.has(j))
+                  j++;
+              const skipped = j - i;
+              if (skipped >= 3) {
+                  html += `<div class="kaiz-diff-fold">⸺ ${skipped} dòng không đổi ⸺</div>`;
+                  i = j;
+              }
+              else {
+                  while (i < j) {
+                      const dl = diffLines[i];
+                      const lineNumOld = dl.lineOld !== undefined ? String(dl.lineOld).padStart(3, ' ') : '   ';
+                      const lineNumNew = dl.lineNew !== undefined ? String(dl.lineNew).padStart(3, ' ') : '   ';
+                      const lineNums = `<span class="kaiz-diff-ln">${escapeHtml(lineNumOld)} ${escapeHtml(lineNumNew)}</span>`;
+                      html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+                      i++;
+                  }
+              }
+          }
+      }
+      // Show common suffix fold
+      if (suffixLen >= 3) {
+          html += `<div class="kaiz-diff-fold">⸺ ${suffixLen} dòng cuối không đổi ⸺</div>`;
+      }
+      else if (suffixLen > 0) {
+          const startOld = oldLines.length - suffixLen;
+          const startNew = newLines.length - suffixLen;
+          for (let s = 0; s < suffixLen; s++) {
+              const lnOld = String(startOld + s + 1).padStart(3, ' ');
+              const lnNew = String(startNew + s + 1).padStart(3, ' ');
+              html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(lnOld)} ${escapeHtml(lnNew)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[startOld + s])}</span></div>`;
+          }
+      }
+      html += '</div>';
+      return html;
+  }
+  /** Build HTML for a newly created block's content (all-green). */
+  function buildCreatedContentHtml(content) {
+      const lines = content.split('\n');
+      let html = '<div class="kaiz-diff-unified">';
+      lines.forEach((line, i) => {
+          html += `<div class="kaiz-diff-line kaiz-diff-add"><span class="kaiz-diff-ln">   ${String(i + 1).padStart(3, ' ')}</span><span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
+      });
+      html += '</div>';
+      return html;
+  }
+  /** Build HTML for a deleted block's content (all-red). */
+  function buildDeletedContentHtml(content) {
+      const lines = content.split('\n');
+      let html = '<div class="kaiz-diff-unified">';
+      lines.forEach((line, i) => {
+          html += `<div class="kaiz-diff-line kaiz-diff-del"><span class="kaiz-diff-ln">${String(i + 1).padStart(3, ' ')}   </span><span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
+      });
+      html += '</div>';
+      return html;
+  }
+  function normalizeOrderItem(raw, promptMap) {
+      if (typeof raw === 'string') {
+          const p = promptMap?.get(raw);
+          return {
+              identifier: raw,
+              name: p?.name || raw,
+              role: p?.role || 'system',
+              enabled: p?.enabled !== false,
+          };
+      }
+      if (raw && typeof raw === 'object') {
+          const id = String(raw.identifier || raw.id || '');
+          const p = promptMap?.get(id);
+          return {
+              identifier: id,
+              name: String(raw.name || p?.name || id || '(không tên)'),
+              role: String(raw.role || p?.role || 'system'),
+              enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : p?.enabled !== false,
+          };
+      }
+      return {
+          identifier: String(raw || ''),
+          name: String(raw || ''),
+          role: 'system',
+          enabled: true,
+      };
+  }
+  function buildReorderDiffHtml(item, promptMap) {
+      const rawOld = Array.isArray(item.oldValue) ? item.oldValue : [];
+      const rawNew = Array.isArray(item.newValue) ? item.newValue : [];
+      const oldBlocks = rawOld.map((r) => normalizeOrderItem(r, promptMap));
+      const newBlocks = rawNew.map((r) => normalizeOrderItem(r, promptMap));
+      if (oldBlocks.length === 0 && newBlocks.length === 0) {
+          return `<div style="font-size: 11px; opacity: 0.65; font-style: italic; padding: 6px 0">Không có thông tin thứ tự block.</div>`;
+      }
+      let movedCount = 0;
+      let addedCount = 0;
+      let removedCount = 0;
+      oldBlocks.forEach((ob, oldIdx) => {
+          const newIdx = newBlocks.findIndex((nb) => nb.identifier === ob.identifier);
+          if (newIdx === -1) {
+              removedCount++;
+          }
+          else if (newIdx !== oldIdx) {
+              movedCount++;
+          }
+      });
+      newBlocks.forEach((nb) => {
+          if (!oldBlocks.some((ob) => ob.identifier === nb.identifier)) {
+              addedCount++;
+          }
+      });
+      const oldCardsHtml = oldBlocks
+          .map((block, oldIdx) => {
+          const oldPos = oldIdx + 1;
+          const newIdx = newBlocks.findIndex((nb) => nb.identifier === block.identifier);
+          let status;
+          let badgeHtml;
+          if (newIdx === -1) {
+              status = 'removed';
+              badgeHtml = `<span class="kaiz-diff-reorder-badge removed" title="Đã bị gỡ khỏi danh sách linked blocks"><i class="fa-solid fa-minus"></i> Gỡ bỏ</span>`;
+          }
+          else if (newIdx !== oldIdx) {
+              status = 'moved';
+              const newPos = newIdx + 1;
+              badgeHtml = `<span class="kaiz-diff-reorder-badge moved" title="Chuyển sang vị trí #${newPos} ở thứ tự mới"><i class="fa-solid fa-arrow-right"></i> #${newPos}</span>`;
+          }
+          else {
+              status = 'same';
+              badgeHtml = `<span class="kaiz-diff-reorder-badge same" title="Vị trí không đổi"><i class="fa-solid fa-check"></i> Không đổi</span>`;
+          }
+          return `
+                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml(block.identifier)}">
+                    <div class="kaiz-diff-reorder-block-main">
+                        <span class="kaiz-diff-reorder-idx">#${oldPos}</span>
+                        <div class="kaiz-diff-reorder-info">
+                            <div class="kaiz-diff-reorder-name-row">
+                                <span class="kaiz-diff-reorder-name" title="${escapeHtml(block.name)}">${escapeHtml(block.name)}</span>
+                                ${!block.enabled ? '<span class="kaiz-diff-reorder-disabled-pill" title="Block đang tắt">Tắt</span>' : ''}
+                            </div>
+                            <div class="kaiz-diff-reorder-meta-row">
+                                <span class="kaiz-diff-reorder-id">[${escapeHtml(block.identifier)}]</span>
+                                <span class="kaiz-diff-reorder-role">${escapeHtml(block.role)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kaiz-diff-reorder-badge-wrap">
+                        ${badgeHtml}
+                    </div>
+                </div>
+            `;
+      })
+          .join('');
+      const newCardsHtml = newBlocks
+          .map((block, newIdx) => {
+          const newPos = newIdx + 1;
+          const oldIdx = oldBlocks.findIndex((ob) => ob.identifier === block.identifier);
+          let status;
+          let badgeHtml;
+          if (oldIdx === -1) {
+              status = 'added';
+              badgeHtml = `<span class="kaiz-diff-reorder-badge added" title="Thêm mới vào thứ tự"><i class="fa-solid fa-plus"></i> Mới thêm</span>`;
+          }
+          else if (oldIdx !== newIdx) {
+              status = 'moved';
+              const oldPos = oldIdx + 1;
+              badgeHtml = `<span class="kaiz-diff-reorder-badge moved-target" title="Chuyển từ vị trí #${oldPos} ở thứ tự cũ"><i class="fa-solid fa-arrow-left"></i> từ #${oldPos}</span>`;
+          }
+          else {
+              status = 'same';
+              badgeHtml = `<span class="kaiz-diff-reorder-badge same" title="Vị trí không đổi"><i class="fa-solid fa-check"></i> Không đổi</span>`;
+          }
+          return `
+                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml(block.identifier)}">
+                    <div class="kaiz-diff-reorder-block-main">
+                        <span class="kaiz-diff-reorder-idx">#${newPos}</span>
+                        <div class="kaiz-diff-reorder-info">
+                            <div class="kaiz-diff-reorder-name-row">
+                                <span class="kaiz-diff-reorder-name" title="${escapeHtml(block.name)}">${escapeHtml(block.name)}</span>
+                                ${!block.enabled ? '<span class="kaiz-diff-reorder-disabled-pill" title="Block đang tắt">Tắt</span>' : ''}
+                            </div>
+                            <div class="kaiz-diff-reorder-meta-row">
+                                <span class="kaiz-diff-reorder-id">[${escapeHtml(block.identifier)}]</span>
+                                <span class="kaiz-diff-reorder-role">${escapeHtml(block.role)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kaiz-diff-reorder-badge-wrap">
+                        ${badgeHtml}
+                    </div>
+                </div>
+            `;
+      })
+          .join('');
+      return `
+        <div class="kaiz-diff-reorder-container">
+            <div class="kaiz-diff-reorder-summary-bar">
+                <span class="kaiz-diff-reorder-summary-tag moved"><i class="fa-solid fa-arrows-up-down"></i> ${movedCount} blocks đổi vị trí</span>
+                ${addedCount > 0 ? `<span class="kaiz-diff-reorder-summary-tag added"><i class="fa-solid fa-plus"></i> ${addedCount} thêm mới</span>` : ''}
+                ${removedCount > 0 ? `<span class="kaiz-diff-reorder-summary-tag removed"><i class="fa-solid fa-minus"></i> ${removedCount} gỡ bỏ</span>` : ''}
+                <span class="kaiz-diff-reorder-hint"><i class="fa-solid fa-circle-info"></i> Rê chuột để đối chiếu block tương ứng</span>
+            </div>
+            <div class="kaiz-diff-reorder-grid">
+                <div class="kaiz-diff-reorder-col old-col">
+                    <div class="kaiz-diff-reorder-col-header">
+                        <div class="kaiz-diff-reorder-col-title">
+                            <i class="fa-solid fa-clock-rotate-left" style="color: #f87171"></i>
+                            <span>Thứ tự ban đầu</span>
+                        </div>
+                        <span class="kaiz-diff-reorder-col-count">${oldBlocks.length} blocks</span>
+                    </div>
+                    <div class="kaiz-diff-reorder-list">
+                        ${oldCardsHtml || '<div class="kaiz-diff-reorder-empty">(Trống)</div>'}
+                    </div>
+                </div>
+                <div class="kaiz-diff-reorder-col new-col">
+                    <div class="kaiz-diff-reorder-col-header">
+                        <div class="kaiz-diff-reorder-col-title">
+                            <i class="fa-solid fa-arrow-down-1-9" style="color: #34d399"></i>
+                            <span>Thứ tự mới</span>
+                        </div>
+                        <span class="kaiz-diff-reorder-col-count">${newBlocks.length} blocks</span>
+                    </div>
+                    <div class="kaiz-diff-reorder-list">
+                        ${newCardsHtml || '<div class="kaiz-diff-reorder-empty">(Trống)</div>'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+  }
+
   const EXT_NAME = 'kaiz_agent';
   console.log(`[KaizAgent] Extension ${EXT_NAME} loaded into browser.`);
   // Tìm chính xác thư mục extension
@@ -12889,6 +16607,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       const adapter = new SillyTavernAdapter();
       const registry = new ToolRegistry();
       registerDefaultTools(registry);
+      if (typeof window !== 'undefined') {
+          window.KaizRegistry = registry;
+      }
       // 1. Nạp giao diện Khung Chat Độc Lập
       try {
           const kaizWindowHtml = await ctx.renderExtensionTemplateAsync(extPath, 'kaiz_window');
@@ -12913,7 +16634,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               initInjectElementTool(uiEngine);
               new UICustomizationModal(stateManager.db, uiEngine);
               new ImageGalleryModal(stateManager.db);
-              console.log('[KaizAgent] UI Customization Engine & Image Gallery initialized.');
+              new PresetGitModal(stateManager.db);
+              console.log('[KaizAgent] UI Customization Engine, Image Gallery & Preset Git initialized.');
               // Bắt đầu Auto Tasks sau khi DB đã init
               const allTasks = await stateManager.db.getAllAutoTasks();
               await autoTaskScheduler.start(allTasks);

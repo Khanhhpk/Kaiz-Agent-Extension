@@ -17,6 +17,7 @@ import { initInjectElementTool } from './core/tools/st_inject_element';
 import { UICustomizationModal } from './ui/ui_customization_modal';
 import { WebImageBridge } from './core/web_image_bridge';
 import { ImageGalleryModal } from './ui/image_gallery_modal';
+import { PresetGitModal } from './ui/preset_git_modal';
 import { DEFAULT_VIEW_SYSTEM_PROMPT } from './core/defaults';
 
 const EXT_NAME = 'kaiz_agent';
@@ -192,6 +193,9 @@ jQuery(async () => {
     const adapter = new SillyTavernAdapter();
     const registry = new ToolRegistry();
     registerDefaultTools(registry);
+    if (typeof window !== 'undefined') {
+        (window as any).KaizRegistry = registry;
+    }
 
     // 1. Nạp giao diện Khung Chat Độc Lập
     try {
@@ -222,7 +226,8 @@ jQuery(async () => {
             initInjectElementTool(uiEngine);
             new UICustomizationModal(stateManager.db, uiEngine);
             new ImageGalleryModal(stateManager.db);
-            console.log('[KaizAgent] UI Customization Engine & Image Gallery initialized.');
+            new PresetGitModal(stateManager.db);
+            console.log('[KaizAgent] UI Customization Engine, Image Gallery & Preset Git initialized.');
 
             // Bắt đầu Auto Tasks sau khi DB đã init
             const allTasks = await stateManager.db.getAllAutoTasks();

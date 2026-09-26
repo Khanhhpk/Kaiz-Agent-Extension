@@ -176,6 +176,17 @@
                             <span class="kaiz-menu-item-desc">Bộ sưu tập ảnh AI đã tạo</span>
                         </div>
                     </div>
+                    <div
+                        id="kaiz-chat-preset-git-btn"
+                        class="kaiz-menu-item interactable"
+                        title="Preset Git Version Control"
+                    >
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-code-branch"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Preset Git & Versions</span>
+                            <span class="kaiz-menu-item-desc">Lịch sử commit, diff & rollback</span>
+                        </div>
+                    </div>
                     <div class="kaiz-menu-divider"></div>
                     <div id="kaiz-chat-backup-btn" class="kaiz-menu-item interactable" title="Backup Manager">
                         <div class="kaiz-menu-item-icon"><i class="fa-solid fa-floppy-disk"></i></div>
@@ -1284,5 +1295,183 @@
                 Đóng
             </button>
         </div>
+    </div>
+</dialog>
+
+<!-- ================= PRESET GIT & VERSION CONTROL MODAL ================= -->
+<dialog id="kaiz-preset-git-modal" class="kaiz-modal kaiz-pg-dialog">
+    <!-- Modal Header -->
+    <div class="kaiz-pg-header">
+        <div class="kaiz-pg-header-left">
+            <div class="kaiz-pg-header-icon">
+                <i class="fa-solid fa-code-branch"></i>
+            </div>
+            <div class="kaiz-pg-header-titles">
+                <h3 class="kaiz-pg-header-title">
+                    Phiên Bản AI Preset
+                    <span id="kaiz-pg-active-badge" class="kaiz-status-pill badge-success">Live Active</span>
+                </h3>
+                <div class="kaiz-pg-header-subtitle">Lịch sử khôi phục, so sánh thay đổi & tối ưu bộ nhớ</div>
+            </div>
+        </div>
+
+        <div class="kaiz-pg-header-controls">
+            <!-- Preset Selector -->
+            <select id="kaiz-pg-preset-select" class="text_pole" title="Chọn Preset để xem lịch sử phiên bản">
+                <option value="">Đang tải danh sách...</option>
+            </select>
+
+            <button id="kaiz-pg-refresh-btn" class="menu_button interactable" title="Làm mới dữ liệu">
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
+        </div>
+
+        <i id="kaiz-pg-close-btn" class="fa-solid fa-xmark interactable kaiz-pg-header-close" title="Đóng cửa sổ"></i>
+    </div>
+
+    <!-- Modal Scrollable Body -->
+    <div class="kaiz-pg-body">
+        <!-- 1. Sleek Metrics & Maintenance Ribbon -->
+        <div class="kaiz-pg-ribbon">
+            <div class="kaiz-pg-ribbon-stats">
+                <div class="kaiz-pg-chip" title="Dung lượng bộ nhớ IndexedDB đang sử dụng">
+                    <i class="fa-solid fa-hard-drive" style="color: #38bdf8"></i>
+                    <span id="kaiz-pg-stat-memory" class="kaiz-pg-stat-val" style="color: #38bdf8">0 KB</span>
+                </div>
+                <div class="kaiz-pg-chip" title="Tổng số mốc lưu">
+                    <i class="fa-solid fa-box-archive" style="color: #a78bfa"></i>
+                    <span id="kaiz-pg-stat-commits" class="kaiz-pg-stat-val">0</span>
+                    <span class="kaiz-pg-chip-unit">bản lưu</span>
+                </div>
+                <div class="kaiz-pg-chip" title="Phiên bản đang kích hoạt trên SillyTavern">
+                    <i class="fa-solid fa-circle-check" style="color: #34d399"></i>
+                    <span class="kaiz-pg-chip-label">Bản hiện tại:</span>
+                    <span id="kaiz-pg-stat-head" class="kaiz-pg-stat-val kaiz-pg-mono" style="color: #34d399"
+                        >none</span
+                    >
+                </div>
+                <span id="kaiz-pg-stat-presets" style="display: none">0</span>
+            </div>
+
+            <div class="kaiz-pg-ribbon-actions">
+                <button
+                    id="kaiz-pg-prune-btn"
+                    class="menu_button interactable kaiz-pg-btn-sm"
+                    title="Chỉ giữ lại 30 mốc gần nhất, dọn bớt các mốc cũ hơn để giải phóng bộ nhớ"
+                >
+                    <i class="fa-solid fa-broom" style="color: #fbbf24"></i>
+                    <span class="kaiz-pg-btn-text">Dọn bớt</span>
+                </button>
+                <button
+                    id="kaiz-pg-clear-history-btn"
+                    class="menu_button interactable kaiz-pg-btn-sm"
+                    title="Xóa toàn bộ lịch sử commit của preset này để làm mới từ đầu"
+                >
+                    <i class="fa-solid fa-trash-can" style="color: #f87171"></i>
+                    <span class="kaiz-pg-btn-text">Xóa Lịch Sử</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Staging Sandbox & Manual Operations Card -->
+        <div id="kaiz-pg-staging-card" class="kaiz-pg-staging-box">
+            <div class="kaiz-pg-staging-header">
+                <div class="kaiz-pg-staging-title">
+                    <i class="fa-solid fa-pen-ruler" style="color: #fbbf24"></i>
+                    <span>Khu Vực Lưu & Nháp</span>
+                    <span id="kaiz-pg-staging-badge" class="kaiz-status-pill badge-neutral">Đồng bộ</span>
+                </div>
+                <div id="kaiz-pg-staging-actions" class="kaiz-pg-staging-btns" style="display: none">
+                    <button
+                        id="kaiz-pg-view-staged-diff-btn"
+                        class="menu_button interactable kaiz-pg-btn-sm"
+                        style="color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)"
+                        title="Xem so sánh giữa các thay đổi đang nháp và bản lưu hiện tại"
+                    >
+                        <i class="fa-solid fa-code-compare"></i> Xem Thay Đổi
+                    </button>
+                    <button
+                        id="kaiz-pg-discard-staged-btn"
+                        class="menu_button interactable kaiz-pg-btn-sm"
+                        style="color: #f87171; border-color: rgba(248, 113, 113, 0.3)"
+                        title="Hủy toàn bộ nháp để quay về bản hiện tại"
+                    >
+                        <i class="fa-solid fa-xmark"></i> Hủy Nháp
+                    </button>
+                </div>
+            </div>
+
+            <!-- Staging summary / dirty explanation -->
+            <div id="kaiz-pg-staging-summary" class="kaiz-pg-staging-desc">
+                Trạng thái đồng bộ — Preset đang ở phiên bản mới nhất, không có chỉnh sửa dở dang.
+            </div>
+
+            <!-- Staged items list (if dirty) -->
+            <div id="kaiz-pg-staged-list" class="kaiz-pg-staged-items" style="display: none"></div>
+
+            <!-- Manual Commit Form (Tiết kiệm API) -->
+            <div id="kaiz-pg-manual-commit-container" class="kaiz-pg-commit-form">
+                <div class="kaiz-pg-commit-inputs">
+                    <input
+                        id="kaiz-pg-commit-msg-input"
+                        type="text"
+                        class="text_pole kaiz-pg-input-msg"
+                        placeholder="Đặt tên cho mốc này (VD: Tối ưu prompt NSFW, Chỉnh lại Greeting)..."
+                    />
+                    <input
+                        id="kaiz-pg-commit-tag-input"
+                        type="text"
+                        class="text_pole kaiz-pg-input-tag"
+                        placeholder="Nhãn (v1.0)"
+                    />
+                </div>
+                <button
+                    id="kaiz-pg-manual-commit-btn"
+                    class="menu_button interactable kaiz-pg-btn-commit"
+                    title="Lưu trạng thái hiện tại thành một mốc khôi phục mới mà không cần gọi LLM"
+                >
+                    <i class="fa-solid fa-floppy-disk"></i> <span>Lưu phiên bản</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Commit History Timeline Card -->
+        <div class="kaiz-pg-timeline-card">
+            <div class="kaiz-pg-timeline-header">
+                <div class="kaiz-pg-timeline-title">
+                    <i class="fa-solid fa-timeline" style="color: #a78bfa"></i> Lịch Sử Phiên Bản (Timeline)
+                </div>
+                <input
+                    id="kaiz-pg-timeline-search"
+                    type="text"
+                    class="text_pole kaiz-pg-search-input"
+                    placeholder="Tìm theo tên mốc, tag, mã hash..."
+                />
+            </div>
+
+            <!-- Timeline List Container -->
+            <div id="kaiz-pg-commit-list" class="kaiz-pg-timeline-container">
+                <!-- Rendered dynamically via JS -->
+            </div>
+        </div>
+    </div>
+</dialog>
+
+<!-- ================= DIFF PREVIEW MODAL ================= -->
+<dialog id="kaiz-preset-diff-modal" class="kaiz-modal kaiz-pg-diff-dialog">
+    <div class="kaiz-pg-diff-header">
+        <div class="kaiz-pg-diff-title">
+            <i class="fa-solid fa-code-compare" style="color: #38bdf8"></i>
+            <span id="kaiz-pg-diff-modal-title">So sánh thay đổi (Diff Viewer)</span>
+        </div>
+        <i
+            id="kaiz-pg-diff-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px; opacity: 0.7; padding: 4px"
+        ></i>
+    </div>
+
+    <div id="kaiz-pg-diff-body" class="kaiz-pg-diff-body">
+        <!-- Diff content rendered here -->
     </div>
 </dialog>

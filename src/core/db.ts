@@ -95,6 +95,29 @@ export interface GalleryImage {
     durationMs?: number;
 }
 
+export interface PresetCommitEntry {
+    id?: number;
+    hash: string;
+    parentHash: string | null;
+    presetName: string;
+    message: string;
+    author: 'agent' | 'user';
+    timestamp: number;
+    tag?: string;
+    tree: {
+        prompts: any[];
+        prompt_order: any[];
+    };
+    stats: {
+        added: number;
+        modified: number;
+        deleted: number;
+        totalBlocks: number;
+    };
+    diffSummary: string;
+    diffItems?: any[];
+}
+
 export class KaizDB {
     private static instance: KaizDB | null = null;
 
@@ -106,7 +129,7 @@ export class KaizDB {
     }
 
     private dbName = 'KaizAgentDB';
-    private dbVersion = 6;
+    private dbVersion = 7;
     private db: IDBDatabase | null = null;
 
     constructor() {
@@ -179,6 +202,19 @@ export class KaizDB {
                         autoIncrement: true,
                     });
                     galleryStore.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+
+                // --- PRESET COMMITS (DB v7) ---
+                if (!db.objectStoreNames.contains('preset_commits')) {
+                    const commitStore = db.createObjectStore('preset_commits', {
+                        keyPath: 'id',
+                        autoIncrement: true,
+                    });
+                    commitStore.createIndex('hash', 'hash', { unique: true });
+                    commitStore.createIndex('presetName', 'presetName', { unique: false });
+                    commitStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    commitStore.createIndex('parentHash', 'parentHash', { unique: false });
+                    commitStore.createIndex('tag', 'tag', { unique: false });
                 }
             };
 
@@ -974,6 +1010,224 @@ export class KaizDB {
 
             const request = store.clear();
             request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // =========================================================================
+    // PRESET COMMITS (GIT CONTROL VERSION)
+    // =========================================================================
+
+    public async addPresetCommit(commit: PresetCommitEntry): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+
+            const request = store.add(commit);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetCommits(presetName: string, limit: number = 30): Promise<PresetCommitEntry[]> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const request = index.getAll(presetName);
+            request.onsuccess = () => {
+                const results = (request.result as PresetCommitEntry[]) || [];
+                // Sort newest first
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results.slice(0, limit));
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetCommitByHash(hash: string): Promise<PresetCommitEntry | null> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('hash');
+
+            const request = index.get(hash);
+            request.onsuccess = () => {
+                resolve((request.result as PresetCommitEntry) || null);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetCommitByTag(presetName: string, tag: string): Promise<PresetCommitEntry | null> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const request = index.getAll(presetName);
+            request.onsuccess = () => {
+                const results = (request.result as PresetCommitEntry[]) || [];
+                const found = results.find((c) => c.tag === tag);
+                resolve(found || null);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deletePresetCommits(presetName: string): Promise<void> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    cursor.delete();
+                    cursor.continue();
+                } else {
+                    resolve();
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deletePresetCommitsAfter(presetName: string, timestamp: number): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            let deletedCount = 0;
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    const entry = cursor.value as PresetCommitEntry;
+                    if (entry.timestamp > timestamp) {
+                        cursor.delete();
+                        deletedCount++;
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(deletedCount);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async prunePresetCommits(presetName: string, keepCount: number = 30): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        const allCommits = await this.getPresetCommits(presetName, 1000);
+        if (allCommits.length <= keepCount) return 0;
+
+        const toDeleteHashes = new Set(allCommits.slice(keepCount).map((c) => c.hash));
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            let deletedCount = 0;
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    const entry = cursor.value as PresetCommitEntry;
+                    if (toDeleteHashes.has(entry.hash)) {
+                        cursor.delete();
+                        deletedCount++;
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(deletedCount);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getDistinctPresetNames(): Promise<string[]> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const names = new Set<string>();
+            const request = index.openKeyCursor();
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursor;
+                if (cursor) {
+                    names.add(cursor.key as string);
+                    cursor.continue();
+                } else {
+                    resolve(Array.from(names));
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetStorageStats(): Promise<{
+        totalCommits: number;
+        totalBytes: number;
+        presetCount: number;
+        byPreset: Record<string, { commits: number; bytes: number }>;
+    }> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+
+            let totalCommits = 0;
+            let totalBytes = 0;
+            const byPreset: Record<string, { commits: number; bytes: number }> = {};
+
+            const request = store.openCursor();
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    totalCommits++;
+                    const entry = cursor.value as PresetCommitEntry;
+                    const pName = entry.presetName || 'unknown';
+                    const str = JSON.stringify(entry);
+                    const bytes = str.length * 2; // rough UTF-16 bytes in memory
+                    totalBytes += bytes;
+
+                    if (!byPreset[pName]) byPreset[pName] = { commits: 0, bytes: 0 };
+                    byPreset[pName].commits++;
+                    byPreset[pName].bytes += bytes;
+
+                    cursor.continue();
+                } else {
+                    resolve({
+                        totalCommits,
+                        totalBytes,
+                        presetCount: Object.keys(byPreset).length,
+                        byPreset,
+                    });
+                }
+            };
             request.onerror = () => reject(request.error);
         });
     }
