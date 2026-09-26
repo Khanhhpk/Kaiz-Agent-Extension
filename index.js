@@ -15056,16 +15056,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const isStaged = dirtyInfo.isStaged;
           if (isDirty) {
               const badgeLabel = isStaged
-                  ? `● ${diff.totalChanges} thay đổi nháp (Sandbox)`
-                  : `● ${diff.totalChanges} thay đổi SillyTavern`;
+                  ? `● ${diff.totalChanges} thay đổi chưa lưu (Nháp)`
+                  : `● ${diff.totalChanges} thay đổi chưa lưu`;
               $('#kaiz-pg-staging-badge')
                   .text(badgeLabel)
                   .removeClass('badge-neutral badge-success')
                   .addClass('badge-warning');
               const sourceText = isStaged
-                  ? '(Dữ liệu SillyTavern gốc chưa bị đè)'
-                  : '(Thay đổi từ giao diện SillyTavern chưa tạo commit)';
-              $('#kaiz-pg-staging-summary').html(`<b>Có ${diff.totalChanges} thay đổi chưa commit:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. ${sourceText}`);
+                  ? '(Dữ liệu SillyTavern gốc chưa bị ghi đè)'
+                  : '(Thay đổi từ giao diện SillyTavern chưa được lưu thành mốc)';
+              $('#kaiz-pg-staging-summary').html(`<b>Có ${diff.totalChanges} thay đổi chưa lưu:</b> +${diff.added} tạo mới, ~${diff.modified} chỉnh sửa, -${diff.deleted} đã xóa. ${sourceText}`);
               $('#kaiz-pg-staging-actions').css('display', 'flex');
               // Render staged items preview
               const list = $('#kaiz-pg-staged-list');
@@ -15090,15 +15090,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 `);
               }
               if (diff.items.length > 5) {
-                  list.append(`<div style="font-size: 10px; opacity: 0.6; padding-left: 8px">...và còn ${diff.items.length - 5} thay đổi khác (bấm "Xem Diff Nháp" để xem hết)</div>`);
+                  list.append(`<div style="font-size: 10px; opacity: 0.6; padding-left: 8px">...và còn ${diff.items.length - 5} thay đổi khác (bấm "Xem Thay Đổi" để xem hết)</div>`);
               }
           }
           else {
               $('#kaiz-pg-staging-badge')
-                  .text('Clean')
+                  .text('Đồng bộ')
                   .removeClass('badge-warning badge-danger')
                   .addClass('badge-success');
-              $('#kaiz-pg-staging-summary').text('Working tree sạch — Không có thay đổi nào. Toàn bộ prompt blocks đang đồng bộ với commit HEAD.');
+              $('#kaiz-pg-staging-summary').text('Trạng thái đồng bộ — Preset đang ở phiên bản mới nhất, không có chỉnh sửa dở dang.');
               $('#kaiz-pg-staging-actions').hide();
               $('#kaiz-pg-staged-list').empty().hide();
           }
@@ -15109,14 +15109,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const tag = ($('#kaiz-pg-commit-tag-input').val() || '').trim();
           if (!msg) {
               if (typeof toastr !== 'undefined')
-                  toastr.warning('Vui lòng nhập Commit Message mô tả thay đổi trước khi lưu!');
+                  toastr.warning('Vui lòng nhập tên hoặc mô tả mốc lưu trước khi bấm Lưu!');
               $('#kaiz-pg-commit-msg-input').focus();
               return;
           }
           const dirtyInfo = await this.manager.isDirtyAgainstHead();
           if (!dirtyInfo.isDirty && !tag) {
               if (typeof toastr !== 'undefined')
-                  toastr.warning('Working tree sạch — Không có thay đổi nào giữa preset và commit HEAD!');
+                  toastr.warning('Preset hiện tại chưa có thay đổi nào mới để lưu!');
               return;
           }
           try {
@@ -15125,13 +15125,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               $('#kaiz-pg-commit-tag-input').val('');
               await this.loadAndRender();
               if (typeof toastr !== 'undefined') {
-                  toastr.success(`Đã commit thành công [${result.hash}]! Dữ liệu đã được lưu và cập nhật SillyTavern.`);
+                  toastr.success(`Đã lưu phiên bản [#${result.hash.substring(0, 8)}] thành công!`);
               }
           }
           catch (e) {
               console.error('[PresetGitModal] Commit thất bại:', e);
               if (typeof toastr !== 'undefined')
-                  toastr.error(`Lỗi khi commit: ${e.message}`);
+                  toastr.error(`Lỗi khi lưu phiên bản: ${e.message}`);
           }
       }
       async renderCommitList() {
@@ -15150,11 +15150,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           if (filtered.length === 0) {
               container.append(`
-                <div style="text-align: center; padding: 40px 20px; opacity: 0.6">
-                    <i class="fa-solid fa-code-commit" style="font-size: 32px; margin-bottom: 10px; display: block; opacity: 0.4"></i>
-                    <div style="font-size: 13px">Không có commit nào ${this.searchQuery ? 'khớp với tìm kiếm' : 'cho preset này'}.</div>
-                    <div style="font-size: 11px; margin-top: 4px; opacity: 0.7">
-                        Mọi thay đổi qua Agent hoặc nút "Lưu Commit Thủ Công" đều sẽ tạo thành các node lịch sử tại đây.
+                <div style="text-align: center; padding: 45px 20px; opacity: 0.65; display: flex; flex-direction: column; align-items: center; gap: 8px">
+                    <div style="width: 44px; height: 44px; border-radius: 50%; background: rgba(255, 255, 255, 0.04); display: flex; align-items: center; justify-content: center; font-size: 20px; color: #a78bfa; margin-bottom: 4px">
+                        <i class="fa-solid fa-timeline"></i>
+                    </div>
+                    <div style="font-size: 13.5px; font-weight: 500; color: #f1f5f9">
+                        ${this.searchQuery ? 'Không tìm thấy phiên bản phù hợp' : 'Chưa có mốc lịch sử nào cho preset này'}
+                    </div>
+                    <div style="font-size: 11.5px; max-width: 380px; line-height: 1.5; opacity: 0.75">
+                        ${this.searchQuery ? 'Thử tìm với từ khóa khác như mã hash, tag hoặc tên thay đổi.' : 'Mọi thay đổi qua Kaiz Agent hoặc nút "Lưu phiên bản" phía trên sẽ tự động xuất hiện tại đây.'}
                     </div>
                 </div>
             `);
@@ -15164,127 +15168,132 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const isHead = commit.hash === headHash;
               const isOlder = headCommit ? commit.timestamp < headTimestamp : false;
               const isNewer = headCommit ? commit.timestamp > headTimestamp : false;
-              const dateStr = new Date(commit.timestamp).toLocaleString();
+              const dateStr = formatRelativeTime(commit.timestamp);
+              const fullDateStr = new Date(commit.timestamp).toLocaleString();
               const author = commit.author || 'Kaiz Agent';
               const isManual = author.toLowerCase().includes('manual') || author.toLowerCase().includes('user');
               const authorBadge = isManual
-                  ? `<span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-user"></i> Manual</span>`
-                  : `<span style="background: rgba(167, 139, 250, 0.15); color: #a78bfa; padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-robot"></i> Agent</span>`;
+                  ? `<span style="background: rgba(56, 189, 248, 0.12); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.25); padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-user"></i> Bạn lưu</span>`
+                  : `<span style="background: rgba(167, 139, 250, 0.12); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.25); padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-robot"></i> Agent</span>`;
               const tagBadge = commit.tag
-                  ? `<span style="background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 500"><i class="fa-solid fa-tag"></i> ${escapeHtml(commit.tag)}</span>`
+                  ? `<span style="background: rgba(251, 191, 36, 0.12); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 500"><i class="fa-solid fa-tag"></i> ${escapeHtml(commit.tag)}</span>`
                   : '';
               const headPill = isHead
-                  ? `<span style="background: #2ecc71; color: #000; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 700">CURRENT HEAD</span>`
+                  ? `<span style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 600"><i class="fa-solid fa-check"></i> Đang dùng</span>`
                   : '';
               const promptCount = commit.tree?.prompts?.length || 0;
               const diffSummary = commit.diffSummary || commit.diff?.summary || `${promptCount} blocks`;
+              // Node dot
+              let dotHtml;
+              if (isHead) {
+                  dotHtml = `<div class="kaiz-pg-timeline-dot is-head" title="Phiên bản đang kích hoạt"><i class="fa-solid fa-check"></i></div>`;
+              }
+              else if (isManual) {
+                  dotHtml = `<div class="kaiz-pg-timeline-dot is-manual" title="Mốc lưu thủ công"><i class="fa-solid fa-user"></i></div>`;
+              }
+              else {
+                  dotHtml = `<div class="kaiz-pg-timeline-dot is-agent" title="Kaiz Agent lưu"><i class="fa-solid fa-robot"></i></div>`;
+              }
+              // Navigation Main Button
               let navActionBtn;
               if (isHead) {
-                  navActionBtn = `<button class="menu_button" disabled style="font-size: 11px; padding: 3px 8px; opacity: 0.55; color: #2ecc71"><i class="fa-solid fa-check"></i> Đang ở HEAD</button>`;
+                  navActionBtn = `<button class="kaiz-pg-btn-primary-action menu_button" disabled style="background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3); opacity: 0.95; cursor: default"><i class="fa-solid fa-circle-check"></i> Đang sử dụng</button>`;
               }
               else if (isOlder) {
                   navActionBtn = `
-                    <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)" title="Hoàn tác toàn bộ chuỗi commit mới hơn để lùi về mốc này (Safe Revert)">
-                        <i class="fa-solid fa-rotate-left"></i> Revert Chuỗi
-                    </button>
-                    <button class="kaiz-pg-btn-hard-reset menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)" title="Rollback về điểm này VÀ XÓA BỎ các commit phía sau để giải phóng bộ nhớ">
-                        <i class="fa-solid fa-fire"></i> Hard Reset
+                    <button class="kaiz-pg-btn-rollback kaiz-pg-btn-primary-action menu_button interactable" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3)" title="Khôi phục lại phiên bản này (Các mốc mới hơn vẫn được lưu an toàn trong lịch sử)">
+                        <i class="fa-solid fa-rotate-left"></i> Quay lại bản này
                     </button>
                 `;
               }
               else if (isNewer) {
                   navActionBtn = `
-                    <button class="kaiz-pg-btn-forward menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #a78bfa; border-color: rgba(167, 139, 250, 0.3)" title="Áp dụng toàn bộ các commit tích lũy để tiến tới mốc này (Fast-Forward)">
-                        <i class="fa-solid fa-forward"></i> Tiến Chuỗi
+                    <button class="kaiz-pg-btn-forward kaiz-pg-btn-primary-action menu_button interactable" style="background: rgba(167, 139, 250, 0.15); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.35)" title="Đi tới phiên bản này cùng các thay đổi tích lũy">
+                        <i class="fa-solid fa-forward"></i> Đi tới bản này
                     </button>
                 `;
               }
               else {
                   navActionBtn = `
-                    <button class="kaiz-pg-btn-rollback menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)">
-                        <i class="fa-solid fa-rotate-left"></i> Rollback
+                    <button class="kaiz-pg-btn-rollback kaiz-pg-btn-primary-action menu_button interactable" style="background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3)">
+                        <i class="fa-solid fa-rotate-left"></i> Khôi phục
                     </button>
                 `;
               }
-              const card = $(`
-                <div class="kaiz-pg-commit-card" data-hash="${commit.hash}" style="
-                    background: rgba(255, 255, 255, 0.03);
-                    border: 1px solid ${isHead ? 'rgba(46, 204, 113, 0.35)' : 'rgba(255, 255, 255, 0.06)'};
-                    border-radius: 8px;
-                    padding: 10px 12px;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 6px;
-                    transition: all 0.15s ease;
-                ">
-                    <!-- Row 1: Header (Hash, Badges, Date) -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px">
-                        <div style="display: flex; align-items: center; gap: 8px">
-                            <span class="kaiz-pg-hash-btn" title="Mã Commit Hash (Bấm để copy)" style="
-                                font-family: monospace;
-                                font-size: 11px;
-                                font-weight: 600;
-                                background: rgba(0, 0, 0, 0.4);
-                                padding: 2px 7px;
-                                border-radius: 4px;
-                                border: 1px solid rgba(255, 255, 255, 0.1);
-                                cursor: pointer;
-                                color: #38bdf8;
-                            "><i class="fa-regular fa-copy" style="font-size: 10px; margin-right: 3px; opacity: 0.7"></i>${commit.hash}</span>
+              // Subtle hard reset button for older commits
+              const hardResetBtn = isOlder
+                  ? `<button class="kaiz-pg-btn-hard-reset kaiz-pg-icon-btn danger menu_button interactable" title="Quay về mốc này và xóa các bản mới hơn phía sau để dọn bộ nhớ"><i class="fa-solid fa-trash-can"></i></button>`
+                  : '';
+              const shortHash = commit.hash.substring(0, 8);
+              const cardNode = $(`
+                <div class="kaiz-pg-timeline-node">
+                    ${dotHtml}
+                    <div class="kaiz-pg-commit-card ${isHead ? 'is-head' : ''}" data-hash="${commit.hash}">
+                        <!-- Row 1: Message & Relative Time -->
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 8px">
+                            <div style="font-size: 13.5px; font-weight: 600; color: #f8fafc; line-height: 1.4; word-break: break-word">
+                                ${escapeHtml(commit.message)}
+                            </div>
+                            <div style="font-size: 11px; opacity: 0.6; white-space: nowrap; flex-shrink: 0" title="${fullDateStr}">
+                                <i class="fa-regular fa-clock" style="margin-right: 3px"></i>${dateStr}
+                            </div>
+                        </div>
+
+                        <!-- Row 2: Badges, Hash & Change Summary -->
+                        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 11px">
+                            <span class="kaiz-pg-hash-btn" title="Mã phiên bản (Bấm để sao chép)">
+                                <i class="fa-regular fa-copy" style="font-size: 9px; margin-right: 2px; opacity: 0.7"></i>#${shortHash}
+                            </span>
                             ${headPill}
                             ${authorBadge}
                             ${tagBadge}
+                            <span style="opacity: 0.6; margin-left: 2px; font-size: 10.5px">
+                                <i class="fa-solid fa-layer-group" style="font-size: 10px; margin-right: 3px"></i>${escapeHtml(diffSummary)}
+                            </span>
                         </div>
-                        <div style="font-size: 11px; opacity: 0.55">
-                            <i class="fa-regular fa-clock" style="margin-right: 3px"></i>${dateStr}
+
+                        <!-- Row 3: Action Buttons -->
+                        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 6px; margin-top: 2px">
+                            <div>
+                                ${navActionBtn}
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 5px">
+                                <button class="kaiz-pg-btn-diff kaiz-pg-icon-btn menu_button interactable" title="Xem chi tiết các thay đổi">
+                                    <i class="fa-solid fa-eye"></i>
+                                </button>
+                                <button class="kaiz-pg-btn-tag kaiz-pg-icon-btn menu_button interactable" title="Gán nhãn mốc (Ví dụ: v1.0)">
+                                    <i class="fa-solid fa-tag"></i>
+                                </button>
+                                ${hardResetBtn}
+                            </div>
                         </div>
-                    </div>
-
-                    <!-- Row 2: Message & Summary -->
-                    <div style="font-size: 13px; font-weight: 500; color: #fff; line-height: 1.4">
-                        ${escapeHtml(commit.message)}
-                    </div>
-                    <div style="font-size: 11px; opacity: 0.65; display: flex; align-items: center; gap: 10px">
-                        <span><i class="fa-solid fa-layer-group" style="font-size: 10px; margin-right: 4px"></i>${escapeHtml(diffSummary)}</span>
-                        ${commit.parentHash ? `<span style="font-family: monospace; font-size: 10px"><i class="fa-solid fa-arrow-turn-up" style="transform: rotate(90deg); margin-right: 2px"></i>parent: ${commit.parentHash.substring(0, 8)}</span>` : '<span style="font-size: 10px; opacity: 0.5">(root commit)</span>'}
-                    </div>
-
-                    <!-- Row 3: Action Buttons -->
-                    <div style="display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 4px; border-top: 1px solid rgba(255, 255, 255, 0.04); padding-top: 6px">
-                        <button class="kaiz-pg-btn-diff menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)" title="Xem chi tiết các thay đổi trong commit này">
-                            <i class="fa-solid fa-code-compare"></i> Xem Diff
-                        </button>
-                        <button class="kaiz-pg-btn-tag menu_button interactable" style="font-size: 11px; padding: 3px 8px; color: #fbbf24; border-color: rgba(251, 191, 36, 0.3)" title="Gán nhãn phiên bản (Tag) cho commit này">
-                            <i class="fa-solid fa-tag"></i> Tag
-                        </button>
-                        ${navActionBtn}
                     </div>
                 </div>
             `);
               // Event Copy Hash
-              card.find('.kaiz-pg-hash-btn').on('click', () => {
+              cardNode.find('.kaiz-pg-hash-btn').on('click', () => {
                   navigator.clipboard.writeText(commit.hash);
                   if (typeof toastr !== 'undefined')
-                      toastr.info(`Đã copy mã hash: ${commit.hash}`);
+                      toastr.info(`Đã sao chép mã commit: #${shortHash}`);
               });
               // Event View Diff
-              card.find('.kaiz-pg-btn-diff').on('click', () => {
+              cardNode.find('.kaiz-pg-btn-diff').on('click', () => {
                   this.viewCommitDiff(commit);
               });
               // Event Add Tag
-              card.find('.kaiz-pg-btn-tag').on('click', async () => {
-                  const newTag = prompt(`Nhập tên nhãn (Tag) cho commit [${commit.hash}]:`, commit.tag || 'v1.0');
+              cardNode.find('.kaiz-pg-btn-tag').on('click', async () => {
+                  const newTag = prompt(`Nhập tên nhãn cho mốc [#${shortHash}]:`, commit.tag || 'v1.0');
                   if (newTag && newTag.trim()) {
                       await this.manager.tagCommit(commit.hash, newTag.trim());
                       await this.loadAndRender();
                       if (typeof toastr !== 'undefined') {
-                          toastr.success(`Đã gắn tag "${newTag}" cho commit [${commit.hash}]!`);
+                          toastr.success(`Đã gắn tag "${newTag}" cho mốc [#${shortHash}]!`);
                       }
                   }
               });
               // Event Rollback (Older)
-              card.find('.kaiz-pg-btn-rollback').on('click', async () => {
-                  if (confirm(`Bạn có chắc chắn muốn hoàn tác toàn bộ chuỗi commit mới hơn để lùi về mốc [${commit.hash}] ("${commit.message}") không?\n(Dữ liệu các commit vẫn được lưu an toàn)`)) {
+              cardNode.find('.kaiz-pg-btn-rollback').on('click', async () => {
+                  if (confirm(`Bạn có chắc chắn muốn quay lại phiên bản [#${shortHash}] ("${commit.message}") không?\n(Toàn bộ các phiên bản mới hơn vẫn được lưu giữ an toàn, bạn có thể quay lại bất cứ lúc nào)`)) {
                       const res = await this.manager.rollback(commit.hash, false);
                       await this.loadAndRender();
                       if (typeof toastr !== 'undefined')
@@ -15292,8 +15301,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               });
               // Event Forward (Newer)
-              card.find('.kaiz-pg-btn-forward').on('click', async () => {
-                  if (confirm(`Bạn có chắc chắn muốn áp dụng toàn bộ chuỗi commit tích lũy để tiến tới mốc [${commit.hash}] ("${commit.message}") không?`)) {
+              cardNode.find('.kaiz-pg-btn-forward').on('click', async () => {
+                  if (confirm(`Bạn có chắc chắn muốn chuyển tiếp tới phiên bản [#${shortHash}] ("${commit.message}") không?`)) {
                       const res = await this.manager.rollback(commit.hash, false);
                       await this.loadAndRender();
                       if (typeof toastr !== 'undefined')
@@ -15301,19 +15310,19 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               });
               // Event Hard Reset
-              card.find('.kaiz-pg-btn-hard-reset').on('click', async () => {
-                  if (confirm(`⚠️ CẢNH BÁO HARD RESET:\nBạn có chắc muốn rollback về commit [${commit.hash}] VÀ XÓA SỔ toàn bộ các commit sinh ra sau thời điểm này khỏi database để giải phóng bộ nhớ không?`)) {
+              cardNode.find('.kaiz-pg-btn-hard-reset').on('click', async () => {
+                  if (confirm(`⚠️ CẢNH BÁO DỌN DẸP BỘ NHỚ:\nBạn có chắc muốn quay về mốc [#${shortHash}] VÀ XÓA BỎ toàn bộ các mốc sinh ra sau thời điểm này để giải phóng dung lượng không?`)) {
                       const res = await this.manager.rollback(commit.hash, true);
                       await this.loadAndRender();
                       if (typeof toastr !== 'undefined')
                           toastr.warning(res.summary);
                   }
               });
-              container.append(card);
+              container.append(cardNode);
           });
       }
       viewCommitDiff(commit) {
-          const title = `Commit [${commit.hash}] Diff: "${commit.message}"`;
+          const title = `Chi tiết thay đổi [#${commit.hash.substring(0, 8)}]: "${commit.message}"`;
           const items = commit.diffItems || commit.diff?.items || [];
           this.openDiffModal(title, items, commit.tree?.prompts || []);
       }
@@ -15325,13 +15334,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (!items || items.length === 0) {
               if (fullPrompts && fullPrompts.length > 0) {
                   body.append(`
-                    <div style="padding: 10px; background: rgba(0,0,0,0.2); border-radius: 6px">
-                        <div style="color: #38bdf8; font-weight: bold; margin-bottom: 6px">Root / Snapshot Content (${fullPrompts.length} blocks):</div>
+                    <div style="padding: 12px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px">
+                        <div style="color: #38bdf8; font-weight: 600; margin-bottom: 8px; font-size: 13px">Nội dung Snapshot (${fullPrompts.length} prompt blocks):</div>
                         ${fullPrompts
                     .map((p, i) => `
-                            <div style="margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px">
-                                <div style="color: #4ade80">#${i + 1} [${p.identifier}] ${escapeHtml(p.name)} (${p.role || 'system'})</div>
-                                <div style="color: #aaa; font-size: 11px; white-space: pre-wrap; max-height: 80px; overflow-y: auto; margin-top: 2px">${escapeHtml((p.content || '').substring(0, 300))}</div>
+                            <div style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px">
+                                <div style="color: #34d399; font-weight: 500; font-size: 12px">#${i + 1} [${p.identifier}] ${escapeHtml(p.name)} <span style="opacity: 0.6; font-size: 11px">(${p.role || 'system'})</span></div>
+                                <div style="color: #cbd5e1; font-size: 11px; white-space: pre-wrap; max-height: 90px; overflow-y: auto; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px">${escapeHtml((p.content || '').substring(0, 300))}</div>
                             </div>
                         `)
                     .join('')}
@@ -15339,32 +15348,45 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                 `);
               }
               else {
-                  body.append(`<div style="text-align: center; padding: 30px; opacity: 0.6">Không có thông tin diff chi tiết được ghi nhận cho mốc này.</div>`);
+                  body.append(`<div style="text-align: center; padding: 35px 20px; opacity: 0.6">Không có thông tin thay đổi chi tiết được ghi nhận cho mốc này.</div>`);
               }
           }
           else {
               items.forEach((item, index) => {
                   let badgeColor = '#38bdf8';
-                  if (item.type === 'create')
-                      badgeColor = '#2ecc71';
-                  else if (item.type === 'delete')
-                      badgeColor = '#e74c3c';
-                  else if (item.type === 'update')
-                      badgeColor = '#f39c12';
+                  let typeLabel = 'THAY ĐỔI';
+                  if (item.type === 'create') {
+                      badgeColor = '#34d399';
+                      typeLabel = 'TẠO MỚI';
+                  }
+                  else if (item.type === 'delete') {
+                      badgeColor = '#f87171';
+                      typeLabel = 'XÓA BỎ';
+                  }
+                  else if (item.type === 'update') {
+                      badgeColor = '#fbbf24';
+                      typeLabel = 'CHỈNH SỬA';
+                  }
+                  else if (item.type === 'reorder') {
+                      badgeColor = '#818cf8';
+                      typeLabel = 'ĐỔI THỨ TỰ';
+                  }
+                  const oldStr = formatDiffValue(item.oldValue);
+                  const newStr = formatDiffValue(item.newValue);
                   body.append(`
-                    <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; padding: 10px">
+                    <div style="background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px">
                         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px">
-                            <span style="background: ${badgeColor}22; color: ${badgeColor}; border: 1px solid ${badgeColor}44; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 11px">
-                                #${index + 1} ${item.type.toUpperCase()}
+                            <span style="background: ${badgeColor}18; color: ${badgeColor}; border: 1px solid ${badgeColor}35; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 10.5px">
+                                #${index + 1} ${typeLabel}
                             </span>
-                            <span style="font-size: 11px; color: #888">[${escapeHtml(item.identifier || '')}]</span>
+                            <span style="font-size: 11px; opacity: 0.6; font-family: monospace">[${escapeHtml(item.identifier || item.name || '')}]</span>
                         </div>
-                        <div style="font-size: 12px; color: #fff; margin-bottom: 4px">${escapeHtml(item.summary || '')}</div>
-                        ${item.oldValue !== undefined || item.newValue !== undefined
+                        <div style="font-size: 12px; color: #f1f5f9; margin-bottom: 6px; font-weight: 500">${escapeHtml(item.summary || '')}</div>
+                        ${oldStr || newStr
                     ? `
-                            <div style="margin-top: 6px; display: flex; flex-direction: column; gap: 4px; font-size: 11px">
-                                ${item.oldValue !== undefined ? `<div style="background: rgba(231, 76, 60, 0.15); color: #ff8b8b; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap">- ${escapeHtml(String(item.oldValue).substring(0, 400))}</div>` : ''}
-                                ${item.newValue !== undefined ? `<div style="background: rgba(46, 204, 113, 0.15); color: #8bffb8; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap">+ ${escapeHtml(String(item.newValue).substring(0, 400))}</div>` : ''}
+                            <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-family: monospace">
+                                ${oldStr ? `<div style="background: rgba(239, 68, 68, 0.12); color: #fca5a5; border-left: 3px solid #ef4444; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap; max-height: 120px; overflow-y: auto">- ${escapeHtml(oldStr.substring(0, 400))}</div>` : ''}
+                                ${newStr ? `<div style="background: rgba(52, 211, 153, 0.12); color: #86efac; border-left: 3px solid #10b981; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap; max-height: 120px; overflow-y: auto">+ ${escapeHtml(newStr.substring(0, 400))}</div>` : ''}
                             </div>
                         `
                     : ''}
@@ -15378,6 +15400,41 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               diffModal.showModal();
           }
       }
+  }
+  function formatRelativeTime(timestamp) {
+      const diff = Math.max(0, Date.now() - timestamp);
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 1)
+          return 'Vừa xong';
+      if (minutes < 60)
+          return `${minutes} phút trước`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24)
+          return `${hours} giờ trước`;
+      const days = Math.floor(hours / 24);
+      if (days < 7)
+          return `${days} ngày trước`;
+      return new Date(timestamp).toLocaleDateString('vi-VN', {
+          day: '2-digit',
+          month: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+      });
+  }
+  function formatDiffValue(val) {
+      if (val === undefined || val === null)
+          return '';
+      if (typeof val === 'string')
+          return val;
+      if (typeof val === 'object') {
+          if (val.content !== undefined) {
+              const meta = `[${val.name || 'Block'}] (${val.role || 'system'}, depth: ${val.injection_depth ?? 'default'})`;
+              const content = val.content ? `\n${val.content}` : '';
+              return `${meta}${content}`;
+          }
+          return JSON.stringify(val, null, 2);
+      }
+      return String(val);
   }
 
   const EXT_NAME = 'kaiz_agent';

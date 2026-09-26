@@ -2543,30 +2543,173 @@
     background: rgba(239, 68, 68, 0.2);
 }
 
-/* ================= PRESET GIT MODAL & TIMELINE ================= */
+/* ================= PRESET GIT MODAL & MODERN TIMELINE ================= */
 #kaiz-preset-git-modal::backdrop,
 #kaiz-preset-diff-modal::backdrop {
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(8px);
 }
 
-.kaiz-pg-commit-card:hover {
-    border-color: rgba(167, 139, 250, 0.35) !important;
-    background: rgba(255, 255, 255, 0.05) !important;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+.kaiz-pg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    color: #cbd5e1;
+    transition: all 0.15s ease;
 }
 
-.kaiz-pg-hash-btn:hover {
-    background: rgba(56, 189, 248, 0.2) !important;
-    border-color: #38bdf8 !important;
+.kaiz-pg-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.15);
 }
 
-.kaiz-pg-metric-card {
+/* Timeline Layout */
+.kaiz-pg-timeline-container {
+    position: relative;
+    padding-left: 30px;
+}
+
+.kaiz-pg-timeline-container::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 14px;
+    bottom: 14px;
+    width: 2px;
+    background: linear-gradient(180deg, rgba(52, 211, 153, 0.6) 0%, rgba(167, 139, 250, 0.3) 50%, rgba(255, 255, 255, 0.06) 100%);
+    border-radius: 2px;
+}
+
+.kaiz-pg-timeline-node {
+    position: relative;
+    margin-bottom: 12px;
+}
+
+.kaiz-pg-timeline-dot {
+    position: absolute;
+    left: -30px;
+    top: 13px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    background: #1e293b;
+    border: 2px solid #475569;
+    color: #94a3b8;
+    z-index: 2;
     transition: all 0.2s ease;
 }
 
-.kaiz-pg-metric-card:hover {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border-color: rgba(255, 255, 255, 0.1) !important;
+.kaiz-pg-timeline-dot.is-head {
+    background: #059669;
+    border-color: #34d399;
+    color: #ffffff;
+    box-shadow: 0 0 14px rgba(52, 211, 153, 0.5);
+}
+
+.kaiz-pg-timeline-dot.is-agent {
+    background: rgba(167, 139, 250, 0.15);
+    border-color: #a78bfa;
+    color: #c4b5fd;
+}
+
+.kaiz-pg-timeline-dot.is-manual {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: #38bdf8;
+    color: #7dd3fc;
+}
+
+/* Card inside node */
+.kaiz-pg-commit-card {
+    background: rgba(255, 255, 255, 0.025);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.15s ease;
+}
+
+.kaiz-pg-commit-card:hover {
+    border-color: rgba(255, 255, 255, 0.16) !important;
+    background: rgba(255, 255, 255, 0.045) !important;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+    transform: translateY(-1px);
+}
+
+.kaiz-pg-commit-card.is-head {
+    border-color: rgba(52, 211, 153, 0.35) !important;
+    background: rgba(16, 185, 129, 0.04) !important;
+}
+
+.kaiz-pg-hash-btn {
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 600;
+    background: rgba(0, 0, 0, 0.35);
+    padding: 2px 7px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
+    color: #38bdf8;
+    transition: all 0.15s ease;
+}
+
+.kaiz-pg-hash-btn:hover {
+    background: rgba(56, 189, 248, 0.18) !important;
+    border-color: #38bdf8 !important;
+}
+
+.kaiz-pg-btn-primary-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.kaiz-pg-btn-primary-action:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+}
+
+.kaiz-pg-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 27px;
+    height: 27px;
+    border-radius: 6px;
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.kaiz-pg-icon-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #f1f5f9;
+    border-color: rgba(255, 255, 255, 0.22);
+}
+
+.kaiz-pg-icon-btn.danger:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #fca5a5;
+    border-color: rgba(239, 68, 68, 0.4);
 }
 
