@@ -164,6 +164,9 @@ export const getPromptBlockTool: ITool = {
                             injection_position: p.injection_position ?? 0,
                             injection_depth: p.injection_depth ?? 4,
                             injection_order: p.injection_order ?? 100,
+                            system_prompt: p.system_prompt ?? false,
+                            marker: p.marker ?? false,
+                            forbid_overrides: p.forbid_overrides ?? false,
                             content: p.content || '',
                         }));
                 }
@@ -184,13 +187,18 @@ export const getPromptBlockTool: ITool = {
                 };
             }
 
-            // 4. Chế độ lấy 1 block cụ thể theo identifier
+            // 4. Chế độ lấy 1 block cụ thể theo identifier (hoặc name)
             if (identifier && typeof identifier === 'string') {
-                const target = prompts.find((p) => p.identifier === identifier || (p as any).id === identifier);
+                const needle = identifier.trim();
+                let target = prompts.find((p) => p.identifier === needle || (p as any).id === needle);
+                if (!target) {
+                    const lower = needle.toLowerCase();
+                    target = prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower);
+                }
                 if (!target) {
                     return {
                         isError: true,
-                        content: `Không tìm thấy prompt block nào có ID: "${identifier}". Vui lòng dùng 'get_preset_info' để kiểm tra danh sách ID hợp lệ.`,
+                        content: `Không tìm thấy prompt block nào có ID hoặc tên: "${identifier}". Vui lòng dùng 'get_preset_info' để kiểm tra danh sách ID hợp lệ.`,
                     };
                 }
 

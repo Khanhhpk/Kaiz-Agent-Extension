@@ -95,8 +95,18 @@ export class PresetGitManager {
     > = {};
     private _stagingVarRenames: Record<string, string> = {}; // oldName -> newName
     private _activeHeads = new Map<string, string>(); // presetName -> commitHash
+    private _lastPresetName: string | null = null;
 
     private db = KaizDB.getInstance();
+
+    private checkPresetSwitch(): void {
+        const currentName = this.getActivePresetName();
+        if (this._lastPresetName && this._lastPresetName !== currentName) {
+            // Preset switched! Clear staging from previous preset to prevent cross-contamination
+            this.clearStaging();
+        }
+        this._lastPresetName = currentName;
+    }
 
     // ─── SillyTavern Context Accessors ──────────────────────────────────────
 
@@ -234,6 +244,7 @@ export class PresetGitManager {
     // ─── Staging / Sandbox Overlay Read ─────────────────────────────────────
 
     public getPrompts(): PromptBlock[] {
+        this.checkPresetSwitch();
         const basePrompts = this.getRawLivePrompts();
 
         // 1. Map existing blocks with staging changes & filter deleted
@@ -259,6 +270,7 @@ export class PresetGitManager {
     }
 
     public getPromptOrder(): string[] {
+        this.checkPresetSwitch();
         let baseOrder: string[];
         if (this._stagingOrder && Array.isArray(this._stagingOrder)) {
             baseOrder = this._stagingOrder.slice();
@@ -289,11 +301,23 @@ export class PresetGitManager {
     }
 
     public findPrompt(identifier: string): PromptBlock | null {
-        return this.getPrompts().find((p) => p.identifier === identifier) || null;
+        if (!identifier) return null;
+        const needle = String(identifier).trim();
+        const prompts = this.getPrompts();
+        const exact = prompts.find((p) => p.identifier === needle || (p as any).id === needle);
+        if (exact) return exact;
+        const lower = needle.toLowerCase();
+        return prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower) || null;
     }
 
     public findRawPrompt(identifier: string): PromptBlock | null {
-        return this.getRawLivePrompts().find((p) => p.identifier === identifier) || null;
+        if (!identifier) return null;
+        const needle = String(identifier).trim();
+        const prompts = this.getRawLivePrompts();
+        const exact = prompts.find((p) => p.identifier === needle || (p as any).id === needle);
+        if (exact) return exact;
+        const lower = needle.toLowerCase();
+        return prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower) || null;
     }
 
     // ─── Staging Actions (Working Tree Sandbox) ─────────────────────────────
@@ -369,8 +393,9 @@ export class PresetGitManager {
         const p = this.findPrompt(identifier);
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
-        if (!this._stagingMap.has(identifier)) this._stagingMap.set(identifier, {});
-        this._stagingMap.get(identifier)!.content = content;
+        const canonicalId = p.identifier;
+        if (!this._stagingMap.has(canonicalId)) this._stagingMap.set(canonicalId, {});
+        this._stagingMap.get(canonicalId)!.content = content;
 
         return {
             ok: true,
@@ -426,17 +451,18 @@ export class PresetGitManager {
             const p = this.findPrompt(identifier);
             if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
-            if (!this._stagingMap.has(identifier)) this._stagingMap.set(identifier, {});
+            const canonicalId = p.identifier;
+            if (!this._stagingMap.has(canonicalId)) this._stagingMap.set(canonicalId, {});
             const currentContent =
-                this._stagingMap.get(identifier)!.content !== undefined
-                    ? this._stagingMap.get(identifier)!.content!
+                this._stagingMap.get(canonicalId)!.content !== undefined
+                    ? this._stagingMap.get(canonicalId)!.content!
                     : p.content || '';
 
             if (!currentContent.includes(target_string)) {
                 throw new Error(`Không tìm thấy đoạn "${target_string}" trong nội dung của block "${p.name}".`);
             }
 
-            this._stagingMap.get(identifier)!.content = currentContent.split(target_string).join(replacement_string);
+            this._stagingMap.get(canonicalId)!.content = currentContent.split(target_string).join(replacement_string);
             return {
                 ok: true,
                 summary: `[Staged] Đã thay thế đoạn văn bản trong block "${p.name}".`,
@@ -449,13 +475,14 @@ export class PresetGitManager {
         const p = this.findPrompt(identifier);
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
-        if (!this._stagingMap.has(identifier)) this._stagingMap.set(identifier, {});
+        const canonicalId = p.identifier;
+        if (!this._stagingMap.has(canonicalId)) this._stagingMap.set(canonicalId, {});
         const currentContent =
-            this._stagingMap.get(identifier)!.content !== undefined
-                ? this._stagingMap.get(identifier)!.content!
+            this._stagingMap.get(canonicalId)!.content !== undefined
+                ? this._stagingMap.get(canonicalId)!.content!
                 : p.content || '';
 
-        this._stagingMap.get(identifier)!.content =
+        this._stagingMap.get(canonicalId)!.content =
             currentContent + (currentContent && append_text ? '\n' : '') + append_text;
 
         return {
@@ -468,6 +495,7 @@ export class PresetGitManager {
         const p = this.findPrompt(identifier);
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
+        const canonicalId = p.identifier;
         const allowedKeys: Array<keyof PromptBlock> = [
             'name',
             'role',
@@ -493,8 +521,8 @@ export class PresetGitManager {
             }
         }
 
-        if (!this._stagingMap.has(identifier)) this._stagingMap.set(identifier, {});
-        Object.assign(this._stagingMap.get(identifier)!, updates);
+        if (!this._stagingMap.has(canonicalId)) this._stagingMap.set(canonicalId, {});
+        Object.assign(this._stagingMap.get(canonicalId)!, updates);
 
         return {
             ok: true,
@@ -506,16 +534,21 @@ export class PresetGitManager {
         const p = this.findPrompt(identifier);
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
+        const canonicalId = p.identifier;
         let newEnabled: boolean;
         if (enabled !== undefined) {
             newEnabled =
                 typeof enabled === 'string' ? enabled.toLowerCase() === 'true' || enabled === '1' : Boolean(enabled);
         } else {
-            newEnabled = !p.enabled;
+            const currentVal =
+                this._stagingMap.get(canonicalId)?.enabled !== undefined
+                    ? this._stagingMap.get(canonicalId)!.enabled!
+                    : p.enabled;
+            newEnabled = !currentVal;
         }
 
-        if (!this._stagingMap.has(identifier)) this._stagingMap.set(identifier, {});
-        this._stagingMap.get(identifier)!.enabled = newEnabled;
+        if (!this._stagingMap.has(canonicalId)) this._stagingMap.set(canonicalId, {});
+        this._stagingMap.get(canonicalId)!.enabled = newEnabled;
 
         return {
             ok: true,
@@ -528,15 +561,16 @@ export class PresetGitManager {
         const p = this.findPrompt(identifier);
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
+        const canonicalId = p.identifier;
         const currentOrder = this.getPromptOrder().slice();
-        const idx = currentOrder.indexOf(identifier);
+        const idx = currentOrder.indexOf(canonicalId);
 
         if (linked) {
             if (idx === -1) {
                 if (typeof position === 'number' && position >= 0 && position <= currentOrder.length) {
-                    currentOrder.splice(position, 0, identifier);
+                    currentOrder.splice(position, 0, canonicalId);
                 } else {
-                    currentOrder.push(identifier);
+                    currentOrder.push(canonicalId);
                 }
             } else if (
                 typeof position === 'number' &&
@@ -545,7 +579,7 @@ export class PresetGitManager {
                 position !== idx
             ) {
                 currentOrder.splice(idx, 1);
-                currentOrder.splice(position, 0, identifier);
+                currentOrder.splice(position, 0, canonicalId);
             }
         } else {
             if (idx !== -1) {
@@ -557,22 +591,32 @@ export class PresetGitManager {
 
         return {
             ok: true,
-            summary: `[Staged] Đã chuyển block "${p.name}" thành ${linked ? `Linked (Vị trí #${currentOrder.indexOf(identifier) + 1})` : 'Unlinked'}.`,
+            summary: `[Staged] Đã chuyển block "${p.name}" thành ${linked ? `Linked (Vị trí #${currentOrder.indexOf(canonicalId) + 1})` : 'Unlinked'}.`,
         };
     }
 
     public stageReorder(order: string[]): { ok: boolean; summary: string } {
         if (!Array.isArray(order)) throw new Error('Tham số order phải là một mảng identifier.');
-        const allPrompts = this.getPrompts();
-        const missing = order.filter((id) => !allPrompts.some((p) => p.identifier === id));
-        if (missing.length > 0) {
-            throw new Error(`Các ID sau không tồn tại trong preset: ${missing.join(', ')}`);
+        const resolvedOrder: string[] = [];
+        const missing: string[] = [];
+
+        for (const item of order) {
+            const found = this.findPrompt(item);
+            if (found) {
+                resolvedOrder.push(found.identifier);
+            } else {
+                missing.push(item);
+            }
         }
 
-        this._stagingOrder = order.slice();
+        if (missing.length > 0) {
+            throw new Error(`Các ID/tên sau không tồn tại trong preset: ${missing.join(', ')}`);
+        }
+
+        this._stagingOrder = resolvedOrder;
         return {
             ok: true,
-            summary: `[Staged] Đã sắp xếp lại thứ tự của ${order.length} prompt blocks.`,
+            summary: `[Staged] Đã sắp xếp lại thứ tự của ${resolvedOrder.length} prompt blocks.`,
         };
     }
 
@@ -580,25 +624,36 @@ export class PresetGitManager {
         const p = this.findPrompt(identifier);
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
+        const canonicalId = p.identifier;
         const duplicateName = newName || `${p.name} (Copy)`;
-        const isLinked = this.getPromptOrder().includes(identifier);
+        const isLinked = this.getPromptOrder().includes(canonicalId);
 
         let targetPosition: number | undefined = undefined;
         if (isLinked) {
             const currentOrder = this.getPromptOrder();
-            const originalIdx = currentOrder.indexOf(identifier);
+            const originalIdx = currentOrder.indexOf(canonicalId);
             if (originalIdx !== -1) {
                 targetPosition = originalIdx + 1;
             }
         }
 
+        const stagingMod = this._stagingMap.get(canonicalId) || {};
+        const effectiveContent = stagingMod.content !== undefined ? stagingMod.content : p.content;
+        const effectiveRole = stagingMod.role !== undefined ? stagingMod.role : p.role;
+        const effectiveInjPos =
+            stagingMod.injection_position !== undefined ? stagingMod.injection_position : p.injection_position;
+        const effectiveInjDepth =
+            stagingMod.injection_depth !== undefined ? stagingMod.injection_depth : p.injection_depth;
+        const effectiveInjOrder =
+            stagingMod.injection_order !== undefined ? stagingMod.injection_order : p.injection_order;
+
         return this.stageCreate({
             name: duplicateName,
-            content: p.content,
-            role: p.role,
-            injection_position: p.injection_position,
-            injection_depth: p.injection_depth,
-            injection_order: p.injection_order,
+            content: effectiveContent,
+            role: effectiveRole,
+            injection_position: effectiveInjPos,
+            injection_depth: effectiveInjDepth,
+            injection_order: effectiveInjOrder,
             addToLinked: isLinked,
             position: targetPosition,
         });
@@ -608,21 +663,26 @@ export class PresetGitManager {
         const p = this.findPrompt(identifier);
         if (!p) throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
 
+        const canonicalId = p.identifier;
         // If it was created in this staging session, remove it directly
-        const createdIdx = this._stagingCreates.findIndex((c) => c.block.identifier === identifier);
+        const createdIdx = this._stagingCreates.findIndex((c) => c.block.identifier === canonicalId);
         if (createdIdx !== -1) {
             this._stagingCreates.splice(createdIdx, 1);
         } else {
-            this._stagingDeletes.add(identifier);
+            this._stagingDeletes.add(canonicalId);
+        }
+
+        if (this._stagingMap.has(canonicalId)) {
+            this._stagingMap.delete(canonicalId);
         }
 
         if (this._stagingOrder) {
-            this._stagingOrder = this._stagingOrder.filter((id) => id !== identifier);
+            this._stagingOrder = this._stagingOrder.filter((id) => id !== canonicalId);
         }
 
         return {
             ok: true,
-            summary: `[Staged] Đã đánh dấu xóa block "${p.name}" [ID: ${identifier}].`,
+            summary: `[Staged] Đã đánh dấu xóa block "${p.name}" [ID: ${canonicalId}].`,
         };
     }
 
@@ -971,6 +1031,18 @@ export class PresetGitManager {
                     changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
                 if (sBlock.injection_order !== lBlock.injection_order)
                     changes.push(`order: ${lBlock.injection_order} -> ${sBlock.injection_order}`);
+
+                const sSys = sBlock.system_prompt === true;
+                const lSys = lBlock.system_prompt === true;
+                if (sSys !== lSys) changes.push(`system_prompt: ${lSys} -> ${sSys}`);
+
+                const sMarker = sBlock.marker === true;
+                const lMarker = lBlock.marker === true;
+                if (sMarker !== lMarker) changes.push(`marker: ${lMarker} -> ${sMarker}`);
+
+                const sForbid = sBlock.forbid_overrides === true;
+                const lForbid = lBlock.forbid_overrides === true;
+                if (sForbid !== lForbid) changes.push(`forbid_overrides: ${lForbid} -> ${sForbid}`);
 
                 if (changes.length > 0) {
                     modified++;
@@ -1583,6 +1655,15 @@ export class PresetGitManager {
                     identifier: p.identifier,
                     name: p.name,
                     warning: `Injection depth âm (${p.injection_depth}), có thể không hoạt động đúng chuẩn ST.`,
+                });
+            }
+
+            const builtInSystemPrompts = new Set(['main', 'nsfw', 'jailbreak', 'enhanceDefinitions']);
+            if (!builtInSystemPrompts.has(p.identifier) && !p.marker && p.system_prompt === true) {
+                warnings.push({
+                    identifier: p.identifier,
+                    name: p.name,
+                    warning: `Block có 'system_prompt: true'. SillyTavern chỉ gửi vào completion và cho phép unlink nếu block là custom prompt với 'system_prompt: false'. (Hệ thống sẽ tự động chuyển thành false khi commit/flush).`,
                 });
             }
         }

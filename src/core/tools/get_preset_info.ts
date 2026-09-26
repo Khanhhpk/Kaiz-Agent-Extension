@@ -71,6 +71,8 @@ export const getPresetInfoTool: ITool = {
                     injection_position: p.injection_position ?? 0,
                     injection_depth: p.injection_depth ?? 4,
                     injection_order: p.injection_order ?? 100,
+                    system_prompt: p.system_prompt ?? false,
+                    marker: p.marker ?? false,
                     char_count: (p.content || '').length,
                     preview: preview ? `${preview}${p.content.length > 70 ? '...' : ''}` : '(Empty)',
                 };

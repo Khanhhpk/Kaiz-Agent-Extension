@@ -6545,7 +6545,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       _stagingVars = {};
       _stagingVarRenames = {}; // oldName -> newName
       _activeHeads = new Map(); // presetName -> commitHash
+      _lastPresetName = null;
       db = KaizDB.getInstance();
+      checkPresetSwitch() {
+          const currentName = this.getActivePresetName();
+          if (this._lastPresetName && this._lastPresetName !== currentName) {
+              // Preset switched! Clear staging from previous preset to prevent cross-contamination
+              this.clearStaging();
+          }
+          this._lastPresetName = currentName;
+      }
       // ─── SillyTavern Context Accessors ──────────────────────────────────────
       getContainer() {
           const win = window;
@@ -6663,6 +6672,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       }
       // ─── Staging / Sandbox Overlay Read ─────────────────────────────────────
       getPrompts() {
+          this.checkPresetSwitch();
           const basePrompts = this.getRawLivePrompts();
           // 1. Map existing blocks with staging changes & filter deleted
           const prompts = basePrompts
@@ -6685,6 +6695,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return prompts;
       }
       getPromptOrder() {
+          this.checkPresetSwitch();
           let baseOrder;
           if (this._stagingOrder && Array.isArray(this._stagingOrder)) {
               baseOrder = this._stagingOrder.slice();
@@ -6711,10 +6722,26 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return filtered;
       }
       findPrompt(identifier) {
-          return this.getPrompts().find((p) => p.identifier === identifier) || null;
+          if (!identifier)
+              return null;
+          const needle = String(identifier).trim();
+          const prompts = this.getPrompts();
+          const exact = prompts.find((p) => p.identifier === needle || p.id === needle);
+          if (exact)
+              return exact;
+          const lower = needle.toLowerCase();
+          return prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower) || null;
       }
       findRawPrompt(identifier) {
-          return this.getRawLivePrompts().find((p) => p.identifier === identifier) || null;
+          if (!identifier)
+              return null;
+          const needle = String(identifier).trim();
+          const prompts = this.getRawLivePrompts();
+          const exact = prompts.find((p) => p.identifier === needle || p.id === needle);
+          if (exact)
+              return exact;
+          const lower = needle.toLowerCase();
+          return prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower) || null;
       }
       // ─── Staging Actions (Working Tree Sandbox) ─────────────────────────────
       hasStagingChanges() {
@@ -6772,9 +6799,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
-          if (!this._stagingMap.has(identifier))
-              this._stagingMap.set(identifier, {});
-          this._stagingMap.get(identifier).content = content;
+          const canonicalId = p.identifier;
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          this._stagingMap.get(canonicalId).content = content;
           return {
               ok: true,
               summary: `[Staged] Đã cập nhật toàn bộ nội dung của block "${p.name}" (${content.length} ký tự).`,
@@ -6821,15 +6849,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const p = this.findPrompt(identifier);
               if (!p)
                   throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
-              if (!this._stagingMap.has(identifier))
-                  this._stagingMap.set(identifier, {});
-              const currentContent = this._stagingMap.get(identifier).content !== undefined
-                  ? this._stagingMap.get(identifier).content
+              const canonicalId = p.identifier;
+              if (!this._stagingMap.has(canonicalId))
+                  this._stagingMap.set(canonicalId, {});
+              const currentContent = this._stagingMap.get(canonicalId).content !== undefined
+                  ? this._stagingMap.get(canonicalId).content
                   : p.content || '';
               if (!currentContent.includes(target_string)) {
                   throw new Error(`Không tìm thấy đoạn "${target_string}" trong nội dung của block "${p.name}".`);
               }
-              this._stagingMap.get(identifier).content = currentContent.split(target_string).join(replacement_string);
+              this._stagingMap.get(canonicalId).content = currentContent.split(target_string).join(replacement_string);
               return {
                   ok: true,
                   summary: `[Staged] Đã thay thế đoạn văn bản trong block "${p.name}".`,
@@ -6841,12 +6870,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
-          if (!this._stagingMap.has(identifier))
-              this._stagingMap.set(identifier, {});
-          const currentContent = this._stagingMap.get(identifier).content !== undefined
-              ? this._stagingMap.get(identifier).content
+          const canonicalId = p.identifier;
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          const currentContent = this._stagingMap.get(canonicalId).content !== undefined
+              ? this._stagingMap.get(canonicalId).content
               : p.content || '';
-          this._stagingMap.get(identifier).content =
+          this._stagingMap.get(canonicalId).content =
               currentContent + (currentContent && append_text ? '\n' : '') + append_text;
           return {
               ok: true,
@@ -6857,6 +6887,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
           const allowedKeys = [
               'name',
               'role',
@@ -6881,9 +6912,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
               }
           }
-          if (!this._stagingMap.has(identifier))
-              this._stagingMap.set(identifier, {});
-          Object.assign(this._stagingMap.get(identifier), updates);
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          Object.assign(this._stagingMap.get(canonicalId), updates);
           return {
               ok: true,
               summary: `[Staged] Đã cập nhật metadata [${Object.keys(updates).join(', ')}] cho block "${p.name}".`,
@@ -6893,17 +6924,21 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
           let newEnabled;
           if (enabled !== undefined) {
               newEnabled =
                   typeof enabled === 'string' ? enabled.toLowerCase() === 'true' || enabled === '1' : Boolean(enabled);
           }
           else {
-              newEnabled = !p.enabled;
+              const currentVal = this._stagingMap.get(canonicalId)?.enabled !== undefined
+                  ? this._stagingMap.get(canonicalId).enabled
+                  : p.enabled;
+              newEnabled = !currentVal;
           }
-          if (!this._stagingMap.has(identifier))
-              this._stagingMap.set(identifier, {});
-          this._stagingMap.get(identifier).enabled = newEnabled;
+          if (!this._stagingMap.has(canonicalId))
+              this._stagingMap.set(canonicalId, {});
+          this._stagingMap.get(canonicalId).enabled = newEnabled;
           return {
               ok: true,
               enabled: newEnabled,
@@ -6914,15 +6949,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
           const currentOrder = this.getPromptOrder().slice();
-          const idx = currentOrder.indexOf(identifier);
+          const idx = currentOrder.indexOf(canonicalId);
           if (linked) {
               if (idx === -1) {
                   if (typeof position === 'number' && position >= 0 && position <= currentOrder.length) {
-                      currentOrder.splice(position, 0, identifier);
+                      currentOrder.splice(position, 0, canonicalId);
                   }
                   else {
-                      currentOrder.push(identifier);
+                      currentOrder.push(canonicalId);
                   }
               }
               else if (typeof position === 'number' &&
@@ -6930,7 +6966,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   position < currentOrder.length &&
                   position !== idx) {
                   currentOrder.splice(idx, 1);
-                  currentOrder.splice(position, 0, identifier);
+                  currentOrder.splice(position, 0, canonicalId);
               }
           }
           else {
@@ -6941,44 +6977,60 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           this._stagingOrder = currentOrder;
           return {
               ok: true,
-              summary: `[Staged] Đã chuyển block "${p.name}" thành ${linked ? `Linked (Vị trí #${currentOrder.indexOf(identifier) + 1})` : 'Unlinked'}.`,
+              summary: `[Staged] Đã chuyển block "${p.name}" thành ${linked ? `Linked (Vị trí #${currentOrder.indexOf(canonicalId) + 1})` : 'Unlinked'}.`,
           };
       }
       stageReorder(order) {
           if (!Array.isArray(order))
               throw new Error('Tham số order phải là một mảng identifier.');
-          const allPrompts = this.getPrompts();
-          const missing = order.filter((id) => !allPrompts.some((p) => p.identifier === id));
-          if (missing.length > 0) {
-              throw new Error(`Các ID sau không tồn tại trong preset: ${missing.join(', ')}`);
+          const resolvedOrder = [];
+          const missing = [];
+          for (const item of order) {
+              const found = this.findPrompt(item);
+              if (found) {
+                  resolvedOrder.push(found.identifier);
+              }
+              else {
+                  missing.push(item);
+              }
           }
-          this._stagingOrder = order.slice();
+          if (missing.length > 0) {
+              throw new Error(`Các ID/tên sau không tồn tại trong preset: ${missing.join(', ')}`);
+          }
+          this._stagingOrder = resolvedOrder;
           return {
               ok: true,
-              summary: `[Staged] Đã sắp xếp lại thứ tự của ${order.length} prompt blocks.`,
+              summary: `[Staged] Đã sắp xếp lại thứ tự của ${resolvedOrder.length} prompt blocks.`,
           };
       }
       stageDuplicate(identifier, newName) {
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
           const duplicateName = newName || `${p.name} (Copy)`;
-          const isLinked = this.getPromptOrder().includes(identifier);
+          const isLinked = this.getPromptOrder().includes(canonicalId);
           let targetPosition = undefined;
           if (isLinked) {
               const currentOrder = this.getPromptOrder();
-              const originalIdx = currentOrder.indexOf(identifier);
+              const originalIdx = currentOrder.indexOf(canonicalId);
               if (originalIdx !== -1) {
                   targetPosition = originalIdx + 1;
               }
           }
+          const stagingMod = this._stagingMap.get(canonicalId) || {};
+          const effectiveContent = stagingMod.content !== undefined ? stagingMod.content : p.content;
+          const effectiveRole = stagingMod.role !== undefined ? stagingMod.role : p.role;
+          const effectiveInjPos = stagingMod.injection_position !== undefined ? stagingMod.injection_position : p.injection_position;
+          const effectiveInjDepth = stagingMod.injection_depth !== undefined ? stagingMod.injection_depth : p.injection_depth;
+          const effectiveInjOrder = stagingMod.injection_order !== undefined ? stagingMod.injection_order : p.injection_order;
           return this.stageCreate({
               name: duplicateName,
-              content: p.content,
-              role: p.role,
-              injection_position: p.injection_position,
-              injection_depth: p.injection_depth,
-              injection_order: p.injection_order,
+              content: effectiveContent,
+              role: effectiveRole,
+              injection_position: effectiveInjPos,
+              injection_depth: effectiveInjDepth,
+              injection_order: effectiveInjOrder,
               addToLinked: isLinked,
               position: targetPosition,
           });
@@ -6987,20 +7039,24 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
+          const canonicalId = p.identifier;
           // If it was created in this staging session, remove it directly
-          const createdIdx = this._stagingCreates.findIndex((c) => c.block.identifier === identifier);
+          const createdIdx = this._stagingCreates.findIndex((c) => c.block.identifier === canonicalId);
           if (createdIdx !== -1) {
               this._stagingCreates.splice(createdIdx, 1);
           }
           else {
-              this._stagingDeletes.add(identifier);
+              this._stagingDeletes.add(canonicalId);
+          }
+          if (this._stagingMap.has(canonicalId)) {
+              this._stagingMap.delete(canonicalId);
           }
           if (this._stagingOrder) {
-              this._stagingOrder = this._stagingOrder.filter((id) => id !== identifier);
+              this._stagingOrder = this._stagingOrder.filter((id) => id !== canonicalId);
           }
           return {
               ok: true,
-              summary: `[Staged] Đã đánh dấu xóa block "${p.name}" [ID: ${identifier}].`,
+              summary: `[Staged] Đã đánh dấu xóa block "${p.name}" [ID: ${canonicalId}].`,
           };
       }
       stageBatchUpdate(updates) {
@@ -7301,6 +7357,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
                   if (sBlock.injection_order !== lBlock.injection_order)
                       changes.push(`order: ${lBlock.injection_order} -> ${sBlock.injection_order}`);
+                  const sSys = sBlock.system_prompt === true;
+                  const lSys = lBlock.system_prompt === true;
+                  if (sSys !== lSys)
+                      changes.push(`system_prompt: ${lSys} -> ${sSys}`);
+                  const sMarker = sBlock.marker === true;
+                  const lMarker = lBlock.marker === true;
+                  if (sMarker !== lMarker)
+                      changes.push(`marker: ${lMarker} -> ${sMarker}`);
+                  const sForbid = sBlock.forbid_overrides === true;
+                  const lForbid = lBlock.forbid_overrides === true;
+                  if (sForbid !== lForbid)
+                      changes.push(`forbid_overrides: ${lForbid} -> ${sForbid}`);
                   if (changes.length > 0) {
                       modified++;
                       items.push({
@@ -7832,6 +7900,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       warning: `Injection depth âm (${p.injection_depth}), có thể không hoạt động đúng chuẩn ST.`,
                   });
               }
+              const builtInSystemPrompts = new Set(['main', 'nsfw', 'jailbreak', 'enhanceDefinitions']);
+              if (!builtInSystemPrompts.has(p.identifier) && !p.marker && p.system_prompt === true) {
+                  warnings.push({
+                      identifier: p.identifier,
+                      name: p.name,
+                      warning: `Block có 'system_prompt: true'. SillyTavern chỉ gửi vào completion và cho phép unlink nếu block là custom prompt với 'system_prompt: false'. (Hệ thống sẽ tự động chuyển thành false khi commit/flush).`,
+                  });
+              }
           }
           return {
               ok: errors.length === 0,
@@ -7939,6 +8015,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       injection_position: p.injection_position ?? 0,
                       injection_depth: p.injection_depth ?? 4,
                       injection_order: p.injection_order ?? 100,
+                      system_prompt: p.system_prompt ?? false,
+                      marker: p.marker ?? false,
                       char_count: (p.content || '').length,
                       preview: preview ? `${preview}${p.content.length > 70 ? '...' : ''}` : '(Empty)',
                   };
@@ -8146,6 +8224,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           injection_position: p.injection_position ?? 0,
                           injection_depth: p.injection_depth ?? 4,
                           injection_order: p.injection_order ?? 100,
+                          system_prompt: p.system_prompt ?? false,
+                          marker: p.marker ?? false,
+                          forbid_overrides: p.forbid_overrides ?? false,
                           content: p.content || '',
                       }));
                   }
@@ -8160,13 +8241,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       }, null, 2),
                   };
               }
-              // 4. Chế độ lấy 1 block cụ thể theo identifier
+              // 4. Chế độ lấy 1 block cụ thể theo identifier (hoặc name)
               if (identifier && typeof identifier === 'string') {
-                  const target = prompts.find((p) => p.identifier === identifier || p.id === identifier);
+                  const needle = identifier.trim();
+                  let target = prompts.find((p) => p.identifier === needle || p.id === needle);
+                  if (!target) {
+                      const lower = needle.toLowerCase();
+                      target = prompts.find((p) => p.name && p.name.trim().toLowerCase() === lower);
+                  }
                   if (!target) {
                       return {
                           isError: true,
-                          content: `Không tìm thấy prompt block nào có ID: "${identifier}". Vui lòng dùng 'get_preset_info' để kiểm tra danh sách ID hợp lệ.`,
+                          content: `Không tìm thấy prompt block nào có ID hoặc tên: "${identifier}". Vui lòng dùng 'get_preset_info' để kiểm tra danh sách ID hợp lệ.`,
                       };
                   }
                   const isLinked = order.includes(target.identifier);
