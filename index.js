@@ -16010,7 +16010,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       const n = b.length;
       // Use two-row rolling array to save memory
       let prev = new Array(n + 1).fill(0);
-      let curr = new Array(n + 1).fill(0);
+      let curr;
       const table = new Array(m + 1);
       table[0] = prev.slice();
       for (let i = 1; i <= m; i++) {
@@ -16066,9 +16066,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       const newLines = newText.split('\n');
       // ── Step 1: strip common prefix ──────────────────────────────────────────
       let prefixLen = 0;
-      while (prefixLen < oldLines.length &&
-          prefixLen < newLines.length &&
-          oldLines[prefixLen] === newLines[prefixLen]) {
+      while (prefixLen < oldLines.length && prefixLen < newLines.length && oldLines[prefixLen] === newLines[prefixLen]) {
           prefixLen++;
       }
       // ── Step 2: strip common suffix ──────────────────────────────────────────
@@ -16081,8 +16079,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       // ── Step 3: extract middle (changed) region ───────────────────────────────
       const oldEnd = suffixLen > 0 ? oldLines.length - suffixLen : oldLines.length;
       const newEnd = suffixLen > 0 ? newLines.length - suffixLen : newLines.length;
-      let oldMiddle = oldLines.slice(prefixLen, oldEnd);
-      let newMiddle = newLines.slice(prefixLen, newEnd);
+      const oldMiddle = oldLines.slice(prefixLen, oldEnd);
+      const newMiddle = newLines.slice(prefixLen, newEnd);
       // ── Step 4: run LCS on middle only ────────────────────────────────────────
       // LCS input is already limited to the changed region after prefix/suffix strip.
       // No cap needed — show the full diff.
@@ -16209,7 +16207,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               identifier: id,
               name: String(raw.name || p?.name || id || '(không tên)'),
               role: String(raw.role || p?.role || 'system'),
-              enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : (p?.enabled !== false),
+              enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : p?.enabled !== false,
           };
       }
       return {
@@ -16248,8 +16246,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           .map((block, oldIdx) => {
           const oldPos = oldIdx + 1;
           const newIdx = newBlocks.findIndex((nb) => nb.identifier === block.identifier);
-          let status = 'same';
-          let badgeHtml = '';
+          let status;
+          let badgeHtml;
           if (newIdx === -1) {
               status = 'removed';
               badgeHtml = `<span class="kaiz-diff-reorder-badge removed" title="Đã bị gỡ khỏi danh sách linked blocks"><i class="fa-solid fa-minus"></i> Gỡ bỏ</span>`;
@@ -16289,8 +16287,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           .map((block, newIdx) => {
           const newPos = newIdx + 1;
           const oldIdx = oldBlocks.findIndex((ob) => ob.identifier === block.identifier);
-          let status = 'same';
-          let badgeHtml = '';
+          let status;
+          let badgeHtml;
           if (oldIdx === -1) {
               status = 'added';
               badgeHtml = `<span class="kaiz-diff-reorder-badge added" title="Thêm mới vào thứ tự"><i class="fa-solid fa-plus"></i> Mới thêm</span>`;

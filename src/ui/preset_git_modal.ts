@@ -700,21 +700,37 @@ export class PresetGitModal {
                     // Metadata pills
                     const metaPills: string[] = [];
                     if ((oldBlock.name || '') !== (newBlock.name || ''))
-                        metaPills.push(`📝 Name: <span class="kaiz-diff-old">${escapeHtml(oldBlock.name || '')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.name || '')}</span>`);
+                        metaPills.push(
+                            `📝 Name: <span class="kaiz-diff-old">${escapeHtml(oldBlock.name || '')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.name || '')}</span>`,
+                        );
                     if ((oldBlock.role || 'system') !== (newBlock.role || 'system'))
-                        metaPills.push(`🎭 Role: <span class="kaiz-diff-old">${escapeHtml(oldBlock.role || 'system')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.role || 'system')}</span>`);
+                        metaPills.push(
+                            `🎭 Role: <span class="kaiz-diff-old">${escapeHtml(oldBlock.role || 'system')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.role || 'system')}</span>`,
+                        );
                     if ((oldBlock.enabled !== false) !== (newBlock.enabled !== false))
-                        metaPills.push(`👁 Enabled: <span class="kaiz-diff-old">${oldBlock.enabled !== false}</span> → <span class="kaiz-diff-new">${newBlock.enabled !== false}</span>`);
+                        metaPills.push(
+                            `👁 Enabled: <span class="kaiz-diff-old">${oldBlock.enabled !== false}</span> → <span class="kaiz-diff-new">${newBlock.enabled !== false}</span>`,
+                        );
                     if ((oldBlock.injection_depth ?? 4) !== (newBlock.injection_depth ?? 4))
-                        metaPills.push(`📏 Depth: <span class="kaiz-diff-old">${oldBlock.injection_depth ?? 4}</span> → <span class="kaiz-diff-new">${newBlock.injection_depth ?? 4}</span>`);
+                        metaPills.push(
+                            `📏 Depth: <span class="kaiz-diff-old">${oldBlock.injection_depth ?? 4}</span> → <span class="kaiz-diff-new">${newBlock.injection_depth ?? 4}</span>`,
+                        );
                     if ((oldBlock.injection_position ?? 0) !== (newBlock.injection_position ?? 0))
-                        metaPills.push(`📍 Position: <span class="kaiz-diff-old">${oldBlock.injection_position ?? 0}</span> → <span class="kaiz-diff-new">${newBlock.injection_position ?? 0}</span>`);
+                        metaPills.push(
+                            `📍 Position: <span class="kaiz-diff-old">${oldBlock.injection_position ?? 0}</span> → <span class="kaiz-diff-new">${newBlock.injection_position ?? 0}</span>`,
+                        );
                     if ((oldBlock.injection_order ?? 100) !== (newBlock.injection_order ?? 100))
-                        metaPills.push(`🔢 Order: <span class="kaiz-diff-old">${oldBlock.injection_order ?? 100}</span> → <span class="kaiz-diff-new">${newBlock.injection_order ?? 100}</span>`);
+                        metaPills.push(
+                            `🔢 Order: <span class="kaiz-diff-old">${oldBlock.injection_order ?? 100}</span> → <span class="kaiz-diff-new">${newBlock.injection_order ?? 100}</span>`,
+                        );
                     if (Boolean(oldBlock.system_prompt) !== Boolean(newBlock.system_prompt))
-                        metaPills.push(`⚙ System: <span class="kaiz-diff-old">${Boolean(oldBlock.system_prompt)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.system_prompt)}</span>`);
+                        metaPills.push(
+                            `⚙ System: <span class="kaiz-diff-old">${Boolean(oldBlock.system_prompt)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.system_prompt)}</span>`,
+                        );
                     if (Boolean(oldBlock.forbid_overrides) !== Boolean(newBlock.forbid_overrides))
-                        metaPills.push(`🔒 ForbidOverrides: <span class="kaiz-diff-old">${Boolean(oldBlock.forbid_overrides)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.forbid_overrides)}</span>`);
+                        metaPills.push(
+                            `🔒 ForbidOverrides: <span class="kaiz-diff-old">${Boolean(oldBlock.forbid_overrides)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.forbid_overrides)}</span>`,
+                        );
 
                     if (metaPills.length > 0) {
                         contentHtml += `<div class="kaiz-diff-meta-pills">${metaPills.map((p) => `<span class="kaiz-diff-meta-pill">${p}</span>`).join('')}</div>`;
@@ -769,7 +785,9 @@ export class PresetGitModal {
                 .on('mouseenter', function (this: HTMLElement) {
                     const blockId = $(this).attr('data-block-id');
                     if (blockId) {
-                        body.find(`.kaiz-diff-reorder-block[data-block-id="${blockId}"]`).addClass('kaiz-diff-reorder-highlight');
+                        body.find(`.kaiz-diff-reorder-block[data-block-id="${blockId}"]`).addClass(
+                            'kaiz-diff-reorder-highlight',
+                        );
                     }
                 })
                 .on('mouseleave', function (this: HTMLElement) {
@@ -810,7 +828,7 @@ function lcsTable(a: string[], b: string[]): number[][] {
     const n = b.length;
     // Use two-row rolling array to save memory
     let prev = new Array(n + 1).fill(0);
-    let curr = new Array(n + 1).fill(0);
+    let curr: number[];
     const table: number[][] = new Array(m + 1);
     table[0] = prev.slice();
     for (let i = 1; i <= m; i++) {
@@ -870,11 +888,7 @@ function buildUnifiedDiffHtml(oldText: string, newText: string): string {
 
     // ── Step 1: strip common prefix ──────────────────────────────────────────
     let prefixLen = 0;
-    while (
-        prefixLen < oldLines.length &&
-        prefixLen < newLines.length &&
-        oldLines[prefixLen] === newLines[prefixLen]
-    ) {
+    while (prefixLen < oldLines.length && prefixLen < newLines.length && oldLines[prefixLen] === newLines[prefixLen]) {
         prefixLen++;
     }
 
@@ -891,8 +905,8 @@ function buildUnifiedDiffHtml(oldText: string, newText: string): string {
     // ── Step 3: extract middle (changed) region ───────────────────────────────
     const oldEnd = suffixLen > 0 ? oldLines.length - suffixLen : oldLines.length;
     const newEnd = suffixLen > 0 ? newLines.length - suffixLen : newLines.length;
-    let oldMiddle = oldLines.slice(prefixLen, oldEnd);
-    let newMiddle = newLines.slice(prefixLen, newEnd);
+    const oldMiddle = oldLines.slice(prefixLen, oldEnd);
+    const newMiddle = newLines.slice(prefixLen, newEnd);
 
     // ── Step 4: run LCS on middle only ────────────────────────────────────────
     // LCS input is already limited to the changed region after prefix/suffix strip.
@@ -932,7 +946,6 @@ function buildUnifiedDiffHtml(oldText: string, newText: string): string {
             html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(ln)} ${escapeHtml(ln)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[p])}</span></div>`;
         }
     }
-
 
     let i = 0;
     while (i < diffLines.length) {
@@ -1033,7 +1046,7 @@ function normalizeOrderItem(raw: any, promptMap?: Map<string, PromptBlock>): Ord
             identifier: id,
             name: String(raw.name || p?.name || id || '(không tên)'),
             role: String(raw.role || p?.role || 'system'),
-            enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : (p?.enabled !== false),
+            enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : p?.enabled !== false,
         };
     }
     return {
@@ -1078,8 +1091,8 @@ function buildReorderDiffHtml(item: any, promptMap: Map<string, PromptBlock>): s
         .map((block: OrderBlockItem, oldIdx: number) => {
             const oldPos = oldIdx + 1;
             const newIdx = newBlocks.findIndex((nb: OrderBlockItem) => nb.identifier === block.identifier);
-            let status = 'same';
-            let badgeHtml = '';
+            let status: string;
+            let badgeHtml: string;
 
             if (newIdx === -1) {
                 status = 'removed';
@@ -1120,8 +1133,8 @@ function buildReorderDiffHtml(item: any, promptMap: Map<string, PromptBlock>): s
         .map((block: OrderBlockItem, newIdx: number) => {
             const newPos = newIdx + 1;
             const oldIdx = oldBlocks.findIndex((ob: OrderBlockItem) => ob.identifier === block.identifier);
-            let status = 'same';
-            let badgeHtml = '';
+            let status: string;
+            let badgeHtml: string;
 
             if (oldIdx === -1) {
                 status = 'added';
