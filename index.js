@@ -12210,16 +12210,142 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }
           };
           // ==========================================
-          // --- MILESTONE SCROLLBAR RAIL LOGIC ---
+          // --- REFINED MILESTONE SCROLLBAR RAIL LOGIC (PC/MOBILE) ---
           // ==========================================
           const milestoneRail = $('#kaiz-milestone-rail');
           const milestoneTrack = $('#kaiz-milestone-track');
           const milestoneTooltip = $('#kaiz-milestone-tooltip');
+          const milestoneBtnTop = $('#kaiz-milestone-btn-top');
+          const milestoneBtnBottom = $('#kaiz-milestone-btn-bottom');
+          const milestoneActiveThumb = $('#kaiz-milestone-active-thumb');
+          let currentMilestones = [];
           let milestoneDebounceTimer = null;
+          let isScrubbingMilestones = false;
+          let activeMilestoneIndex = -1;
+          let scrollTrackerRafId = null;
+          let hudHideTimeout = null;
+          // Quick Jump buttons
+          milestoneBtnTop.on('click', (e) => {
+              e.stopPropagation();
+              history[0]?.scrollTo({ top: 0, behavior: 'smooth' });
+          });
+          milestoneBtnBottom.on('click', (e) => {
+              e.stopPropagation();
+              const hEl = history[0];
+              if (hEl) {
+                  hEl.scrollTo({ top: hEl.scrollHeight, behavior: 'smooth' });
+              }
+          });
+          // Hàm hiển thị HUD Preview
+          const showMilestoneHUD = (item, clientY) => {
+              clearTimeout(hudHideTimeout);
+              const total = currentMilestones.length;
+              milestoneTooltip.html(`
+                <div class="kaiz-milestone-tt-header">
+                    <span class="kaiz-milestone-tt-badge"><i class="fa-solid fa-user"></i> LƯỢT #${item.index + 1} / ${total}</span>
+                    <span class="kaiz-milestone-tt-percent">${Math.round(item.posPercent)}%</span>
+                </div>
+                <div class="kaiz-milestone-tt-body">${escapeHtml$2(item.excerpt)}</div>
+                <div class="kaiz-milestone-tt-hint"><i class="fa-solid fa-arrows-up-down"></i> Kéo để duyệt các lượt chat</div>
+            `);
+              const trackEl = milestoneTrack[0];
+              if (!trackEl)
+                  return;
+              const trackRect = trackEl.getBoundingClientRect();
+              const railRect = milestoneRail[0].getBoundingClientRect();
+              let targetY;
+              if (clientY !== undefined) {
+                  targetY = clientY - railRect.top;
+              }
+              else {
+                  targetY = trackRect.top - railRect.top + trackRect.height * (item.posPercent / 100);
+              }
+              const clampedY = Math.max(25, Math.min(railRect.height - 25, targetY));
+              milestoneTooltip.css({
+                  top: `${clampedY}px`,
+                  display: 'block',
+              });
+          };
+          const hideMilestoneHUD = (delay = 0) => {
+              clearTimeout(hudHideTimeout);
+              if (delay > 0) {
+                  hudHideTimeout = setTimeout(() => {
+                      milestoneTooltip.hide();
+                  }, delay);
+              }
+              else {
+                  milestoneTooltip.hide();
+              }
+          };
+          // Hàm cuộn tới tin nhắn của milestone
+          const scrollToMilestone = (item, smooth = true) => {
+              const hEl = history[0];
+              if (!hEl)
+                  return;
+              const curTargetRect = item.msgEl.getBoundingClientRect();
+              const curHistoryRect = hEl.getBoundingClientRect();
+              const targetTop = curTargetRect.top - curHistoryRect.top + hEl.scrollTop - 16;
+              hEl.scrollTo({
+                  top: Math.max(0, targetTop),
+                  behavior: smooth ? 'smooth' : 'instant',
+              });
+          };
+          // Hàm cập nhật trạng thái milestone đang hiển thị trong viewport
+          const updateActiveMilestone = () => {
+              if (isScrubbingMilestones || currentMilestones.length === 0)
+                  return;
+              const hEl = history[0];
+              if (!hEl)
+                  return;
+              const currentScroll = hEl.scrollTop;
+              const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
+              let bestIndex = 0;
+              if (currentScroll >= maxScroll - 30) {
+                  // Đã cuộn gần sát đáy -> milestone cuối cùng
+                  bestIndex = currentMilestones.length - 1;
+              }
+              else if (currentScroll <= 30) {
+                  // Đang ở đỉnh -> milestone đầu tiên
+                  bestIndex = 0;
+              }
+              else {
+                  // Tìm tin nhắn nằm gần vùng 25% phía trên của viewport
+                  const thresholdY = currentScroll + hEl.clientHeight * 0.25;
+                  for (let i = 0; i < currentMilestones.length; i++) {
+                      if (currentMilestones[i].relativeTop <= thresholdY) {
+                          bestIndex = i;
+                      }
+                      else {
+                          break;
+                      }
+                  }
+              }
+              if (bestIndex !== activeMilestoneIndex) {
+                  activeMilestoneIndex = bestIndex;
+                  milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-active');
+                  milestoneTrack.find(`.kaiz-milestone-marker[data-index="${bestIndex}"]`).addClass('is-active');
+                  const activeItem = currentMilestones[bestIndex];
+                  if (activeItem) {
+                      milestoneActiveThumb.css({
+                          top: `${activeItem.posPercent.toFixed(2)}%`,
+                          display: 'block',
+                      });
+                  }
+              }
+          };
+          const requestUpdateActiveMilestone = () => {
+              if (scrollTrackerRafId !== null)
+                  return;
+              scrollTrackerRafId = requestAnimationFrame(() => {
+                  scrollTrackerRafId = null;
+                  updateActiveMilestone();
+              });
+          };
+          // Lắng nghe scroll trên history để cập nhật indicator
+          history.off('scroll.kaiz_milestones').on('scroll.kaiz_milestones', requestUpdateActiveMilestone);
           const updateMilestones = () => {
               if (!history[0] || !milestoneTrack[0])
                   return;
-              // Chỉ lấy các tin nhắn user thực sự (bỏ qua tool results)
               const userMsgs = history
                   .find('.kaiz-msg-user')
                   .filter((_, el) => {
@@ -12231,9 +12357,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               })
                   .toArray();
               if (userMsgs.length === 0) {
-                  milestoneTrack.empty();
+                  currentMilestones = [];
+                  activeMilestoneIndex = -1;
+                  milestoneTrack.find('.kaiz-milestone-marker').remove();
+                  milestoneActiveThumb.hide();
                   milestoneRail.css('opacity', '0.2');
-                  milestoneTooltip.hide();
+                  hideMilestoneHUD();
                   return;
               }
               milestoneRail.css('opacity', '1');
@@ -12241,56 +12370,51 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const scrollHeight = Math.max(historyEl.scrollHeight, 1);
               const historyRect = historyEl.getBoundingClientRect();
               const currentScroll = historyEl.scrollTop;
-              milestoneTrack.empty();
-              userMsgs.forEach((msgEl, index) => {
+              currentMilestones = userMsgs.map((msgEl, index) => {
                   const targetRect = msgEl.getBoundingClientRect();
                   const relativeTop = targetRect.top - historyRect.top + currentScroll;
                   const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
                   const rawText = $(msgEl).find('.kaiz-msg-content').text().trim();
                   const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
+                  return {
+                      index,
+                      msgEl,
+                      relativeTop,
+                      posPercent,
+                      excerpt,
+                  };
+              });
+              // Giữ lại activeThumb, xóa các markers cũ
+              milestoneTrack.find('.kaiz-milestone-marker').remove();
+              currentMilestones.forEach((item) => {
                   const marker = $(`
-                    <div class="kaiz-milestone-marker" style="top: ${posPercent.toFixed(2)}%;" data-index="${index}"></div>
+                    <div class="kaiz-milestone-marker" style="top: ${item.posPercent.toFixed(2)}%;" data-index="${item.index}"></div>
                 `);
-                  marker.on('mouseenter', function () {
-                      const markerRect = this.getBoundingClientRect();
-                      const railRect = milestoneRail[0].getBoundingClientRect();
-                      const topOffset = markerRect.top - railRect.top + markerRect.height / 2;
-                      milestoneTooltip.html(`
-                        <div class="kaiz-milestone-tt-title"><i class="fa-solid fa-user"></i> Lượt chat #${index + 1}</div>
-                        <div class="kaiz-milestone-tt-body">${escapeHtml$2(excerpt)}</div>
-                        <div class="kaiz-milestone-tt-hint">Nhấp để cuộn tới</div>
-                    `);
-                      milestoneTooltip.css({
-                          top: topOffset + 'px',
-                          display: 'block',
-                      });
+                  marker.on('mouseenter', () => {
+                      if (isScrubbingMilestones)
+                          return;
+                      showMilestoneHUD(item);
                   });
                   marker.on('mouseleave', () => {
-                      milestoneTooltip.hide();
+                      if (isScrubbingMilestones)
+                          return;
+                      hideMilestoneHUD();
                   });
                   marker.on('click', (e) => {
                       e.stopPropagation();
                       e.preventDefault();
-                      milestoneTooltip.hide();
-                      const hEl = history[0];
-                      if (!hEl)
-                          return;
-                      const curTargetRect = msgEl.getBoundingClientRect();
-                      const curHistoryRect = hEl.getBoundingClientRect();
-                      const targetTop = curTargetRect.top - curHistoryRect.top + hEl.scrollTop - 16;
-                      hEl.scrollTo({
-                          top: Math.max(0, targetTop),
-                          behavior: 'smooth',
-                      });
-                      $(msgEl).removeClass('kaiz-msg-highlight-pulse');
-                      void msgEl.offsetWidth; // Trigger reflow for animation restart
-                      $(msgEl).addClass('kaiz-msg-highlight-pulse');
+                      hideMilestoneHUD();
+                      scrollToMilestone(item, true);
+                      $(item.msgEl).removeClass('kaiz-msg-highlight-pulse');
+                      void item.msgEl.offsetWidth; // Trigger reflow for animation restart
+                      $(item.msgEl).addClass('kaiz-msg-highlight-pulse');
                       setTimeout(() => {
-                          $(msgEl).removeClass('kaiz-msg-highlight-pulse');
+                          $(item.msgEl).removeClass('kaiz-msg-highlight-pulse');
                       }, 1500);
                   });
                   milestoneTrack.append(marker);
               });
+              updateActiveMilestone();
           };
           const requestUpdateMilestones = () => {
               const chatWinEl = win[0];
@@ -12299,20 +12423,100 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               clearTimeout(milestoneDebounceTimer);
               milestoneDebounceTimer = setTimeout(updateMilestones, 120);
           };
-          // Click trên track để cuộn tương đối
-          milestoneTrack.on('click', (e) => {
-              if ($(e.target).hasClass('kaiz-milestone-marker'))
-                  return;
-              e.stopPropagation();
-              const trackRect = milestoneTrack[0].getBoundingClientRect();
-              const clickY = e.clientY - trackRect.top;
-              const ratio = Math.max(0, Math.min(1, clickY / Math.max(trackRect.height, 1)));
-              const historyEl = history[0];
-              if (historyEl) {
-                  const maxScroll = Math.max(0, historyEl.scrollHeight - historyEl.clientHeight);
-                  const targetScroll = ratio * maxScroll;
-                  historyEl.scrollTo({ top: targetScroll, behavior: 'smooth' });
+          // --- HÀM TÌM MILESTONE GẦN NHẤT VỚI TỌA ĐỘ Y ---
+          const getClosestMilestoneByY = (clientY) => {
+              if (currentMilestones.length === 0)
+                  return null;
+              const trackEl = milestoneTrack[0];
+              if (!trackEl)
+                  return null;
+              const trackRect = trackEl.getBoundingClientRect();
+              const clickY = clientY - trackRect.top;
+              const percent = Math.max(0, Math.min(100, (clickY / Math.max(trackRect.height, 1)) * 100));
+              let closest = currentMilestones[0];
+              let minDist = Math.abs(currentMilestones[0].posPercent - percent);
+              for (let i = 1; i < currentMilestones.length; i++) {
+                  const dist = Math.abs(currentMilestones[i].posPercent - percent);
+                  if (dist < minDist) {
+                      minDist = dist;
+                      closest = currentMilestones[i];
+                  }
               }
+              return closest;
+          };
+          // --- CƠ CHẾ SCRUBBING (KÉO TRƯỢT TRÊN PC VÀ VUỐT NGÓN TAY TRÊN MOBILE) ---
+          const handleScrubMove = (clientY) => {
+              const target = getClosestMilestoneByY(clientY);
+              if (!target)
+                  return;
+              // Di chuyển active thumb và hiển thị HUD theo ngón tay/chuột
+              milestoneActiveThumb.css({
+                  top: `${target.posPercent.toFixed(2)}%`,
+                  display: 'block',
+              });
+              milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-hovered is-proximity');
+              const targetMarker = milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index}"]`);
+              targetMarker.addClass('is-hovered');
+              // Proximity effect cho các marker lân cận (trong bán kính ±1 nấc)
+              milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index - 1}"]`).addClass('is-proximity');
+              milestoneTrack.find(`.kaiz-milestone-marker[data-index="${target.index + 1}"]`).addClass('is-proximity');
+              showMilestoneHUD(target, clientY);
+              // Live scroll khi đang kéo
+              scrollToMilestone(target, false);
+          };
+          const handleScrubEnd = (clientY) => {
+              isScrubbingMilestones = false;
+              milestoneRail.removeClass('is-scrubbing');
+              $(document).off('.kaiz_milestone_scrub');
+              milestoneTrack.find('.kaiz-milestone-marker').removeClass('is-hovered is-proximity');
+              const target = getClosestMilestoneByY(clientY);
+              if (target) {
+                  scrollToMilestone(target, true);
+                  $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
+                  void target.msgEl.offsetWidth;
+                  $(target.msgEl).addClass('kaiz-msg-highlight-pulse');
+                  setTimeout(() => {
+                      $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
+                  }, 1500);
+              }
+              hideMilestoneHUD(500);
+              requestUpdateActiveMilestone();
+          };
+          const startScrubbing = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (currentMilestones.length === 0)
+                  return;
+              isScrubbingMilestones = true;
+              milestoneRail.addClass('is-scrubbing');
+              const clientY = e.type.startsWith('touch') ? e.originalEvent.touches[0].clientY : e.clientY;
+              handleScrubMove(clientY);
+              $(document)
+                  .off('.kaiz_milestone_scrub')
+                  .on('mousemove.kaiz_milestone_scrub', (moveEv) => {
+                  if (!isScrubbingMilestones)
+                      return;
+                  handleScrubMove(moveEv.clientY);
+              })
+                  .on('touchmove.kaiz_milestone_scrub', (moveEv) => {
+                  if (!isScrubbingMilestones || !moveEv.originalEvent.touches[0])
+                      return;
+                  handleScrubMove(moveEv.originalEvent.touches[0].clientY);
+              })
+                  .on('mouseup.kaiz_milestone_scrub', (upEv) => {
+                  handleScrubEnd(upEv.clientY);
+              })
+                  .on('touchend.kaiz_milestone_scrub touchcancel.kaiz_milestone_scrub', (upEv) => {
+                  const endY = upEv.originalEvent.changedTouches?.[0]?.clientY || clientY;
+                  handleScrubEnd(endY);
+              });
+          };
+          // Gắn sự kiện mousedown và touchstart lên toàn bộ milestoneTrack
+          milestoneTrack.on('mousedown', (e) => {
+              startScrubbing(e);
+          });
+          milestoneTrack.on('touchstart', (e) => {
+              startScrubbing(e);
           });
           // ==========================================
           // --- IN-CHAT SEARCH BAR LOGIC ---

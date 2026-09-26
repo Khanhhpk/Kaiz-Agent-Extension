@@ -335,7 +335,25 @@
                     <!-- Tin nhắn sẽ được nhúng vào đây -->
                 </div>
                 <div id="kaiz-milestone-rail" class="kaiz-milestone-rail" title="Mốc tin nhắn User">
-                    <div id="kaiz-milestone-track" class="kaiz-milestone-track"></div>
+                    <button
+                        type="button"
+                        id="kaiz-milestone-btn-top"
+                        class="kaiz-milestone-quick-btn kaiz-milestone-btn-top interactable"
+                        title="Cuộn lên đầu chat"
+                    >
+                        <i class="fa-solid fa-chevron-up"></i>
+                    </button>
+                    <div id="kaiz-milestone-track" class="kaiz-milestone-track">
+                        <div id="kaiz-milestone-active-thumb" class="kaiz-milestone-active-thumb" style="display: none"></div>
+                    </div>
+                    <button
+                        type="button"
+                        id="kaiz-milestone-btn-bottom"
+                        class="kaiz-milestone-quick-btn kaiz-milestone-btn-bottom interactable"
+                        title="Cuộn xuống tin mới nhất"
+                    >
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
                     <div id="kaiz-milestone-tooltip" class="kaiz-milestone-tooltip" style="display: none"></div>
                 </div>
             </div>
