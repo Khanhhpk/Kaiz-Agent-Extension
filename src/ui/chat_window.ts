@@ -355,11 +355,15 @@ export class ChatWindowUI {
             }
 
             milestoneRail.css('opacity', '1');
-            const scrollHeight = Math.max(history[0].scrollHeight, 1);
+            const historyEl = history[0];
+            const scrollHeight = Math.max(historyEl.scrollHeight, 1);
+            const historyRect = historyEl.getBoundingClientRect();
+            const currentScroll = historyEl.scrollTop;
             milestoneTrack.empty();
 
             userMsgs.forEach((msgEl: HTMLElement, index: number) => {
-                const relativeTop = msgEl.offsetTop;
+                const targetRect = msgEl.getBoundingClientRect();
+                const relativeTop = targetRect.top - historyRect.top + currentScroll;
                 const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
 
                 const rawText = $(msgEl).find('.kaiz-msg-content').text().trim();
@@ -391,8 +395,28 @@ export class ChatWindowUI {
 
                 marker.on('click', (e: any) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     milestoneTooltip.hide();
-                    msgEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+                    const hEl = history[0];
+                    if (!hEl) return;
+
+                    const curTargetRect = msgEl.getBoundingClientRect();
+                    const curHistoryRect = hEl.getBoundingClientRect();
+                    const targetTop = curTargetRect.top - curHistoryRect.top + hEl.scrollTop - 16;
+
+                    hEl.scrollTo({
+                        top: Math.max(0, targetTop),
+                        behavior: 'smooth',
+                    });
+
+                    // Safeguard: Đảm bảo SillyTavern / window không bao giờ bị scroll theo
+                    if (window.scrollY !== 0 || window.scrollX !== 0) {
+                        window.scrollTo(0, 0);
+                    }
+                    document.documentElement.scrollTop = 0;
+                    document.body.scrollTop = 0;
+
                     $(msgEl).removeClass('kaiz-msg-highlight-pulse');
                     void msgEl.offsetWidth; // Trigger reflow for animation restart
                     $(msgEl).addClass('kaiz-msg-highlight-pulse');
@@ -413,11 +437,21 @@ export class ChatWindowUI {
         // Click trên track để cuộn tương đối
         milestoneTrack.on('click', (e: any) => {
             if ($(e.target).hasClass('kaiz-milestone-marker')) return;
+            e.stopPropagation();
             const trackRect = milestoneTrack[0].getBoundingClientRect();
             const clickY = e.clientY - trackRect.top;
             const ratio = Math.max(0, Math.min(1, clickY / Math.max(trackRect.height, 1)));
-            const targetScroll = ratio * history[0].scrollHeight;
-            history[0].scrollTo({ top: targetScroll, behavior: 'smooth' });
+            const historyEl = history[0];
+            if (historyEl) {
+                const maxScroll = Math.max(0, historyEl.scrollHeight - historyEl.clientHeight);
+                const targetScroll = ratio * maxScroll;
+                historyEl.scrollTo({ top: targetScroll, behavior: 'smooth' });
+                if (window.scrollY !== 0 || window.scrollX !== 0) {
+                    window.scrollTo(0, 0);
+                }
+                document.documentElement.scrollTop = 0;
+                document.body.scrollTop = 0;
+            }
         });
 
         // ==========================================
@@ -453,7 +487,29 @@ export class ChatWindowUI {
                 const currentEl = currentSearchMatches[activeMatchIndex];
                 currentEl.classList.add('kaiz-search-mark-active');
                 searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}`);
-                currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+                const historyEl = history[0];
+                if (historyEl) {
+                    const targetRect = currentEl.getBoundingClientRect();
+                    const historyRect = historyEl.getBoundingClientRect();
+                    const targetTop =
+                        targetRect.top -
+                        historyRect.top +
+                        historyEl.scrollTop -
+                        historyRect.height / 2 +
+                        targetRect.height / 2;
+
+                    historyEl.scrollTo({
+                        top: Math.max(0, targetTop),
+                        behavior: 'smooth',
+                    });
+
+                    if (window.scrollY !== 0 || window.scrollX !== 0) {
+                        window.scrollTo(0, 0);
+                    }
+                    document.documentElement.scrollTop = 0;
+                    document.body.scrollTop = 0;
+                }
             }
         };
 
@@ -1064,6 +1120,11 @@ export class ChatWindowUI {
                         if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
                     }, 50);
                 }
+                if (window.scrollY !== 0 || window.scrollX !== 0) {
+                    window.scrollTo(0, 0);
+                }
+                document.documentElement.scrollTop = 0;
+                document.body.scrollTop = 0;
                 // Refresh list khi mở
                 stateManager.loadChatList().then(renderChatList);
                 setTimeout(requestUpdateMilestones, 150);

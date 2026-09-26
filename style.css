@@ -532,6 +532,7 @@ mark.kaiz-search-mark-active {
 }
 
 .kaiz-chat-history {
+    position: relative;
     flex: 1;
     min-height: 0;
     min-width: 0;
