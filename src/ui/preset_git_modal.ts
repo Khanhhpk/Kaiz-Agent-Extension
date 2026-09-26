@@ -824,33 +824,94 @@ function generateLineDiff(oldLines: string[], newLines: string[]): DiffLine[] {
 
 const DIFF_CONTEXT_SIZE = 2; // lines of context around each change
 
-/** Build escaped HTML for the unified diff viewer. */
+/** Build escaped HTML for the unified diff viewer.
+ *
+ * Strategy to handle prompts of any length correctly:
+ * 1. Strip common prefix lines (O(n) pass) — these are always unchanged.
+ * 2. Strip common suffix lines (O(n) pass).
+ * 3. Run LCS only on the "changed middle" region — guarantees changes anywhere
+ *    in the file (e.g. line 800 of 1000) are always found.
+ * 4. Cap the middle region if it is still huge (edge case: massive rewrites).
+ * 5. Render prefix/suffix as fold separators with absolute line numbers.
+ */
 function buildUnifiedDiffHtml(oldText: string, newText: string): string {
     const oldLines = oldText.split('\n');
     const newLines = newText.split('\n');
 
-    // Guard: if either side is very large (>2000 lines total), cap at first 500 of each
-    const cappedOld = oldLines.length > 1000 ? oldLines.slice(0, 500) : oldLines;
-    const cappedNew = newLines.length > 1000 ? newLines.slice(0, 500) : newLines;
-    const wasCapped = cappedOld.length < oldLines.length || cappedNew.length < newLines.length;
+    // ── Step 1: strip common prefix ──────────────────────────────────────────
+    let prefixLen = 0;
+    while (
+        prefixLen < oldLines.length &&
+        prefixLen < newLines.length &&
+        oldLines[prefixLen] === newLines[prefixLen]
+    ) {
+        prefixLen++;
+    }
 
-    const diffLines = generateLineDiff(cappedOld, cappedNew);
-    if (diffLines.length === 0) return '';
+    // ── Step 2: strip common suffix ──────────────────────────────────────────
+    let suffixLen = 0;
+    while (
+        suffixLen < oldLines.length - prefixLen &&
+        suffixLen < newLines.length - prefixLen &&
+        oldLines[oldLines.length - 1 - suffixLen] === newLines[newLines.length - 1 - suffixLen]
+    ) {
+        suffixLen++;
+    }
 
-    // Mark which indices are near a change
+    // ── Step 3: extract middle (changed) region ───────────────────────────────
+    const oldEnd = suffixLen > 0 ? oldLines.length - suffixLen : oldLines.length;
+    const newEnd = suffixLen > 0 ? newLines.length - suffixLen : newLines.length;
+    let oldMiddle = oldLines.slice(prefixLen, oldEnd);
+    let newMiddle = newLines.slice(prefixLen, newEnd);
+
+    // ── Step 4: cap the middle if still huge (massive rewrite edge case) ──────
+    const MAX_MIDDLE = 400;
+    const middleCapped = oldMiddle.length > MAX_MIDDLE || newMiddle.length > MAX_MIDDLE;
+    if (oldMiddle.length > MAX_MIDDLE) oldMiddle = oldMiddle.slice(0, MAX_MIDDLE);
+    if (newMiddle.length > MAX_MIDDLE) newMiddle = newMiddle.slice(0, MAX_MIDDLE);
+
+    // ── Step 5: run LCS on middle only ────────────────────────────────────────
+    // Adjust lineOld/lineNew to be absolute (1-indexed from original file)
+    const diffLines = generateLineDiff(oldMiddle, newMiddle);
+
+    // Shift line numbers to absolute positions
+    diffLines.forEach((dl) => {
+        if (dl.lineOld !== undefined) dl.lineOld += prefixLen;
+        if (dl.lineNew !== undefined) dl.lineNew += prefixLen;
+    });
+
+    // ── Step 6: mark lines near changes for context folding ───────────────────
     const visible = new Set<number>();
     diffLines.forEach((dl, idx) => {
         if (dl.type !== 'context') {
-            for (let k = Math.max(0, idx - DIFF_CONTEXT_SIZE); k <= Math.min(diffLines.length - 1, idx + DIFF_CONTEXT_SIZE); k++) {
+            for (
+                let k = Math.max(0, idx - DIFF_CONTEXT_SIZE);
+                k <= Math.min(diffLines.length - 1, idx + DIFF_CONTEXT_SIZE);
+                k++
+            ) {
                 visible.add(k);
             }
         }
     });
 
+    // ── Step 7: render ─────────────────────────────────────────────────────────
     let html = '<div class="kaiz-diff-unified">';
-    if (wasCapped) {
-        html += '<div class="kaiz-diff-cap-warning">⚠ Nội dung quá dài — chỉ hiển thị 500 dòng đầu mỗi phía.</div>';
+
+    // Show common prefix fold
+    if (prefixLen >= 3) {
+        html += `<div class="kaiz-diff-fold">⸺ ${prefixLen} dòng đầu không đổi ⸺</div>`;
+    } else if (prefixLen > 0) {
+        // Show the 1–2 prefix lines as context (with absolute line numbers)
+        for (let p = 0; p < prefixLen; p++) {
+            const ln = String(p + 1).padStart(3, ' ');
+            html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(ln)} ${escapeHtml(ln)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[p])}</span></div>`;
+        }
     }
+
+    if (middleCapped) {
+        html += `<div class="kaiz-diff-cap-warning">⚠ Vùng thay đổi quá lớn — hiển thị ${MAX_MIDDLE} dòng đầu của phần đã sửa.</div>`;
+    }
+
     let i = 0;
     while (i < diffLines.length) {
         if (visible.has(i)) {
@@ -867,7 +928,7 @@ function buildUnifiedDiffHtml(oldText: string, newText: string): string {
             }
             i++;
         } else {
-            // Count consecutive hidden lines
+            // Count consecutive hidden context lines
             let j = i;
             while (j < diffLines.length && !visible.has(j)) j++;
             const skipped = j - i;
@@ -875,7 +936,6 @@ function buildUnifiedDiffHtml(oldText: string, newText: string): string {
                 html += `<div class="kaiz-diff-fold">⸺ ${skipped} dòng không đổi ⸺</div>`;
                 i = j;
             } else {
-                // Show them as context (small gap)
                 while (i < j) {
                     const dl = diffLines[i];
                     const lineNumOld = dl.lineOld !== undefined ? String(dl.lineOld).padStart(3, ' ') : '   ';
@@ -887,6 +947,20 @@ function buildUnifiedDiffHtml(oldText: string, newText: string): string {
             }
         }
     }
+
+    // Show common suffix fold
+    if (suffixLen >= 3) {
+        html += `<div class="kaiz-diff-fold">⸺ ${suffixLen} dòng cuối không đổi ⸺</div>`;
+    } else if (suffixLen > 0) {
+        const startOld = oldLines.length - suffixLen;
+        const startNew = newLines.length - suffixLen;
+        for (let s = 0; s < suffixLen; s++) {
+            const lnOld = String(startOld + s + 1).padStart(3, ' ');
+            const lnNew = String(startNew + s + 1).padStart(3, ' ');
+            html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(lnOld)} ${escapeHtml(lnNew)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[startOld + s])}</span></div>`;
+        }
+    }
+
     html += '</div>';
     return html;
 }
