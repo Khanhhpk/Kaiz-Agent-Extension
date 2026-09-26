@@ -1102,11 +1102,27 @@ export class PresetGitManager {
 
         // Check reorders
         if (JSON.stringify(liveOrder) !== JSON.stringify(stagedOrder)) {
+            const mapReorderItem = (id: string, map1: Map<string, PromptBlock>, map2: Map<string, PromptBlock>) => {
+                const b = map1.get(id) || map2.get(id);
+                return {
+                    identifier: id,
+                    name: b?.name || id,
+                    role: b?.role || 'system',
+                    enabled: b?.enabled !== false,
+                };
+            };
+            const reorderSummary =
+                liveOrder.length === stagedOrder.length
+                    ? `↺ [REORDER] Thay đổi thứ tự ${liveOrder.length} linked blocks`
+                    : `↺ [REORDER] Thay đổi thứ tự linked blocks (${liveOrder.length} -> ${stagedOrder.length} items)`;
+
             items.push({
                 type: 'reorder',
-                oldValue: liveOrder,
-                newValue: stagedOrder,
-                summary: `↺ [REORDER] Thứ tự linked blocks thay đổi (${liveOrder.length} -> ${stagedOrder.length} items)`,
+                identifier: 'prompt_order',
+                name: 'Thứ tự Prompt Blocks',
+                oldValue: liveOrder.map((id) => mapReorderItem(id, liveMap, stagedMap)),
+                newValue: stagedOrder.map((id) => mapReorderItem(id, stagedMap, liveMap)),
+                summary: reorderSummary,
             });
         }
 

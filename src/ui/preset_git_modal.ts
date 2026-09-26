@@ -103,7 +103,7 @@ export class PresetGitModal {
                 const title = dirtyInfo.isStaged
                     ? 'Thay đổi trong Vùng Nháp (Staging Diff)'
                     : 'Thay đổi chưa lưu so với phiên bản hiện tại (Working Tree Diff)';
-                this.openDiffModal(title, diff.items);
+                this.openDiffModal(title, diff.items, this.manager.getPrompts());
             });
 
         // 9. Manual Commit (Tiết kiệm API)
@@ -643,6 +643,25 @@ export class PresetGitModal {
                 );
             }
         } else {
+            const promptMap = new Map<string, PromptBlock>();
+            if (Array.isArray(fullPrompts) && fullPrompts.length > 0) {
+                fullPrompts.forEach((p) => {
+                    if (p?.identifier) promptMap.set(p.identifier, p);
+                });
+            }
+            try {
+                const mgrPrompts = this.manager.getPrompts();
+                if (Array.isArray(mgrPrompts)) {
+                    mgrPrompts.forEach((p) => {
+                        if (p?.identifier && !promptMap.has(p.identifier)) {
+                            promptMap.set(p.identifier, p);
+                        }
+                    });
+                }
+            } catch {
+                // ignore
+            }
+
             items.forEach((item, index) => {
                 let badgeColor = '#38bdf8';
                 let typeLabel = 'THAY ĐỔI';
@@ -717,8 +736,7 @@ export class PresetGitModal {
                         contentHtml += buildDeletedContentHtml(content);
                     }
                 } else if (item.type === 'reorder') {
-                    // Show reorder as simple info text — no big blocks needed
-                    contentHtml += `<div style="font-size: 11px; opacity: 0.65; font-style: italic; padding: 4px 0">Thứ tự các block đã thay đổi.</div>`;
+                    contentHtml += buildReorderDiffHtml(item, promptMap);
                 } else {
                     // varUpdate, varRename, or unknown — simple old→new
                     const oldStr = item.oldValue !== undefined && item.oldValue !== null ? String(item.oldValue) : '';
@@ -744,6 +762,19 @@ export class PresetGitModal {
                     </div>
                 `);
             });
+
+            // Interactive cross-column highlight for reordered blocks
+            body.find('.kaiz-diff-reorder-block')
+                .off('mouseenter mouseleave')
+                .on('mouseenter', function (this: HTMLElement) {
+                    const blockId = $(this).attr('data-block-id');
+                    if (blockId) {
+                        body.find(`.kaiz-diff-reorder-block[data-block-id="${blockId}"]`).addClass('kaiz-diff-reorder-highlight');
+                    }
+                })
+                .on('mouseleave', function (this: HTMLElement) {
+                    body.find('.kaiz-diff-reorder-block').removeClass('kaiz-diff-reorder-highlight');
+                });
         }
 
         const diffModal = $('#kaiz-preset-diff-modal')[0] as HTMLDialogElement;
@@ -976,4 +1007,191 @@ function buildDeletedContentHtml(content: string): string {
     });
     html += '</div>';
     return html;
+}
+
+interface OrderBlockItem {
+    identifier: string;
+    name: string;
+    role: string;
+    enabled: boolean;
+}
+
+function normalizeOrderItem(raw: any, promptMap?: Map<string, PromptBlock>): OrderBlockItem {
+    if (typeof raw === 'string') {
+        const p = promptMap?.get(raw);
+        return {
+            identifier: raw,
+            name: p?.name || raw,
+            role: p?.role || 'system',
+            enabled: p?.enabled !== false,
+        };
+    }
+    if (raw && typeof raw === 'object') {
+        const id = String(raw.identifier || raw.id || '');
+        const p = promptMap?.get(id);
+        return {
+            identifier: id,
+            name: String(raw.name || p?.name || id || '(không tên)'),
+            role: String(raw.role || p?.role || 'system'),
+            enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : (p?.enabled !== false),
+        };
+    }
+    return {
+        identifier: String(raw || ''),
+        name: String(raw || ''),
+        role: 'system',
+        enabled: true,
+    };
+}
+
+function buildReorderDiffHtml(item: any, promptMap: Map<string, PromptBlock>): string {
+    const rawOld = Array.isArray(item.oldValue) ? item.oldValue : [];
+    const rawNew = Array.isArray(item.newValue) ? item.newValue : [];
+
+    const oldBlocks: OrderBlockItem[] = rawOld.map((r: any) => normalizeOrderItem(r, promptMap));
+    const newBlocks: OrderBlockItem[] = rawNew.map((r: any) => normalizeOrderItem(r, promptMap));
+
+    if (oldBlocks.length === 0 && newBlocks.length === 0) {
+        return `<div style="font-size: 11px; opacity: 0.65; font-style: italic; padding: 6px 0">Không có thông tin thứ tự block.</div>`;
+    }
+
+    let movedCount = 0;
+    let addedCount = 0;
+    let removedCount = 0;
+
+    oldBlocks.forEach((ob: OrderBlockItem, oldIdx: number) => {
+        const newIdx = newBlocks.findIndex((nb: OrderBlockItem) => nb.identifier === ob.identifier);
+        if (newIdx === -1) {
+            removedCount++;
+        } else if (newIdx !== oldIdx) {
+            movedCount++;
+        }
+    });
+
+    newBlocks.forEach((nb: OrderBlockItem) => {
+        if (!oldBlocks.some((ob: OrderBlockItem) => ob.identifier === nb.identifier)) {
+            addedCount++;
+        }
+    });
+
+    const oldCardsHtml = oldBlocks
+        .map((block: OrderBlockItem, oldIdx: number) => {
+            const oldPos = oldIdx + 1;
+            const newIdx = newBlocks.findIndex((nb: OrderBlockItem) => nb.identifier === block.identifier);
+            let status = 'same';
+            let badgeHtml = '';
+
+            if (newIdx === -1) {
+                status = 'removed';
+                badgeHtml = `<span class="kaiz-diff-reorder-badge removed" title="Đã bị gỡ khỏi danh sách linked blocks"><i class="fa-solid fa-minus"></i> Gỡ bỏ</span>`;
+            } else if (newIdx !== oldIdx) {
+                status = 'moved';
+                const newPos = newIdx + 1;
+                badgeHtml = `<span class="kaiz-diff-reorder-badge moved" title="Chuyển sang vị trí #${newPos} ở thứ tự mới"><i class="fa-solid fa-arrow-right"></i> #${newPos}</span>`;
+            } else {
+                status = 'same';
+                badgeHtml = `<span class="kaiz-diff-reorder-badge same" title="Vị trí không đổi"><i class="fa-solid fa-check"></i> Không đổi</span>`;
+            }
+
+            return `
+                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml(block.identifier)}">
+                    <div class="kaiz-diff-reorder-block-main">
+                        <span class="kaiz-diff-reorder-idx">#${oldPos}</span>
+                        <div class="kaiz-diff-reorder-info">
+                            <div class="kaiz-diff-reorder-name-row">
+                                <span class="kaiz-diff-reorder-name" title="${escapeHtml(block.name)}">${escapeHtml(block.name)}</span>
+                                ${!block.enabled ? '<span class="kaiz-diff-reorder-disabled-pill" title="Block đang tắt">Tắt</span>' : ''}
+                            </div>
+                            <div class="kaiz-diff-reorder-meta-row">
+                                <span class="kaiz-diff-reorder-id">[${escapeHtml(block.identifier)}]</span>
+                                <span class="kaiz-diff-reorder-role">${escapeHtml(block.role)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kaiz-diff-reorder-badge-wrap">
+                        ${badgeHtml}
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+
+    const newCardsHtml = newBlocks
+        .map((block: OrderBlockItem, newIdx: number) => {
+            const newPos = newIdx + 1;
+            const oldIdx = oldBlocks.findIndex((ob: OrderBlockItem) => ob.identifier === block.identifier);
+            let status = 'same';
+            let badgeHtml = '';
+
+            if (oldIdx === -1) {
+                status = 'added';
+                badgeHtml = `<span class="kaiz-diff-reorder-badge added" title="Thêm mới vào thứ tự"><i class="fa-solid fa-plus"></i> Mới thêm</span>`;
+            } else if (oldIdx !== newIdx) {
+                status = 'moved';
+                const oldPos = oldIdx + 1;
+                badgeHtml = `<span class="kaiz-diff-reorder-badge moved-target" title="Chuyển từ vị trí #${oldPos} ở thứ tự cũ"><i class="fa-solid fa-arrow-left"></i> từ #${oldPos}</span>`;
+            } else {
+                status = 'same';
+                badgeHtml = `<span class="kaiz-diff-reorder-badge same" title="Vị trí không đổi"><i class="fa-solid fa-check"></i> Không đổi</span>`;
+            }
+
+            return `
+                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml(block.identifier)}">
+                    <div class="kaiz-diff-reorder-block-main">
+                        <span class="kaiz-diff-reorder-idx">#${newPos}</span>
+                        <div class="kaiz-diff-reorder-info">
+                            <div class="kaiz-diff-reorder-name-row">
+                                <span class="kaiz-diff-reorder-name" title="${escapeHtml(block.name)}">${escapeHtml(block.name)}</span>
+                                ${!block.enabled ? '<span class="kaiz-diff-reorder-disabled-pill" title="Block đang tắt">Tắt</span>' : ''}
+                            </div>
+                            <div class="kaiz-diff-reorder-meta-row">
+                                <span class="kaiz-diff-reorder-id">[${escapeHtml(block.identifier)}]</span>
+                                <span class="kaiz-diff-reorder-role">${escapeHtml(block.role)}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="kaiz-diff-reorder-badge-wrap">
+                        ${badgeHtml}
+                    </div>
+                </div>
+            `;
+        })
+        .join('');
+
+    return `
+        <div class="kaiz-diff-reorder-container">
+            <div class="kaiz-diff-reorder-summary-bar">
+                <span class="kaiz-diff-reorder-summary-tag moved"><i class="fa-solid fa-arrows-up-down"></i> ${movedCount} blocks đổi vị trí</span>
+                ${addedCount > 0 ? `<span class="kaiz-diff-reorder-summary-tag added"><i class="fa-solid fa-plus"></i> ${addedCount} thêm mới</span>` : ''}
+                ${removedCount > 0 ? `<span class="kaiz-diff-reorder-summary-tag removed"><i class="fa-solid fa-minus"></i> ${removedCount} gỡ bỏ</span>` : ''}
+                <span class="kaiz-diff-reorder-hint"><i class="fa-solid fa-circle-info"></i> Rê chuột để đối chiếu block tương ứng</span>
+            </div>
+            <div class="kaiz-diff-reorder-grid">
+                <div class="kaiz-diff-reorder-col old-col">
+                    <div class="kaiz-diff-reorder-col-header">
+                        <div class="kaiz-diff-reorder-col-title">
+                            <i class="fa-solid fa-clock-rotate-left" style="color: #f87171"></i>
+                            <span>Thứ tự ban đầu</span>
+                        </div>
+                        <span class="kaiz-diff-reorder-col-count">${oldBlocks.length} blocks</span>
+                    </div>
+                    <div class="kaiz-diff-reorder-list">
+                        ${oldCardsHtml || '<div class="kaiz-diff-reorder-empty">(Trống)</div>'}
+                    </div>
+                </div>
+                <div class="kaiz-diff-reorder-col new-col">
+                    <div class="kaiz-diff-reorder-col-header">
+                        <div class="kaiz-diff-reorder-col-title">
+                            <i class="fa-solid fa-arrow-down-1-9" style="color: #34d399"></i>
+                            <span>Thứ tự mới</span>
+                        </div>
+                        <span class="kaiz-diff-reorder-col-count">${newBlocks.length} blocks</span>
+                    </div>
+                    <div class="kaiz-diff-reorder-list">
+                        ${newCardsHtml || '<div class="kaiz-diff-reorder-empty">(Trống)</div>'}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
 }
