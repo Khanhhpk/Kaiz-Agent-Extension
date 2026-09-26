@@ -20,7 +20,7 @@ export const managePresetPromptTool: ITool = {
             '  - "reorder": Sắp xếp lại thứ tự toàn bộ mảng ID Linked blocks (data: { order: string[] }).\n' +
             '  - "duplicate": Nhân bản 1 block kèm 100% nội dung và meta (yêu cầu identifier, data: { newName? }).\n' +
             '  - "delete": Đánh dấu xóa 1 block (yêu cầu identifier).\n' +
-            '  - "batch_update": Cập nhật đồng thời nhiều block cùng lúc (data: { updates: [...] }).\n' +
+            '  - "batch_update": Cập nhật đồng thời nhiều block cùng lúc (data: { updates: Array<{ identifier: string, action?: "toggle"|"edit_meta"|"edit_content"|"replace_text"|"delete"|"set_linked", data?: object, enabled?: boolean, content?: string, ... }> }). Hỗ trợ cả định dạng phẳng lẫn action lồng nhau.\n' +
             '  - "update_var": Sửa giá trị biến macro {{setvar}} (data: { varName, newValue, promptId? }).\n' +
             '  - "rename_var": Đổi tên biến trên toàn bộ preset (data: { oldName, newName }).\n' +
             '  - "validate_syntax": Quét toàn bộ preset phát hiện lỗi ngoặc {{...}}, sai cú pháp macro, injection depth âm.\n\n' +
@@ -360,15 +360,19 @@ export const managePresetPromptTool: ITool = {
                 }
 
                 case 'batch_update': {
-                    if (!Array.isArray(data.updates)) {
-                        return { isError: true, content: 'Action "batch_update" yêu cầu truyền mảng `data.updates`.' };
+                    const updatesList = Array.isArray(data.updates) ? data.updates : Array.isArray(data) ? data : null;
+                    if (!updatesList) {
+                        return {
+                            isError: true,
+                            content: 'Action "batch_update" yêu cầu truyền mảng `data.updates` hoặc `data` dạng mảng.',
+                        };
                     }
-                    const result = manager.stageBatchUpdate(data.updates);
+                    const result = manager.stageBatchUpdate(updatesList);
                     const diff = manager.calculateDiff();
                     return {
                         content: JSON.stringify(
                             {
-                                ok: true,
+                                ok: result.ok,
                                 action: 'batch_update',
                                 message: result.summary,
                                 results: result.results,

@@ -6787,10 +6787,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               'marker',
               'forbid_overrides',
           ];
+          const rawMeta = meta;
           const updates = {};
           for (const k of allowedKeys) {
-              if (meta[k] !== undefined)
-                  updates[k] = meta[k];
+              if (rawMeta[k] !== undefined) {
+                  if (k === 'enabled') {
+                      const raw = rawMeta[k];
+                      updates.enabled =
+                          typeof raw === 'string' ? raw.toLowerCase() === 'true' || raw === '1' : Boolean(raw);
+                  }
+                  else {
+                      updates[k] = rawMeta[k];
+                  }
+              }
           }
           if (!this._stagingMap.has(identifier))
               this._stagingMap.set(identifier, {});
@@ -6804,7 +6813,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const p = this.findPrompt(identifier);
           if (!p)
               throw new Error(`Không tìm thấy prompt block với ID: "${identifier}"`);
-          const newEnabled = enabled !== undefined ? Boolean(enabled) : !p.enabled;
+          let newEnabled;
+          if (enabled !== undefined) {
+              newEnabled =
+                  typeof enabled === 'string' ? enabled.toLowerCase() === 'true' || enabled === '1' : Boolean(enabled);
+          }
+          else {
+              newEnabled = !p.enabled;
+          }
           if (!this._stagingMap.has(identifier))
               this._stagingMap.set(identifier, {});
           this._stagingMap.get(identifier).enabled = newEnabled;
@@ -6904,34 +6920,179 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const results = [];
           let successCount = 0;
           for (const upd of updates) {
-              const { identifier, ...fields } = upd;
-              if (!this.findPrompt(identifier)) {
-                  results.push({ identifier, ok: false, error: 'Không tìm thấy ID' });
+              if (!upd || typeof upd !== 'object') {
+                  results.push({ ok: false, error: 'Phần tử update không hợp lệ (phải là object)' });
                   continue;
               }
-              if (!this._stagingMap.has(identifier))
-                  this._stagingMap.set(identifier, {});
-              const allowed = [
-                  'name',
-                  'content',
-                  'role',
-                  'enabled',
-                  'injection_position',
-                  'injection_depth',
-                  'injection_order',
-                  'system_prompt',
-                  'marker',
-                  'forbid_overrides',
-              ];
-              for (const k of allowed) {
-                  if (fields[k] !== undefined)
-                      this._stagingMap.get(identifier)[k] = fields[k];
+              const rawId = upd.identifier !== undefined ? upd.identifier : upd.id !== undefined ? upd.id : upd.data?.identifier;
+              const subAction = (upd.action || upd.type || '').toLowerCase();
+              const payloadData = typeof upd.data === 'object' && upd.data !== null ? upd.data : {};
+              if (subAction === 'create') {
+                  try {
+                      const res = this.stageCreate({
+                          name: payloadData.name || upd.name,
+                          content: payloadData.content || upd.content,
+                          role: payloadData.role || upd.role,
+                          injection_position: payloadData.injection_position || upd.injection_position,
+                          injection_depth: payloadData.injection_depth ?? upd.injection_depth,
+                          injection_order: payloadData.injection_order ?? upd.injection_order,
+                          addToLinked: payloadData.addToLinked ?? upd.addToLinked,
+                          position: payloadData.position ?? upd.position,
+                      });
+                      results.push({ identifier: res.identifier, ok: true, action: 'create' });
+                      successCount++;
+                  }
+                  catch (err) {
+                      results.push({ ok: false, action: 'create', error: err.message });
+                  }
+                  continue;
               }
-              results.push({ identifier, ok: true });
-              successCount++;
+              if (!rawId) {
+                  results.push({ ok: false, error: 'Thiếu identifier của prompt block' });
+                  continue;
+              }
+              let p = this.findPrompt(String(rawId));
+              if (!p) {
+                  // Fallback: Tìm theo tên block (không phân biệt hoa thường)
+                  const needle = String(rawId).trim().toLowerCase();
+                  p = this.getPrompts().find((item) => item.name && item.name.trim().toLowerCase() === needle) || null;
+              }
+              if (!p) {
+                  results.push({
+                      identifier: rawId,
+                      ok: false,
+                      error: `Không tìm thấy block với ID hoặc tên: "${rawId}"`,
+                  });
+                  continue;
+              }
+              const resolvedId = p.identifier;
+              try {
+                  if (subAction === 'delete') {
+                      this.stageDelete(resolvedId);
+                      results.push({ identifier: resolvedId, ok: true, action: 'delete' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'toggle') {
+                      const rawEnabled = payloadData.enabled !== undefined ? payloadData.enabled : upd.enabled;
+                      let targetEnabled = undefined;
+                      if (rawEnabled !== undefined) {
+                          targetEnabled =
+                              typeof rawEnabled === 'string'
+                                  ? rawEnabled.toLowerCase() === 'true' || rawEnabled === '1'
+                                  : Boolean(rawEnabled);
+                      }
+                      const res = this.stageToggle(resolvedId, targetEnabled);
+                      results.push({ identifier: resolvedId, ok: true, action: 'toggle', enabled: res.enabled });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'edit_content') {
+                      const content = payloadData.content !== undefined
+                          ? String(payloadData.content)
+                          : upd.content !== undefined
+                              ? String(upd.content)
+                              : '';
+                      this.stageUpdateContent(resolvedId, content);
+                      results.push({ identifier: resolvedId, ok: true, action: 'edit_content' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'replace_text') {
+                      const target = payloadData.target_string || upd.target_string;
+                      const replacement = payloadData.replacement_string ?? upd.replacement_string ?? '';
+                      if (!target)
+                          throw new Error('Thiếu target_string');
+                      this.stageReplaceText(resolvedId, target, replacement);
+                      results.push({ identifier: resolvedId, ok: true, action: 'replace_text' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'append_content') {
+                      const appendText = payloadData.append_text || upd.append_text || '';
+                      this.stageAppendContent(resolvedId, appendText);
+                      results.push({ identifier: resolvedId, ok: true, action: 'append_content' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'set_linked') {
+                      const linked = payloadData.linked !== undefined ? Boolean(payloadData.linked) : Boolean(upd.linked);
+                      const position = typeof payloadData.position === 'number' ? payloadData.position : upd.position;
+                      this.stageSetLinked(resolvedId, linked, position);
+                      results.push({ identifier: resolvedId, ok: true, action: 'set_linked' });
+                      successCount++;
+                      continue;
+                  }
+                  if (subAction === 'duplicate') {
+                      const newName = payloadData.newName || upd.newName;
+                      const res = this.stageDuplicate(resolvedId, newName);
+                      results.push({
+                          identifier: resolvedId,
+                          duplicated_id: res.identifier,
+                          ok: true,
+                          action: 'duplicate',
+                      });
+                      successCount++;
+                      continue;
+                  }
+                  // Nhóm trực tiếp hoặc subAction là 'edit_meta' / 'update':
+                  const mergedFields = { ...upd, ...payloadData };
+                  delete mergedFields.action;
+                  delete mergedFields.type;
+                  delete mergedFields.data;
+                  delete mergedFields.identifier;
+                  delete mergedFields.id;
+                  const allowed = [
+                      'name',
+                      'content',
+                      'role',
+                      'enabled',
+                      'injection_position',
+                      'injection_depth',
+                      'injection_order',
+                      'system_prompt',
+                      'marker',
+                      'forbid_overrides',
+                  ];
+                  let hasAppliedAny = false;
+                  if (!this._stagingMap.has(resolvedId))
+                      this._stagingMap.set(resolvedId, {});
+                  const targetStaging = this._stagingMap.get(resolvedId);
+                  for (const k of allowed) {
+                      if (mergedFields[k] !== undefined) {
+                          if (k === 'enabled') {
+                              const raw = mergedFields[k];
+                              targetStaging.enabled =
+                                  typeof raw === 'string' ? raw.toLowerCase() === 'true' || raw === '1' : Boolean(raw);
+                          }
+                          else {
+                              targetStaging[k] = mergedFields[k];
+                          }
+                          hasAppliedAny = true;
+                      }
+                  }
+                  if (hasAppliedAny) {
+                      const updatedKeys = Object.keys(mergedFields).filter((k) => allowed.includes(k));
+                      results.push({ identifier: resolvedId, ok: true, updated_fields: updatedKeys });
+                      successCount++;
+                  }
+                  else {
+                      if (Object.keys(targetStaging).length === 0) {
+                          this._stagingMap.delete(resolvedId);
+                      }
+                      results.push({
+                          identifier: resolvedId,
+                          ok: false,
+                          error: 'Không tìm thấy trường dữ liệu hợp lệ nào để cập nhật',
+                      });
+                  }
+              }
+              catch (err) {
+                  results.push({ identifier: resolvedId, ok: false, error: err.message });
+              }
           }
           return {
-              ok: true,
+              ok: successCount > 0,
               summary: `[Staged] Đã cập nhật thành công ${successCount}/${updates.length} blocks trong batch.`,
               results,
           };
@@ -7903,7 +8064,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               '  - "reorder": Sắp xếp lại thứ tự toàn bộ mảng ID Linked blocks (data: { order: string[] }).\n' +
               '  - "duplicate": Nhân bản 1 block kèm 100% nội dung và meta (yêu cầu identifier, data: { newName? }).\n' +
               '  - "delete": Đánh dấu xóa 1 block (yêu cầu identifier).\n' +
-              '  - "batch_update": Cập nhật đồng thời nhiều block cùng lúc (data: { updates: [...] }).\n' +
+              '  - "batch_update": Cập nhật đồng thời nhiều block cùng lúc (data: { updates: Array<{ identifier: string, action?: "toggle"|"edit_meta"|"edit_content"|"replace_text"|"delete"|"set_linked", data?: object, enabled?: boolean, content?: string, ... }> }). Hỗ trợ cả định dạng phẳng lẫn action lồng nhau.\n' +
               '  - "update_var": Sửa giá trị biến macro {{setvar}} (data: { varName, newValue, promptId? }).\n' +
               '  - "rename_var": Đổi tên biến trên toàn bộ preset (data: { oldName, newName }).\n' +
               '  - "validate_syntax": Quét toàn bộ preset phát hiện lỗi ngoặc {{...}}, sai cú pháp macro, injection depth âm.\n\n' +
@@ -8183,14 +8344,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       };
                   }
                   case 'batch_update': {
-                      if (!Array.isArray(data.updates)) {
-                          return { isError: true, content: 'Action "batch_update" yêu cầu truyền mảng `data.updates`.' };
+                      const updatesList = Array.isArray(data.updates) ? data.updates : Array.isArray(data) ? data : null;
+                      if (!updatesList) {
+                          return {
+                              isError: true,
+                              content: 'Action "batch_update" yêu cầu truyền mảng `data.updates` hoặc `data` dạng mảng.',
+                          };
                       }
-                      const result = manager.stageBatchUpdate(data.updates);
+                      const result = manager.stageBatchUpdate(updatesList);
                       const diff = manager.calculateDiff();
                       return {
                           content: JSON.stringify({
-                              ok: true,
+                              ok: result.ok,
                               action: 'batch_update',
                               message: result.summary,
                               results: result.results,
