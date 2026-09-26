@@ -11,3 +11,6 @@ tools_dump.txt
 
 # Reference repos & external code
 _references/
+
+# Generated source maps (build artifacts)
+*.map
