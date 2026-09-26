@@ -658,30 +658,89 @@ export class PresetGitModal {
                 } else if (item.type === 'reorder') {
                     badgeColor = '#818cf8';
                     typeLabel = 'ĐỔI THỨ TỰ';
+                } else if (item.type === 'varUpdate') {
+                    badgeColor = '#fb923c';
+                    typeLabel = 'CẬP NHẬT VAR';
+                } else if (item.type === 'varRename') {
+                    badgeColor = '#a78bfa';
+                    typeLabel = 'ĐỔI TÊN VAR';
                 }
 
-                const oldStr = formatDiffValue(item.oldValue);
-                const newStr = formatDiffValue(item.newValue);
+                // Build card HTML
+                let contentHtml = '';
+
+                if (item.type === 'update' && item.oldValue && item.newValue) {
+                    // ── Separate metadata changes from content changes ──
+                    const oldBlock = item.oldValue as PromptBlock;
+                    const newBlock = item.newValue as PromptBlock;
+
+                    const oldContent = (oldBlock.content || '').replace(/\r\n/g, '\n');
+                    const newContent = (newBlock.content || '').replace(/\r\n/g, '\n');
+                    const contentChanged = oldContent !== newContent;
+
+                    // Metadata pills
+                    const metaPills: string[] = [];
+                    if ((oldBlock.name || '') !== (newBlock.name || ''))
+                        metaPills.push(`📝 Name: <span class="kaiz-diff-old">${escapeHtml(oldBlock.name || '')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.name || '')}</span>`);
+                    if ((oldBlock.role || 'system') !== (newBlock.role || 'system'))
+                        metaPills.push(`🎭 Role: <span class="kaiz-diff-old">${escapeHtml(oldBlock.role || 'system')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.role || 'system')}</span>`);
+                    if ((oldBlock.enabled !== false) !== (newBlock.enabled !== false))
+                        metaPills.push(`👁 Enabled: <span class="kaiz-diff-old">${oldBlock.enabled !== false}</span> → <span class="kaiz-diff-new">${newBlock.enabled !== false}</span>`);
+                    if ((oldBlock.injection_depth ?? 4) !== (newBlock.injection_depth ?? 4))
+                        metaPills.push(`📏 Depth: <span class="kaiz-diff-old">${oldBlock.injection_depth ?? 4}</span> → <span class="kaiz-diff-new">${newBlock.injection_depth ?? 4}</span>`);
+                    if ((oldBlock.injection_position ?? 0) !== (newBlock.injection_position ?? 0))
+                        metaPills.push(`📍 Position: <span class="kaiz-diff-old">${oldBlock.injection_position ?? 0}</span> → <span class="kaiz-diff-new">${newBlock.injection_position ?? 0}</span>`);
+                    if ((oldBlock.injection_order ?? 100) !== (newBlock.injection_order ?? 100))
+                        metaPills.push(`🔢 Order: <span class="kaiz-diff-old">${oldBlock.injection_order ?? 100}</span> → <span class="kaiz-diff-new">${newBlock.injection_order ?? 100}</span>`);
+                    if (Boolean(oldBlock.system_prompt) !== Boolean(newBlock.system_prompt))
+                        metaPills.push(`⚙ System: <span class="kaiz-diff-old">${Boolean(oldBlock.system_prompt)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.system_prompt)}</span>`);
+                    if (Boolean(oldBlock.forbid_overrides) !== Boolean(newBlock.forbid_overrides))
+                        metaPills.push(`🔒 ForbidOverrides: <span class="kaiz-diff-old">${Boolean(oldBlock.forbid_overrides)}</span> → <span class="kaiz-diff-new">${Boolean(newBlock.forbid_overrides)}</span>`);
+
+                    if (metaPills.length > 0) {
+                        contentHtml += `<div class="kaiz-diff-meta-pills">${metaPills.map((p) => `<span class="kaiz-diff-meta-pill">${p}</span>`).join('')}</div>`;
+                    }
+
+                    if (contentChanged) {
+                        contentHtml += buildUnifiedDiffHtml(oldContent, newContent);
+                    }
+                } else if (item.type === 'create' && item.newValue) {
+                    const newBlock = item.newValue as PromptBlock;
+                    const content = (newBlock.content || '').replace(/\r\n/g, '\n');
+                    if (content) {
+                        contentHtml += buildCreatedContentHtml(content);
+                    }
+                } else if (item.type === 'delete' && item.oldValue) {
+                    const oldBlock = item.oldValue as PromptBlock;
+                    const content = (oldBlock.content || '').replace(/\r\n/g, '\n');
+                    if (content) {
+                        contentHtml += buildDeletedContentHtml(content);
+                    }
+                } else if (item.type === 'reorder') {
+                    // Show reorder as simple info text — no big blocks needed
+                    contentHtml += `<div style="font-size: 11px; opacity: 0.65; font-style: italic; padding: 4px 0">Thứ tự các block đã thay đổi.</div>`;
+                } else {
+                    // varUpdate, varRename, or unknown — simple old→new
+                    const oldStr = item.oldValue !== undefined && item.oldValue !== null ? String(item.oldValue) : '';
+                    const newStr = item.newValue !== undefined && item.newValue !== null ? String(item.newValue) : '';
+                    if (oldStr || newStr) {
+                        contentHtml += `<div class="kaiz-diff-simple">`;
+                        if (oldStr) contentHtml += `<div class="kaiz-diff-simple-old">- ${escapeHtml(oldStr)}</div>`;
+                        if (newStr) contentHtml += `<div class="kaiz-diff-simple-new">+ ${escapeHtml(newStr)}</div>`;
+                        contentHtml += `</div>`;
+                    }
+                }
 
                 body.append(`
-                    <div style="background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px">
-                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px">
-                            <span style="background: ${badgeColor}18; color: ${badgeColor}; border: 1px solid ${badgeColor}35; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 10.5px">
+                    <div class="kaiz-diff-item">
+                        <div class="kaiz-diff-item-header">
+                            <span class="kaiz-diff-badge" style="background: ${badgeColor}18; color: ${badgeColor}; border-color: ${badgeColor}35">
                                 #${index + 1} ${typeLabel}
                             </span>
-                            <span style="font-size: 11px; opacity: 0.6; font-family: monospace">[${escapeHtml(item.identifier || item.name || '')}]</span>
+                            <span class="kaiz-diff-identifier">[${escapeHtml(item.identifier || item.name || '')}]</span>
                         </div>
-                        <div style="font-size: 12px; color: #f1f5f9; margin-bottom: 6px; font-weight: 500">${escapeHtml(item.summary || '')}</div>
-                        ${
-                            oldStr || newStr
-                                ? `
-                            <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-family: monospace">
-                                ${oldStr ? `<div style="background: rgba(239, 68, 68, 0.12); color: #fca5a5; border-left: 3px solid #ef4444; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap; max-height: 120px; overflow-y: auto">- ${escapeHtml(oldStr.substring(0, 400))}</div>` : ''}
-                                ${newStr ? `<div style="background: rgba(52, 211, 153, 0.12); color: #86efac; border-left: 3px solid #10b981; padding: 4px 8px; border-radius: 4px; white-space: pre-wrap; max-height: 120px; overflow-y: auto">+ ${escapeHtml(newStr.substring(0, 400))}</div>` : ''}
-                            </div>
-                        `
-                                : ''
-                        }
+                        <div class="kaiz-diff-summary">${escapeHtml(item.summary || '')}</div>
+                        ${contentHtml}
                     </div>
                 `);
             });
@@ -712,16 +771,156 @@ function formatRelativeTime(timestamp: number): string {
     });
 }
 
-function formatDiffValue(val: any): string {
-    if (val === undefined || val === null) return '';
-    if (typeof val === 'string') return val;
-    if (typeof val === 'object') {
-        if (val.content !== undefined) {
-            const meta = `[${val.name || 'Block'}] (${val.role || 'system'}, depth: ${val.injection_depth ?? 'default'})`;
-            const content = val.content ? `\n${val.content}` : '';
-            return `${meta}${content}`;
+// ─── Unified Line Diff Engine ────────────────────────────────────────────────
+
+/** Compute LCS table for two string arrays. */
+function lcsTable(a: string[], b: string[]): number[][] {
+    const m = a.length;
+    const n = b.length;
+    // Use two-row rolling array to save memory
+    let prev = new Array(n + 1).fill(0);
+    let curr = new Array(n + 1).fill(0);
+    const table: number[][] = new Array(m + 1);
+    table[0] = prev.slice();
+    for (let i = 1; i <= m; i++) {
+        curr = new Array(n + 1).fill(0);
+        for (let j = 1; j <= n; j++) {
+            if (a[i - 1] === b[j - 1]) {
+                curr[j] = prev[j - 1] + 1;
+            } else {
+                curr[j] = Math.max(prev[j], curr[j - 1]);
+            }
         }
-        return JSON.stringify(val, null, 2);
+        prev = curr.slice();
+        table[i] = prev.slice();
     }
-    return String(val);
+    return table;
+}
+
+type DiffLine = { type: 'context' | 'add' | 'del'; text: string; lineOld?: number; lineNew?: number };
+
+/** Generate a unified list of diff lines via LCS backtrack. */
+function generateLineDiff(oldLines: string[], newLines: string[]): DiffLine[] {
+    const table = lcsTable(oldLines, newLines);
+    const result: DiffLine[] = [];
+
+    function backtrack(i: number, j: number): void {
+        if (i === 0 && j === 0) return;
+        if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
+            backtrack(i - 1, j - 1);
+            result.push({ type: 'context', text: oldLines[i - 1], lineOld: i, lineNew: j });
+        } else if (j > 0 && (i === 0 || table[i][j - 1] >= table[i - 1][j])) {
+            backtrack(i, j - 1);
+            result.push({ type: 'add', text: newLines[j - 1], lineNew: j });
+        } else {
+            backtrack(i - 1, j);
+            result.push({ type: 'del', text: oldLines[i - 1], lineOld: i });
+        }
+    }
+
+    backtrack(oldLines.length, newLines.length);
+    return result;
+}
+
+const DIFF_CONTEXT_SIZE = 2; // lines of context around each change
+
+/** Build escaped HTML for the unified diff viewer. */
+function buildUnifiedDiffHtml(oldText: string, newText: string): string {
+    const oldLines = oldText.split('\n');
+    const newLines = newText.split('\n');
+
+    // Guard: if either side is very large (>2000 lines total), cap at first 500 of each
+    const cappedOld = oldLines.length > 1000 ? oldLines.slice(0, 500) : oldLines;
+    const cappedNew = newLines.length > 1000 ? newLines.slice(0, 500) : newLines;
+    const wasCapped = cappedOld.length < oldLines.length || cappedNew.length < newLines.length;
+
+    const diffLines = generateLineDiff(cappedOld, cappedNew);
+    if (diffLines.length === 0) return '';
+
+    // Mark which indices are near a change
+    const visible = new Set<number>();
+    diffLines.forEach((dl, idx) => {
+        if (dl.type !== 'context') {
+            for (let k = Math.max(0, idx - DIFF_CONTEXT_SIZE); k <= Math.min(diffLines.length - 1, idx + DIFF_CONTEXT_SIZE); k++) {
+                visible.add(k);
+            }
+        }
+    });
+
+    let html = '<div class="kaiz-diff-unified">';
+    if (wasCapped) {
+        html += '<div class="kaiz-diff-cap-warning">⚠ Nội dung quá dài — chỉ hiển thị 500 dòng đầu mỗi phía.</div>';
+    }
+    let i = 0;
+    while (i < diffLines.length) {
+        if (visible.has(i)) {
+            const dl = diffLines[i];
+            const lineNumOld = dl.lineOld !== undefined ? String(dl.lineOld).padStart(3, ' ') : '   ';
+            const lineNumNew = dl.lineNew !== undefined ? String(dl.lineNew).padStart(3, ' ') : '   ';
+            const lineNums = `<span class="kaiz-diff-ln">${escapeHtml(lineNumOld)} ${escapeHtml(lineNumNew)}</span>`;
+            if (dl.type === 'del') {
+                html += `<div class="kaiz-diff-line kaiz-diff-del">${lineNums}<span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+            } else if (dl.type === 'add') {
+                html += `<div class="kaiz-diff-line kaiz-diff-add">${lineNums}<span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+            } else {
+                html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+            }
+            i++;
+        } else {
+            // Count consecutive hidden lines
+            let j = i;
+            while (j < diffLines.length && !visible.has(j)) j++;
+            const skipped = j - i;
+            if (skipped >= 3) {
+                html += `<div class="kaiz-diff-fold">⸺ ${skipped} dòng không đổi ⸺</div>`;
+                i = j;
+            } else {
+                // Show them as context (small gap)
+                while (i < j) {
+                    const dl = diffLines[i];
+                    const lineNumOld = dl.lineOld !== undefined ? String(dl.lineOld).padStart(3, ' ') : '   ';
+                    const lineNumNew = dl.lineNew !== undefined ? String(dl.lineNew).padStart(3, ' ') : '   ';
+                    const lineNums = `<span class="kaiz-diff-ln">${escapeHtml(lineNumOld)} ${escapeHtml(lineNumNew)}</span>`;
+                    html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+                    i++;
+                }
+            }
+        }
+    }
+    html += '</div>';
+    return html;
+}
+
+/** Build HTML for a newly created block's content (all-green). */
+function buildCreatedContentHtml(content: string): string {
+    const lines = content.split('\n');
+    const MAX_LINES = 40;
+    const shown = lines.slice(0, MAX_LINES);
+    const rest = lines.length - MAX_LINES;
+    let html = '<div class="kaiz-diff-unified">';
+    shown.forEach((line, i) => {
+        html += `<div class="kaiz-diff-line kaiz-diff-add"><span class="kaiz-diff-ln">   ${String(i + 1).padStart(3, ' ')}</span><span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
+    });
+    if (rest > 0) {
+        html += `<div class="kaiz-diff-fold">⸺ ... ${rest} dòng nữa ⸺</div>`;
+    }
+    html += '</div>';
+    return html;
+}
+
+/** Build HTML for a deleted block's content (all-red). */
+function buildDeletedContentHtml(content: string): string {
+    const lines = content.split('\n');
+    const MAX_LINES = 40;
+    const shown = lines.slice(0, MAX_LINES);
+    const rest = lines.length - MAX_LINES;
+    let html = '<div class="kaiz-diff-unified">';
+    shown.forEach((line, i) => {
+        html += `<div class="kaiz-diff-line kaiz-diff-del"><span class="kaiz-diff-ln">${String(i + 1).padStart(3, ' ')}   </span><span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
+    });
+    if (rest > 0) {
+        html += `<div class="kaiz-diff-fold">⸺ ... ${rest} dòng nữa ⸺</div>`;
+    }
+    html += '</div>';
+    return html;
 }
