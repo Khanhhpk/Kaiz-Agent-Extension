@@ -457,7 +457,10 @@ export class PresetGitModal {
                 : '';
 
             const promptCount = commit.tree?.prompts?.length || 0;
-            const diffSummary = commit.diffSummary || (commit as any).diff?.summary || `${promptCount} blocks`;
+            let diffSummary = commit.diffSummary || (commit as any).diff?.summary || `${promptCount} blocks`;
+            if (diffSummary.includes('thay đổi chưa lưu')) {
+                diffSummary = diffSummary.replace(/Preset có \d+ thay đổi chưa lưu:\s*/i, '');
+            }
 
             // Node dot
             let dotHtml: string;

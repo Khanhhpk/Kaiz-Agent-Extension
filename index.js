@@ -7340,10 +7340,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   // Check updates
                   const lBlock = liveMap.get(id);
                   const changes = [];
-                  if (sBlock.name !== lBlock.name)
+                  if ((sBlock.name || '') !== (lBlock.name || ''))
                       changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
-                  if ((sBlock.content || '') !== (lBlock.content || '')) {
-                      changes.push(`content (${(lBlock.content || '').length} -> ${(sBlock.content || '').length} chars)`);
+                  const sContentNorm = (sBlock.content || '').replace(/\r\n/g, '\n');
+                  const lContentNorm = (lBlock.content || '').replace(/\r\n/g, '\n');
+                  if (sContentNorm !== lContentNorm) {
+                      changes.push(`content (${lContentNorm.length} -> ${sContentNorm.length} chars)`);
                   }
                   if ((sBlock.role || 'system') !== (lBlock.role || 'system'))
                       changes.push(`role: ${lBlock.role || 'system'} -> ${sBlock.role || 'system'}`);
@@ -7351,22 +7353,28 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   const lEnabled = lBlock.enabled !== false;
                   if (sEnabled !== lEnabled)
                       changes.push(`enabled: ${lEnabled} -> ${sEnabled}`);
-                  if (sBlock.injection_position !== lBlock.injection_position)
-                      changes.push(`position: ${lBlock.injection_position} -> ${sBlock.injection_position}`);
-                  if (sBlock.injection_depth !== lBlock.injection_depth)
-                      changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
-                  if (sBlock.injection_order !== lBlock.injection_order)
-                      changes.push(`order: ${lBlock.injection_order} -> ${sBlock.injection_order}`);
-                  const sSys = sBlock.system_prompt === true;
-                  const lSys = lBlock.system_prompt === true;
+                  const sInjPos = sBlock.injection_position ?? 0;
+                  const lInjPos = lBlock.injection_position ?? 0;
+                  if (sInjPos !== lInjPos)
+                      changes.push(`position: ${lInjPos} -> ${sInjPos}`);
+                  const sInjDepth = sBlock.injection_depth ?? 4;
+                  const lInjDepth = lBlock.injection_depth ?? 4;
+                  if (sInjDepth !== lInjDepth)
+                      changes.push(`depth: ${lInjDepth} -> ${sInjDepth}`);
+                  const sInjOrder = sBlock.injection_order ?? 100;
+                  const lInjOrder = lBlock.injection_order ?? 100;
+                  if (sInjOrder !== lInjOrder)
+                      changes.push(`order: ${lInjOrder} -> ${sInjOrder}`);
+                  const sSys = Boolean(sBlock.system_prompt);
+                  const lSys = Boolean(lBlock.system_prompt);
                   if (sSys !== lSys)
                       changes.push(`system_prompt: ${lSys} -> ${sSys}`);
-                  const sMarker = sBlock.marker === true;
-                  const lMarker = lBlock.marker === true;
+                  const sMarker = Boolean(sBlock.marker);
+                  const lMarker = Boolean(lBlock.marker);
                   if (sMarker !== lMarker)
                       changes.push(`marker: ${lMarker} -> ${sMarker}`);
-                  const sForbid = sBlock.forbid_overrides === true;
-                  const lForbid = lBlock.forbid_overrides === true;
+                  const sForbid = Boolean(sBlock.forbid_overrides);
+                  const lForbid = Boolean(lBlock.forbid_overrides);
                   if (sForbid !== lForbid)
                       changes.push(`forbid_overrides: ${lForbid} -> ${sForbid}`);
                   if (changes.length > 0) {
@@ -7519,7 +7527,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   deleted: 0,
                   totalBlocks: livePrompts.length,
               },
-              diffSummary: `Initial snapshot with ${livePrompts.length} prompt blocks`,
+              diffSummary: `Snapshot ban đầu (${livePrompts.length} blocks)`,
           };
           await this.db.addPresetCommit(rootCommit);
           this._activeHeads.set(presetName, hash);
@@ -7548,6 +7556,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const timestamp = Date.now();
           const hashSeed = `${parentHash}:${timestamp}:${message}:${JSON.stringify(finalOrder)}`;
           const commitHash = await this.generateCommitHash(hashSeed);
+          const changeParts = [
+              diff.added > 0 ? `+${diff.added} mới` : null,
+              diff.modified > 0 ? `~${diff.modified} sửa` : null,
+              diff.deleted > 0 ? `-${diff.deleted} xóa` : null,
+          ].filter(Boolean);
+          const commitDiffSummary = diff.totalChanges > 0
+              ? `${diff.totalChanges} thay đổi (${changeParts.join(', ') || 'thứ tự'})`
+              : 'Không có thay đổi';
           const newCommit = {
               hash: commitHash,
               parentHash,
@@ -7566,7 +7582,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   deleted: diff.deleted,
                   totalBlocks: finalPrompts.length,
               },
-              diffSummary: diff.summary,
+              diffSummary: commitDiffSummary,
               diffItems: diff.items,
           };
           // 1. Save commit to IndexedDB
@@ -7585,7 +7601,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return {
               ok: true,
               hash: commitHash,
-              summary: `✅ Commit thành công [${commitHash}]: "${message}" (${diff.summary})`,
+              summary: `✅ Commit thành công [${commitHash}]: "${message}" (${commitDiffSummary})`,
           };
       }
       async getLog(limit = 20) {
@@ -15625,7 +15641,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   ? `<span style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 600"><i class="fa-solid fa-check"></i> Đang dùng</span>`
                   : '';
               const promptCount = commit.tree?.prompts?.length || 0;
-              const diffSummary = commit.diffSummary || commit.diff?.summary || `${promptCount} blocks`;
+              let diffSummary = commit.diffSummary || commit.diff?.summary || `${promptCount} blocks`;
+              if (diffSummary.includes('thay đổi chưa lưu')) {
+                  diffSummary = diffSummary.replace(/Preset có \d+ thay đổi chưa lưu:\s*/i, '');
+              }
               // Node dot
               let dotHtml;
               if (isHead) {

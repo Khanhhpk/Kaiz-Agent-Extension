@@ -1012,11 +1012,13 @@ export class PresetGitManager {
                 // Check updates
                 const lBlock = liveMap.get(id)!;
                 const changes: string[] = [];
-                if (sBlock.name !== lBlock.name) changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
-                if ((sBlock.content || '') !== (lBlock.content || '')) {
-                    changes.push(
-                        `content (${(lBlock.content || '').length} -> ${(sBlock.content || '').length} chars)`,
-                    );
+                if ((sBlock.name || '') !== (lBlock.name || ''))
+                    changes.push(`name: "${lBlock.name}" -> "${sBlock.name}"`);
+
+                const sContentNorm = (sBlock.content || '').replace(/\r\n/g, '\n');
+                const lContentNorm = (lBlock.content || '').replace(/\r\n/g, '\n');
+                if (sContentNorm !== lContentNorm) {
+                    changes.push(`content (${lContentNorm.length} -> ${sContentNorm.length} chars)`);
                 }
                 if ((sBlock.role || 'system') !== (lBlock.role || 'system'))
                     changes.push(`role: ${lBlock.role || 'system'} -> ${sBlock.role || 'system'}`);
@@ -1025,23 +1027,28 @@ export class PresetGitManager {
                 const lEnabled = lBlock.enabled !== false;
                 if (sEnabled !== lEnabled) changes.push(`enabled: ${lEnabled} -> ${sEnabled}`);
 
-                if (sBlock.injection_position !== lBlock.injection_position)
-                    changes.push(`position: ${lBlock.injection_position} -> ${sBlock.injection_position}`);
-                if (sBlock.injection_depth !== lBlock.injection_depth)
-                    changes.push(`depth: ${lBlock.injection_depth} -> ${sBlock.injection_depth}`);
-                if (sBlock.injection_order !== lBlock.injection_order)
-                    changes.push(`order: ${lBlock.injection_order} -> ${sBlock.injection_order}`);
+                const sInjPos = sBlock.injection_position ?? 0;
+                const lInjPos = lBlock.injection_position ?? 0;
+                if (sInjPos !== lInjPos) changes.push(`position: ${lInjPos} -> ${sInjPos}`);
 
-                const sSys = sBlock.system_prompt === true;
-                const lSys = lBlock.system_prompt === true;
+                const sInjDepth = sBlock.injection_depth ?? 4;
+                const lInjDepth = lBlock.injection_depth ?? 4;
+                if (sInjDepth !== lInjDepth) changes.push(`depth: ${lInjDepth} -> ${sInjDepth}`);
+
+                const sInjOrder = sBlock.injection_order ?? 100;
+                const lInjOrder = lBlock.injection_order ?? 100;
+                if (sInjOrder !== lInjOrder) changes.push(`order: ${lInjOrder} -> ${sInjOrder}`);
+
+                const sSys = Boolean(sBlock.system_prompt);
+                const lSys = Boolean(lBlock.system_prompt);
                 if (sSys !== lSys) changes.push(`system_prompt: ${lSys} -> ${sSys}`);
 
-                const sMarker = sBlock.marker === true;
-                const lMarker = lBlock.marker === true;
+                const sMarker = Boolean(sBlock.marker);
+                const lMarker = Boolean(lBlock.marker);
                 if (sMarker !== lMarker) changes.push(`marker: ${lMarker} -> ${sMarker}`);
 
-                const sForbid = sBlock.forbid_overrides === true;
-                const lForbid = lBlock.forbid_overrides === true;
+                const sForbid = Boolean(sBlock.forbid_overrides);
+                const lForbid = Boolean(lBlock.forbid_overrides);
                 if (sForbid !== lForbid) changes.push(`forbid_overrides: ${lForbid} -> ${sForbid}`);
 
                 if (changes.length > 0) {
@@ -1207,7 +1214,7 @@ export class PresetGitManager {
                 deleted: 0,
                 totalBlocks: livePrompts.length,
             },
-            diffSummary: `Initial snapshot with ${livePrompts.length} prompt blocks`,
+            diffSummary: `Snapshot ban đầu (${livePrompts.length} blocks)`,
         };
 
         await this.db.addPresetCommit(rootCommit);
@@ -1245,6 +1252,17 @@ export class PresetGitManager {
         const hashSeed = `${parentHash}:${timestamp}:${message}:${JSON.stringify(finalOrder)}`;
         const commitHash = await this.generateCommitHash(hashSeed);
 
+        const changeParts = [
+            diff.added > 0 ? `+${diff.added} mới` : null,
+            diff.modified > 0 ? `~${diff.modified} sửa` : null,
+            diff.deleted > 0 ? `-${diff.deleted} xóa` : null,
+        ].filter(Boolean);
+
+        const commitDiffSummary =
+            diff.totalChanges > 0
+                ? `${diff.totalChanges} thay đổi (${changeParts.join(', ') || 'thứ tự'})`
+                : 'Không có thay đổi';
+
         const newCommit: PresetCommitEntry = {
             hash: commitHash,
             parentHash,
@@ -1263,7 +1281,7 @@ export class PresetGitManager {
                 deleted: diff.deleted,
                 totalBlocks: finalPrompts.length,
             },
-            diffSummary: diff.summary,
+            diffSummary: commitDiffSummary,
             diffItems: diff.items,
         };
 
@@ -1285,7 +1303,7 @@ export class PresetGitManager {
         return {
             ok: true,
             hash: commitHash,
-            summary: `✅ Commit thành công [${commitHash}]: "${message}" (${diff.summary})`,
+            summary: `✅ Commit thành công [${commitHash}]: "${message}" (${commitDiffSummary})`,
         };
     }
 
