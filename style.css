@@ -2795,8 +2795,6 @@
     overflow: hidden;
     font-family: 'Fira Mono', 'Consolas', 'Monaco', monospace;
     font-size: 11px;
-    max-height: 360px;
-    overflow-y: auto;
 }
 
 .kaiz-diff-cap-warning {

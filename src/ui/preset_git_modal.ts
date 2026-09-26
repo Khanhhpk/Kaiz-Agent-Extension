@@ -630,7 +630,7 @@ export class PresetGitModal {
                                 (p, i) => `
                             <div style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px">
                                 <div style="color: #34d399; font-weight: 500; font-size: 12px">#${i + 1} [${p.identifier}] ${escapeHtml(p.name)} <span style="opacity: 0.6; font-size: 11px">(${p.role || 'system'})</span></div>
-                                <div style="color: #cbd5e1; font-size: 11px; white-space: pre-wrap; max-height: 90px; overflow-y: auto; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px">${escapeHtml((p.content || '').substring(0, 300))}</div>
+                                <div style="color: #cbd5e1; font-size: 11px; white-space: pre-wrap; overflow-y: auto; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px">${escapeHtml(p.content || '')}</div>
                             </div>
                         `,
                             )
@@ -959,16 +959,10 @@ function buildUnifiedDiffHtml(oldText: string, newText: string): string {
 /** Build HTML for a newly created block's content (all-green). */
 function buildCreatedContentHtml(content: string): string {
     const lines = content.split('\n');
-    const MAX_LINES = 40;
-    const shown = lines.slice(0, MAX_LINES);
-    const rest = lines.length - MAX_LINES;
     let html = '<div class="kaiz-diff-unified">';
-    shown.forEach((line, i) => {
+    lines.forEach((line, i) => {
         html += `<div class="kaiz-diff-line kaiz-diff-add"><span class="kaiz-diff-ln">   ${String(i + 1).padStart(3, ' ')}</span><span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
     });
-    if (rest > 0) {
-        html += `<div class="kaiz-diff-fold">⸺ ... ${rest} dòng nữa ⸺</div>`;
-    }
     html += '</div>';
     return html;
 }
@@ -976,16 +970,10 @@ function buildCreatedContentHtml(content: string): string {
 /** Build HTML for a deleted block's content (all-red). */
 function buildDeletedContentHtml(content: string): string {
     const lines = content.split('\n');
-    const MAX_LINES = 40;
-    const shown = lines.slice(0, MAX_LINES);
-    const rest = lines.length - MAX_LINES;
     let html = '<div class="kaiz-diff-unified">';
-    shown.forEach((line, i) => {
+    lines.forEach((line, i) => {
         html += `<div class="kaiz-diff-line kaiz-diff-del"><span class="kaiz-diff-ln">${String(i + 1).padStart(3, ' ')}   </span><span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
     });
-    if (rest > 0) {
-        html += `<div class="kaiz-diff-fold">⸺ ... ${rest} dòng nữa ⸺</div>`;
-    }
     html += '</div>';
     return html;
 }
