@@ -93,6 +93,12 @@ export class SettingsUI {
         $('#kaiz-core-behavior').val(settings.coreBehavior || DEFAULT_CORE_BEHAVIOR);
         $('#kaiz-core-prefill').val(settings.corePrefill || DEFAULT_CORE_PREFILL);
         $('#kaiz-core-cot-prompt').val(settings.coreCotPrompt || DEFAULT_CORE_COT_PROMPT);
+        $('#kaiz-prefill-as-system').prop('checked', !!settings.prefillAsSystem);
+
+        $('#kaiz-prefill-as-system').on('change', function (this: HTMLInputElement) {
+            settings.prefillAsSystem = this.checked;
+            ctx.saveSettingsDebounced();
+        });
 
         $('#kaiz-core-identity, #kaiz-core-behavior, #kaiz-core-prefill, #kaiz-core-cot-prompt').on(
             'input',
@@ -112,10 +118,12 @@ export class SettingsUI {
                 $('#kaiz-core-behavior').val(DEFAULT_CORE_BEHAVIOR);
                 $('#kaiz-core-prefill').val(DEFAULT_CORE_PREFILL);
                 $('#kaiz-core-cot-prompt').val(DEFAULT_CORE_COT_PROMPT);
+                $('#kaiz-prefill-as-system').prop('checked', false);
                 settings.coreIdentity = DEFAULT_CORE_IDENTITY;
                 settings.coreBehavior = DEFAULT_CORE_BEHAVIOR;
                 settings.corePrefill = DEFAULT_CORE_PREFILL;
                 settings.coreCotPrompt = DEFAULT_CORE_COT_PROMPT;
+                settings.prefillAsSystem = false;
                 ctx.saveSettingsDebounced();
                 toastr.success('Đã khôi phục Core Prompts');
             }

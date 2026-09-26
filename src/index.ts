@@ -89,8 +89,12 @@ jQuery(async () => {
             viewContextDepth: 5,
             viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
             cotDisplayMode: 'collapse_streaming',
+            prefillAsSystem: false,
         };
     } else {
+        if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
+            ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
+        }
         if (ctx.extensionSettings[EXT_NAME].cotDisplayMode === undefined) {
             ctx.extensionSettings[EXT_NAME].cotDisplayMode = 'collapse_streaming';
         }

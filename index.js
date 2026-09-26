@@ -417,7 +417,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
           }
           if (!(continueMode && step === 1)) {
               const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
-              msgs.push({ role: 'assistant', content: prefill });
+              const prefillRole = settings.prefillAsSystem ? 'system' : 'assistant';
+              msgs.push({ role: prefillRole, content: prefill });
           }
           else {
               let isCutOffInsideCot = false;
@@ -10742,6 +10743,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           $('#kaiz-core-behavior').val(settings.coreBehavior || DEFAULT_CORE_BEHAVIOR);
           $('#kaiz-core-prefill').val(settings.corePrefill || DEFAULT_CORE_PREFILL);
           $('#kaiz-core-cot-prompt').val(settings.coreCotPrompt || DEFAULT_CORE_COT_PROMPT);
+          $('#kaiz-prefill-as-system').prop('checked', !!settings.prefillAsSystem);
+          $('#kaiz-prefill-as-system').on('change', function () {
+              settings.prefillAsSystem = this.checked;
+              ctx.saveSettingsDebounced();
+          });
           $('#kaiz-core-identity, #kaiz-core-behavior, #kaiz-core-prefill, #kaiz-core-cot-prompt').on('input', function () {
               const id = this.id;
               if (id === 'kaiz-core-identity')
@@ -10760,10 +10766,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   $('#kaiz-core-behavior').val(DEFAULT_CORE_BEHAVIOR);
                   $('#kaiz-core-prefill').val(DEFAULT_CORE_PREFILL);
                   $('#kaiz-core-cot-prompt').val(DEFAULT_CORE_COT_PROMPT);
+                  $('#kaiz-prefill-as-system').prop('checked', false);
                   settings.coreIdentity = DEFAULT_CORE_IDENTITY;
                   settings.coreBehavior = DEFAULT_CORE_BEHAVIOR;
                   settings.corePrefill = DEFAULT_CORE_PREFILL;
                   settings.coreCotPrompt = DEFAULT_CORE_COT_PROMPT;
+                  settings.prefillAsSystem = false;
                   ctx.saveSettingsDebounced();
                   toastr.success('Đã khôi phục Core Prompts');
               }
@@ -16507,9 +16515,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               viewContextDepth: 5,
               viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
               cotDisplayMode: 'collapse_streaming',
+              prefillAsSystem: false,
           };
       }
       else {
+          if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
+              ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
+          }
           if (ctx.extensionSettings[EXT_NAME].cotDisplayMode === undefined) {
               ctx.extensionSettings[EXT_NAME].cotDisplayMode = 'collapse_streaming';
           }
