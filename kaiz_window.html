@@ -124,6 +124,14 @@
             <div class="kaiz-header-actions">
                 <button
                     type="button"
+                    id="kaiz-chat-search-toggle-btn"
+                    class="kaiz-header-btn interactable"
+                    title="Tìm kiếm tin nhắn (Ctrl+F)"
+                >
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <button
+                    type="button"
                     id="kaiz-chat-tools-btn"
                     class="kaiz-header-btn interactable"
                     title="Menu tiện ích"
@@ -206,6 +214,50 @@
             </div>
         </div>
 
+        <!-- In-Chat Search Bar -->
+        <div id="kaiz-chat-search-bar" class="kaiz-chat-search-bar" style="display: none">
+            <div class="kaiz-search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass kaiz-search-icon"></i>
+                <input
+                    type="text"
+                    id="kaiz-search-input"
+                    class="kaiz-search-input text_pole"
+                    placeholder="Tìm kiếm trong cuộc trò chuyện..."
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+                <span id="kaiz-search-counter" class="kaiz-search-counter">0/0</span>
+            </div>
+            <div class="kaiz-search-actions">
+                <button
+                    type="button"
+                    id="kaiz-search-prev-btn"
+                    class="kaiz-search-nav-btn interactable"
+                    title="Kết quả trước (Shift+Enter / ▲)"
+                    disabled
+                >
+                    <i class="fa-solid fa-chevron-up"></i>
+                </button>
+                <button
+                    type="button"
+                    id="kaiz-search-next-btn"
+                    class="kaiz-search-nav-btn interactable"
+                    title="Kết quả tiếp theo (Enter / ▼)"
+                    disabled
+                >
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+                <button
+                    type="button"
+                    id="kaiz-search-close-btn"
+                    class="kaiz-search-nav-btn kaiz-search-close-btn interactable"
+                    title="Đóng tìm kiếm (Esc)"
+                >
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
         <div
             id="kaiz-chat-body-wrapper"
             style="position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0"
@@ -278,8 +330,14 @@
                 </div>
             </div>
 
-            <div id="kaiz-chat-history" class="kaiz-chat-history">
-                <!-- Tin nhắn sẽ được nhúng vào đây -->
+            <div id="kaiz-chat-history-wrap" class="kaiz-chat-history-wrap">
+                <div id="kaiz-chat-history" class="kaiz-chat-history">
+                    <!-- Tin nhắn sẽ được nhúng vào đây -->
+                </div>
+                <div id="kaiz-milestone-rail" class="kaiz-milestone-rail" title="Mốc tin nhắn User">
+                    <div id="kaiz-milestone-track" class="kaiz-milestone-track"></div>
+                    <div id="kaiz-milestone-tooltip" class="kaiz-milestone-tooltip" style="display: none"></div>
+                </div>
             </div>
 
             <div class="kaiz-chat-input-area" id="kaiz-chat-input-area">

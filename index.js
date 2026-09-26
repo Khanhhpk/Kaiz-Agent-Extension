@@ -12209,6 +12209,269 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   continueBtn.hide();
               }
           };
+          // ==========================================
+          // --- MILESTONE SCROLLBAR RAIL LOGIC ---
+          // ==========================================
+          const milestoneRail = $('#kaiz-milestone-rail');
+          const milestoneTrack = $('#kaiz-milestone-track');
+          const milestoneTooltip = $('#kaiz-milestone-tooltip');
+          let milestoneDebounceTimer = null;
+          const updateMilestones = () => {
+              if (!history[0] || !milestoneTrack[0])
+                  return;
+              // Chỉ lấy các tin nhắn user thực sự (bỏ qua tool results)
+              const userMsgs = history
+                  .find('.kaiz-msg-user')
+                  .filter((_, el) => {
+                  const $el = $(el);
+                  if ($el.find('.kaiz-system-result-block').length > 0)
+                      return false;
+                  const text = $el.find('.kaiz-msg-content').text().trim();
+                  return !text.startsWith('[Tool Result');
+              })
+                  .toArray();
+              if (userMsgs.length === 0) {
+                  milestoneTrack.empty();
+                  milestoneRail.css('opacity', '0.2');
+                  milestoneTooltip.hide();
+                  return;
+              }
+              milestoneRail.css('opacity', '1');
+              const scrollHeight = Math.max(history[0].scrollHeight, 1);
+              milestoneTrack.empty();
+              userMsgs.forEach((msgEl, index) => {
+                  const relativeTop = msgEl.offsetTop;
+                  const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
+                  const rawText = $(msgEl).find('.kaiz-msg-content').text().trim();
+                  const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
+                  const marker = $(`
+                    <div class="kaiz-milestone-marker" style="top: ${posPercent.toFixed(2)}%;" data-index="${index}"></div>
+                `);
+                  marker.on('mouseenter', function () {
+                      const markerRect = this.getBoundingClientRect();
+                      const railRect = milestoneRail[0].getBoundingClientRect();
+                      const topOffset = markerRect.top - railRect.top + markerRect.height / 2;
+                      milestoneTooltip.html(`
+                        <div class="kaiz-milestone-tt-title"><i class="fa-solid fa-user"></i> Lượt chat #${index + 1}</div>
+                        <div class="kaiz-milestone-tt-body">${escapeHtml$2(excerpt)}</div>
+                        <div class="kaiz-milestone-tt-hint">Nhấp để cuộn tới</div>
+                    `);
+                      milestoneTooltip.css({
+                          top: topOffset + 'px',
+                          display: 'block',
+                      });
+                  });
+                  marker.on('mouseleave', () => {
+                      milestoneTooltip.hide();
+                  });
+                  marker.on('click', (e) => {
+                      e.stopPropagation();
+                      milestoneTooltip.hide();
+                      msgEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                      $(msgEl).removeClass('kaiz-msg-highlight-pulse');
+                      void msgEl.offsetWidth; // Trigger reflow for animation restart
+                      $(msgEl).addClass('kaiz-msg-highlight-pulse');
+                      setTimeout(() => {
+                          $(msgEl).removeClass('kaiz-msg-highlight-pulse');
+                      }, 1500);
+                  });
+                  milestoneTrack.append(marker);
+              });
+          };
+          const requestUpdateMilestones = () => {
+              clearTimeout(milestoneDebounceTimer);
+              milestoneDebounceTimer = setTimeout(updateMilestones, 120);
+          };
+          // Click trên track để cuộn tương đối
+          milestoneTrack.on('click', (e) => {
+              if ($(e.target).hasClass('kaiz-milestone-marker'))
+                  return;
+              const trackRect = milestoneTrack[0].getBoundingClientRect();
+              const clickY = e.clientY - trackRect.top;
+              const ratio = Math.max(0, Math.min(1, clickY / Math.max(trackRect.height, 1)));
+              const targetScroll = ratio * history[0].scrollHeight;
+              history[0].scrollTo({ top: targetScroll, behavior: 'smooth' });
+          });
+          // ==========================================
+          // --- IN-CHAT SEARCH BAR LOGIC ---
+          // ==========================================
+          const searchToggleBtn = $('#kaiz-chat-search-toggle-btn');
+          const searchBar = $('#kaiz-chat-search-bar');
+          const searchInput = $('#kaiz-search-input');
+          const searchCounter = $('#kaiz-search-counter');
+          const searchPrevBtn = $('#kaiz-search-prev-btn');
+          const searchNextBtn = $('#kaiz-search-next-btn');
+          const searchCloseBtn = $('#kaiz-search-close-btn');
+          let currentSearchMatches = [];
+          let activeMatchIndex = -1;
+          let searchDebounceTimer = null;
+          const clearSearchHighlights = () => {
+              history.find('mark.kaiz-search-mark').each(function () {
+                  const parent = this.parentNode;
+                  if (parent) {
+                      parent.replaceChild(document.createTextNode(this.textContent || ''), this);
+                      parent.normalize();
+                  }
+              });
+              currentSearchMatches = [];
+              activeMatchIndex = -1;
+          };
+          const highlightCurrentMatch = () => {
+              currentSearchMatches.forEach((m) => m.classList.remove('kaiz-search-mark-active'));
+              if (activeMatchIndex >= 0 && activeMatchIndex < currentSearchMatches.length) {
+                  const currentEl = currentSearchMatches[activeMatchIndex];
+                  currentEl.classList.add('kaiz-search-mark-active');
+                  searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}`);
+                  currentEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+          };
+          const performSearch = (query) => {
+              clearSearchHighlights();
+              const cleanQuery = query.trim();
+              if (!cleanQuery) {
+                  searchCounter.text('0/0');
+                  searchPrevBtn.prop('disabled', true);
+                  searchNextBtn.prop('disabled', true);
+                  return;
+              }
+              const matches = [];
+              const queryLower = cleanQuery.toLowerCase();
+              const msgContents = history.find('.kaiz-msg-content').toArray();
+              for (const contentEl of msgContents) {
+                  const walker = document.createTreeWalker(contentEl, 4 /* NodeFilter.SHOW_TEXT */, {
+                      acceptNode: (node) => {
+                          if (node.parentElement?.tagName === 'MARK')
+                              return 2; /* NodeFilter.FILTER_REJECT */
+                          return 1; /* NodeFilter.FILTER_ACCEPT */
+                      },
+                  });
+                  const textNodes = [];
+                  let currentNode = walker.nextNode();
+                  while (currentNode) {
+                      textNodes.push(currentNode);
+                      currentNode = walker.nextNode();
+                  }
+                  for (const textNode of textNodes) {
+                      const text = textNode.nodeValue || '';
+                      const textLower = text.toLowerCase();
+                      let matchIndex = textLower.indexOf(queryLower);
+                      if (matchIndex === -1)
+                          continue;
+                      const frag = document.createDocumentFragment();
+                      let lastIdx = 0;
+                      while (matchIndex !== -1) {
+                          if (matchIndex > lastIdx) {
+                              frag.appendChild(document.createTextNode(text.substring(lastIdx, matchIndex)));
+                          }
+                          const mark = document.createElement('mark');
+                          mark.className = 'kaiz-search-mark';
+                          mark.textContent = text.substring(matchIndex, matchIndex + cleanQuery.length);
+                          frag.appendChild(mark);
+                          matches.push(mark);
+                          lastIdx = matchIndex + cleanQuery.length;
+                          matchIndex = textLower.indexOf(queryLower, lastIdx);
+                      }
+                      if (lastIdx < text.length) {
+                          frag.appendChild(document.createTextNode(text.substring(lastIdx)));
+                      }
+                      textNode.parentNode?.replaceChild(frag, textNode);
+                  }
+              }
+              currentSearchMatches = matches;
+              if (matches.length > 0) {
+                  activeMatchIndex = 0;
+                  highlightCurrentMatch();
+                  searchPrevBtn.prop('disabled', false);
+                  searchNextBtn.prop('disabled', false);
+              }
+              else {
+                  activeMatchIndex = -1;
+                  searchCounter.text('0/0');
+                  searchPrevBtn.prop('disabled', true);
+                  searchNextBtn.prop('disabled', true);
+              }
+          };
+          const openSearch = () => {
+              searchBar.slideDown(150, () => {
+                  searchInput.focus().select();
+              });
+              searchToggleBtn.addClass('active');
+              const q = String(searchInput.val() || '');
+              if (q)
+                  performSearch(q);
+          };
+          const closeSearch = () => {
+              searchBar.slideUp(150);
+              searchToggleBtn.removeClass('active');
+              clearSearchHighlights();
+              searchCounter.text('0/0');
+              searchPrevBtn.prop('disabled', true);
+              searchNextBtn.prop('disabled', true);
+          };
+          searchToggleBtn.on('click', (e) => {
+              e.stopPropagation();
+              if (searchBar.is(':visible')) {
+                  closeSearch();
+              }
+              else {
+                  openSearch();
+              }
+          });
+          searchCloseBtn.on('click', () => {
+              closeSearch();
+          });
+          searchInput.on('input', function () {
+              clearTimeout(searchDebounceTimer);
+              const val = this.value;
+              searchDebounceTimer = setTimeout(() => {
+                  performSearch(val);
+              }, 150);
+          });
+          const nextSearchMatch = () => {
+              if (currentSearchMatches.length === 0)
+                  return;
+              activeMatchIndex = (activeMatchIndex + 1) % currentSearchMatches.length;
+              highlightCurrentMatch();
+          };
+          const prevSearchMatch = () => {
+              if (currentSearchMatches.length === 0)
+                  return;
+              activeMatchIndex = (activeMatchIndex - 1 + currentSearchMatches.length) % currentSearchMatches.length;
+              highlightCurrentMatch();
+          };
+          searchNextBtn.on('click', nextSearchMatch);
+          searchPrevBtn.on('click', prevSearchMatch);
+          searchInput.on('keydown', (e) => {
+              if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (e.shiftKey) {
+                      prevSearchMatch();
+                  }
+                  else {
+                      nextSearchMatch();
+                  }
+              }
+              else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  closeSearch();
+              }
+          });
+          // Phím tắt Ctrl+F / Cmd+F khi chat window đang mở
+          $(document).on('keydown.kaiz_search_shortcut', (e) => {
+              if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+                  const chatWinEl = win[0];
+                  if (chatWinEl && chatWinEl.open) {
+                      e.preventDefault();
+                      if (!searchBar.is(':visible')) {
+                          openSearch();
+                      }
+                      else {
+                          searchInput.focus().select();
+                      }
+                  }
+              }
+          });
+          $(window).on('resize.kaiz_milestones', requestUpdateMilestones);
           // --- Drag Logic ---
           const ensureInBounds = (el) => {
               if (el[0].tagName === 'DIALOG' && !el[0].open)
@@ -12608,11 +12871,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   // Refresh list khi mở
                   stateManager.loadChatList().then(renderChatList);
+                  setTimeout(requestUpdateMilestones, 150);
               }
               else {
                   dialogEl.close();
                   toolsMenu.hide();
                   toolsBtn.removeClass('active');
+                  closeSearch();
                   if (isSidebarOpen)
                       toggleSidebar();
               }
@@ -12622,6 +12887,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               dialogEl.close();
               toolsMenu.hide();
               toolsBtn.removeClass('active');
+              closeSearch();
               if (isSidebarOpen)
                   toggleSidebar(); // Đóng luôn sidebar
           });
@@ -12668,6 +12934,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
               stateManager.currentChatId = null;
               addWelcomeMessage();
+              closeSearch();
+              requestUpdateMilestones();
               // Xóa background selected ở chat list
               $('.kaiz-chat-item').css('background', 'transparent');
               toggleSidebar();
@@ -12980,6 +13248,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }
               updateContinueBtnVisibility();
               refreshTokens();
+              requestUpdateMilestones();
+              if (searchBar.is(':visible')) {
+                  const q = String(searchInput.val() || '');
+                  if (q)
+                      performSearch(q);
+              }
           };
           const addWelcomeMessage = () => {
               const welcomeHtml = `
@@ -12989,6 +13263,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             </div>`;
               history.append(welcomeHtml);
               updateContinueBtnVisibility();
+              requestUpdateMilestones();
           };
           // Hàm tiện ích thêm tin nhắn DOM (không save DB)
           const addMessageToDOM = (role, htmlContent, animate = true, dbMessageId) => {
@@ -13021,6 +13296,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   history.scrollTop(history[0].scrollHeight);
               }
               updateContinueBtnVisibility();
+              requestUpdateMilestones();
+              if (searchBar.is(':visible')) {
+                  const q = String(searchInput.val() || '');
+                  if (q)
+                      performSearch(q);
+              }
               return msgId;
           };
           // Lắng nghe sự kiện xóa tin nhắn
@@ -13044,6 +13325,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   updateContinueBtnVisibility();
                   if (history.children('.kaiz-msg').length === 0) {
                       addWelcomeMessage();
+                  }
+                  requestUpdateMilestones();
+                  if (searchBar.is(':visible')) {
+                      const q = String(searchInput.val() || '');
+                      if (q)
+                          performSearch(q);
                   }
               });
               toastr.info('Đã xóa tin nhắn', 'Kaiz Agent');
@@ -13143,6 +13430,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       }
                       refreshTokens();
                       agentContentBox = null;
+                      requestUpdateMilestones();
                   }
                   else if (event.type === 'tool_result') {
                       const toolMsgId = await stateManager.addMessage('user', event.text || '');
@@ -13239,6 +13527,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               sendBtn.prop('disabled', false);
               input.focus();
               updateContinueBtnVisibility();
+              requestUpdateMilestones();
           };
           // --- XỬ LÝ KÉO THẢ CO GIÃN CHIỀU CAO THANH INPUT ---
           const inputResizer = $('#kaiz-input-resizer');
@@ -13277,6 +13566,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (currentH && currentH >= DEFAULT_INPUT_HEIGHT) {
                   localStorage.setItem('kaiz_chat_input_height', Math.round(currentH).toString());
               }
+              requestUpdateMilestones();
           };
           inputResizer.on('mousedown', (e) => {
               if (chatBodyWrapper.hasClass('kaiz-input-fullscreen'))
