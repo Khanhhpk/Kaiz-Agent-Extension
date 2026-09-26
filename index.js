@@ -15296,13 +15296,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               $('#kaiz-chat-tools-menu').hide();
               await this.open();
           });
-          // 2. Mở Modal từ Settings Quick Toolbar
-          $('#kaiz-settings-preset-git-btn')
-              .off('click')
-              .on('click', async () => {
-              await this.open();
-          });
-          // 3. Đóng Modal
+          // 2. Đóng Modal
           $('#kaiz-pg-close-btn')
               .off('click')
               .on('click', () => {
