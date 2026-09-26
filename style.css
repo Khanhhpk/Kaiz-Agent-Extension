@@ -2719,14 +2719,98 @@
 }
 
 /* ================= SMART DIFF VIEWER ================= */
+.kaiz-diff-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 7px 12px;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    margin-bottom: 4px;
+}
+
+.kaiz-diff-toolbar-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+}
+
+.kaiz-diff-toolbar-count {
+    color: #f1f5f9;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-weight: 500;
+}
+
+.kaiz-diff-toolbar-sub {
+    font-size: 10.5px;
+    color: rgba(148, 163, 184, 0.65);
+    font-style: italic;
+}
+
+.kaiz-diff-toolbar-actions {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.kaiz-diff-btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #cbd5e1;
+    font-size: 10.5px;
+    font-weight: 500;
+    padding: 3px 9px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.kaiz-diff-btn-action:hover {
+    background: rgba(56, 189, 248, 0.15);
+    border-color: rgba(56, 189, 248, 0.4);
+    color: #38bdf8;
+}
+
 .kaiz-diff-item {
     background: rgba(255, 255, 255, 0.025);
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 8px;
-    padding: 10px 12px;
+    padding: 8px 12px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.kaiz-diff-item.has-content:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+}
+
+.kaiz-diff-item.kaiz-diff-expanded {
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.kaiz-diff-item-toggle {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border-radius: 5px;
+    padding: 2px 0;
+}
+
+.kaiz-diff-item.has-content .kaiz-diff-item-toggle {
+    cursor: pointer;
+    user-select: none;
 }
 
 .kaiz-diff-item-header {
@@ -2734,6 +2818,21 @@
     align-items: center;
     justify-content: space-between;
     gap: 8px;
+}
+
+.kaiz-diff-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.kaiz-diff-header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
 }
 
 .kaiz-diff-badge {
@@ -2754,11 +2853,55 @@
     white-space: nowrap;
 }
 
+.kaiz-diff-toggle-state-label {
+    font-size: 10px;
+    color: rgba(148, 163, 184, 0.7);
+    padding: 1px 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    transition: all 0.15s ease;
+}
+
+.kaiz-diff-item.kaiz-diff-collapsed .kaiz-diff-toggle-state-label::after {
+    content: "Mở chi tiết";
+}
+
+.kaiz-diff-item.kaiz-diff-expanded .kaiz-diff-toggle-state-label::after {
+    content: "Thu gọn";
+}
+
+.kaiz-diff-item-toggle:hover .kaiz-diff-toggle-state-label {
+    color: #38bdf8;
+    background: rgba(56, 189, 248, 0.1);
+    border-color: rgba(56, 189, 248, 0.3);
+}
+
+.kaiz-diff-chevron {
+    font-size: 10px;
+    color: rgba(148, 163, 184, 0.65);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s ease;
+}
+
+.kaiz-diff-item-toggle:hover .kaiz-diff-chevron {
+    color: #38bdf8;
+}
+
+.kaiz-diff-item.kaiz-diff-expanded .kaiz-diff-chevron {
+    transform: rotate(90deg);
+}
+
 .kaiz-diff-summary {
     font-size: 11.5px;
     color: #f1f5f9;
     font-weight: 500;
     line-height: 1.45;
+}
+
+.kaiz-diff-item-content {
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
 }
 
 /* Metadata pills (role, depth, position changes) */

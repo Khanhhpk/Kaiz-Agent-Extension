@@ -662,6 +662,26 @@ export class PresetGitModal {
                 // ignore
             }
 
+            body.append(`
+                <div class="kaiz-diff-toolbar">
+                    <div class="kaiz-diff-toolbar-info">
+                        <span class="kaiz-diff-toolbar-count">
+                            <i class="fa-solid fa-list-check" style="color: #38bdf8"></i>
+                            <strong>${items.length}</strong> mục thay đổi
+                        </span>
+                        <span class="kaiz-diff-toolbar-sub">(Mặc định thu gọn • Bấm vào để mở/đóng)</span>
+                    </div>
+                    <div class="kaiz-diff-toolbar-actions">
+                        <button id="kaiz-diff-expand-all-btn" class="kaiz-diff-btn-action interactable" type="button" title="Mở rộng tất cả các mục thay đổi">
+                            <i class="fa-solid fa-angles-down"></i> Mở rộng tất cả
+                        </button>
+                        <button id="kaiz-diff-collapse-all-btn" class="kaiz-diff-btn-action interactable" type="button" title="Thu gọn tất cả các mục thay đổi">
+                            <i class="fa-solid fa-angles-up"></i> Thu gọn tất cả
+                        </button>
+                    </div>
+                </div>
+            `);
+
             items.forEach((item, index) => {
                 let badgeColor = '#38bdf8';
                 let typeLabel = 'THAY ĐỔI';
@@ -765,19 +785,77 @@ export class PresetGitModal {
                     }
                 }
 
+                const hasContent = Boolean(contentHtml && contentHtml.trim());
+
                 body.append(`
-                    <div class="kaiz-diff-item">
-                        <div class="kaiz-diff-item-header">
-                            <span class="kaiz-diff-badge" style="background: ${badgeColor}18; color: ${badgeColor}; border-color: ${badgeColor}35">
-                                #${index + 1} ${typeLabel}
-                            </span>
-                            <span class="kaiz-diff-identifier">[${escapeHtml(item.identifier || item.name || '')}]</span>
+                    <div class="kaiz-diff-item ${hasContent ? 'kaiz-diff-collapsed has-content' : 'no-content'}">
+                        <div class="kaiz-diff-item-toggle ${hasContent ? 'interactable' : ''}" ${hasContent ? 'title="Bấm để mở rộng / thu gọn chi tiết"' : ''}>
+                            <div class="kaiz-diff-item-header">
+                                <div class="kaiz-diff-header-left">
+                                    <span class="kaiz-diff-badge" style="background: ${badgeColor}18; color: ${badgeColor}; border-color: ${badgeColor}35">
+                                        #${index + 1} ${typeLabel}
+                                    </span>
+                                    <span class="kaiz-diff-identifier">[${escapeHtml(item.identifier || item.name || '')}]</span>
+                                </div>
+                                ${
+                                    hasContent
+                                        ? `
+                                <div class="kaiz-diff-header-right">
+                                    <span class="kaiz-diff-toggle-state-label"></span>
+                                    <i class="fa-solid fa-chevron-right kaiz-diff-chevron"></i>
+                                </div>
+                                `
+                                        : ''
+                                }
+                            </div>
+                            <div class="kaiz-diff-summary">${escapeHtml(item.summary || '')}</div>
                         </div>
-                        <div class="kaiz-diff-summary">${escapeHtml(item.summary || '')}</div>
-                        ${contentHtml}
+                        ${
+                            hasContent
+                                ? `
+                        <div class="kaiz-diff-item-content" style="display: none">
+                            ${contentHtml}
+                        </div>
+                        `
+                                : ''
+                        }
                     </div>
                 `);
             });
+
+            // Toggle expand/collapse for individual diff items
+            body.find('.kaiz-diff-item.has-content .kaiz-diff-item-toggle')
+                .off('click')
+                .on('click', function (this: HTMLElement) {
+                    const itemEl = $(this).closest('.kaiz-diff-item');
+                    const contentEl = itemEl.find('.kaiz-diff-item-content');
+                    const isCollapsed = itemEl.hasClass('kaiz-diff-collapsed');
+
+                    if (isCollapsed) {
+                        itemEl.removeClass('kaiz-diff-collapsed').addClass('kaiz-diff-expanded');
+                        contentEl.slideDown(150);
+                    } else {
+                        itemEl.removeClass('kaiz-diff-expanded').addClass('kaiz-diff-collapsed');
+                        contentEl.slideUp(150);
+                    }
+                });
+
+            // Global Expand All / Collapse All
+            body.find('#kaiz-diff-expand-all-btn')
+                .off('click')
+                .on('click', function () {
+                    const itemsWithContent = body.find('.kaiz-diff-item.has-content');
+                    itemsWithContent.removeClass('kaiz-diff-collapsed').addClass('kaiz-diff-expanded');
+                    itemsWithContent.find('.kaiz-diff-item-content').slideDown(150);
+                });
+
+            body.find('#kaiz-diff-collapse-all-btn')
+                .off('click')
+                .on('click', function () {
+                    const itemsWithContent = body.find('.kaiz-diff-item.has-content');
+                    itemsWithContent.removeClass('kaiz-diff-expanded').addClass('kaiz-diff-collapsed');
+                    itemsWithContent.find('.kaiz-diff-item-content').slideUp(150);
+                });
 
             // Interactive cross-column highlight for reordered blocks
             body.find('.kaiz-diff-reorder-block')
