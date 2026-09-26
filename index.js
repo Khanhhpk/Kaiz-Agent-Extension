@@ -16013,9 +16013,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
    * 1. Strip common prefix lines (O(n) pass) — these are always unchanged.
    * 2. Strip common suffix lines (O(n) pass).
    * 3. Run LCS only on the "changed middle" region — guarantees changes anywhere
-   *    in the file (e.g. line 800 of 1000) are always found.
-   * 4. Cap the middle region if it is still huge (edge case: massive rewrites).
-   * 5. Render prefix/suffix as fold separators with absolute line numbers.
+   *    in the file (e.g. line 800 of 1000) are always found and fully shown.
+   * 4. Render prefix/suffix as fold separators with absolute line numbers.
    */
   function buildUnifiedDiffHtml(oldText, newText) {
       const oldLines = oldText.split('\n');
@@ -16039,15 +16038,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       const newEnd = suffixLen > 0 ? newLines.length - suffixLen : newLines.length;
       let oldMiddle = oldLines.slice(prefixLen, oldEnd);
       let newMiddle = newLines.slice(prefixLen, newEnd);
-      // ── Step 4: cap the middle if still huge (massive rewrite edge case) ──────
-      const MAX_MIDDLE = 400;
-      const middleCapped = oldMiddle.length > MAX_MIDDLE || newMiddle.length > MAX_MIDDLE;
-      if (oldMiddle.length > MAX_MIDDLE)
-          oldMiddle = oldMiddle.slice(0, MAX_MIDDLE);
-      if (newMiddle.length > MAX_MIDDLE)
-          newMiddle = newMiddle.slice(0, MAX_MIDDLE);
-      // ── Step 5: run LCS on middle only ────────────────────────────────────────
-      // Adjust lineOld/lineNew to be absolute (1-indexed from original file)
+      // ── Step 4: run LCS on middle only ────────────────────────────────────────
+      // LCS input is already limited to the changed region after prefix/suffix strip.
+      // No cap needed — show the full diff.
       const diffLines = generateLineDiff(oldMiddle, newMiddle);
       // Shift line numbers to absolute positions
       diffLines.forEach((dl) => {
@@ -16056,7 +16049,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (dl.lineNew !== undefined)
               dl.lineNew += prefixLen;
       });
-      // ── Step 6: mark lines near changes for context folding ───────────────────
+      // ── Step 5: mark lines near changes for context folding ───────────────────
       const visible = new Set();
       diffLines.forEach((dl, idx) => {
           if (dl.type !== 'context') {
@@ -16065,7 +16058,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }
           }
       });
-      // ── Step 7: render ─────────────────────────────────────────────────────────
+      // ── Step 6: render ─────────────────────────────────────────────────────────
       let html = '<div class="kaiz-diff-unified">';
       // Show common prefix fold
       if (prefixLen >= 3) {
@@ -16077,9 +16070,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const ln = String(p + 1).padStart(3, ' ');
               html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(ln)} ${escapeHtml(ln)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[p])}</span></div>`;
           }
-      }
-      if (middleCapped) {
-          html += `<div class="kaiz-diff-cap-warning">⚠ Vùng thay đổi quá lớn — hiển thị ${MAX_MIDDLE} dòng đầu của phần đã sửa.</div>`;
       }
       let i = 0;
       while (i < diffLines.length) {
