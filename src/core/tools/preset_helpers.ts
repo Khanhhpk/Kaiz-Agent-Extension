@@ -901,8 +901,18 @@ export class PresetGitManager {
         let targetBlock: PromptBlock | null = null;
         let matchStr = oldValueMatch || '';
 
+        const escapedVar = varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const searchRegex = new RegExp(
+            `\\{\\{(setvar|addvar|setglobalvar|addglobalvar)::${escapedVar}::([\\s\\S]*?)\\}\\}`,
+            'i',
+        );
+
         for (const p of prompts) {
-            if (promptId && p.identifier !== promptId) continue;
+            if (promptId) {
+                const found = this.findPrompt(promptId);
+                if (found && p.identifier !== found.identifier) continue;
+                if (!found && p.identifier !== promptId) continue;
+            }
             const content = p.content || '';
 
             if (matchStr && content.includes(matchStr)) {
@@ -910,11 +920,7 @@ export class PresetGitManager {
                 break;
             }
 
-            const regex = new RegExp(
-                `\\{\\{(setvar|addvar|setglobalvar|addglobalvar)::${varName}::([\\s\\S]*?)\\}\\}`,
-                'i',
-            );
-            const m = content.match(regex);
+            const m = content.match(searchRegex);
             if (m) {
                 targetBlock = p;
                 matchStr = m[0];
@@ -926,23 +932,33 @@ export class PresetGitManager {
             throw new Error(`Không tìm thấy khai báo biến "${varName}" trong các prompt blocks.`);
         }
 
-        const stId = `${targetBlock.identifier}::${varName}`;
+        const canonicalId = targetBlock.identifier;
+        const stId = `${canonicalId}::${varName}`;
         this._stagingVars[stId] = {
-            promptId: targetBlock.identifier,
+            promptId: canonicalId,
             varName,
             oldValueMatch: matchStr,
             newValue: String(newValue),
         };
 
         // Also reflect into staging content immediately
-        if (!this._stagingMap.has(targetBlock.identifier)) this._stagingMap.set(targetBlock.identifier, {});
+        if (!this._stagingMap.has(canonicalId)) this._stagingMap.set(canonicalId, {});
         const curContent =
-            this._stagingMap.get(targetBlock.identifier)!.content !== undefined
-                ? this._stagingMap.get(targetBlock.identifier)!.content!
+            this._stagingMap.get(canonicalId)!.content !== undefined
+                ? this._stagingMap.get(canonicalId)!.content!
                 : targetBlock.content || '';
 
-        const replaced = matchStr.replace(/::([^}]*)\}\}$/, `::${newValue}}}`);
-        this._stagingMap.get(targetBlock.identifier)!.content = curContent.replace(matchStr, replaced);
+        // Safely replace preserving the macro prefix {{setvar::varName::
+        const replaceRegex = new RegExp(
+            `(\\{\\{(?:setvar|addvar|setglobalvar|addglobalvar)::${escapedVar}::)[\\s\\S]*?\\}\\}`,
+            'i',
+        );
+        let replaced = matchStr.replace(replaceRegex, `$1${newValue}}}`);
+        if (replaced === matchStr) {
+            // Fallback for corrupted/unmatched tags (e.g. {{setvar::val}} where varName was lost)
+            replaced = `{{setvar::${varName}::${newValue}}}`;
+        }
+        this._stagingMap.get(canonicalId)!.content = curContent.replace(matchStr, replaced);
 
         return {
             ok: true,
@@ -957,20 +973,25 @@ export class PresetGitManager {
         const prompts = this.getPrompts();
         let affected = 0;
 
+        const escapedOld = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Match setter macros ({{setvar::oldName::) and getter macros ({{getvar::oldName}})
+        const regex = new RegExp(
+            `(\\{\\{(?:setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::)${escapedOld}(::|\\}\\})`,
+            'gi',
+        );
+
         for (const p of prompts) {
             const content = p.content || '';
-            const regex = new RegExp(
-                `\\{\\{(setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::${oldName}::`,
-                'gi',
-            );
+            regex.lastIndex = 0;
             if (regex.test(content)) {
+                regex.lastIndex = 0;
                 if (!this._stagingMap.has(p.identifier)) this._stagingMap.set(p.identifier, {});
                 const cur =
                     this._stagingMap.get(p.identifier)!.content !== undefined
                         ? this._stagingMap.get(p.identifier)!.content!
                         : content;
 
-                this._stagingMap.get(p.identifier)!.content = cur.replace(regex, `{{$1::${newName}::`);
+                this._stagingMap.get(p.identifier)!.content = cur.replace(regex, `$1${newName}$2`);
                 affected++;
             }
         }
