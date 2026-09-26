@@ -410,13 +410,6 @@ export class ChatWindowUI {
                         behavior: 'smooth',
                     });
 
-                    // Safeguard: Đảm bảo SillyTavern / window không bao giờ bị scroll theo
-                    if (window.scrollY !== 0 || window.scrollX !== 0) {
-                        window.scrollTo(0, 0);
-                    }
-                    document.documentElement.scrollTop = 0;
-                    document.body.scrollTop = 0;
-
                     $(msgEl).removeClass('kaiz-msg-highlight-pulse');
                     void msgEl.offsetWidth; // Trigger reflow for animation restart
                     $(msgEl).addClass('kaiz-msg-highlight-pulse');
@@ -430,6 +423,8 @@ export class ChatWindowUI {
         };
 
         const requestUpdateMilestones = () => {
+            const chatWinEl = win[0] as HTMLDialogElement;
+            if (!chatWinEl || !chatWinEl.open) return;
             clearTimeout(milestoneDebounceTimer);
             milestoneDebounceTimer = setTimeout(updateMilestones, 120);
         };
@@ -446,11 +441,6 @@ export class ChatWindowUI {
                 const maxScroll = Math.max(0, historyEl.scrollHeight - historyEl.clientHeight);
                 const targetScroll = ratio * maxScroll;
                 historyEl.scrollTo({ top: targetScroll, behavior: 'smooth' });
-                if (window.scrollY !== 0 || window.scrollX !== 0) {
-                    window.scrollTo(0, 0);
-                }
-                document.documentElement.scrollTop = 0;
-                document.body.scrollTop = 0;
             }
         });
 
@@ -503,12 +493,6 @@ export class ChatWindowUI {
                         top: Math.max(0, targetTop),
                         behavior: 'smooth',
                     });
-
-                    if (window.scrollY !== 0 || window.scrollX !== 0) {
-                        window.scrollTo(0, 0);
-                    }
-                    document.documentElement.scrollTop = 0;
-                    document.body.scrollTop = 0;
                 }
             }
         };
@@ -656,17 +640,22 @@ export class ChatWindowUI {
             }
         });
 
-        // Phím tắt Ctrl+F / Cmd+F khi chat window đang mở
+        // Phím tắt Ctrl+F / Cmd+F: CHỈ kích hoạt khi con trỏ hoặc focus đang ở trong Kaiz chat window
         $(document).on('keydown.kaiz_search_shortcut', (e: any) => {
             if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
                 const chatWinEl = win[0] as HTMLDialogElement;
-                if (chatWinEl && chatWinEl.open) {
-                    e.preventDefault();
-                    if (!searchBar.is(':visible')) {
-                        openSearch();
-                    } else {
-                        searchInput.focus().select();
-                    }
+                if (!chatWinEl || !chatWinEl.open) return;
+
+                // Tuyệt đối không cướp Ctrl+F của SillyTavern nếu người dùng không tương tác trong Kaiz
+                const isInsideKaiz = $(e.target).closest('#kaiz-chat-window').length > 0;
+                if (!isInsideKaiz) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+                if (!searchBar.is(':visible')) {
+                    openSearch();
+                } else {
+                    searchInput.focus().select();
                 }
             }
         });
@@ -1120,11 +1109,6 @@ export class ChatWindowUI {
                         if (winPos) localStorage.setItem('kaiz_win_pos', JSON.stringify(winPos));
                     }, 50);
                 }
-                if (window.scrollY !== 0 || window.scrollX !== 0) {
-                    window.scrollTo(0, 0);
-                }
-                document.documentElement.scrollTop = 0;
-                document.body.scrollTop = 0;
                 // Refresh list khi mở
                 stateManager.loadChatList().then(renderChatList);
                 setTimeout(requestUpdateMilestones, 150);

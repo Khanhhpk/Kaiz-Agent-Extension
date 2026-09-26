@@ -505,7 +505,7 @@
 }
 
 /* Search Highlights */
-mark.kaiz-search-mark {
+#kaiz-chat-window mark.kaiz-search-mark {
     background: rgba(234, 179, 8, 0.4);
     color: inherit;
     border-radius: 3px;
@@ -514,7 +514,7 @@ mark.kaiz-search-mark {
     transition: background 0.15s ease;
 }
 
-mark.kaiz-search-mark-active {
+#kaiz-chat-window mark.kaiz-search-mark-active {
     background: #00c9ff !important;
     color: #000 !important;
     font-weight: 700;
@@ -664,7 +664,7 @@ mark.kaiz-search-mark-active {
     }
 }
 
-.kaiz-msg.kaiz-msg-highlight-pulse {
+#kaiz-chat-window .kaiz-msg.kaiz-msg-highlight-pulse {
     animation: kaizMsgHighlightPulse 1.4s ease-out forwards;
     border-radius: 12px;
 }
