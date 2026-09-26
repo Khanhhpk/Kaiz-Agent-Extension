@@ -974,9 +974,9 @@ export class PresetGitManager {
         let affected = 0;
 
         const escapedOld = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Match setter macros ({{setvar::oldName::) and getter macros ({{getvar::oldName}})
+        // Match setter macros ({{setvar::oldName::) and getter macros ({{getvar::oldName}}, {{var::oldName}})
         const regex = new RegExp(
-            `(\\{\\{(?:setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::)${escapedOld}(::|\\}\\})`,
+            `(\\{\\{(?:setvar|addvar|getvar|var|setglobalvar|addglobalvar|getglobalvar|globalvar)::)${escapedOld}(::|\\}\\})`,
             'gi',
         );
 
@@ -1726,7 +1726,7 @@ export class PresetGitManager {
         for (const p of prompts) {
             const content = p.content || '';
             const macroRegex =
-                /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
+                /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar|var|globalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
             let match: RegExpExecArray | null;
 
             while ((match = macroRegex.exec(content)) !== null) {

@@ -7308,8 +7308,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const prompts = this.getPrompts();
           let affected = 0;
           const escapedOld = oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          // Match setter macros ({{setvar::oldName::) and getter macros ({{getvar::oldName}})
-          const regex = new RegExp(`(\\{\\{(?:setvar|addvar|getvar|setglobalvar|addglobalvar|getglobalvar)::)${escapedOld}(::|\\}\\})`, 'gi');
+          // Match setter macros ({{setvar::oldName::) and getter macros ({{getvar::oldName}}, {{var::oldName}})
+          const regex = new RegExp(`(\\{\\{(?:setvar|addvar|getvar|var|setglobalvar|addglobalvar|getglobalvar|globalvar)::)${escapedOld}(::|\\}\\})`, 'gi');
           for (const p of prompts) {
               const content = p.content || '';
               regex.lastIndex = 0;
@@ -7958,7 +7958,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const refs = [];
           for (const p of prompts) {
               const content = p.content || '';
-              const macroRegex = /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
+              const macroRegex = /\{\{(setvar|addvar|setglobalvar|addglobalvar|getvar|getglobalvar|var|globalvar)::([^:}]+)(?:::([\s\S]*?))?\}\}/gi;
               let match;
               while ((match = macroRegex.exec(content)) !== null) {
                   const fullMatch = match[0];
