@@ -483,6 +483,13 @@ export class MvuDashboardModal {
         for (const d of descriptors) {
             if (d.type === 'object' && d.children && d.children.length > 0) {
                 flat.push(...this.flattenDescriptorsForSchema(d.children));
+            } else if (d.type === 'record' && d.recordTemplate && d.recordTemplate.length > 0) {
+                for (const t of d.recordTemplate) {
+                    flat.push({
+                        ...t,
+                        path: `${d.path}.${t.name}`,
+                    });
+                }
             } else {
                 flat.push(d);
             }
@@ -547,63 +554,6 @@ export class MvuDashboardModal {
         }
 
         return { name: categoryName, icon, order };
-    }
-
-    /**
-     * Xác định màu sắc thanh tiến trình hoàn toàn tự động theo tỷ lệ % (100% Data-Driven):
-     * - Dưới 25%: Đỏ nguy cấp (Crimson)
-     * - 25% - 50%: Hổ phách cảnh báo (Amber)
-     * - 50% - 80%: Xanh lam dồi dào (Cyan)
-     * - Trên 80%: Lục bảo tối ưu (Emerald)
-     */
-    private getProgressBarTheme(pct: number): { fillClass: string; color: string } {
-        if (pct <= 25) {
-            return { fillClass: 'mvu-bar-crimson', color: '#f43f5e' };
-        } else if (pct <= 50) {
-            return { fillClass: 'mvu-bar-amber', color: '#eab308' };
-        } else if (pct <= 80) {
-            return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
-        }
-        return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
-    }
-
-    /**
-     * Tìm giá trị tối đa động từ biến chị em (sibling max variable), ví dụ:
-     * - Linh_tính -> Linh_tính_tối_đa, Linh_tính_max, Max_Linh_tính
-     * - hp -> hp_max, max_hp
-     */
-    private findSiblingMax(desc: MvuVariableDescriptor): number | undefined {
-        const parts = desc.path.split('.');
-        const leafName = parts[parts.length - 1];
-        const parentParts = parts.slice(0, -1);
-        const parentPath = parentParts.join('.');
-
-        const lower = leafName.toLowerCase();
-        if (
-            lower.endsWith('_tối_đa') ||
-            lower.endsWith('_toi_da') ||
-            lower.endsWith('_max') ||
-            lower.startsWith('max_')
-        ) {
-            return undefined;
-        }
-
-        const candidateNames = [
-            `${leafName}_tối_đa`,
-            `${leafName}_toi_da`,
-            `${leafName}_max`,
-            `max_${leafName}`,
-            `${leafName}_limit`,
-        ];
-
-        for (const cand of candidateNames) {
-            const fullPath = parentPath ? `${parentPath}.${cand}` : cand;
-            const val = MvuManager.getLiveVariables(fullPath, this.selectedFloorId);
-            if (typeof val === 'number' && Number.isFinite(val) && val > 0 && val < 1e7) {
-                return val;
-            }
-        }
-        return undefined;
     }
 
     private renderStatsTab(report: MvuInspectionResult): void {
@@ -673,14 +623,6 @@ export class MvuDashboardModal {
                     currentVal = currentVal[0];
                 }
                 const isNumeric = desc.type === 'number' || (typeof currentVal === 'number' && Number.isFinite(currentVal));
-                const siblingMax = isNumeric ? this.findSiblingMax(desc) : undefined;
-                const effectiveMax = siblingMax !== undefined ? siblingMax : desc.max;
-                const effectiveMin = desc.min !== undefined ? desc.min : 0;
-                const showProgressGauge =
-                    isNumeric &&
-                    effectiveMax !== undefined &&
-                    effectiveMax > effectiveMin &&
-                    (siblingMax !== undefined || effectiveMax <= 1000);
                 const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
 
                 catHtml += `
@@ -698,35 +640,20 @@ export class MvuDashboardModal {
                         </div>
                 `;
 
-                if (showProgressGauge) {
-                    const min = effectiveMin;
-                    const max = effectiveMax!;
+                if (isNumeric) {
                     const numVal = Number(currentVal) || 0;
-                    const pct = Math.min(100, Math.max(0, ((numVal - min) / (max - min)) * 100));
-                    const theme = this.getProgressBarTheme(pct);
-
+                    const hasBounds =
+                        desc.min !== undefined &&
+                        desc.max !== undefined &&
+                        Math.abs(desc.max) < 1e6 &&
+                        Math.abs(desc.min) < 1e6;
                     catHtml += `
                         <div class="kaiz-mvu-card-numeric">
-                            <span class="kaiz-mvu-val-main" style="color: ${theme.color};">${numVal}</span>
-                            <span class="kaiz-mvu-val-bounds">/ ${max}</span>
-                        </div>
-                        <div class="kaiz-mvu-progress-track">
-                            <div class="kaiz-mvu-progress-fill ${theme.fillClass}" style="width: ${pct}%;"></div>
-                        </div>
-                        <div class="kaiz-mvu-progress-labels">
-                            <span>Min: ${min}</span>
-                            <span>${pct.toFixed(0)}%</span>
-                            <span>Max: ${max}</span>
+                            <span class="kaiz-mvu-val-main">${numVal}</span>
+                            ${hasBounds ? `<span class="kaiz-mvu-val-bounds">(${desc.min} ➔ ${desc.max})</span>` : ''}
                         </div>
                     `;
-                } else if (isNumeric) {
-                    const numVal = Number(currentVal) || 0;
-                    catHtml += `
-                        <div class="kaiz-mvu-card-numeric">
-                            <span class="kaiz-mvu-val-main" style="color: #38bdf8;">${numVal}</span>
-                        </div>
-                    `;
-                } else if (desc.type === 'boolean') {
+                } else if (desc.type === 'boolean' || typeof currentVal === 'boolean') {
                     const isTrue = currentVal === true || currentVal === 'true';
                     catHtml += `
                         <div class="kaiz-mvu-card-value">
@@ -735,7 +662,7 @@ export class MvuDashboardModal {
                             </span>
                         </div>
                     `;
-                } else if (desc.type === 'array') {
+                } else if (desc.type === 'array' || Array.isArray(currentVal)) {
                     const arr = Array.isArray(currentVal) ? currentVal : [];
                     catHtml += `
                         <div class="kaiz-mvu-card-value">
@@ -762,18 +689,33 @@ export class MvuDashboardModal {
                             catHtml += `
                                 <div class="kaiz-mvu-obj-row">
                                     <span class="kaiz-mvu-obj-k">${escapeHtml(subK)}:</span>
-                                    <span class="kaiz-mvu-obj-v" title="${escapeHtml(valStr)}">${escapeHtml(valStr)}</span>
+                                    <span class="kaiz-mvu-obj-v" title="${escapeHtml(valStr)}">${escapeHtml(valStr || '—')}</span>
                                 </div>
                             `;
                         }
                         catHtml += `</div></div>`;
                     }
                 } else {
-                    catHtml += `
-                        <div class="kaiz-mvu-card-value">
-                            <span class="kaiz-mvu-text-badge">${escapeHtml(currentVal)}</span>
-                        </div>
-                    `;
+                    const strVal = String(currentVal ?? '');
+                    if (strVal === '') {
+                        catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-empty-badge">Trống ("")</span>
+                            </div>
+                        `;
+                    } else if (strVal.length > 70 || strVal.includes('\n')) {
+                        catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <div class="kaiz-mvu-text-block" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</div>
+                            </div>
+                        `;
+                    } else {
+                        catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-text-badge">${escapeHtml(strVal)}</span>
+                            </div>
+                        `;
+                    }
                 }
 
                 // Inline Edit Form (Hidden by default)

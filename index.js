@@ -17221,60 +17221,42 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           desc.type = 'object';
                       }
                   }
-                  // Gán giới hạn số học động (Mathematical dynamic bounds) nếu Zod Script không khai báo min/max
-                  if (desc.type === 'number' && typeof realVal === 'number' && Number.isFinite(realVal)) {
-                      if (desc.min === undefined && desc.max === undefined) {
-                          const bounds = this.getDynamicNumberBounds(realVal);
-                          desc.min = bounds.min;
-                          desc.max = bounds.max;
-                      }
-                  }
-                  // Nếu là object/record nhưng chưa có children, tự sinh children từ keys thực tế
-                  // Nếu là record có recordTemplate và có live data object:
+                  // Nếu là record có recordTemplate (bộ sưu tập thực thể như Quan_hệ, Nhiệm_vụ, Túi_đồ, Di_chứng):
                   if (desc.type === 'record' &&
                       typeof realVal === 'object' &&
                       realVal !== null &&
                       !Array.isArray(realVal)) {
-                      desc.children = Object.entries(realVal).map(([subK, subV]) => {
-                          const subPath = `${desc.path}.${subK}`;
-                          if (desc.recordTemplate &&
-                              desc.recordTemplate.length > 0 &&
-                              typeof subV === 'object' &&
-                              subV !== null) {
-                              const instanceChildren = desc.recordTemplate.map(t => ({
-                                  ...t,
-                                  path: `${subPath}.${t.name}`,
-                                  children: t.children
-                                      ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
-                                      : undefined,
-                              }));
-                              this.enrichWithLiveData(instanceChildren, subV);
-                              return {
-                                  name: subK,
-                                  path: subPath,
-                                  type: 'object',
-                                  defaultValue: subV,
-                                  children: instanceChildren,
-                              };
+                      if (desc.recordTemplate && desc.recordTemplate.length > 0) {
+                          if (Object.keys(realVal).length > 0) {
+                              desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                                  const subPath = `${desc.path}.${subK}`;
+                                  const instanceChildren = desc.recordTemplate.map(t => ({
+                                      ...t,
+                                      path: `${subPath}.${t.name}`,
+                                      children: t.children
+                                          ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
+                                          : undefined,
+                                  }));
+                                  this.enrichWithLiveData(instanceChildren, subV);
+                                  return {
+                                      name: subK,
+                                      path: subPath,
+                                      type: 'object',
+                                      defaultValue: subV,
+                                      children: instanceChildren,
+                                  };
+                              });
                           }
                           else {
-                              const subType = typeof subV === 'number'
-                                  ? 'number'
-                                  : typeof subV === 'boolean'
-                                      ? 'boolean'
-                                      : Array.isArray(subV)
-                                          ? 'array'
-                                          : typeof subV === 'object' && subV !== null
-                                              ? 'object'
-                                              : 'string';
-                              return {
-                                  name: subK,
-                                  path: subPath,
-                                  type: subType,
-                                  defaultValue: subV,
-                              };
+                              desc.children = [];
                           }
-                      });
+                      }
+                      else {
+                          // Record kiểu nguyên thủy (primitive record dictionary như Kỹ_năng, Manh_mối, Hồ_sơ_chi_tiết, Nghịch_lý):
+                          // Giữ desc đại diện cho toàn bộ dictionary để hiển thị key-value gọn gàng
+                          desc.defaultValue = realVal;
+                          desc.children = undefined;
+                      }
                   }
                   else if (desc.type === 'object' &&
                       (!desc.children || desc.children.length === 0) &&
@@ -17304,30 +17286,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               if (desc.children && desc.children.length > 0) {
                   this.enrichWithLiveData(desc.children, liveData);
               }
-          }
-      }
-      /**
-       * Tự động suy diễn giới hạn min / max toán học linh hoạt cho mọi giá trị số bất kỳ
-       * (Dựa trên thuật toán của TavernHelper Portable MVU Editor - không phụ thuộc card hay ngôn ngữ)
-       */
-      static getDynamicNumberBounds(value) {
-          const val = Number.isFinite(value) ? value : 0;
-          if (val >= 0) {
-              if (val <= 100) {
-                  return { min: 0, max: 100 };
-              }
-              const target = val * 1.25;
-              const power = Math.pow(10, Math.floor(Math.log10(target)));
-              const mult = target / power;
-              const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
-              return { min: 0, max: factor * power };
-          }
-          else {
-              const absTarget = Math.abs(val) * 1.25;
-              const power = Math.pow(10, Math.floor(Math.log10(absTarget)));
-              const mult = absTarget / power;
-              const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
-              return { min: -factor * power, max: 0 };
           }
       }
       /**
@@ -27454,6 +27412,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (d.type === 'object' && d.children && d.children.length > 0) {
                   flat.push(...this.flattenDescriptorsForSchema(d.children));
               }
+              else if (d.type === 'record' && d.recordTemplate && d.recordTemplate.length > 0) {
+                  for (const t of d.recordTemplate) {
+                      flat.push({
+                          ...t,
+                          path: `${d.path}.${t.name}`,
+                      });
+                  }
+              }
               else {
                   flat.push(d);
               }
@@ -27517,58 +27483,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           return { name: categoryName, icon, order };
       }
-      /**
-       * Xác định màu sắc thanh tiến trình hoàn toàn tự động theo tỷ lệ % (100% Data-Driven):
-       * - Dưới 25%: Đỏ nguy cấp (Crimson)
-       * - 25% - 50%: Hổ phách cảnh báo (Amber)
-       * - 50% - 80%: Xanh lam dồi dào (Cyan)
-       * - Trên 80%: Lục bảo tối ưu (Emerald)
-       */
-      getProgressBarTheme(pct) {
-          if (pct <= 25) {
-              return { fillClass: 'mvu-bar-crimson', color: '#f43f5e' };
-          }
-          else if (pct <= 50) {
-              return { fillClass: 'mvu-bar-amber', color: '#eab308' };
-          }
-          else if (pct <= 80) {
-              return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
-          }
-          return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
-      }
-      /**
-       * Tìm giá trị tối đa động từ biến chị em (sibling max variable), ví dụ:
-       * - Linh_tính -> Linh_tính_tối_đa, Linh_tính_max, Max_Linh_tính
-       * - hp -> hp_max, max_hp
-       */
-      findSiblingMax(desc) {
-          const parts = desc.path.split('.');
-          const leafName = parts[parts.length - 1];
-          const parentParts = parts.slice(0, -1);
-          const parentPath = parentParts.join('.');
-          const lower = leafName.toLowerCase();
-          if (lower.endsWith('_tối_đa') ||
-              lower.endsWith('_toi_da') ||
-              lower.endsWith('_max') ||
-              lower.startsWith('max_')) {
-              return undefined;
-          }
-          const candidateNames = [
-              `${leafName}_tối_đa`,
-              `${leafName}_toi_da`,
-              `${leafName}_max`,
-              `max_${leafName}`,
-              `${leafName}_limit`,
-          ];
-          for (const cand of candidateNames) {
-              const fullPath = parentPath ? `${parentPath}.${cand}` : cand;
-              const val = MvuManager.getLiveVariables(fullPath, this.selectedFloorId);
-              if (typeof val === 'number' && Number.isFinite(val) && val > 0 && val < 1e7) {
-                  return val;
-              }
-          }
-          return undefined;
-      }
       renderStatsTab(report) {
           const $ = jQuery;
           const container = $('#kaiz-mvu-stats-grid');
@@ -27619,13 +27533,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       currentVal = currentVal[0];
                   }
                   const isNumeric = desc.type === 'number' || (typeof currentVal === 'number' && Number.isFinite(currentVal));
-                  const siblingMax = isNumeric ? this.findSiblingMax(desc) : undefined;
-                  const effectiveMax = siblingMax !== undefined ? siblingMax : desc.max;
-                  const effectiveMin = desc.min !== undefined ? desc.min : 0;
-                  const showProgressGauge = isNumeric &&
-                      effectiveMax !== undefined &&
-                      effectiveMax > effectiveMin &&
-                      (siblingMax !== undefined || effectiveMax <= 1000);
                   const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
                   catHtml += `
                     <div class="kaiz-mvu-stat-card" data-path="${escapeHtml(desc.path)}">
@@ -27641,36 +27548,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             </div>
                         </div>
                 `;
-                  if (showProgressGauge) {
-                      const min = effectiveMin;
-                      const max = effectiveMax;
+                  if (isNumeric) {
                       const numVal = Number(currentVal) || 0;
-                      const pct = Math.min(100, Math.max(0, ((numVal - min) / (max - min)) * 100));
-                      const theme = this.getProgressBarTheme(pct);
+                      const hasBounds = desc.min !== undefined &&
+                          desc.max !== undefined &&
+                          Math.abs(desc.max) < 1e6 &&
+                          Math.abs(desc.min) < 1e6;
                       catHtml += `
                         <div class="kaiz-mvu-card-numeric">
-                            <span class="kaiz-mvu-val-main" style="color: ${theme.color};">${numVal}</span>
-                            <span class="kaiz-mvu-val-bounds">/ ${max}</span>
-                        </div>
-                        <div class="kaiz-mvu-progress-track">
-                            <div class="kaiz-mvu-progress-fill ${theme.fillClass}" style="width: ${pct}%;"></div>
-                        </div>
-                        <div class="kaiz-mvu-progress-labels">
-                            <span>Min: ${min}</span>
-                            <span>${pct.toFixed(0)}%</span>
-                            <span>Max: ${max}</span>
+                            <span class="kaiz-mvu-val-main">${numVal}</span>
+                            ${hasBounds ? `<span class="kaiz-mvu-val-bounds">(${desc.min} ➔ ${desc.max})</span>` : ''}
                         </div>
                     `;
                   }
-                  else if (isNumeric) {
-                      const numVal = Number(currentVal) || 0;
-                      catHtml += `
-                        <div class="kaiz-mvu-card-numeric">
-                            <span class="kaiz-mvu-val-main" style="color: #38bdf8;">${numVal}</span>
-                        </div>
-                    `;
-                  }
-                  else if (desc.type === 'boolean') {
+                  else if (desc.type === 'boolean' || typeof currentVal === 'boolean') {
                       const isTrue = currentVal === true || currentVal === 'true';
                       catHtml += `
                         <div class="kaiz-mvu-card-value">
@@ -27680,7 +27571,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         </div>
                     `;
                   }
-                  else if (desc.type === 'array') {
+                  else if (desc.type === 'array' || Array.isArray(currentVal)) {
                       const arr = Array.isArray(currentVal) ? currentVal : [];
                       catHtml += `
                         <div class="kaiz-mvu-card-value">
@@ -27715,7 +27606,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                               catHtml += `
                                 <div class="kaiz-mvu-obj-row">
                                     <span class="kaiz-mvu-obj-k">${escapeHtml(subK)}:</span>
-                                    <span class="kaiz-mvu-obj-v" title="${escapeHtml(valStr)}">${escapeHtml(valStr)}</span>
+                                    <span class="kaiz-mvu-obj-v" title="${escapeHtml(valStr)}">${escapeHtml(valStr || '—')}</span>
                                 </div>
                             `;
                           }
@@ -27723,11 +27614,28 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       }
                   }
                   else {
-                      catHtml += `
-                        <div class="kaiz-mvu-card-value">
-                            <span class="kaiz-mvu-text-badge">${escapeHtml(currentVal)}</span>
-                        </div>
-                    `;
+                      const strVal = String(currentVal ?? '');
+                      if (strVal === '') {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-empty-badge">Trống ("")</span>
+                            </div>
+                        `;
+                      }
+                      else if (strVal.length > 70 || strVal.includes('\n')) {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <div class="kaiz-mvu-text-block" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</div>
+                            </div>
+                        `;
+                      }
+                      else {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-text-badge">${escapeHtml(strVal)}</span>
+                            </div>
+                        `;
+                      }
                   }
                   // Inline Edit Form (Hidden by default)
                   if (isObject) {

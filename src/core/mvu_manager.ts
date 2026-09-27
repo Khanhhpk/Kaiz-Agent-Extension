@@ -1002,65 +1002,42 @@ export class MvuManager {
                     }
                 }
 
-                // Gán giới hạn số học động (Mathematical dynamic bounds) nếu Zod Script không khai báo min/max
-                if (desc.type === 'number' && typeof realVal === 'number' && Number.isFinite(realVal)) {
-                    if (desc.min === undefined && desc.max === undefined) {
-                        const bounds = this.getDynamicNumberBounds(realVal);
-                        desc.min = bounds.min;
-                        desc.max = bounds.max;
-                    }
-                }
-
-                // Nếu là object/record nhưng chưa có children, tự sinh children từ keys thực tế
-                // Nếu là record có recordTemplate và có live data object:
+                // Nếu là record có recordTemplate (bộ sưu tập thực thể như Quan_hệ, Nhiệm_vụ, Túi_đồ, Di_chứng):
                 if (
                     desc.type === 'record' &&
                     typeof realVal === 'object' &&
                     realVal !== null &&
                     !Array.isArray(realVal)
                 ) {
-                    desc.children = Object.entries(realVal).map(([subK, subV]) => {
-                        const subPath = `${desc.path}.${subK}`;
-                        if (
-                            desc.recordTemplate &&
-                            desc.recordTemplate.length > 0 &&
-                            typeof subV === 'object' &&
-                            subV !== null
-                        ) {
-                            const instanceChildren: MvuVariableDescriptor[] = desc.recordTemplate.map(t => ({
-                                ...t,
-                                path: `${subPath}.${t.name}`,
-                                children: t.children
-                                    ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
-                                    : undefined,
-                            }));
-                            this.enrichWithLiveData(instanceChildren, subV);
-                            return {
-                                name: subK,
-                                path: subPath,
-                                type: 'object' as const,
-                                defaultValue: subV,
-                                children: instanceChildren,
-                            };
+                    if (desc.recordTemplate && desc.recordTemplate.length > 0) {
+                        if (Object.keys(realVal).length > 0) {
+                            desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                                const subPath = `${desc.path}.${subK}`;
+                                const instanceChildren: MvuVariableDescriptor[] = desc.recordTemplate!.map(t => ({
+                                    ...t,
+                                    path: `${subPath}.${t.name}`,
+                                    children: t.children
+                                        ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
+                                        : undefined,
+                                }));
+                                this.enrichWithLiveData(instanceChildren, subV);
+                                return {
+                                    name: subK,
+                                    path: subPath,
+                                    type: 'object' as const,
+                                    defaultValue: subV,
+                                    children: instanceChildren,
+                                };
+                            });
                         } else {
-                            const subType =
-                                typeof subV === 'number'
-                                    ? 'number'
-                                    : typeof subV === 'boolean'
-                                      ? 'boolean'
-                                      : Array.isArray(subV)
-                                        ? 'array'
-                                        : typeof subV === 'object' && subV !== null
-                                          ? 'object'
-                                          : 'string';
-                            return {
-                                name: subK,
-                                path: subPath,
-                                type: subType as any,
-                                defaultValue: subV,
-                            };
+                            desc.children = [];
                         }
-                    });
+                    } else {
+                        // Record kiểu nguyên thủy (primitive record dictionary như Kỹ_năng, Manh_mối, Hồ_sơ_chi_tiết, Nghịch_lý):
+                        // Giữ desc đại diện cho toàn bộ dictionary để hiển thị key-value gọn gàng
+                        desc.defaultValue = realVal;
+                        desc.children = undefined;
+                    }
                 } else if (
                     desc.type === 'object' &&
                     (!desc.children || desc.children.length === 0) &&
@@ -1093,30 +1070,6 @@ export class MvuManager {
             if (desc.children && desc.children.length > 0) {
                 this.enrichWithLiveData(desc.children, liveData);
             }
-        }
-    }
-
-    /**
-     * Tự động suy diễn giới hạn min / max toán học linh hoạt cho mọi giá trị số bất kỳ
-     * (Dựa trên thuật toán của TavernHelper Portable MVU Editor - không phụ thuộc card hay ngôn ngữ)
-     */
-    public static getDynamicNumberBounds(value: number): { min: number; max: number } {
-        const val = Number.isFinite(value) ? value : 0;
-        if (val >= 0) {
-            if (val <= 100) {
-                return { min: 0, max: 100 };
-            }
-            const target = val * 1.25;
-            const power = Math.pow(10, Math.floor(Math.log10(target)));
-            const mult = target / power;
-            const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
-            return { min: 0, max: factor * power };
-        } else {
-            const absTarget = Math.abs(val) * 1.25;
-            const power = Math.pow(10, Math.floor(Math.log10(absTarget)));
-            const mult = absTarget / power;
-            const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
-            return { min: -factor * power, max: 0 };
         }
     }
 
