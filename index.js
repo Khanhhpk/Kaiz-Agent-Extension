@@ -16762,6 +16762,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               else if (comment.includes('biến') && comment.includes('danh sách')) {
                   result.varListEntry = entry;
               }
+              else if (content.includes('@@preprocessing') ||
+                  comment.includes('bộ điều khiển') ||
+                  comment.includes('preprocessing')) {
+                  result.ejsControllerEntry = entry;
+              }
           }
           // 2. Nếu chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
           if (!result.initvarEntry || !result.updateRulesEntry) {
@@ -17469,26 +17474,42 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               this.enrichWithLiveData(parsedSchema, liveVars);
           }
-          // Kiểm tra tính nhất quán giữa Schema và InitVar
+          // Kiểm tra tính nhất quán giữa Schema và InitVar (theo chuẩn Zod 4 & MVUZOD)
           if (parsedSchema.length > 0 && initvarParsed) {
-              for (const desc of parsedSchema) {
-                  const parts = desc.path.split('.');
-                  let curr = initvarParsed;
-                  let found = true;
-                  for (const p of parts) {
-                      if (curr && typeof curr === 'object' && p in curr) {
-                          curr = curr[p];
+              const checkLeaves = (items) => {
+                  for (const desc of items) {
+                      if (desc.type === 'object' && desc.children && desc.children.length > 0) {
+                          checkLeaves(desc.children);
+                          continue;
                       }
-                      else {
-                          found = false;
-                          break;
+                      if (desc.type === 'record') {
+                          // Record là danh sách thực thể động (như Túi_đồ, Quan_hệ), không yêu cầu instance mẫu trong InitVar
+                          continue;
+                      }
+                      // Theo chuẩn Zod 4: Các trường có .prefault() tự động nạp fallback an toàn tại runtime
+                      if (desc.defaultValue !== undefined) {
+                          continue;
+                      }
+                      const parts = desc.path.split('.');
+                      let curr = initvarParsed;
+                      let found = true;
+                      for (const p of parts) {
+                          if (curr && typeof curr === 'object' && p in curr) {
+                              curr = curr[p];
+                          }
+                          else {
+                              found = false;
+                              break;
+                          }
+                      }
+                      if (!found) {
+                          inconsistencies.push(`Biến "${desc.path}" chưa có giá trị khởi tạo trong [InitVar] và không có .prefault().`);
                       }
                   }
-                  if (!found && desc.type !== 'object') {
-                      inconsistencies.push(`Biến "${desc.path}" có trong Zod Schema nhưng thiếu trong Worldbook [InitVar].`);
-                  }
-              }
+              };
+              checkLeaves(parsedSchema);
           }
+          const hasEjs = Boolean(lorebookMvu.ejsControllerEntry);
           return {
               hasMvu: isMvu,
               characterName: charName,
@@ -17502,6 +17523,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               dataSource: this.cachedDataSource,
               initvarVariables: initvarParsed,
               updateRulesSummary: lorebookMvu.updateRulesEntry?.content || '',
+              hasEjsController: hasEjs,
+              ejsControllerSummary: lorebookMvu.ejsControllerEntry?.comment || '',
               healthWarnings: warnings,
               inconsistencies,
           };
@@ -27439,6 +27462,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   .removeClass('badge-neutral badge-success')
                   .addClass('badge-danger');
           }
+          const ejsPill = $('#kaiz-mvu-ejs-pill');
+          if (ejsPill.length) {
+              if (report.hasEjsController) {
+                  ejsPill
+                      .text('EJS: OK')
+                      .attr('title', report.ejsControllerSummary ? `Bộ điều khiển: ${report.ejsControllerSummary}` : 'Có bộ điều khiển EJS Preprocessing động')
+                      .removeClass('badge-neutral badge-danger')
+                      .addClass('badge-success')
+                      .show();
+              }
+              else {
+                  ejsPill.hide();
+              }
+          }
           // 2. Cảnh báo Inconsistencies / Warnings
           const warnings = [...(report.healthWarnings || []), ...(report.inconsistencies || [])];
           const warnContainer = $('#kaiz-mvu-warnings-container');
@@ -27594,6 +27631,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             <div class="kaiz-mvu-card-name" title="${escapeHtml(dynamicDesc ? `${desc.path} (${dynamicDesc})` : desc.path)}">
                                 ${escapeHtml(desc.name)}
                                 ${dynamicDesc ? `<span style="font-size: 10.5px; color: #94a3b8; font-weight: normal; margin-left: 4px;">· ${escapeHtml(dynamicDesc)}</span>` : ''}
+                                ${desc.name.startsWith('_') ? `<span class="kaiz-status-pill badge-neutral" style="font-size: 9.5px; padding: 1px 5px; margin-left: 5px; font-weight: normal;" title="Biến chỉ đọc của hệ thống (Readonly)"><i class="fa-solid fa-lock"></i> Chỉ đọc</span>` : ''}
                             </div>
                             <div class="kaiz-mvu-card-actions">
                                 <button type="button" class="kaiz-mvu-inline-edit-btn interactable" title="Chỉnh sửa giá trị" data-path="${escapeHtml(desc.path)}">

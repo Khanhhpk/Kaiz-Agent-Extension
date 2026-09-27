@@ -454,6 +454,20 @@ export class MvuDashboardModal {
                 .addClass('badge-danger');
         }
 
+        const ejsPill = $('#kaiz-mvu-ejs-pill');
+        if (ejsPill.length) {
+            if (report.hasEjsController) {
+                ejsPill
+                    .text('EJS: OK')
+                    .attr('title', report.ejsControllerSummary ? `Bộ điều khiển: ${report.ejsControllerSummary}` : 'Có bộ điều khiển EJS Preprocessing động')
+                    .removeClass('badge-neutral badge-danger')
+                    .addClass('badge-success')
+                    .show();
+            } else {
+                ejsPill.hide();
+            }
+        }
+
         // 2. Cảnh báo Inconsistencies / Warnings
         const warnings = [...(report.healthWarnings || []), ...(report.inconsistencies || [])];
         const warnContainer = $('#kaiz-mvu-warnings-container');
@@ -631,6 +645,7 @@ export class MvuDashboardModal {
                             <div class="kaiz-mvu-card-name" title="${escapeHtml(dynamicDesc ? `${desc.path} (${dynamicDesc})` : desc.path)}">
                                 ${escapeHtml(desc.name)}
                                 ${dynamicDesc ? `<span style="font-size: 10.5px; color: #94a3b8; font-weight: normal; margin-left: 4px;">· ${escapeHtml(dynamicDesc)}</span>` : ''}
+                                ${desc.name.startsWith('_') ? `<span class="kaiz-status-pill badge-neutral" style="font-size: 9.5px; padding: 1px 5px; margin-left: 5px; font-weight: normal;" title="Biến chỉ đọc của hệ thống (Readonly)"><i class="fa-solid fa-lock"></i> Chỉ đọc</span>` : ''}
                             </div>
                             <div class="kaiz-mvu-card-actions">
                                 <button type="button" class="kaiz-mvu-inline-edit-btn interactable" title="Chỉnh sửa giá trị" data-path="${escapeHtml(desc.path)}">

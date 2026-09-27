@@ -35,6 +35,8 @@ export interface MvuInspectionResult {
     dataSource?: 'mvu' | 'helper' | 'fallback';
     initvarVariables: any;
     updateRulesSummary: string;
+    hasEjsController?: boolean;
+    ejsControllerSummary?: string;
     healthWarnings: string[];
     inconsistencies?: string[];
 }
@@ -510,12 +512,14 @@ export class MvuManager {
         updateRulesEntry?: any;
         formatEntry?: any;
         varListEntry?: any;
+        ejsControllerEntry?: any;
     }> {
         const result: {
             initvarEntry?: any;
             updateRulesEntry?: any;
             formatEntry?: any;
             varListEntry?: any;
+            ejsControllerEntry?: any;
         } = {};
 
         // 1. Kiểm tra embedded character_book
@@ -541,6 +545,12 @@ export class MvuManager {
                 result.formatEntry = entry;
             } else if (comment.includes('biến') && comment.includes('danh sách')) {
                 result.varListEntry = entry;
+            } else if (
+                content.includes('@@preprocessing') ||
+                comment.includes('bộ điều khiển') ||
+                comment.includes('preprocessing')
+            ) {
+                result.ejsControllerEntry = entry;
             }
         }
 
@@ -1266,27 +1276,44 @@ export class MvuManager {
             this.enrichWithLiveData(parsedSchema, liveVars);
         }
 
-        // Kiểm tra tính nhất quán giữa Schema và InitVar
+        // Kiểm tra tính nhất quán giữa Schema và InitVar (theo chuẩn Zod 4 & MVUZOD)
         if (parsedSchema.length > 0 && initvarParsed) {
-            for (const desc of parsedSchema) {
-                const parts = desc.path.split('.');
-                let curr = initvarParsed;
-                let found = true;
-                for (const p of parts) {
-                    if (curr && typeof curr === 'object' && p in curr) {
-                        curr = curr[p];
-                    } else {
-                        found = false;
-                        break;
+            const checkLeaves = (items: MvuVariableDescriptor[]) => {
+                for (const desc of items) {
+                    if (desc.type === 'object' && desc.children && desc.children.length > 0) {
+                        checkLeaves(desc.children);
+                        continue;
+                    }
+                    if (desc.type === 'record') {
+                        // Record là danh sách thực thể động (như Túi_đồ, Quan_hệ), không yêu cầu instance mẫu trong InitVar
+                        continue;
+                    }
+                    // Theo chuẩn Zod 4: Các trường có .prefault() tự động nạp fallback an toàn tại runtime
+                    if (desc.defaultValue !== undefined) {
+                        continue;
+                    }
+                    const parts = desc.path.split('.');
+                    let curr = initvarParsed;
+                    let found = true;
+                    for (const p of parts) {
+                        if (curr && typeof curr === 'object' && p in curr) {
+                            curr = curr[p];
+                        } else {
+                            found = false;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        inconsistencies.push(
+                            `Biến "${desc.path}" chưa có giá trị khởi tạo trong [InitVar] và không có .prefault().`,
+                        );
                     }
                 }
-                if (!found && desc.type !== 'object') {
-                    inconsistencies.push(
-                        `Biến "${desc.path}" có trong Zod Schema nhưng thiếu trong Worldbook [InitVar].`,
-                    );
-                }
-            }
+            };
+            checkLeaves(parsedSchema);
         }
+
+        const hasEjs = Boolean(lorebookMvu.ejsControllerEntry);
 
         return {
             hasMvu: isMvu,
@@ -1301,6 +1328,8 @@ export class MvuManager {
             dataSource: this.cachedDataSource,
             initvarVariables: initvarParsed,
             updateRulesSummary: lorebookMvu.updateRulesEntry?.content || '',
+            hasEjsController: hasEjs,
+            ejsControllerSummary: lorebookMvu.ejsControllerEntry?.comment || '',
             healthWarnings: warnings,
             inconsistencies,
         };
