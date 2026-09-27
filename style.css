@@ -5228,6 +5228,19 @@
     max-height: 280px;
 }
 
+.kaiz-mvu-raw-pane-full {
+    grid-column: span 2;
+}
+
+.kaiz-mvu-floor-select:hover {
+    border-color: rgba(56, 189, 248, 0.6) !important;
+}
+
+.kaiz-mvu-floor-select:focus {
+    border-color: #38bdf8 !important;
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.25);
+}
+
 .kaiz-mvu-raw-header {
     padding: 8px 12px;
     background: rgba(30, 41, 59, 0.5);

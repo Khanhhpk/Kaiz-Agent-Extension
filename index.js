@@ -16340,13 +16340,40 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
   });
 
   class MvuManager {
+      static cachedStatData = null;
+      static cachedWrapper = null;
+      static cachedCurrentFloor = null;
+      static cachedFloors = [];
+      static cachedDataSource = 'fallback';
+      /**
+       * Truy xuất ngữ cảnh toàn cục (hỗ trợ cả iframe và window cha)
+       */
+      static getGlobalContext() {
+          let win = window;
+          try {
+              if (window.parent && window.parent !== window) {
+                  win = window.parent;
+              }
+          }
+          catch { }
+          const th = win.TavernHelper || globalThis.TavernHelper || window.TavernHelper || null;
+          const mvu = win.Mvu || globalThis.Mvu || window.Mvu || null;
+          let stContext = null;
+          try {
+              stContext =
+                  win.SillyTavern?.getContext?.() ||
+                      globalThis.SillyTavern?.getContext?.() ||
+                      window.SillyTavern?.getContext?.() ||
+                      null;
+          }
+          catch { }
+          return { win, th, mvu, stContext };
+      }
       /**
        * Lấy SillyTavern Context
        */
       static getContext() {
-          return typeof globalThis.SillyTavern !== 'undefined'
-              ? globalThis.SillyTavern.getContext()
-              : globalThis.window?.SillyTavern?.getContext?.() || null;
+          return this.getGlobalContext().stContext;
       }
       /**
        * Lấy nhân vật đang hoạt động hiện tại
@@ -16406,51 +16433,194 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return null;
       }
       /**
-       * Lấy toàn bộ biến thời gian thực qua TavernHelper API
+       * Đọc dữ liệu biến của một lượt tin nhắn (floor/message) cụ thể
        */
-      static getLiveVariables(subPath) {
-          const th = window.TavernHelper;
-          if (!th)
-              return null;
-          let data = null;
-          try {
-              if (typeof th.getVariables === 'function') {
-                  data = th.getVariables('stat_data');
-                  if (!data)
-                      data = th.getVariables();
+      static async readFloor(messageId) {
+          const { mvu, th } = this.getGlobalContext();
+          const targetId = typeof messageId === 'number' ? messageId : undefined;
+          const opts = targetId !== undefined ? { type: 'message', message_id: targetId } : undefined;
+          let raw = null;
+          let source = 'mvu';
+          // 1. Thử gọi API MVU chính thống (SillyTavern-MVU plugin)
+          if (mvu && typeof mvu.getMvuData === 'function') {
+              try {
+                  raw = opts ? await mvu.getMvuData(opts) : await mvu.getMvuData();
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Error fetching via Mvu.getMvuData:', e);
               }
           }
-          catch (e) {
-              console.warn('[MvuManager] Failed to get live variables via TavernHelper:', e);
+          // 2. Fallback sang TavernHelper API (tương thích)
+          if (!raw && th && typeof th.getVariables === 'function') {
+              source = 'helper';
+              try {
+                  raw = opts ? await th.getVariables(opts) : await th.getVariables();
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Error fetching via TavernHelper.getVariables:', e);
+              }
           }
-          if (subPath && data) {
+          // 3. Fallback sang SillyTavern chat memory trực tiếp
+          if (!raw && typeof targetId === 'number') {
+              const { stContext } = this.getGlobalContext();
+              const msg = stContext?.chat?.[targetId];
+              if (msg) {
+                  if (msg.variables && typeof msg.variables === 'object') {
+                      if (Array.isArray(msg.variables)) {
+                          const swipe = typeof msg.swipe_id === 'number' ? msg.swipe_id : 0;
+                          raw = msg.variables[swipe] || msg.variables[0];
+                      }
+                      else {
+                          raw = msg.variables;
+                      }
+                  }
+                  else if (msg.stat_data && typeof msg.stat_data === 'object') {
+                      raw = msg;
+                  }
+                  if (raw)
+                      source = 'fallback';
+              }
+          }
+          if (!raw || typeof raw !== 'object') {
+              return null;
+          }
+          // 4. Chuẩn hóa bóc tách: Phân tách wrapper và stat_data
+          const hasStatData = Object.prototype.hasOwnProperty.call(raw, 'stat_data') &&
+              raw.stat_data &&
+              typeof raw.stat_data === 'object';
+          const statData = hasStatData ? raw.stat_data : raw;
+          return {
+              wrapper: raw,
+              statData,
+              messageId: targetId,
+              source,
+          };
+      }
+      /**
+       * Quét danh sách các lượt tin nhắn (floor) có dữ liệu stat_data trong cuộc hội thoại hiện tại
+       */
+      static async listValidFloors() {
+          const { stContext } = this.getGlobalContext();
+          const chat = Array.isArray(stContext?.chat) ? stContext.chat : [];
+          const floors = [];
+          for (let i = chat.length - 1; i >= 0; i--) {
+              const msg = chat[i];
+              if (!msg)
+                  continue;
+              const isSystem = !!(msg.is_system || msg.role === 'system' || msg.mes_role === 'system');
+              if (isSystem)
+                  continue;
+              const floorData = await this.readFloor(i);
+              if (floorData &&
+                  floorData.statData &&
+                  typeof floorData.statData === 'object' &&
+                  Object.keys(floorData.statData).length > 0) {
+                  const rawText = String(msg.mes || msg.message || '').replace(/\s+/g, ' ').trim();
+                  const preview = rawText.length > 70 ? rawText.slice(0, 70) + '…' : rawText;
+                  floors.push({
+                      messageId: i,
+                      displayIndex: i + 1,
+                      role: msg.role ? String(msg.role) : msg.is_user ? 'user' : 'assistant',
+                      name: String(msg.name || msg.ch_name || (msg.is_user ? 'User' : 'Character')),
+                      preview: preview || '(Không có văn bản)',
+                      source: floorData.source,
+                  });
+              }
+          }
+          return floors;
+      }
+      /**
+       * Lấy toàn bộ biến thời gian thực của nhân vật (đã bóc tách sạch khỏi preset prompts)
+       */
+      static getLiveVariables(subPath, messageId) {
+          let data = this.cachedStatData;
+          let wrapper = this.cachedWrapper;
+          // Nếu chưa có cache, lấy nhanh từ context hiện tại
+          if (!data) {
+              const { th, mvu } = this.getGlobalContext();
+              let raw = null;
+              try {
+                  if (mvu && typeof mvu.getMvuData === 'function') {
+                      raw = mvu.getMvuData();
+                  }
+              }
+              catch { }
+              if (!raw && th && typeof th.getVariables === 'function') {
+                  try {
+                      raw = th.getVariables();
+                  }
+                  catch { }
+              }
+              if (raw && typeof raw === 'object') {
+                  wrapper = raw;
+                  data =
+                      raw.stat_data && typeof raw.stat_data === 'object'
+                          ? raw.stat_data
+                          : raw;
+              }
+          }
+          if (!data)
+              return null;
+          if (subPath) {
               const cleanPath = subPath.replace(/^stat_data\./, '');
               const parts = cleanPath.split('.');
+              // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU)
               let curr = data;
+              let found = true;
               for (const p of parts) {
                   if (curr && typeof curr === 'object' && p in curr) {
                       curr = curr[p];
                   }
                   else {
-                      return undefined;
+                      found = false;
+                      break;
                   }
               }
-              return curr;
+              if (found)
+                  return curr;
+              // Ưu tiên 2: Fallback tìm trong root wrapper (phòng trường hợp biến root)
+              if (wrapper && typeof wrapper === 'object') {
+                  let rootCurr = wrapper;
+                  let rootFound = true;
+                  for (const p of parts) {
+                      if (rootCurr && typeof rootCurr === 'object' && p in rootCurr) {
+                          rootCurr = rootCurr[p];
+                      }
+                      else {
+                          rootFound = false;
+                          break;
+                      }
+                  }
+                  if (rootFound)
+                      return rootCurr;
+              }
+              return undefined;
           }
           return data;
       }
       /**
-       * Cập nhật trực tiếp biến ở Runtime qua TavernHelper API
+       * Cập nhật trực tiếp biến ở Runtime qua TavernHelper hoặc Mvu API
        */
-      static async setLiveVariable(path, value) {
-          const th = window.TavernHelper;
-          if (!th) {
-              throw new Error('TavernHelper API chưa được tải trong SillyTavern.');
+      static async setLiveVariable(path, value, messageId) {
+          const { th, mvu } = this.getGlobalContext();
+          if (!th && !mvu) {
+              throw new Error('Không tìm thấy TavernHelper hoặc Mvu API trong SillyTavern.');
           }
-          // Chuẩn hóa path: đảm bảo có prefix stat_data nếu cần
-          const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${path}`;
+          let targetMessageId = messageId;
+          if (targetMessageId === undefined) {
+              if (this.cachedCurrentFloor) {
+                  targetMessageId = this.cachedCurrentFloor.messageId;
+              }
+              else {
+                  const floors = await this.listValidFloors();
+                  if (floors.length > 0) {
+                      targetMessageId = floors[0].messageId;
+                  }
+              }
+          }
           const cleanPath = path.replace(/^stat_data\./, '');
-          const oldValue = this.getLiveVariables(cleanPath);
+          const cleanParts = cleanPath.split('.');
+          const oldValue = this.getLiveVariables(cleanPath, targetMessageId);
           // Tự động ép kiểu thông minh nếu truyền vào dạng chuỗi
           let parsedValue = value;
           if (typeof value === 'string') {
@@ -16474,16 +16644,94 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
               }
           }
-          if (typeof th.setVariable === 'function') {
-              await th.setVariable(fullPath, parsedValue);
+          const setDeep = (obj, parts, val) => {
+              let curr = obj;
+              for (let i = 0; i < parts.length - 1; i++) {
+                  const p = parts[i];
+                  if (!curr[p] || typeof curr[p] !== 'object') {
+                      curr[p] = {};
+                  }
+                  curr = curr[p];
+              }
+              const lastKey = parts[parts.length - 1];
+              const existing = curr[lastKey];
+              if (Array.isArray(existing) &&
+                  existing.length === 2 &&
+                  typeof existing[1] === 'string' &&
+                  (existing[0] === null || ['string', 'number', 'boolean'].includes(typeof existing[0]))) {
+                  existing[0] = val;
+              }
+              else {
+                  curr[lastKey] = val;
+              }
+          };
+          let updated = false;
+          // Phương thức 1: Mvu.replaceMvuData
+          if (mvu && typeof mvu.replaceMvuData === 'function' && targetMessageId !== undefined) {
+              try {
+                  const floor = await this.readFloor(targetMessageId);
+                  if (floor && floor.wrapper) {
+                      const clone = typeof structuredClone === 'function'
+                          ? structuredClone(floor.wrapper)
+                          : JSON.parse(JSON.stringify(floor.wrapper));
+                      if (clone.stat_data && typeof clone.stat_data === 'object') {
+                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      }
+                      else {
+                          setDeep(clone, cleanParts, parsedValue);
+                      }
+                      await mvu.replaceMvuData(clone, { type: 'message', message_id: targetMessageId });
+                      updated = true;
+                  }
+              }
+              catch (e) {
+                  console.warn('[MvuManager] replaceMvuData failed, falling back to TavernHelper:', e);
+              }
           }
-          else if (typeof th.updateVariable === 'function') {
-              await th.updateVariable(fullPath, parsedValue);
+          // Phương thức 2: TavernHelper.updateVariablesWith
+          if (!updated && th && typeof th.updateVariablesWith === 'function' && targetMessageId !== undefined) {
+              try {
+                  await th.updateVariablesWith((existing) => {
+                      const clone = typeof structuredClone === 'function'
+                          ? structuredClone(existing || {})
+                          : JSON.parse(JSON.stringify(existing || {}));
+                      if (clone.stat_data && typeof clone.stat_data === 'object') {
+                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      }
+                      else {
+                          setDeep(clone, cleanParts, parsedValue);
+                      }
+                      return clone;
+                  }, { type: 'message', message_id: targetMessageId });
+                  updated = true;
+              }
+              catch (e) {
+                  console.warn('[MvuManager] updateVariablesWith failed, falling back to setVariable:', e);
+              }
           }
-          else {
-              throw new Error('TavernHelper không hỗ trợ setVariable/updateVariable API.');
+          // Phương thức 3: TavernHelper.setVariable / updateVariable
+          if (!updated && th && typeof th.setVariable === 'function') {
+              const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
+              const opts = targetMessageId !== undefined ? { type: 'message', message_id: targetMessageId } : undefined;
+              await th.setVariable(fullPath, parsedValue, opts);
+              updated = true;
           }
-          const newValue = this.getLiveVariables(cleanPath);
+          else if (!updated && th && typeof th.updateVariable === 'function') {
+              const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
+              const opts = targetMessageId !== undefined ? { type: 'message', message_id: targetMessageId } : undefined;
+              await th.updateVariable(fullPath, parsedValue, opts);
+              updated = true;
+          }
+          if (!updated) {
+              throw new Error('Không thể cập nhật biến qua bất kỳ API MVU nào.');
+          }
+          // Làm mới cache sau khi cập nhật
+          const refreshed = await this.readFloor(targetMessageId);
+          if (refreshed) {
+              this.cachedStatData = refreshed.statData;
+              this.cachedWrapper = refreshed.wrapper;
+          }
+          const newValue = this.getLiveVariables(cleanPath, targetMessageId);
           return { success: true, oldValue, newValue };
       }
       /**
@@ -16757,7 +17005,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       /**
        * Báo cáo toàn diện hệ thống MVU của nhân vật hiện hành
        */
-      static async inspectMvu(adapter, filterPath) {
+      static async inspectMvu(adapter, filterPath, targetFloorId) {
           const liveChar = this.getActiveCharacter();
           const charName = liveChar?.name || 'Unknown Character';
           if (!liveChar) {
@@ -16766,6 +17014,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   characterName: charName,
                   parsedSchema: [],
                   liveVariables: null,
+                  rawWrapper: null,
+                  currentFloor: null,
+                  availableFloors: [],
+                  dataSource: 'fallback',
                   initvarVariables: null,
                   updateRulesSummary: '',
                   healthWarnings: ['Không tìm thấy nhân vật nào đang được chọn.'],
@@ -16773,7 +17025,42 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           }
           const isMvu = this.hasMvu(liveChar);
           const zodScript = this.getZodScript(liveChar);
-          const liveVars = this.getLiveVariables(filterPath);
+          // 1. Quét danh sách floor hợp lệ trong chat
+          const floors = await this.listValidFloors();
+          let effectiveFloorId = targetFloorId;
+          if (effectiveFloorId === undefined && floors.length > 0) {
+              effectiveFloorId = floors[0].messageId;
+          }
+          // 2. Đọc dữ liệu floor mục tiêu
+          const floorData = await this.readFloor(effectiveFloorId);
+          if (floorData) {
+              this.cachedStatData = floorData.statData;
+              this.cachedWrapper = floorData.wrapper;
+              this.cachedDataSource = floorData.source;
+              const matchedFloor = floors.find(f => f.messageId === floorData.messageId);
+              this.cachedCurrentFloor =
+                  matchedFloor ||
+                      (floorData.messageId !== undefined
+                          ? {
+                              messageId: floorData.messageId,
+                              displayIndex: floorData.messageId + 1,
+                              role: 'assistant',
+                              name: charName,
+                              preview: '',
+                              source: floorData.source,
+                          }
+                          : null);
+          }
+          else {
+              this.cachedStatData = null;
+              this.cachedWrapper = null;
+              this.cachedCurrentFloor = null;
+              this.cachedDataSource = 'fallback';
+          }
+          this.cachedFloors = floors;
+          const liveVars = filterPath
+              ? this.getLiveVariables(filterPath, effectiveFloorId)
+              : this.cachedStatData;
           const lorebookMvu = await this.getLorebookMvuEntries(adapter, liveChar);
           let initvarParsed = null;
           if (lorebookMvu.initvarEntry?.content) {
@@ -16800,7 +17087,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   warnings.push('Thiếu mục [mvu_update] trong Worldbook để hướng dẫn AI quy tắc cập nhật biến.');
               }
               if (!liveVars) {
-                  warnings.push('TavernHelper chưa trả về dữ liệu stat_data (có thể cuộc hội thoại chưa bắt đầu).');
+                  warnings.push('Chưa tìm thấy dữ liệu stat_data trong bộ nhớ (có thể cuộc hội thoại chưa bắt đầu hoặc chưa gửi tin nhắn).');
               }
           }
           const parsedSchema = zodScript ? this.parseZodCode(zodScript.content) : [];
@@ -16831,6 +17118,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               zodSchemaCode: zodScript?.content,
               parsedSchema,
               liveVariables: liveVars,
+              rawWrapper: this.cachedWrapper,
+              currentFloor: this.cachedCurrentFloor,
+              availableFloors: floors,
+              dataSource: this.cachedDataSource,
               initvarVariables: initvarParsed,
               updateRulesSummary: lorebookMvu.updateRulesEntry?.content || '',
               healthWarnings: warnings,
@@ -26374,6 +26665,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       currentReport = null;
       activeTab = 'stats';
       builderVariables = [];
+      selectedFloorId;
       constructor(adapter) {
           this.adapter = adapter;
           this.bindEvents();
@@ -26397,14 +26689,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               modal.close();
           }
       }
-      async refresh() {
+      async refresh(floorId) {
           const $ = jQuery;
           $('#kaiz-mvu-status-badge')
               .text('Đang đồng bộ...')
               .removeClass('badge-success badge-warning badge-danger')
               .addClass('badge-neutral');
+          if (floorId !== undefined) {
+              this.selectedFloorId = floorId;
+          }
           try {
-              this.currentReport = await MvuManager.inspectMvu(this.adapter);
+              this.currentReport = await MvuManager.inspectMvu(this.adapter, undefined, this.selectedFloorId);
+              if (this.currentReport.currentFloor) {
+                  this.selectedFloorId = this.currentReport.currentFloor.messageId;
+              }
               this.render();
           }
           catch (error) {
@@ -26433,9 +26731,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           $('#kaiz-mvu-refresh-btn')
               .off('click')
               .on('click', async () => {
-              await this.refresh();
+              await this.refresh(this.selectedFloorId);
               if (typeof toastr !== 'undefined') {
                   toastr.info('Đã đồng bộ lại chỉ số MVU.');
+              }
+          });
+          // 3.1 Bộ chọn Lượt Chat (Floor Selector)
+          $('#kaiz-mvu-floor-select')
+              .off('change')
+              .on('change', async (e) => {
+              const val = $(e.target).val();
+              const floorId = val === '' ? undefined : Number(val);
+              this.selectedFloorId = floorId;
+              await this.refresh(floorId);
+              if (typeof toastr !== 'undefined') {
+                  toastr.info(floorId !== undefined
+                      ? `Đã chuyển sang lượt chat #${floorId + 1}`
+                      : 'Đã chuyển sang chế độ tự động theo lượt mới nhất.');
               }
           });
           // 4. Chuyển Tab
@@ -26682,8 +26994,16 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const report = this.currentReport;
           if (!report)
               return;
-          // Cập nhật Tiêu đề & Tên nhân vật
-          $('#kaiz-mvu-subtitle').text(`Nhân vật: ${report.characterName} ${report.hasMvu ? '• ' + (report.zodScriptName || 'Zod Schema') : ''}`);
+          // Cập nhật Tiêu đề, Tên nhân vật, Lượt chat & Nguồn dữ liệu
+          let subtitle = `Nhân vật: ${escapeHtml(report.characterName)} ${report.hasMvu ? '• ' + escapeHtml(report.zodScriptName || 'Zod Schema') : ''}`;
+          if (report.currentFloor) {
+              subtitle += ` • Lượt #${report.currentFloor.displayIndex} (${escapeHtml(report.currentFloor.name)})`;
+          }
+          if (report.dataSource) {
+              const src = report.dataSource === 'mvu' ? 'MVU API' : report.dataSource === 'helper' ? 'TavernHelper' : 'Bộ nhớ ST';
+              subtitle += ` • Nguồn: ${src}`;
+          }
+          $('#kaiz-mvu-subtitle').html(subtitle);
           if (!report.hasMvu) {
               // Không có MVU
               $('#kaiz-mvu-status-badge')
@@ -26701,7 +27021,19 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               .addClass('badge-success');
           $('#kaiz-mvu-empty-container').hide();
           $('#kaiz-mvu-active-container').show();
-          // 1. Cập nhật Ribbon
+          // 1. Cập nhật Ribbon & Floor Selector
+          const floorSelect = $('#kaiz-mvu-floor-select');
+          if (floorSelect.length) {
+              floorSelect.empty();
+              floorSelect.append('<option value="">Lượt mới nhất (Tự động)</option>');
+              if (report.availableFloors && report.availableFloors.length > 0) {
+                  for (const fl of report.availableFloors) {
+                      const isSel = this.selectedFloorId === fl.messageId ? 'selected' : '';
+                      const optText = `Lượt #${fl.displayIndex} · ${escapeHtml(fl.name)} ${fl.preview ? '— ' + escapeHtml(fl.preview) : ''}`;
+                      floorSelect.append(`<option value="${fl.messageId}" ${isSel}>${optText}</option>`);
+                  }
+              }
+          }
           const allDescriptors = this.flattenDescriptors(report.parsedSchema);
           $('#kaiz-mvu-stat-count').text(allDescriptors.length);
           $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'Zod 4 Schema');
@@ -26833,13 +27165,25 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     <div class="kaiz-mvu-cards-grid">
             `;
               for (const desc of descriptors) {
-                  const liveVal = MvuManager.getLiveVariables(desc.path);
-                  const currentVal = liveVal !== undefined ? liveVal : desc.defaultValue !== undefined ? desc.defaultValue : '—';
+                  const liveVal = MvuManager.getLiveVariables(desc.path, this.selectedFloorId);
+                  let currentVal = liveVal !== undefined ? liveVal : desc.defaultValue !== undefined ? desc.defaultValue : '—';
+                  let dynamicDesc = desc.description || '';
+                  if (Array.isArray(currentVal) &&
+                      currentVal.length === 2 &&
+                      typeof currentVal[1] === 'string' &&
+                      (currentVal[0] === null || ['string', 'number', 'boolean'].includes(typeof currentVal[0]))) {
+                      if (!dynamicDesc)
+                          dynamicDesc = currentVal[1];
+                      currentVal = currentVal[0];
+                  }
                   const hasClamp = desc.type === 'number' && desc.min !== undefined && desc.max !== undefined;
                   catHtml += `
                     <div class="kaiz-mvu-stat-card" data-path="${escapeHtml(desc.path)}">
                         <div class="kaiz-mvu-card-top">
-                            <div class="kaiz-mvu-card-name" title="${escapeHtml(desc.path)}">${escapeHtml(desc.name)}</div>
+                            <div class="kaiz-mvu-card-name" title="${escapeHtml(dynamicDesc ? `${desc.path} (${dynamicDesc})` : desc.path)}">
+                                ${escapeHtml(desc.name)}
+                                ${dynamicDesc ? `<span style="font-size: 10.5px; color: #94a3b8; font-weight: normal; margin-left: 4px;">· ${escapeHtml(dynamicDesc)}</span>` : ''}
+                            </div>
                             <div class="kaiz-mvu-card-actions">
                                 <button type="button" class="kaiz-mvu-inline-edit-btn interactable" title="Chỉnh sửa giá trị" data-path="${escapeHtml(desc.path)}">
                                     <i class="fa-solid fa-pen"></i>
@@ -26918,12 +27262,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const editorId = `#editor-${path.replace(/\./g, '_')}`;
               const inputVal = $(editorId).find('.kaiz-mvu-inline-input').val();
               try {
-                  const res = await MvuManager.setLiveVariable(path, inputVal);
+                  const res = await MvuManager.setLiveVariable(path, inputVal, this.selectedFloorId);
                   if (res.success) {
                       if (typeof toastr !== 'undefined') {
                           toastr.success(`Đã cập nhật ${path} = ${inputVal}`);
                       }
-                      await this.refresh();
+                      await this.refresh(this.selectedFloorId);
                   }
               }
               catch (err) {
@@ -27013,6 +27357,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           $('#kaiz-mvu-raw-live').text(report.liveVariables
               ? JSON.stringify(report.liveVariables, null, 2)
               : 'Không có dữ liệu stat_data trong bộ nhớ.');
+          $('#kaiz-mvu-raw-wrapper').text(report.rawWrapper
+              ? JSON.stringify(report.rawWrapper, null, 2)
+              : 'Không có dữ liệu wrapper tin nhắn trong bộ nhớ.');
           $('#kaiz-mvu-raw-zod').text(report.zodSchemaCode || 'Không tìm thấy Zod Schema script.');
           $('#kaiz-mvu-raw-initvar').text(report.initvarVariables ? YAML.stringify(report.initvarVariables) : 'Chưa có Worldbook [InitVar].');
           $('#kaiz-mvu-raw-rules').text(report.updateRulesSummary || 'Chưa có Worldbook [mvu_update].');

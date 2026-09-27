@@ -20,6 +20,7 @@ export class MvuDashboardModal {
     private currentReport: MvuInspectionResult | null = null;
     private activeTab: 'stats' | 'schema' | 'raw' = 'stats';
     private builderVariables: MvuVariableInput[] = [];
+    private selectedFloorId?: number;
 
     constructor(private adapter: SillyTavernAdapter) {
         this.bindEvents();
@@ -47,15 +48,22 @@ export class MvuDashboardModal {
         }
     }
 
-    public async refresh(): Promise<void> {
+    public async refresh(floorId?: number): Promise<void> {
         const $ = jQuery;
         $('#kaiz-mvu-status-badge')
             .text('Đang đồng bộ...')
             .removeClass('badge-success badge-warning badge-danger')
             .addClass('badge-neutral');
 
+        if (floorId !== undefined) {
+            this.selectedFloorId = floorId;
+        }
+
         try {
-            this.currentReport = await MvuManager.inspectMvu(this.adapter);
+            this.currentReport = await MvuManager.inspectMvu(this.adapter, undefined, this.selectedFloorId);
+            if (this.currentReport.currentFloor) {
+                this.selectedFloorId = this.currentReport.currentFloor.messageId;
+            }
             this.render();
         } catch (error: any) {
             console.error('[MvuDashboardModal] Error inspecting MVU:', error);
@@ -87,9 +95,26 @@ export class MvuDashboardModal {
         $('#kaiz-mvu-refresh-btn')
             .off('click')
             .on('click', async () => {
-                await this.refresh();
+                await this.refresh(this.selectedFloorId);
                 if (typeof toastr !== 'undefined') {
                     toastr.info('Đã đồng bộ lại chỉ số MVU.');
+                }
+            });
+
+        // 3.1 Bộ chọn Lượt Chat (Floor Selector)
+        $('#kaiz-mvu-floor-select')
+            .off('change')
+            .on('change', async (e: any) => {
+                const val = $(e.target).val();
+                const floorId = val === '' ? undefined : Number(val);
+                this.selectedFloorId = floorId;
+                await this.refresh(floorId);
+                if (typeof toastr !== 'undefined') {
+                    toastr.info(
+                        floorId !== undefined
+                            ? `Đã chuyển sang lượt chat #${floorId + 1}`
+                            : 'Đã chuyển sang chế độ tự động theo lượt mới nhất.',
+                    );
                 }
             });
 
@@ -357,10 +382,16 @@ export class MvuDashboardModal {
         const report = this.currentReport;
         if (!report) return;
 
-        // Cập nhật Tiêu đề & Tên nhân vật
-        $('#kaiz-mvu-subtitle').text(
-            `Nhân vật: ${report.characterName} ${report.hasMvu ? '• ' + (report.zodScriptName || 'Zod Schema') : ''}`,
-        );
+        // Cập nhật Tiêu đề, Tên nhân vật, Lượt chat & Nguồn dữ liệu
+        let subtitle = `Nhân vật: ${escapeHtml(report.characterName)} ${report.hasMvu ? '• ' + escapeHtml(report.zodScriptName || 'Zod Schema') : ''}`;
+        if (report.currentFloor) {
+            subtitle += ` • Lượt #${report.currentFloor.displayIndex} (${escapeHtml(report.currentFloor.name)})`;
+        }
+        if (report.dataSource) {
+            const src = report.dataSource === 'mvu' ? 'MVU API' : report.dataSource === 'helper' ? 'TavernHelper' : 'Bộ nhớ ST';
+            subtitle += ` • Nguồn: ${src}`;
+        }
+        $('#kaiz-mvu-subtitle').html(subtitle);
 
         if (!report.hasMvu) {
             // Không có MVU
@@ -381,7 +412,20 @@ export class MvuDashboardModal {
         $('#kaiz-mvu-empty-container').hide();
         $('#kaiz-mvu-active-container').show();
 
-        // 1. Cập nhật Ribbon
+        // 1. Cập nhật Ribbon & Floor Selector
+        const floorSelect = $('#kaiz-mvu-floor-select');
+        if (floorSelect.length) {
+            floorSelect.empty();
+            floorSelect.append('<option value="">Lượt mới nhất (Tự động)</option>');
+            if (report.availableFloors && report.availableFloors.length > 0) {
+                for (const fl of report.availableFloors) {
+                    const isSel = this.selectedFloorId === fl.messageId ? 'selected' : '';
+                    const optText = `Lượt #${fl.displayIndex} · ${escapeHtml(fl.name)} ${fl.preview ? '— ' + escapeHtml(fl.preview) : ''}`;
+                    floorSelect.append(`<option value="${fl.messageId}" ${isSel}>${optText}</option>`);
+                }
+            }
+        }
+
         const allDescriptors = this.flattenDescriptors(report.parsedSchema);
         $('#kaiz-mvu-stat-count').text(allDescriptors.length);
         $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'Zod 4 Schema');
@@ -524,15 +568,29 @@ export class MvuDashboardModal {
             `;
 
             for (const desc of descriptors) {
-                const liveVal = MvuManager.getLiveVariables(desc.path);
-                const currentVal =
+                const liveVal = MvuManager.getLiveVariables(desc.path, this.selectedFloorId);
+                let currentVal =
                     liveVal !== undefined ? liveVal : desc.defaultValue !== undefined ? desc.defaultValue : '—';
+                let dynamicDesc = desc.description || '';
+
+                if (
+                    Array.isArray(currentVal) &&
+                    currentVal.length === 2 &&
+                    typeof currentVal[1] === 'string' &&
+                    (currentVal[0] === null || ['string', 'number', 'boolean'].includes(typeof currentVal[0]))
+                ) {
+                    if (!dynamicDesc) dynamicDesc = currentVal[1];
+                    currentVal = currentVal[0];
+                }
                 const hasClamp = desc.type === 'number' && desc.min !== undefined && desc.max !== undefined;
 
                 catHtml += `
                     <div class="kaiz-mvu-stat-card" data-path="${escapeHtml(desc.path)}">
                         <div class="kaiz-mvu-card-top">
-                            <div class="kaiz-mvu-card-name" title="${escapeHtml(desc.path)}">${escapeHtml(desc.name)}</div>
+                            <div class="kaiz-mvu-card-name" title="${escapeHtml(dynamicDesc ? `${desc.path} (${dynamicDesc})` : desc.path)}">
+                                ${escapeHtml(desc.name)}
+                                ${dynamicDesc ? `<span style="font-size: 10.5px; color: #94a3b8; font-weight: normal; margin-left: 4px;">· ${escapeHtml(dynamicDesc)}</span>` : ''}
+                            </div>
                             <div class="kaiz-mvu-card-actions">
                                 <button type="button" class="kaiz-mvu-inline-edit-btn interactable" title="Chỉnh sửa giá trị" data-path="${escapeHtml(desc.path)}">
                                     <i class="fa-solid fa-pen"></i>
@@ -616,12 +674,12 @@ export class MvuDashboardModal {
             const inputVal = $(editorId).find('.kaiz-mvu-inline-input').val();
 
             try {
-                const res = await MvuManager.setLiveVariable(path, inputVal);
+                const res = await MvuManager.setLiveVariable(path, inputVal, this.selectedFloorId);
                 if (res.success) {
                     if (typeof toastr !== 'undefined') {
                         toastr.success(`Đã cập nhật ${path} = ${inputVal}`);
                     }
-                    await this.refresh();
+                    await this.refresh(this.selectedFloorId);
                 }
             } catch (err: any) {
                 console.error('[MvuDashboardModal] Error setting live variable:', err);
@@ -723,6 +781,11 @@ export class MvuDashboardModal {
             report.liveVariables
                 ? JSON.stringify(report.liveVariables, null, 2)
                 : 'Không có dữ liệu stat_data trong bộ nhớ.',
+        );
+        $('#kaiz-mvu-raw-wrapper').text(
+            report.rawWrapper
+                ? JSON.stringify(report.rawWrapper, null, 2)
+                : 'Không có dữ liệu wrapper tin nhắn trong bộ nhớ.',
         );
         $('#kaiz-mvu-raw-zod').text(report.zodSchemaCode || 'Không tìm thấy Zod Schema script.');
         $('#kaiz-mvu-raw-initvar').text(

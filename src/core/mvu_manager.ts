@@ -12,6 +12,15 @@ export interface MvuVariableDescriptor {
     children?: MvuVariableDescriptor[];
 }
 
+export interface MvuFloorInfo {
+    messageId: number;
+    displayIndex: number;
+    role: string;
+    name: string;
+    preview: string;
+    source: 'mvu' | 'helper' | 'fallback';
+}
+
 export interface MvuInspectionResult {
     hasMvu: boolean;
     characterName: string;
@@ -19,6 +28,10 @@ export interface MvuInspectionResult {
     zodSchemaCode?: string;
     parsedSchema: MvuVariableDescriptor[];
     liveVariables: any;
+    rawWrapper?: any;
+    currentFloor?: MvuFloorInfo | null;
+    availableFloors?: MvuFloorInfo[];
+    dataSource?: 'mvu' | 'helper' | 'fallback';
     initvarVariables: any;
     updateRulesSummary: string;
     healthWarnings: string[];
@@ -57,13 +70,40 @@ export interface MvuScaffoldOptions {
 }
 
 export class MvuManager {
+    private static cachedStatData: any = null;
+    private static cachedWrapper: any = null;
+    private static cachedCurrentFloor: MvuFloorInfo | null = null;
+    private static cachedFloors: MvuFloorInfo[] = [];
+    private static cachedDataSource: 'mvu' | 'helper' | 'fallback' = 'fallback';
+
+    /**
+     * Truy xuất ngữ cảnh toàn cục (hỗ trợ cả iframe và window cha)
+     */
+    public static getGlobalContext(): { win: any; th: any; mvu: any; stContext: any } {
+        let win: any = window;
+        try {
+            if (window.parent && window.parent !== window) {
+                win = window.parent;
+            }
+        } catch {}
+        const th = win.TavernHelper || (globalThis as any).TavernHelper || (window as any).TavernHelper || null;
+        const mvu = win.Mvu || (globalThis as any).Mvu || (window as any).Mvu || null;
+        let stContext: any = null;
+        try {
+            stContext =
+                win.SillyTavern?.getContext?.() ||
+                (globalThis as any).SillyTavern?.getContext?.() ||
+                (window as any).SillyTavern?.getContext?.() ||
+                null;
+        } catch {}
+        return { win, th, mvu, stContext };
+    }
+
     /**
      * Lấy SillyTavern Context
      */
     public static getContext(): any {
-        return typeof (globalThis as any).SillyTavern !== 'undefined'
-            ? (globalThis as any).SillyTavern.getContext()
-            : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
+        return this.getGlobalContext().stContext;
     }
 
     /**
@@ -130,55 +170,213 @@ export class MvuManager {
     }
 
     /**
-     * Lấy toàn bộ biến thời gian thực qua TavernHelper API
+     * Đọc dữ liệu biến của một lượt tin nhắn (floor/message) cụ thể
      */
-    public static getLiveVariables(subPath?: string): any {
-        const th = (window as any).TavernHelper;
-        if (!th) return null;
+    public static async readFloor(messageId?: number): Promise<{
+        wrapper: any;
+        statData: any;
+        messageId?: number;
+        source: 'mvu' | 'helper' | 'fallback';
+    } | null> {
+        const { mvu, th } = this.getGlobalContext();
+        const targetId = typeof messageId === 'number' ? messageId : undefined;
+        const opts = targetId !== undefined ? { type: 'message', message_id: targetId } : undefined;
 
-        let data: any = null;
-        try {
-            if (typeof th.getVariables === 'function') {
-                data = th.getVariables('stat_data');
-                if (!data) data = th.getVariables();
+        let raw: any = null;
+        let source: 'mvu' | 'helper' | 'fallback' = 'mvu';
+
+        // 1. Thử gọi API MVU chính thống (SillyTavern-MVU plugin)
+        if (mvu && typeof mvu.getMvuData === 'function') {
+            try {
+                raw = opts ? await mvu.getMvuData(opts) : await mvu.getMvuData();
+            } catch (e) {
+                console.warn('[MvuManager] Error fetching via Mvu.getMvuData:', e);
             }
-        } catch (e) {
-            console.warn('[MvuManager] Failed to get live variables via TavernHelper:', e);
         }
 
-        if (subPath && data) {
+        // 2. Fallback sang TavernHelper API (tương thích)
+        if (!raw && th && typeof th.getVariables === 'function') {
+            source = 'helper';
+            try {
+                raw = opts ? await th.getVariables(opts) : await th.getVariables();
+            } catch (e) {
+                console.warn('[MvuManager] Error fetching via TavernHelper.getVariables:', e);
+            }
+        }
+
+        // 3. Fallback sang SillyTavern chat memory trực tiếp
+        if (!raw && typeof targetId === 'number') {
+            const { stContext } = this.getGlobalContext();
+            const msg = stContext?.chat?.[targetId];
+            if (msg) {
+                if (msg.variables && typeof msg.variables === 'object') {
+                    if (Array.isArray(msg.variables)) {
+                        const swipe = typeof msg.swipe_id === 'number' ? msg.swipe_id : 0;
+                        raw = msg.variables[swipe] || msg.variables[0];
+                    } else {
+                        raw = msg.variables;
+                    }
+                } else if (msg.stat_data && typeof msg.stat_data === 'object') {
+                    raw = msg;
+                }
+                if (raw) source = 'fallback';
+            }
+        }
+
+        if (!raw || typeof raw !== 'object') {
+            return null;
+        }
+
+        // 4. Chuẩn hóa bóc tách: Phân tách wrapper và stat_data
+        const hasStatData =
+            Object.prototype.hasOwnProperty.call(raw, 'stat_data') &&
+            raw.stat_data &&
+            typeof raw.stat_data === 'object';
+
+        const statData = hasStatData ? raw.stat_data : raw;
+
+        return {
+            wrapper: raw,
+            statData,
+            messageId: targetId,
+            source,
+        };
+    }
+
+    /**
+     * Quét danh sách các lượt tin nhắn (floor) có dữ liệu stat_data trong cuộc hội thoại hiện tại
+     */
+    public static async listValidFloors(): Promise<MvuFloorInfo[]> {
+        const { stContext } = this.getGlobalContext();
+        const chat = Array.isArray(stContext?.chat) ? stContext.chat : [];
+        const floors: MvuFloorInfo[] = [];
+
+        for (let i = chat.length - 1; i >= 0; i--) {
+            const msg = chat[i];
+            if (!msg) continue;
+            const isSystem = !!(msg.is_system || msg.role === 'system' || msg.mes_role === 'system');
+            if (isSystem) continue;
+
+            const floorData = await this.readFloor(i);
+            if (
+                floorData &&
+                floorData.statData &&
+                typeof floorData.statData === 'object' &&
+                Object.keys(floorData.statData).length > 0
+            ) {
+                const rawText = String(msg.mes || msg.message || '').replace(/\s+/g, ' ').trim();
+                const preview = rawText.length > 70 ? rawText.slice(0, 70) + '…' : rawText;
+                floors.push({
+                    messageId: i,
+                    displayIndex: i + 1,
+                    role: msg.role ? String(msg.role) : msg.is_user ? 'user' : 'assistant',
+                    name: String(msg.name || msg.ch_name || (msg.is_user ? 'User' : 'Character')),
+                    preview: preview || '(Không có văn bản)',
+                    source: floorData.source,
+                });
+            }
+        }
+        return floors;
+    }
+
+    /**
+     * Lấy toàn bộ biến thời gian thực của nhân vật (đã bóc tách sạch khỏi preset prompts)
+     */
+    public static getLiveVariables(subPath?: string, messageId?: number): any {
+        let data = this.cachedStatData;
+        let wrapper = this.cachedWrapper;
+
+        // Nếu chưa có cache, lấy nhanh từ context hiện tại
+        if (!data) {
+            const { th, mvu } = this.getGlobalContext();
+            let raw: any = null;
+            try {
+                if (mvu && typeof mvu.getMvuData === 'function') {
+                    raw = mvu.getMvuData();
+                }
+            } catch {}
+            if (!raw && th && typeof th.getVariables === 'function') {
+                try {
+                    raw = th.getVariables();
+                } catch {}
+            }
+            if (raw && typeof raw === 'object') {
+                wrapper = raw;
+                data =
+                    raw.stat_data && typeof raw.stat_data === 'object'
+                        ? raw.stat_data
+                        : raw;
+            }
+        }
+
+        if (!data) return null;
+
+        if (subPath) {
             const cleanPath = subPath.replace(/^stat_data\./, '');
             const parts = cleanPath.split('.');
+
+            // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU)
             let curr = data;
+            let found = true;
             for (const p of parts) {
                 if (curr && typeof curr === 'object' && p in curr) {
                     curr = curr[p];
                 } else {
-                    return undefined;
+                    found = false;
+                    break;
                 }
             }
-            return curr;
+            if (found) return curr;
+
+            // Ưu tiên 2: Fallback tìm trong root wrapper (phòng trường hợp biến root)
+            if (wrapper && typeof wrapper === 'object') {
+                let rootCurr = wrapper;
+                let rootFound = true;
+                for (const p of parts) {
+                    if (rootCurr && typeof rootCurr === 'object' && p in rootCurr) {
+                        rootCurr = rootCurr[p];
+                    } else {
+                        rootFound = false;
+                        break;
+                    }
+                }
+                if (rootFound) return rootCurr;
+            }
+
+            return undefined;
         }
 
         return data;
     }
 
     /**
-     * Cập nhật trực tiếp biến ở Runtime qua TavernHelper API
+     * Cập nhật trực tiếp biến ở Runtime qua TavernHelper hoặc Mvu API
      */
     public static async setLiveVariable(
         path: string,
         value: any,
+        messageId?: number,
     ): Promise<{ success: boolean; oldValue: any; newValue: any }> {
-        const th = (window as any).TavernHelper;
-        if (!th) {
-            throw new Error('TavernHelper API chưa được tải trong SillyTavern.');
+        const { th, mvu } = this.getGlobalContext();
+        if (!th && !mvu) {
+            throw new Error('Không tìm thấy TavernHelper hoặc Mvu API trong SillyTavern.');
         }
 
-        // Chuẩn hóa path: đảm bảo có prefix stat_data nếu cần
-        const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${path}`;
+        let targetMessageId = messageId;
+        if (targetMessageId === undefined) {
+            if (this.cachedCurrentFloor) {
+                targetMessageId = this.cachedCurrentFloor.messageId;
+            } else {
+                const floors = await this.listValidFloors();
+                if (floors.length > 0) {
+                    targetMessageId = floors[0].messageId;
+                }
+            }
+        }
+
         const cleanPath = path.replace(/^stat_data\./, '');
-        const oldValue = this.getLiveVariables(cleanPath);
+        const cleanParts = cleanPath.split('.');
+        const oldValue = this.getLiveVariables(cleanPath, targetMessageId);
 
         // Tự động ép kiểu thông minh nếu truyền vào dạng chuỗi
         let parsedValue = value;
@@ -202,15 +400,101 @@ export class MvuManager {
             }
         }
 
-        if (typeof th.setVariable === 'function') {
-            await th.setVariable(fullPath, parsedValue);
-        } else if (typeof th.updateVariable === 'function') {
-            await th.updateVariable(fullPath, parsedValue);
-        } else {
-            throw new Error('TavernHelper không hỗ trợ setVariable/updateVariable API.');
+        const setDeep = (obj: any, parts: string[], val: any) => {
+            let curr = obj;
+            for (let i = 0; i < parts.length - 1; i++) {
+                const p = parts[i];
+                if (!curr[p] || typeof curr[p] !== 'object') {
+                    curr[p] = {};
+                }
+                curr = curr[p];
+            }
+            const lastKey = parts[parts.length - 1];
+            const existing = curr[lastKey];
+            if (
+                Array.isArray(existing) &&
+                existing.length === 2 &&
+                typeof existing[1] === 'string' &&
+                (existing[0] === null || ['string', 'number', 'boolean'].includes(typeof existing[0]))
+            ) {
+                existing[0] = val;
+            } else {
+                curr[lastKey] = val;
+            }
+        };
+
+        let updated = false;
+
+        // Phương thức 1: Mvu.replaceMvuData
+        if (mvu && typeof mvu.replaceMvuData === 'function' && targetMessageId !== undefined) {
+            try {
+                const floor = await this.readFloor(targetMessageId);
+                if (floor && floor.wrapper) {
+                    const clone =
+                        typeof structuredClone === 'function'
+                            ? structuredClone(floor.wrapper)
+                            : JSON.parse(JSON.stringify(floor.wrapper));
+                    if (clone.stat_data && typeof clone.stat_data === 'object') {
+                        setDeep(clone.stat_data, cleanParts, parsedValue);
+                    } else {
+                        setDeep(clone, cleanParts, parsedValue);
+                    }
+                    await mvu.replaceMvuData(clone, { type: 'message', message_id: targetMessageId });
+                    updated = true;
+                }
+            } catch (e) {
+                console.warn('[MvuManager] replaceMvuData failed, falling back to TavernHelper:', e);
+            }
         }
 
-        const newValue = this.getLiveVariables(cleanPath);
+        // Phương thức 2: TavernHelper.updateVariablesWith
+        if (!updated && th && typeof th.updateVariablesWith === 'function' && targetMessageId !== undefined) {
+            try {
+                await th.updateVariablesWith(
+                    (existing: any) => {
+                        const clone =
+                            typeof structuredClone === 'function'
+                                ? structuredClone(existing || {})
+                                : JSON.parse(JSON.stringify(existing || {}));
+                        if (clone.stat_data && typeof clone.stat_data === 'object') {
+                            setDeep(clone.stat_data, cleanParts, parsedValue);
+                        } else {
+                            setDeep(clone, cleanParts, parsedValue);
+                        }
+                        return clone;
+                    },
+                    { type: 'message', message_id: targetMessageId },
+                );
+                updated = true;
+            } catch (e) {
+                console.warn('[MvuManager] updateVariablesWith failed, falling back to setVariable:', e);
+            }
+        }
+
+        // Phương thức 3: TavernHelper.setVariable / updateVariable
+        if (!updated && th && typeof th.setVariable === 'function') {
+            const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
+            const opts = targetMessageId !== undefined ? { type: 'message', message_id: targetMessageId } : undefined;
+            await th.setVariable(fullPath, parsedValue, opts);
+            updated = true;
+        } else if (!updated && th && typeof th.updateVariable === 'function') {
+            const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
+            const opts = targetMessageId !== undefined ? { type: 'message', message_id: targetMessageId } : undefined;
+            await th.updateVariable(fullPath, parsedValue, opts);
+            updated = true;
+        }
+
+        if (!updated) {
+            throw new Error('Không thể cập nhật biến qua bất kỳ API MVU nào.');
+        }
+
+        // Làm mới cache sau khi cập nhật
+        const refreshed = await this.readFloor(targetMessageId);
+        if (refreshed) {
+            this.cachedStatData = refreshed.statData;
+            this.cachedWrapper = refreshed.wrapper;
+        }
+        const newValue = this.getLiveVariables(cleanPath, targetMessageId);
         return { success: true, oldValue, newValue };
     }
 
@@ -497,7 +781,11 @@ export class MvuManager {
     /**
      * Báo cáo toàn diện hệ thống MVU của nhân vật hiện hành
      */
-    public static async inspectMvu(adapter: SillyTavernAdapter, filterPath?: string): Promise<MvuInspectionResult> {
+    public static async inspectMvu(
+        adapter: SillyTavernAdapter,
+        filterPath?: string,
+        targetFloorId?: number,
+    ): Promise<MvuInspectionResult> {
         const liveChar = this.getActiveCharacter();
         const charName = liveChar?.name || 'Unknown Character';
 
@@ -507,6 +795,10 @@ export class MvuManager {
                 characterName: charName,
                 parsedSchema: [],
                 liveVariables: null,
+                rawWrapper: null,
+                currentFloor: null,
+                availableFloors: [],
+                dataSource: 'fallback',
                 initvarVariables: null,
                 updateRulesSummary: '',
                 healthWarnings: ['Không tìm thấy nhân vật nào đang được chọn.'],
@@ -515,7 +807,45 @@ export class MvuManager {
 
         const isMvu = this.hasMvu(liveChar);
         const zodScript = this.getZodScript(liveChar);
-        const liveVars = this.getLiveVariables(filterPath);
+
+        // 1. Quét danh sách floor hợp lệ trong chat
+        const floors = await this.listValidFloors();
+        let effectiveFloorId = targetFloorId;
+        if (effectiveFloorId === undefined && floors.length > 0) {
+            effectiveFloorId = floors[0].messageId;
+        }
+
+        // 2. Đọc dữ liệu floor mục tiêu
+        const floorData = await this.readFloor(effectiveFloorId);
+        if (floorData) {
+            this.cachedStatData = floorData.statData;
+            this.cachedWrapper = floorData.wrapper;
+            this.cachedDataSource = floorData.source;
+            const matchedFloor = floors.find(f => f.messageId === floorData.messageId);
+            this.cachedCurrentFloor =
+                matchedFloor ||
+                (floorData.messageId !== undefined
+                    ? {
+                          messageId: floorData.messageId,
+                          displayIndex: floorData.messageId + 1,
+                          role: 'assistant',
+                          name: charName,
+                          preview: '',
+                          source: floorData.source,
+                      }
+                    : null);
+        } else {
+            this.cachedStatData = null;
+            this.cachedWrapper = null;
+            this.cachedCurrentFloor = null;
+            this.cachedDataSource = 'fallback';
+        }
+        this.cachedFloors = floors;
+
+        const liveVars = filterPath
+            ? this.getLiveVariables(filterPath, effectiveFloorId)
+            : this.cachedStatData;
+
         const lorebookMvu = await this.getLorebookMvuEntries(adapter, liveChar);
 
         let initvarParsed: any = null;
@@ -542,7 +872,7 @@ export class MvuManager {
                 warnings.push('Thiếu mục [mvu_update] trong Worldbook để hướng dẫn AI quy tắc cập nhật biến.');
             }
             if (!liveVars) {
-                warnings.push('TavernHelper chưa trả về dữ liệu stat_data (có thể cuộc hội thoại chưa bắt đầu).');
+                warnings.push('Chưa tìm thấy dữ liệu stat_data trong bộ nhớ (có thể cuộc hội thoại chưa bắt đầu hoặc chưa gửi tin nhắn).');
             }
         }
 
@@ -577,6 +907,10 @@ export class MvuManager {
             zodSchemaCode: zodScript?.content,
             parsedSchema,
             liveVariables: liveVars,
+            rawWrapper: this.cachedWrapper,
+            currentFloor: this.cachedCurrentFloor,
+            availableFloors: floors,
+            dataSource: this.cachedDataSource,
             initvarVariables: initvarParsed,
             updateRulesSummary: lorebookMvu.updateRulesEntry?.content || '',
             healthWarnings: warnings,

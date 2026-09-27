@@ -1781,6 +1781,12 @@
                 </div>
 
                 <div class="kaiz-mvu-ribbon-actions">
+                    <div class="kaiz-mvu-floor-control" style="display: flex; align-items: center; gap: 6px;">
+                        <label for="kaiz-mvu-floor-select" style="font-size: 11.5px; color: #94a3b8; white-space: nowrap;"><i class="fa-solid fa-layer-group"></i> Lượt chat:</label>
+                        <select id="kaiz-mvu-floor-select" class="kaiz-mvu-floor-select" style="background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.35); border-radius: 6px; color: #f1f5f9; padding: 4px 8px; font-size: 11.5px; max-width: 230px; outline: none; cursor: pointer;">
+                            <option value="">Lượt mới nhất (Tự động)</option>
+                        </select>
+                    </div>
                     <button
                         type="button"
                         id="kaiz-mvu-toggle-add-btn"
@@ -1898,6 +1904,12 @@
                             <span><i class="fa-solid fa-compass"></i> Worldbook [mvu_update] (YAML)</span>
                         </div>
                         <pre id="kaiz-mvu-raw-rules" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane kaiz-mvu-raw-pane-full">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-layer-group"></i> Toàn bộ biến tin nhắn (Message Variables Wrapper)</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-wrapper" class="kaiz-mvu-pre"></pre>
                     </div>
                 </div>
             </div>
