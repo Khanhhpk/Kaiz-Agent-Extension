@@ -383,7 +383,7 @@ export class MvuDashboardModal {
         if (!report) return;
 
         // Cập nhật Tiêu đề, Tên nhân vật, Lượt chat & Nguồn dữ liệu
-        let subtitle = `Nhân vật: ${escapeHtml(report.characterName)} ${report.hasMvu ? '• ' + escapeHtml(report.zodScriptName || 'Zod Schema') : ''}`;
+        let subtitle = `Nhân vật: ${escapeHtml(report.characterName)} ${report.hasMvu ? '• ' + escapeHtml(report.zodScriptName || 'Hệ thống MVU') : ''}`;
         if (report.currentFloor) {
             subtitle += ` • Lượt #${report.currentFloor.displayIndex} (${escapeHtml(report.currentFloor.name)})`;
         }
@@ -428,7 +428,7 @@ export class MvuDashboardModal {
 
         const allDescriptors = this.flattenDescriptorsForSchema(report.parsedSchema);
         $('#kaiz-mvu-stat-count').text(allDescriptors.length);
-        $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'Zod 4 Schema');
+        $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'MagVarUpdate / MVU');
 
         if (report.initvarVariables) {
             $('#kaiz-mvu-initvar-pill')

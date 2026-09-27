@@ -522,9 +522,16 @@ export class MvuManager {
         const embeddedEntries = char?.data?.character_book?.entries || [];
         for (const entry of embeddedEntries) {
             const comment = (entry.comment || '').toLowerCase();
+            const content = (entry.content || '').toLowerCase();
             if (comment.includes('initvar') || comment.includes('khởi tạo biến') || comment.includes('[initvar]')) {
                 result.initvarEntry = entry;
-            } else if (comment.includes('mvu_update') || comment.includes('quy tắc cập nhật')) {
+            } else if (
+                comment.includes('mvu_update') ||
+                comment.includes('quy tắc cập nhật') ||
+                comment.includes('cập nhật biến') ||
+                content.includes('【cập nhật biến】') ||
+                content.includes('quy tắc cập nhật')
+            ) {
                 result.updateRulesEntry = entry;
             } else if (
                 comment.includes('mvu_format') ||
@@ -548,12 +555,16 @@ export class MvuManager {
                       : [];
                 for (const entry of entries as any[]) {
                     const comment = (entry?.comment || '').toLowerCase();
+                    const content = (entry?.content || '').toLowerCase();
                     if (!result.initvarEntry && (comment.includes('initvar') || comment.includes('khởi tạo biến'))) {
                         result.initvarEntry = entry;
                     }
                     if (
                         !result.updateRulesEntry &&
-                        (comment.includes('mvu_update') || comment.includes('quy tắc cập nhật'))
+                        (comment.includes('mvu_update') ||
+                            comment.includes('quy tắc cập nhật') ||
+                            comment.includes('cập nhật biến') ||
+                            content.includes('【cập nhật biến】'))
                     ) {
                         result.updateRulesEntry = entry;
                     }
@@ -644,7 +655,7 @@ export class MvuManager {
         let sMatch: RegExpExecArray | null;
         while ((sMatch = subSchemaRegex.exec(code)) !== null) {
             const sName = sMatch[1];
-            if (sName === 'Schema') continue;
+            if (sName.toLowerCase() === 'schema') continue;
             const braceIdx = sMatch.index + sMatch[0].length - 1;
             const inner = this.extractMatchingBraceContent(code, braceIdx);
             if (inner) {
@@ -812,9 +823,23 @@ export class MvuManager {
             let max: number | undefined;
             let defaultValue: any;
 
-            // 1. Kiểm tra nested z.object({ ... })
-            const hasZObject = /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr);
-            if (hasZObject) {
+            // 1. Kiểm tra outermost z.record hoặc z.object({ ... })
+            const isRecord = /^\s*z(?:\s*\.\s*)record\s*\(/.test(expr);
+            const isObject = /^\s*z(?:\s*\.\s*)object\s*\(/.test(expr);
+
+            if (isRecord) {
+                type = 'record';
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                if (objMatch && objMatch.index !== undefined) {
+                    const openIdx = expr.indexOf('{', objMatch.index);
+                    if (openIdx !== -1) {
+                        const inner = this.extractMatchingBraceContent(expr, openIdx);
+                        if (inner) {
+                            recordTemplate = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                        }
+                    }
+                }
+            } else if (isObject || /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr)) {
                 type = 'object';
                 const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
                 if (objMatch && objMatch.index !== undefined) {
@@ -829,7 +854,7 @@ export class MvuManager {
             }
 
             // 2. Kiểm tra tham chiếu tới knownSubSchemas (ví dụ: `Tài_sản: TaiSan` hoặc `Bang(NPC)`)
-            if (type === 'unknown' || (type === 'object' && (!children || children.length === 0))) {
+            if (type === 'unknown' || (type === 'record' && !recordTemplate) || (type === 'object' && (!children || children.length === 0))) {
                 for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
                     const wordRegex = new RegExp(`\\b${subName}\\b`);
                     if (wordRegex.test(expr)) {
@@ -838,7 +863,7 @@ export class MvuManager {
                                 hInfo.type === 'record' &&
                                 (expr.includes(`${hName}(${subName})`) || (expr.includes(hName) && expr.includes(subName))),
                         );
-                        if (isRecordHelper || expr.includes(`z.record`)) {
+                        if (isRecord || isRecordHelper || expr.includes(`z.record`)) {
                             type = 'record';
                             recordTemplate = subDescriptors;
                             children = [];
@@ -901,36 +926,38 @@ export class MvuManager {
                 }
             }
 
-            // 4. Kiểm tra các kiểu Zod cơ bản trực tiếp
+            // 4. Kiểm tra các kiểu Zod cơ bản trực tiếp (thứ tự ưu tiên: record, array, coerce.number, boolean, string)
             if (type === 'unknown') {
-                if (/\bz(?:\s*\.\s*)(?:coerce\s*\.\s*)?number\b/.test(expr)) {
-                    type = 'number';
-                } else if (/\bz(?:\s*\.\s*)string\b/.test(expr)) {
-                    type = 'string';
-                } else if (/\bz(?:\s*\.\s*)boolean\b/.test(expr)) {
-                    type = 'boolean';
-                } else if (/\bz(?:\s*\.\s*)record\b/.test(expr)) {
+                if (/\bz(?:\s*\.\s*)record\b/.test(expr)) {
                     type = 'record';
                 } else if (/\bz(?:\s*\.\s*)array\b/.test(expr)) {
                     type = 'array';
+                } else if (/\bz(?:\s*\.\s*)(?:coerce\s*\.\s*)?number\b/.test(expr)) {
+                    type = 'number';
+                } else if (/\bz(?:\s*\.\s*)boolean\b/.test(expr)) {
+                    type = 'boolean';
+                } else if (/\bz(?:\s*\.\s*)string\b/.test(expr)) {
+                    type = 'string';
                 }
             }
 
-            // 5. Trích xuất min / max / clamp / prefault
-            if (min === undefined || max === undefined) {
-                const clampMatch = expr.match(/clamp\s*\([^,]+,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/i);
-                if (clampMatch) {
-                    if (min === undefined) min = Number(clampMatch[1]);
-                    if (max === undefined) max = Number(clampMatch[2]);
+            // 5. Trích xuất min / max / clamp (chỉ áp dụng cho number)
+            if (type === 'number') {
+                if (min === undefined || max === undefined) {
+                    const clampMatch = expr.match(/clamp\s*\([^,]+,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/i);
+                    if (clampMatch) {
+                        if (min === undefined) min = Number(clampMatch[1]);
+                        if (max === undefined) max = Number(clampMatch[2]);
+                    }
                 }
-            }
-            if (min === undefined) {
-                const minMatch = expr.match(/\.min\s*\(\s*(-?\d+)\s*\)/);
-                if (minMatch) min = Number(minMatch[1]);
-            }
-            if (max === undefined) {
-                const maxMatch = expr.match(/\.max\s*\(\s*(-?\d+)\s*\)/);
-                if (maxMatch) max = Number(maxMatch[1]);
+                if (min === undefined) {
+                    const minMatch = expr.match(/\.min\s*\(\s*(-?\d+)\s*\)/);
+                    if (minMatch) min = Number(minMatch[1]);
+                }
+                if (max === undefined) {
+                    const maxMatch = expr.match(/\.max\s*\(\s*(-?\d+)\s*\)/);
+                    if (maxMatch) max = Number(maxMatch[1]);
+                }
             }
 
             if (defaultValue === undefined) {
@@ -1078,29 +1105,56 @@ export class MvuManager {
      */
     public static generateSchemaFromData(data: any, parentPath = ''): MvuVariableDescriptor[] {
         if (!data || typeof data !== 'object') return [];
-        return Object.entries(data).map(([key, val]) => {
+        const descriptors: MvuVariableDescriptor[] = [];
+
+        for (const [key, val] of Object.entries(data)) {
+            if (key.startsWith('$')) continue; // Bỏ qua $meta, $__, etc. (nội bộ MVU engine)
+
             const currentPath = parentPath ? `${parentPath}.${key}` : key;
-            if (typeof val === 'number') {
-                return { name: key, path: currentPath, type: 'number', defaultValue: val };
-            } else if (typeof val === 'boolean') {
-                return { name: key, path: currentPath, type: 'boolean', defaultValue: val };
-            } else if (Array.isArray(val)) {
-                return { name: key, path: currentPath, type: 'array', defaultValue: val };
-            } else if (typeof val === 'object' && val !== null) {
-                const isTuple =
-                    Array.isArray(val) &&
-                    val.length === 2 &&
-                    typeof val[1] === 'string' &&
-                    (val[0] === null || ['string', 'number', 'boolean'].includes(typeof val[0]));
-                if (isTuple) {
-                    const t = typeof val[0] === 'number' ? 'number' : typeof val[0] === 'boolean' ? 'boolean' : 'string';
-                    return { name: key, path: currentPath, type: t, defaultValue: val[0], description: val[1] };
+            const isTuple =
+                Array.isArray(val) &&
+                val.length === 2 &&
+                typeof val[1] === 'string' &&
+                (val[0] === null || ['string', 'number', 'boolean'].includes(typeof val[0]));
+
+            if (isTuple) {
+                const rawVal = val[0];
+                const descText = val[1];
+                const t = typeof rawVal === 'number' ? 'number' : typeof rawVal === 'boolean' ? 'boolean' : 'string';
+                let min: number | undefined;
+                let max: number | undefined;
+                if (t === 'number') {
+                    const rangeMatch =
+                        descText.match(/(?:khoảng|trong|từ)?\s*\[\s*(-?\d+)\s*[,~-]\s*(-?\d+)\s*\]/i) ||
+                        descText.match(/(-?\d+)\s*[-~]\s*(-?\d+)/);
+                    if (rangeMatch) {
+                        min = Number(rangeMatch[1]);
+                        max = Number(rangeMatch[2]);
+                    }
                 }
+                descriptors.push({
+                    name: key,
+                    path: currentPath,
+                    type: t,
+                    defaultValue: rawVal,
+                    description: descText,
+                    min,
+                    max,
+                });
+            } else if (typeof val === 'number') {
+                descriptors.push({ name: key, path: currentPath, type: 'number', defaultValue: val });
+            } else if (typeof val === 'boolean') {
+                descriptors.push({ name: key, path: currentPath, type: 'boolean', defaultValue: val });
+            } else if (Array.isArray(val)) {
+                descriptors.push({ name: key, path: currentPath, type: 'array', defaultValue: val });
+            } else if (typeof val === 'object' && val !== null) {
                 const children = this.generateSchemaFromData(val, currentPath);
-                return { name: key, path: currentPath, type: 'object', children };
+                descriptors.push({ name: key, path: currentPath, type: 'object', children });
+            } else {
+                descriptors.push({ name: key, path: currentPath, type: 'string', defaultValue: String(val) });
             }
-            return { name: key, path: currentPath, type: 'string', defaultValue: String(val) };
-        });
+        }
+        return descriptors;
     }
 
     /**
@@ -1202,6 +1256,9 @@ export class MvuManager {
         }
 
         let parsedSchema = zodScript ? this.parseZodCode(zodScript.content) : [];
+        if (parsedSchema.length === 0 && initvarParsed) {
+            parsedSchema = this.generateSchemaFromData(initvarParsed);
+        }
         if (liveVars) {
             if (parsedSchema.length === 0) {
                 parsedSchema = this.generateSchemaFromData(liveVars);
