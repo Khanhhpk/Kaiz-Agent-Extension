@@ -1000,12 +1000,18 @@ export class SillyTavernAdapter {
                             characterBook = {
                                 name: linkedWorldName,
                                 description: `Tự động đóng gói từ Worldbook liên kết [${linkedWorldName}] vào bản sao lưu thẻ.`,
-                                scan_depth: worldData.scan_depth ?? 2,
-                                token_budget: worldData.token_budget ?? 500,
-                                recursive_scanning: worldData.recursive_scanning ?? false,
                                 extensions: worldData.extensions ?? {},
                                 entries: entriesArray,
                             };
+                            if (worldData.scan_depth !== undefined && worldData.scan_depth !== null) {
+                                characterBook.scan_depth = worldData.scan_depth;
+                            }
+                            if (worldData.token_budget !== undefined && worldData.token_budget !== null) {
+                                characterBook.token_budget = worldData.token_budget;
+                            }
+                            if (worldData.recursive_scanning !== undefined && worldData.recursive_scanning !== null) {
+                                characterBook.recursive_scanning = worldData.recursive_scanning;
+                            }
                         }
                     } catch (wbErr) {
                         console.warn('[KaizAgent] Không thể nhúng linked worldbook vào bản sao lưu thẻ:', wbErr);

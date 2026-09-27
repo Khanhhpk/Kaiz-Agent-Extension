@@ -17775,6 +17775,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           }
           // 4. Lưu lại toàn bộ vào SillyTavern Backend qua merge-attributes
           const mergePayload = {
+              avatar: liveChar.avatar,
               avatar_url: liveChar.avatar,
               ch_name: liveChar.name,
               data: {
@@ -17790,6 +17791,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           });
           if (!res.ok) {
               throw new Error(`Lỗi khi lưu vào SillyTavern Backend: HTTP ${res.status}`);
+          }
+          if (typeof ctx.saveCharacterDebounced === 'function') {
+              ctx.saveCharacterDebounced();
           }
           return {
               success: true,
@@ -17975,8 +17979,20 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               liveChar.data.extensions.tavern_helper = { scripts: {} };
           if (!liveChar.data.extensions.regex_scripts)
               liveChar.data.extensions.regex_scripts = [];
-          if (!liveChar.data.character_book)
-              liveChar.data.character_book = { entries: [] };
+          if (!liveChar.data.character_book) {
+              liveChar.data.character_book = {
+                  name: liveChar.name ? `${liveChar.name}'s Lorebook` : 'Character Book',
+                  description: '',
+                  extensions: {},
+                  entries: [],
+              };
+          }
+          else {
+              if (!liveChar.data.character_book.extensions)
+                  liveChar.data.character_book.extensions = {};
+              if (!Array.isArray(liveChar.data.character_book.entries))
+                  liveChar.data.character_book.entries = [];
+          }
           let zodCode = '';
           let initvarData = {};
           let updateRulesData = { Quy_tắc_cập_nhật: {} };
@@ -18127,46 +18143,63 @@ format: |-
   </JSONPatch>
   </UpdateVariable>
 </update_variable_rules>`;
+          const now = Date.now();
           const newEntries = [
               {
+                  id: now,
+                  keys: [],
+                  secondary_keys: [],
                   comment: '[InitVar] Khởi tạo biến cấm bật',
                   content: YAML.stringify(initvarData),
                   enabled: false, // Bắt buộc vô hiệu hóa: MVU chỉ đọc các mục initvar bị vô hiệu hóa để không tốn token prompt
                   constant: false,
                   selective: false,
-                  keys: [],
                   position: 'before_char',
                   insertion_order: 100,
+                  use_regex: false,
+                  extensions: {},
               },
               {
+                  id: now + 1,
+                  keys: [],
+                  secondary_keys: [],
                   comment: '[mvu_update] Quy tắc cập nhật biến',
                   content: YAML.stringify(updateRulesData),
                   enabled: true,
                   constant: true,
                   selective: false,
-                  keys: [],
                   position: 'before_char',
                   insertion_order: 101,
+                  use_regex: false,
+                  extensions: {},
               },
               {
+                  id: now + 2,
+                  keys: [],
+                  secondary_keys: [],
                   comment: '[mvu_update] Định dạng đầu ra của biến',
                   content: outputFormatContent,
                   enabled: true,
                   constant: true,
                   selective: false,
-                  keys: [],
                   position: 'before_char',
                   insertion_order: 102,
+                  use_regex: false,
+                  extensions: {},
               },
               {
+                  id: now + 3,
+                  keys: [],
+                  secondary_keys: [],
                   comment: 'Danh sách biến',
                   content: `<status_current_variable>\n{{format_message_variable::stat_data}}\n</status_current_variable>`,
                   enabled: true,
                   constant: true,
                   selective: false,
-                  keys: [],
                   position: 'before_char',
                   insertion_order: 103,
+                  use_regex: false,
+                  extensions: {},
               },
           ];
           const existingComments = new Set((liveChar.data.character_book.entries || []).map((e) => e.comment));
@@ -18187,6 +18220,7 @@ format: |-
               method: 'POST',
               headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
               body: JSON.stringify({
+                  avatar: liveChar.avatar,
                   avatar_url: liveChar.avatar,
                   ch_name: liveChar.name,
                   data: {
@@ -18197,6 +18231,9 @@ format: |-
           });
           if (!res.ok) {
               throw new Error(`Lưu MVU vào SillyTavern thất bại: HTTP ${res.status}`);
+          }
+          if (typeof ctx.saveCharacterDebounced === 'function') {
+              ctx.saveCharacterDebounced();
           }
           return {
               success: true,
@@ -19911,12 +19948,18 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                               characterBook = {
                                   name: linkedWorldName,
                                   description: `Tự động đóng gói từ Worldbook liên kết [${linkedWorldName}] vào bản sao lưu thẻ.`,
-                                  scan_depth: worldData.scan_depth ?? 2,
-                                  token_budget: worldData.token_budget ?? 500,
-                                  recursive_scanning: worldData.recursive_scanning ?? false,
                                   extensions: worldData.extensions ?? {},
                                   entries: entriesArray,
                               };
+                              if (worldData.scan_depth !== undefined && worldData.scan_depth !== null) {
+                                  characterBook.scan_depth = worldData.scan_depth;
+                              }
+                              if (worldData.token_budget !== undefined && worldData.token_budget !== null) {
+                                  characterBook.token_budget = worldData.token_budget;
+                              }
+                              if (worldData.recursive_scanning !== undefined && worldData.recursive_scanning !== null) {
+                                  characterBook.recursive_scanning = worldData.recursive_scanning;
+                              }
                           }
                       }
                       catch (wbErr) {
