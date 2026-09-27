@@ -549,23 +549,20 @@ export class MvuDashboardModal {
         return { name: categoryName, icon, order };
     }
 
-    private getProgressBarTheme(name: string): { fillClass: string; color: string } {
-        const n = name.toLowerCase();
-        // Nhóm Sinh lực / Sức khỏe / Máu
-        if (n.includes('hp') || n.includes('health') || n.includes('máu') || n.includes('sinh_')) {
+    /**
+     * Xác định màu sắc thanh tiến trình hoàn toàn tự động theo tỷ lệ % (100% Data-Driven):
+     * - Dưới 25%: Đỏ nguy cấp (Crimson)
+     * - 25% - 50%: Hổ phách cảnh báo (Amber)
+     * - 50% - 80%: Xanh lam dồi dào (Cyan)
+     * - Trên 80%: Lục bảo tối ưu (Emerald)
+     */
+    private getProgressBarTheme(pct: number): { fillClass: string; color: string } {
+        if (pct <= 25) {
             return { fillClass: 'mvu-bar-crimson', color: '#f43f5e' };
-        }
-        // Nhóm Năng lượng / Tinh thần / Ma lực
-        if (n.includes('mp') || n.includes('mana') || n.includes('energy') || n.includes('spirit') || n.includes('linh_')) {
-            return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
-        }
-        // Nhóm Xã hội / Quan hệ / Hảo cảm
-        if (n.includes('love') || n.includes('affection') || n.includes('hảo_cảm') || n.includes('trust') || n.includes('tin_tưởng')) {
-            return { fillClass: 'mvu-bar-rose', color: '#ec4899' };
-        }
-        // Nhóm Tiền tệ / Tài nguyên
-        if (n.includes('gold') || n.includes('money') || n.includes('coin') || n.includes('tiền') || n.includes('bảng') || n.includes('xu')) {
+        } else if (pct <= 50) {
             return { fillClass: 'mvu-bar-amber', color: '#eab308' };
+        } else if (pct <= 80) {
+            return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
         }
         return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
     }
@@ -659,7 +656,7 @@ export class MvuDashboardModal {
                     const max = desc.max!;
                     const numVal = Number(currentVal) || 0;
                     const pct = Math.min(100, Math.max(0, ((numVal - min) / (max - min)) * 100));
-                    const theme = this.getProgressBarTheme(desc.name);
+                    const theme = this.getProgressBarTheme(pct);
 
                     catHtml += `
                         <div class="kaiz-mvu-card-numeric">

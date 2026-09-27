@@ -19,7 +19,7 @@ export const inspectMvuTool: ITool = {
                 path: {
                     type: 'string',
                     description:
-                        'Đường dẫn biến cụ thể cần lọc (VD: "Người_chơi.Tu_vi" hoặc "stat_data.Hảo_cảm"). Nếu để trống sẽ trả về toàn bộ cây biến.',
+                        'Đường dẫn biến cụ thể cần lọc (VD: "Trạng_thái.Sức_khỏe" hoặc "stat_data.Thuộc_tính"). Nếu để trống sẽ trả về toàn bộ cây biến.',
                 },
             },
         },

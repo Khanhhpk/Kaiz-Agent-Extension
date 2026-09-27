@@ -41,7 +41,7 @@ export interface MvuInspectionResult {
 
 export interface MvuMutationOptions {
     action: 'add' | 'rename' | 'delete' | 'modify';
-    variablePath: string; // e.g. "Người_chơi.Tu_vi.Chân_nguyên" or "stat_data.Người_chơi..."
+    variablePath: string; // e.g. "Trạng_thái.Sức_khỏe" or "stat_data.Nhân_vật..."
     type?: 'number' | 'string' | 'boolean' | 'array' | 'object';
     min?: number;
     max?: number;
@@ -833,11 +833,12 @@ export class MvuManager {
                 for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
                     const wordRegex = new RegExp(`\\b${subName}\\b`);
                     if (wordRegex.test(expr)) {
-                        if (
-                            expr.includes(`Bang(${subName})`) ||
-                            expr.includes(`z.record`) ||
-                            (helpers['Bang'] && expr.includes(subName))
-                        ) {
+                        const isRecordHelper = Object.entries(helpers).some(
+                            ([hName, hInfo]) =>
+                                hInfo.type === 'record' &&
+                                (expr.includes(`${hName}(${subName})`) || (expr.includes(hName) && expr.includes(subName))),
+                        );
+                        if (isRecordHelper || expr.includes(`z.record`)) {
                             type = 'record';
                             recordTemplate = subDescriptors;
                             children = [];

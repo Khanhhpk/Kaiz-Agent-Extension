@@ -17049,9 +17049,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
                       const wordRegex = new RegExp(`\\b${subName}\\b`);
                       if (wordRegex.test(expr)) {
-                          if (expr.includes(`Bang(${subName})`) ||
-                              expr.includes(`z.record`) ||
-                              (helpers['Bang'] && expr.includes(subName))) {
+                          const isRecordHelper = Object.entries(helpers).some(([hName, hInfo]) => hInfo.type === 'record' &&
+                              (expr.includes(`${hName}(${subName})`) || (expr.includes(hName) && expr.includes(subName))));
+                          if (isRecordHelper || expr.includes(`z.record`)) {
                               type = 'record';
                               recordTemplate = subDescriptors;
                               children = [];
@@ -18114,7 +18114,7 @@ format: |-
               properties: {
                   path: {
                       type: 'string',
-                      description: 'Đường dẫn biến cụ thể cần lọc (VD: "Người_chơi.Tu_vi" hoặc "stat_data.Hảo_cảm"). Nếu để trống sẽ trả về toàn bộ cây biến.',
+                      description: 'Đường dẫn biến cụ thể cần lọc (VD: "Trạng_thái.Sức_khỏe" hoặc "stat_data.Thuộc_tính"). Nếu để trống sẽ trả về toàn bộ cây biến.',
                   },
               },
           },
@@ -18152,7 +18152,7 @@ format: |-
               properties: {
                   path: {
                       type: 'string',
-                      description: 'Đường dẫn biến cần sửa (VD: "stat_data.Người_chơi.Tu_vi.Chân_nguyên" hoặc "Hảo_cảm" hoặc "Nhân_vật.Túi_đồ").',
+                      description: 'Đường dẫn biến cần sửa (VD: "stat_data.Thuộc_tính.Sức_khỏe" hoặc "Trạng_thái" hoặc "Nhân_vật.Túi_đồ").',
                   },
                   value: {
                       type: 'string',
@@ -27504,23 +27504,22 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           return { name: categoryName, icon, order };
       }
-      getProgressBarTheme(name) {
-          const n = name.toLowerCase();
-          // Nhóm Sinh lực / Sức khỏe / Máu
-          if (n.includes('hp') || n.includes('health') || n.includes('máu') || n.includes('sinh_')) {
+      /**
+       * Xác định màu sắc thanh tiến trình hoàn toàn tự động theo tỷ lệ % (100% Data-Driven):
+       * - Dưới 25%: Đỏ nguy cấp (Crimson)
+       * - 25% - 50%: Hổ phách cảnh báo (Amber)
+       * - 50% - 80%: Xanh lam dồi dào (Cyan)
+       * - Trên 80%: Lục bảo tối ưu (Emerald)
+       */
+      getProgressBarTheme(pct) {
+          if (pct <= 25) {
               return { fillClass: 'mvu-bar-crimson', color: '#f43f5e' };
           }
-          // Nhóm Năng lượng / Tinh thần / Ma lực
-          if (n.includes('mp') || n.includes('mana') || n.includes('energy') || n.includes('spirit') || n.includes('linh_')) {
-              return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
-          }
-          // Nhóm Xã hội / Quan hệ / Hảo cảm
-          if (n.includes('love') || n.includes('affection') || n.includes('hảo_cảm') || n.includes('trust') || n.includes('tin_tưởng')) {
-              return { fillClass: 'mvu-bar-rose', color: '#ec4899' };
-          }
-          // Nhóm Tiền tệ / Tài nguyên
-          if (n.includes('gold') || n.includes('money') || n.includes('coin') || n.includes('tiền') || n.includes('bảng') || n.includes('xu')) {
+          else if (pct <= 50) {
               return { fillClass: 'mvu-bar-amber', color: '#eab308' };
+          }
+          else if (pct <= 80) {
+              return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
           }
           return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
       }
@@ -27594,7 +27593,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const max = desc.max;
                       const numVal = Number(currentVal) || 0;
                       const pct = Math.min(100, Math.max(0, ((numVal - min) / (max - min)) * 100));
-                      const theme = this.getProgressBarTheme(desc.name);
+                      const theme = this.getProgressBarTheme(pct);
                       catHtml += `
                         <div class="kaiz-mvu-card-numeric">
                             <span class="kaiz-mvu-val-main" style="color: ${theme.color};">${numVal}</span>
