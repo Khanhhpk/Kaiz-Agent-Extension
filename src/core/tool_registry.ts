@@ -5,7 +5,7 @@
  */
 
 interface ToolParameterProperty {
-    type: string;
+    type?: string;
     description: string;
     enum?: string[];
     items?:

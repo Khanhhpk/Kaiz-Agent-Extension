@@ -17510,18 +17510,72 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               checkLeaves(parsedSchema);
           }
           const hasEjs = Boolean(lorebookMvu.ejsControllerEntry);
+          // 5. Lọc dữ liệu nếu có filterPath
+          let effectiveLiveVars = liveVars;
+          let effectiveInitvar = initvarParsed;
+          let effectiveParsedSchema = parsedSchema;
+          if (filterPath && typeof filterPath === 'string' && filterPath.trim()) {
+              const cleanFilter = filterPath.replace(/^stat_data\./, '').trim();
+              if (cleanFilter) {
+                  const parts = cleanFilter.split('.');
+                  const getDeep = (obj, pathParts) => {
+                      let curr = obj;
+                      for (const p of pathParts) {
+                          if (curr && typeof curr === 'object' && p in curr) {
+                              curr = curr[p];
+                          }
+                          else {
+                              return undefined;
+                          }
+                      }
+                      return curr;
+                  };
+                  if (effectiveLiveVars) {
+                      effectiveLiveVars = getDeep(effectiveLiveVars, parts);
+                  }
+                  if (effectiveInitvar) {
+                      effectiveInitvar = getDeep(effectiveInitvar, parts);
+                  }
+                  if (effectiveParsedSchema && effectiveParsedSchema.length > 0) {
+                      const filterDescriptors = (items) => {
+                          const matched = [];
+                          for (const it of items) {
+                              if (it.path === cleanFilter || it.name === cleanFilter) {
+                                  matched.push(it);
+                              }
+                              else if (it.path.startsWith(cleanFilter + '.')) {
+                                  matched.push(it);
+                              }
+                              else if (cleanFilter.startsWith(it.path + '.')) {
+                                  if (it.children) {
+                                      const childMatches = filterDescriptors(it.children);
+                                      if (childMatches.length > 0) {
+                                          matched.push({
+                                              ...it,
+                                              children: childMatches,
+                                          });
+                                      }
+                                  }
+                              }
+                          }
+                          return matched;
+                      };
+                      effectiveParsedSchema = filterDescriptors(effectiveParsedSchema);
+                  }
+              }
+          }
           return {
               hasMvu: isMvu,
               characterName: charName,
               zodScriptName: zodScript?.name,
               zodSchemaCode: zodScript?.content,
-              parsedSchema,
-              liveVariables: liveVars,
+              parsedSchema: effectiveParsedSchema,
+              liveVariables: effectiveLiveVars,
               rawWrapper: this.cachedWrapper,
               currentFloor: this.cachedCurrentFloor,
               availableFloors: floors,
               dataSource: this.cachedDataSource,
-              initvarVariables: initvarParsed,
+              initvarVariables: effectiveInitvar,
               updateRulesSummary: lorebookMvu.updateRulesEntry?.content || '',
               hasEjsController: hasEjs,
               ejsControllerSummary: lorebookMvu.ejsControllerEntry?.comment || '',
@@ -18164,6 +18218,10 @@ format: |-
                       type: 'string',
                       description: 'Đường dẫn biến cụ thể cần lọc (VD: "Trạng_thái.Sức_khỏe" hoặc "stat_data.Thuộc_tính"). Nếu để trống sẽ trả về toàn bộ cây biến.',
                   },
+                  floor: {
+                      type: 'number',
+                      description: 'Tùy chọn: Tầng tin nhắn (Message ID) cụ thể cần khảo sát trạng thái biến. Nếu để trống sẽ lấy tầng tin nhắn hiện tại hoặc mới nhất.',
+                  },
               },
           },
       },
@@ -18176,7 +18234,8 @@ format: |-
                   };
               }
               const filterPath = args.path;
-              const report = await MvuManager.inspectMvu(context.adapter, filterPath);
+              const floor = args.floor !== undefined ? Number(args.floor) : undefined;
+              const report = await MvuManager.inspectMvu(context.adapter, filterPath, floor);
               return {
                   content: JSON.stringify(report, null, 2),
               };
@@ -18203,8 +18262,11 @@ format: |-
                       description: 'Đường dẫn biến cần sửa (VD: "stat_data.Thuộc_tính.Sức_khỏe" hoặc "Trạng_thái" hoặc "Nhân_vật.Túi_đồ").',
                   },
                   value: {
-                      type: 'string',
                       description: 'Giá trị mới cần gán cho biến (có thể là số, chuỗi, boolean, mảng hoặc object tùy theo Schema).',
+                  },
+                  floor: {
+                      type: 'number',
+                      description: 'Tùy chọn: Tầng tin nhắn (Message ID) cụ thể cần cập nhật biến. Nếu để trống sẽ tự động cập nhật tầng hiện tại hoặc mới nhất.',
                   },
                   reason: {
                       type: 'string',
@@ -18223,13 +18285,14 @@ format: |-
                   };
               }
               const { path, value, reason } = args;
+              const floor = args.floor !== undefined ? Number(args.floor) : undefined;
               if (!path) {
                   return {
                       isError: true,
                       content: 'Lỗi: Thiếu tham số "path" (đường dẫn biến).',
                   };
               }
-              const result = await MvuManager.setLiveVariable(path, value);
+              const result = await MvuManager.setLiveVariable(path, value, floor);
               return {
                   content: JSON.stringify({
                       success: true,
@@ -18290,8 +18353,7 @@ format: |-
                       description: 'Giá trị lớn nhất (nếu là số, hệ thống sẽ tự động clamp/kẹp trong khoảng này).',
                   },
                   default_value: {
-                      type: 'string',
-                      description: 'Giá trị khởi tạo ban đầu đưa vào [InitVar].',
+                      description: 'Giá trị khởi tạo ban đầu đưa vào [InitVar] (có thể là số, chuỗi, boolean, mảng hoặc object).',
                   },
                   rule_check: {
                       type: 'string',

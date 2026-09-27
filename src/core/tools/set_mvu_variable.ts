@@ -17,9 +17,13 @@ export const setMvuVariableTool: ITool = {
                         'Đường dẫn biến cần sửa (VD: "stat_data.Thuộc_tính.Sức_khỏe" hoặc "Trạng_thái" hoặc "Nhân_vật.Túi_đồ").',
                 },
                 value: {
-                    type: 'string',
                     description:
                         'Giá trị mới cần gán cho biến (có thể là số, chuỗi, boolean, mảng hoặc object tùy theo Schema).',
+                },
+                floor: {
+                    type: 'number',
+                    description:
+                        'Tùy chọn: Tầng tin nhắn (Message ID) cụ thể cần cập nhật biến. Nếu để trống sẽ tự động cập nhật tầng hiện tại hoặc mới nhất.',
                 },
                 reason: {
                     type: 'string',
@@ -40,6 +44,7 @@ export const setMvuVariableTool: ITool = {
             }
 
             const { path, value, reason } = args;
+            const floor = args.floor !== undefined ? Number(args.floor) : undefined;
             if (!path) {
                 return {
                     isError: true,
@@ -47,7 +52,7 @@ export const setMvuVariableTool: ITool = {
                 };
             }
 
-            const result = await MvuManager.setLiveVariable(path, value);
+            const result = await MvuManager.setLiveVariable(path, value, floor);
 
             return {
                 content: JSON.stringify(

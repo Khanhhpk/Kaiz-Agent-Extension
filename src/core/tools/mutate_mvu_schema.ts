@@ -44,8 +44,7 @@ export const mutateMvuSchemaTool: ITool = {
                     description: 'Giá trị lớn nhất (nếu là số, hệ thống sẽ tự động clamp/kẹp trong khoảng này).',
                 },
                 default_value: {
-                    type: 'string',
-                    description: 'Giá trị khởi tạo ban đầu đưa vào [InitVar].',
+                    description: 'Giá trị khởi tạo ban đầu đưa vào [InitVar] (có thể là số, chuỗi, boolean, mảng hoặc object).',
                 },
                 rule_check: {
                     type: 'string',

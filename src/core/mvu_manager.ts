@@ -1315,18 +1315,72 @@ export class MvuManager {
 
         const hasEjs = Boolean(lorebookMvu.ejsControllerEntry);
 
+        // 5. Lọc dữ liệu nếu có filterPath
+        let effectiveLiveVars = liveVars;
+        let effectiveInitvar = initvarParsed;
+        let effectiveParsedSchema = parsedSchema;
+
+        if (filterPath && typeof filterPath === 'string' && filterPath.trim()) {
+            const cleanFilter = filterPath.replace(/^stat_data\./, '').trim();
+            if (cleanFilter) {
+                const parts = cleanFilter.split('.');
+                const getDeep = (obj: any, pathParts: string[]) => {
+                    let curr = obj;
+                    for (const p of pathParts) {
+                        if (curr && typeof curr === 'object' && p in curr) {
+                            curr = curr[p];
+                        } else {
+                            return undefined;
+                        }
+                    }
+                    return curr;
+                };
+
+                if (effectiveLiveVars) {
+                    effectiveLiveVars = getDeep(effectiveLiveVars, parts);
+                }
+                if (effectiveInitvar) {
+                    effectiveInitvar = getDeep(effectiveInitvar, parts);
+                }
+                if (effectiveParsedSchema && effectiveParsedSchema.length > 0) {
+                    const filterDescriptors = (items: MvuVariableDescriptor[]): MvuVariableDescriptor[] => {
+                        const matched: MvuVariableDescriptor[] = [];
+                        for (const it of items) {
+                            if (it.path === cleanFilter || it.name === cleanFilter) {
+                                matched.push(it);
+                            } else if (it.path.startsWith(cleanFilter + '.')) {
+                                matched.push(it);
+                            } else if (cleanFilter.startsWith(it.path + '.')) {
+                                if (it.children) {
+                                    const childMatches = filterDescriptors(it.children);
+                                    if (childMatches.length > 0) {
+                                        matched.push({
+                                            ...it,
+                                            children: childMatches,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        return matched;
+                    };
+                    effectiveParsedSchema = filterDescriptors(effectiveParsedSchema);
+                }
+            }
+        }
+
         return {
             hasMvu: isMvu,
             characterName: charName,
             zodScriptName: zodScript?.name,
             zodSchemaCode: zodScript?.content,
-            parsedSchema,
-            liveVariables: liveVars,
+            parsedSchema: effectiveParsedSchema,
+            liveVariables: effectiveLiveVars,
             rawWrapper: this.cachedWrapper,
             currentFloor: this.cachedCurrentFloor,
             availableFloors: floors,
             dataSource: this.cachedDataSource,
-            initvarVariables: initvarParsed,
+            initvarVariables: effectiveInitvar,
             updateRulesSummary: lorebookMvu.updateRulesEntry?.content || '',
             hasEjsController: hasEjs,
             ejsControllerSummary: lorebookMvu.ejsControllerEntry?.comment || '',

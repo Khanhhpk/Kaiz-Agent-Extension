@@ -21,6 +21,11 @@ export const inspectMvuTool: ITool = {
                     description:
                         'Đường dẫn biến cụ thể cần lọc (VD: "Trạng_thái.Sức_khỏe" hoặc "stat_data.Thuộc_tính"). Nếu để trống sẽ trả về toàn bộ cây biến.',
                 },
+                floor: {
+                    type: 'number',
+                    description:
+                        'Tùy chọn: Tầng tin nhắn (Message ID) cụ thể cần khảo sát trạng thái biến. Nếu để trống sẽ lấy tầng tin nhắn hiện tại hoặc mới nhất.',
+                },
             },
         },
     },
@@ -34,7 +39,8 @@ export const inspectMvuTool: ITool = {
             }
 
             const filterPath = args.path as string | undefined;
-            const report = await MvuManager.inspectMvu(context.adapter, filterPath);
+            const floor = args.floor !== undefined ? Number(args.floor) : undefined;
+            const report = await MvuManager.inspectMvu(context.adapter, filterPath, floor);
 
             return {
                 content: JSON.stringify(report, null, 2),
