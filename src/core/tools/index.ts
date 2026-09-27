@@ -44,6 +44,11 @@ import { generateWebImageTool } from './generate_web_image';
 import { getPresetInfoTool } from './get_preset_info';
 import { getPromptBlockTool } from './get_prompt_block';
 import { managePresetPromptTool } from './manage_preset_prompt';
+import { inspectMvuTool } from './inspect_mvu';
+import { setMvuVariableTool } from './set_mvu_variable';
+import { mutateMvuSchemaTool } from './mutate_mvu_schema';
+import { scaffoldMvuCardTool } from './scaffold_mvu_card';
+import { mvuInstructTool } from './mvu_instruct';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -96,4 +101,11 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getPresetInfoTool);
     registry.registerTool(getPromptBlockTool);
     registry.registerTool(managePresetPromptTool);
+    registry.registerTool(inspectMvuTool);
+    registry.registerTool(setMvuVariableTool);
+    registry.registerTool(mutateMvuSchemaTool);
+    registry.registerTool(scaffoldMvuCardTool);
+    registry.registerTool(mvuInstructTool);
 }
+
+export { inspectMvuTool, setMvuVariableTool, mutateMvuSchemaTool, scaffoldMvuCardTool, mvuInstructTool };

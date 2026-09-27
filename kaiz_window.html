@@ -195,6 +195,17 @@
                             <span class="kaiz-menu-item-desc">Lịch sử commit, diff & rollback</span>
                         </div>
                     </div>
+                    <div
+                        id="kaiz-mvu-dashboard-btn"
+                        class="kaiz-menu-item interactable"
+                        title="Chỉ số & Quản lý MVU Zod"
+                    >
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-chart-pie"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Chỉ số MVU & Zod</span>
+                            <span class="kaiz-menu-item-desc">Xem, sửa & modding biến runtime</span>
+                        </div>
+                    </div>
                     <div class="kaiz-menu-divider"></div>
                     <div id="kaiz-chat-backup-btn" class="kaiz-menu-item interactable" title="Backup Manager">
                         <div class="kaiz-menu-item-icon"><i class="fa-solid fa-floppy-disk"></i></div>
@@ -344,7 +355,11 @@
                         <i class="fa-solid fa-chevron-up"></i>
                     </button>
                     <div id="kaiz-milestone-track" class="kaiz-milestone-track">
-                        <div id="kaiz-milestone-active-thumb" class="kaiz-milestone-active-thumb" style="display: none"></div>
+                        <div
+                            id="kaiz-milestone-active-thumb"
+                            class="kaiz-milestone-active-thumb"
+                            style="display: none"
+                        ></div>
                     </div>
                     <button
                         type="button"
@@ -1549,5 +1564,343 @@
 
     <div id="kaiz-pg-diff-body" class="kaiz-pg-diff-body">
         <!-- Diff content rendered here -->
+    </div>
+</dialog>
+
+<!-- ================= MVU & ZOD 4 DASHBOARD MODAL ================= -->
+<dialog id="kaiz-mvu-dashboard-modal" class="kaiz-modal kaiz-mvu-dialog">
+    <!-- Header -->
+    <div class="kaiz-mvu-header">
+        <div class="kaiz-mvu-header-left">
+            <div class="kaiz-mvu-header-icon">
+                <i class="fa-solid fa-chart-pie"></i>
+            </div>
+            <div class="kaiz-mvu-header-titles">
+                <h3 class="kaiz-mvu-header-title">
+                    Bảng Chỉ Số & Quản Lý MVU
+                    <span id="kaiz-mvu-status-badge" class="kaiz-status-pill badge-neutral">Đang tải...</span>
+                </h3>
+                <div id="kaiz-mvu-subtitle" class="kaiz-mvu-header-subtitle">
+                    Hệ thống biến trạng thái thời gian thực & Zod 4 Schema
+                </div>
+            </div>
+        </div>
+
+        <div class="kaiz-mvu-header-controls">
+            <!-- Tabs -->
+            <div class="kaiz-mvu-tabs">
+                <button type="button" class="kaiz-mvu-tab active" data-tab="stats" title="Chỉ số trực quan">
+                    <i class="fa-solid fa-gauge-high"></i> <span>Chỉ số</span>
+                </button>
+                <button type="button" class="kaiz-mvu-tab" data-tab="schema" title="Quản lý cấu trúc Zod">
+                    <i class="fa-solid fa-sitemap"></i> <span>Cấu trúc</span>
+                </button>
+                <button type="button" class="kaiz-mvu-tab" data-tab="raw" title="Xem mã nguồn & JSON">
+                    <i class="fa-solid fa-code"></i> <span>Raw / YAML</span>
+                </button>
+            </div>
+
+            <button type="button" id="kaiz-mvu-refresh-btn" class="menu_button interactable" title="Đồng bộ lại biến">
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
+            <i
+                id="kaiz-mvu-close-btn"
+                class="fa-solid fa-xmark interactable kaiz-mvu-header-close"
+                title="Đóng cửa sổ"
+            ></i>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="kaiz-mvu-body">
+        <!-- 1. Flexible Substrate Setup Banner if character has no MVU -->
+        <div id="kaiz-mvu-empty-container" class="kaiz-mvu-empty-state" style="display: none">
+            <div class="kaiz-mvu-empty-icon"><i class="fa-solid fa-cube"></i></div>
+            <h4 class="kaiz-mvu-empty-title">Khởi Tạo Sàn Hạ Tầng MVU Zod 4</h4>
+            <p class="kaiz-mvu-empty-desc">
+                Nhân vật này chưa kích hoạt hệ thống biến. Kaiz cung cấp sàn kỹ thuật MVU linh hoạt tuyệt đối — không
+                mẫu cố định, không giới hạn. Bạn có thể yêu cầu AI tự tạo biến theo cốt truyện, tạo trực quan từng biến,
+                hoặc dán mã Zod tùy ý.
+            </p>
+
+            <div class="kaiz-mvu-scaffold-modes">
+                <!-- Mode Switcher Tabs -->
+                <div class="kaiz-mvu-scaffold-tabs">
+                    <button type="button" class="kaiz-mvu-scaffold-tab active" data-mode="ai">
+                        <i class="fa-solid fa-robot"></i> <span>Kaiz AI Tự Thiết Kế</span>
+                    </button>
+                    <button type="button" class="kaiz-mvu-scaffold-tab" data-mode="builder">
+                        <i class="fa-solid fa-sliders"></i> <span>Tạo Biến Trực Quan</span>
+                    </button>
+                    <button type="button" class="kaiz-mvu-scaffold-tab" data-mode="raw">
+                        <i class="fa-solid fa-code"></i> <span>Nạp Zod / YAML Trực Tiếp</span>
+                    </button>
+                </div>
+
+                <!-- Mode 1: AI Auto Design -->
+                <div class="kaiz-mvu-scaffold-pane active" id="kaiz-scaffold-pane-ai">
+                    <div class="kaiz-mvu-ai-box">
+                        <label for="kaiz-mvu-ai-prompt" class="kaiz-mvu-label"
+                            >Yêu cầu hệ thống biến (Lore, Game rules, Trạng thái):</label
+                        >
+                        <textarea
+                            id="kaiz-mvu-ai-prompt"
+                            class="text_pole"
+                            rows="3"
+                            placeholder="Nhập định hướng hệ thống biến cho nhân vật này (hoặc để trống để Kaiz AI tự đọc Lore & Worldbook nhân vật hiện tại rồi thiết kế hệ sinh thái biến phù hợp nhất)..."
+                        ></textarea>
+                        <div class="kaiz-mvu-ai-actions">
+                            <button
+                                type="button"
+                                id="kaiz-mvu-ai-scaffold-btn"
+                                class="menu_button interactable btn-primary-accent"
+                            >
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> ✨ Kaiz AI Phân Tích & Khởi Tạo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode 2: Quick Builder -->
+                <div class="kaiz-mvu-scaffold-pane" id="kaiz-scaffold-pane-builder" style="display: none">
+                    <div class="kaiz-mvu-builder-box">
+                        <div class="kaiz-mvu-builder-form">
+                            <div class="kaiz-mvu-form-row">
+                                <input
+                                    type="text"
+                                    id="kaiz-builder-path"
+                                    class="text_pole"
+                                    placeholder="Đường dẫn biến (VD: HP, Thể_lực, Nhân_vật.Tâm_trạng)"
+                                />
+                                <select id="kaiz-builder-type" class="text_pole">
+                                    <option value="number">Số (number)</option>
+                                    <option value="string">Chuỗi (string)</option>
+                                    <option value="boolean">Logic (boolean)</option>
+                                    <option value="array">Mảng (array)</option>
+                                    <option value="object">Đối tượng (object)</option>
+                                </select>
+                            </div>
+                            <div class="kaiz-mvu-form-row kaiz-builder-num-row">
+                                <input type="number" id="kaiz-builder-min" class="text_pole" placeholder="Min" />
+                                <input type="number" id="kaiz-builder-max" class="text_pole" placeholder="Max" />
+                                <input
+                                    type="text"
+                                    id="kaiz-builder-default"
+                                    class="text_pole"
+                                    placeholder="Giá trị khởi tạo"
+                                />
+                            </div>
+                            <div class="kaiz-mvu-form-row">
+                                <input
+                                    type="text"
+                                    id="kaiz-builder-rule"
+                                    class="text_pole"
+                                    placeholder="Quy tắc thay đổi (Ví dụ: Giảm khi bị thương, hồi phục khi nghỉ ngơi)"
+                                />
+                                <button type="button" id="kaiz-builder-add-row-btn" class="menu_button interactable">
+                                    <i class="fa-solid fa-plus"></i> Thêm Vào Danh Sách
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="kaiz-mvu-builder-list" id="kaiz-builder-items-list">
+                            <div class="kaiz-mvu-empty-badge" id="kaiz-builder-list-empty">
+                                Chưa có biến nào trong danh sách. Hãy điền thông tin bên trên và bấm "Thêm Vào Danh
+                                Sách".
+                            </div>
+                        </div>
+
+                        <div class="kaiz-mvu-builder-actions">
+                            <button
+                                type="button"
+                                id="kaiz-mvu-builder-submit-btn"
+                                class="menu_button interactable btn-primary-accent"
+                            >
+                                <i class="fa-solid fa-rocket"></i> 🚀 Khởi Tạo Hạ Tầng MVU Với Các Biến Đã Chọn
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode 3: Raw Zod / YAML Injection -->
+                <div class="kaiz-mvu-scaffold-pane" id="kaiz-scaffold-pane-raw" style="display: none">
+                    <div class="kaiz-mvu-raw-scaffold-box">
+                        <label for="kaiz-raw-zod-input" class="kaiz-mvu-label"
+                            >Mã Zod 4 Schema tùy chỉnh (Export Schema = z.object hoặc các trường):</label
+                        >
+                        <textarea
+                            id="kaiz-raw-zod-input"
+                            class="text_pole code-font"
+                            rows="5"
+                            placeholder="// Nhập code Zod 4 Schema tùy chỉnh tại đây...
+'Chỉ_số': z.object({
+  'Máu': z.coerce.number().transform(v => _.clamp(v, 0, 100)).prefault(100),
+}),"
+                        ></textarea>
+
+                        <label for="kaiz-raw-initvar-input" class="kaiz-mvu-label" style="margin-top: 10px"
+                            >YAML [InitVar] Khởi tạo (Tùy chọn):</label
+                        >
+                        <textarea
+                            id="kaiz-raw-initvar-input"
+                            class="text_pole code-font"
+                            rows="3"
+                            placeholder="# Khởi tạo biến YAML tùy chọn (nếu để trống hệ thống sẽ tự suy từ Schema)"
+                        ></textarea>
+
+                        <div class="kaiz-mvu-raw-actions" style="margin-top: 12px">
+                            <button
+                                type="button"
+                                id="kaiz-mvu-raw-submit-btn"
+                                class="menu_button interactable btn-primary-accent"
+                            >
+                                <i class="fa-solid fa-check"></i> 📥 Nạp Schema Trực Tiếp Vào Card
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Active MVU Content -->
+        <div id="kaiz-mvu-active-container" class="kaiz-mvu-active-content">
+            <!-- Summary Ribbon -->
+            <div class="kaiz-mvu-ribbon">
+                <div class="kaiz-mvu-ribbon-stats">
+                    <div class="kaiz-mvu-chip">
+                        <i class="fa-solid fa-cubes" style="color: #38bdf8"></i>
+                        <span id="kaiz-mvu-stat-count" class="kaiz-mvu-stat-val">0</span>
+                        <span class="kaiz-mvu-chip-unit">biến</span>
+                    </div>
+                    <div class="kaiz-mvu-chip">
+                        <i class="fa-solid fa-scroll" style="color: #a78bfa"></i>
+                        <span id="kaiz-mvu-zod-name" class="kaiz-mvu-stat-val">Zod Schema</span>
+                    </div>
+                    <div id="kaiz-mvu-initvar-pill" class="kaiz-status-pill badge-neutral">InitVar: ?</div>
+                    <div id="kaiz-mvu-rules-pill" class="kaiz-status-pill badge-neutral">Quy tắc: ?</div>
+                </div>
+
+                <div class="kaiz-mvu-ribbon-actions">
+                    <button
+                        type="button"
+                        id="kaiz-mvu-toggle-add-btn"
+                        class="menu_button interactable"
+                        style="background: rgba(56, 189, 248, 0.2); border-color: rgba(56, 189, 248, 0.4)"
+                    >
+                        <i class="fa-solid fa-plus"></i> Thêm Biến
+                    </button>
+                </div>
+            </div>
+
+            <!-- Warnings / Inconsistencies container -->
+            <div id="kaiz-mvu-warnings-container" class="kaiz-mvu-warnings" style="display: none"></div>
+
+            <!-- Add Variable Drawer / Panel -->
+            <div id="kaiz-mvu-add-panel" class="kaiz-mvu-add-panel" style="display: none">
+                <div class="kaiz-mvu-panel-header">
+                    <h4><i class="fa-solid fa-circle-plus"></i> Thêm Biến Mới vào Schema & Worldbook</h4>
+                    <i id="kaiz-mvu-close-add-panel" class="fa-solid fa-xmark interactable" style="cursor: pointer"></i>
+                </div>
+                <div class="kaiz-mvu-panel-grid">
+                    <div class="kaiz-mvu-field">
+                        <label>Đường dẫn biến (Tên hoặc Cha.Con):</label>
+                        <input
+                            type="text"
+                            id="kaiz-mvu-input-path"
+                            class="text_pole"
+                            placeholder="VD: Thể_lực hoặc Tu_vi.Linh_căn"
+                        />
+                    </div>
+                    <div class="kaiz-mvu-field">
+                        <label>Kiểu dữ liệu:</label>
+                        <select id="kaiz-mvu-select-type" class="text_pole">
+                            <option value="number">Số (Number - Hỗ trợ clamp min/max)</option>
+                            <option value="string">Chuỗi chữ (String)</option>
+                            <option value="boolean">Đúng / Sai (Boolean)</option>
+                            <option value="array">Danh sách (Array of String)</option>
+                        </select>
+                    </div>
+                    <div class="kaiz-mvu-field kaiz-mvu-num-field">
+                        <label>Giới hạn Nhỏ nhất (Min):</label>
+                        <input type="number" id="kaiz-mvu-input-min" class="text_pole" placeholder="0" />
+                    </div>
+                    <div class="kaiz-mvu-field kaiz-mvu-num-field">
+                        <label>Giới hạn Lớn nhất (Max):</label>
+                        <input type="number" id="kaiz-mvu-input-max" class="text_pole" placeholder="100" />
+                    </div>
+                    <div class="kaiz-mvu-field">
+                        <label>Giá trị khởi tạo (Default):</label>
+                        <input
+                            type="text"
+                            id="kaiz-mvu-input-default"
+                            class="text_pole"
+                            placeholder="VD: 100 hoặc Bình thường"
+                        />
+                    </div>
+                    <div class="kaiz-mvu-field full-width">
+                        <label>Quy tắc AI suy luận (Hướng dẫn AI khi nào thay đổi biến này):</label>
+                        <input
+                            type="text"
+                            id="kaiz-mvu-input-rule"
+                            class="text_pole"
+                            placeholder="VD: Tăng khi chạy thể dục, giảm khi bị trúng đòn"
+                        />
+                    </div>
+                </div>
+                <div class="kaiz-mvu-panel-actions">
+                    <button
+                        type="button"
+                        id="kaiz-mvu-submit-add-btn"
+                        class="menu_button menu_button_primary interactable"
+                    >
+                        <i class="fa-solid fa-floppy-disk"></i> Lưu & Lan Truyền Vào Card
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab 1: Stats Visual Cards -->
+            <div id="kaiz-mvu-tab-stats" class="kaiz-mvu-tab-content active">
+                <div id="kaiz-mvu-stats-grid" class="kaiz-mvu-categories-container">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Tab 2: Schema Management -->
+            <div id="kaiz-mvu-tab-schema" class="kaiz-mvu-tab-content">
+                <div id="kaiz-mvu-schema-table-container">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Tab 3: Raw / YAML Code Inspector -->
+            <div id="kaiz-mvu-tab-raw" class="kaiz-mvu-tab-content">
+                <div class="kaiz-mvu-raw-panes">
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-code"></i> Live stat_data (JSON)</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-live" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-file-code"></i> Zod Schema Script</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-zod" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-book"></i> Worldbook [InitVar] (YAML)</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-initvar" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-compass"></i> Worldbook [mvu_update] (YAML)</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-rules" class="kaiz-mvu-pre"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </dialog>
