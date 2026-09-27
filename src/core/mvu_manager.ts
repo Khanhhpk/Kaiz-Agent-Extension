@@ -70,6 +70,7 @@ export interface MvuScaffoldOptions {
     customRulesYaml?: string | Record<string, any>;
     title?: string;
     characterName?: string;
+    force?: boolean;
 }
 
 export class MvuManager {
@@ -141,6 +142,104 @@ export class MvuManager {
             }
         }
         return false;
+    }
+
+    /**
+     * Kích hoạt toggle "Character Script" (Kịch bản nhân vật) trong Tửu quán trợ thủ (TavernHelper / JS-Slash-Runner)
+     * Đảm bảo script của nhân vật chạy ngầm và không bị chặn.
+     */
+    public static async enableCharacterScriptsInTavernHelper(liveChar: any): Promise<void> {
+        if (!liveChar) return;
+        const avatar = liveChar.avatar;
+        if (!avatar) return;
+        const avatarPng = avatar.endsWith('.png') ? avatar : `${avatar}.png`;
+
+        // 1. Cập nhật SillyTavern extension_settings
+        try {
+            const ctx = this.getContext();
+            const extSettings = (window as any).extension_settings || ctx?.extensionSettings;
+            if (extSettings) {
+                for (const key of ['tavern_helper', 'TavernHelper']) {
+                    if (!extSettings[key]) extSettings[key] = {};
+                    const th = extSettings[key];
+                    if (!th.script) th.script = {};
+                    if (!th.script.enabled) th.script.enabled = {};
+                    if (!Array.isArray(th.script.enabled.characters)) th.script.enabled.characters = [];
+
+                    if (!th.script.enabled.characters.includes(avatar)) {
+                        th.script.enabled.characters.push(avatar);
+                    }
+                    if (avatarPng !== avatar && !th.script.enabled.characters.includes(avatarPng)) {
+                        th.script.enabled.characters.push(avatarPng);
+                    }
+
+                    if (!th.script.popuped) th.script.popuped = {};
+                    if (!Array.isArray(th.script.popuped.characters)) th.script.popuped.characters = [];
+                    if (!th.script.popuped.characters.includes(avatar)) {
+                        th.script.popuped.characters.push(avatar);
+                    }
+                    if (avatarPng !== avatar && !th.script.popuped.characters.includes(avatarPng)) {
+                        th.script.popuped.characters.push(avatarPng);
+                    }
+                }
+
+                if (typeof (window as any).saveSettingsDebounced === 'function') {
+                    (window as any).saveSettingsDebounced();
+                } else if (typeof ctx?.saveSettingsDebounced === 'function') {
+                    ctx.saveSettingsDebounced();
+                }
+            }
+        } catch (e) {
+            console.warn('[MvuManager] Lỗi khi cập nhật extension_settings.tavern_helper:', e);
+        }
+
+        // 2. Cập nhật trực tiếp Vue/Pinia store trong bộ nhớ frontend nếu extension đang nạp
+        try {
+            const el = document.getElementById('tavern_helper');
+            const vueApp = (el as any)?.__vue_app__;
+            const provides = vueApp?._context?.provides;
+            if (provides) {
+                const pinia =
+                    provides[Symbol.for('pinia')] ||
+                    provides.pinia ||
+                    Object.values(provides).find((p: any) => p && (p as any)._s);
+                if (pinia && (pinia as any)._s) {
+                    const globalStore = (pinia as any)._s.get('global_settings');
+                    if (globalStore?.settings?.script?.enabled?.characters) {
+                        const chars = globalStore.settings.script.enabled.characters;
+                        if (!chars.includes(avatar)) chars.push(avatar);
+                        if (avatarPng !== avatar && !chars.includes(avatarPng)) chars.push(avatarPng);
+                    }
+                    if (globalStore?.settings?.script?.popuped?.characters) {
+                        const popups = globalStore.settings.script.popuped.characters;
+                        if (!popups.includes(avatar)) popups.push(avatar);
+                        if (avatarPng !== avatar && !popups.includes(avatarPng)) popups.push(avatarPng);
+                    }
+                    const charScriptsStore = (pinia as any)._s.get('character_scripts');
+                    if (charScriptsStore) {
+                        charScriptsStore.enabled = true;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('[MvuManager] Lỗi khi cập nhật Pinia store TavernHelper:', e);
+        }
+
+        // 3. Đồng bộ checkbox trên giao diện DOM nếu panel kịch bản đang mở
+        try {
+            const charContainer = document.querySelector('[data-container-type="character"]');
+            if (charContainer) {
+                const parentBox = charContainer.closest('.flex-col') || charContainer.parentElement;
+                const checkbox = parentBox?.querySelector(
+                    'input[type="checkbox"][id*="script-enable-toggle"]',
+                ) as HTMLInputElement;
+                if (checkbox && !checkbox.checked) {
+                    checkbox.click();
+                }
+            }
+        } catch (e) {
+            console.warn('[MvuManager] Lỗi khi đồng bộ DOM toggle TavernHelper:', e);
+        }
     }
 
     /**
@@ -1714,6 +1813,9 @@ export class MvuManager {
             eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: liveChar } });
         } catch {}
 
+        // Đảm bảo toggle Character Scripts trong TavernHelper được kích hoạt
+        await this.enableCharacterScriptsInTavernHelper(liveChar);
+
         return {
             success: true,
             modifiedFiles,
@@ -1877,6 +1979,7 @@ export class MvuManager {
         options: MvuScaffoldOptions = {},
     ): Promise<{
         success: boolean;
+        linkedWorldbook?: string;
         injectedScripts: string[];
         injectedRegexes: string[];
         injectedLorebookEntries: string[];
@@ -1884,8 +1987,14 @@ export class MvuManager {
         const liveChar = this.getActiveCharacter();
         if (!liveChar) throw new Error('Không có nhân vật nào đang hoạt động để nạp MVU.');
 
+        if (this.hasMvu(liveChar) && !options.force) {
+            throw new Error(
+                `Nhân vật "${liveChar.name || liveChar.avatar}" đã có sẵn hệ thống MVU! Để bảo toàn các biến hiện có, hãy sử dụng công cụ "mutate_mvu_schema" để thêm/sửa/xoá biến. Nếu bạn thực sự muốn xoá và dựng lại toàn bộ từ đầu, hãy truyền thêm tham số { "force": true }.`,
+            );
+        }
+
         if (this.hasMvu(liveChar)) {
-            console.warn('[MvuManager] Cảnh báo: Card đã có hệ thống MVU. Thao tác scaffold sẽ ghi đè lên cấu hình hiện tại.');
+            console.warn('[MvuManager] Cảnh báo: Card đã có hệ thống MVU. Thao tác scaffold sẽ ghi đè lên cấu hình hiện tại (force: true).');
         }
 
         if (!liveChar.data) liveChar.data = {};
@@ -2032,6 +2141,9 @@ export class MvuManager {
         } catch (e) {
             console.warn('[MvuManager] TavernHelper updateScriptTreesWith warning in scaffold:', e);
         }
+
+        // Bật toggle "Character Script" trong Tửu quán trợ thủ (TavernHelper)
+        await this.enableCharacterScriptsInTavernHelper(liveChar);
 
         // 3. Tiêm Regex Scripts chuẩn (Tiếng Việt / English)
         const regexes = [
@@ -2198,66 +2310,122 @@ format: |-
             },
         ];
 
-        // 4. Tiêm Worldbook Entries chuẩn (hỗ trợ cả linked worldbook và embedded character_book)
-        const linkedWorld = liveChar.data?.extensions?.world || liveChar.world;
+        // 4. Tiêm Worldbook Entries chuẩn (tự động tạo và liên kết Worldbook nếu thẻ chưa có)
+        let linkedWorld = liveChar.data?.extensions?.world || liveChar.world;
+        let ST_WorldInfo: any = null;
+        try {
+            ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+        } catch {}
+
+        if (!linkedWorld || typeof linkedWorld !== 'string' || !linkedWorld.trim()) {
+            const rawName = (liveChar.name || '').trim();
+            const avatarBase = liveChar.avatar ? liveChar.avatar.replace(/\.[^/.]+$/, '').trim() : 'Character';
+            const baseName = rawName || avatarBase || 'Character';
+
+            let candidateName = `${baseName} (MVU)`;
+            if (
+                liveChar.data?.character_book?.name &&
+                typeof liveChar.data.character_book.name === 'string' &&
+                liveChar.data.character_book.name.trim()
+            ) {
+                candidateName = liveChar.data.character_book.name.trim();
+            }
+
+            const existingNames: string[] = ST_WorldInfo?.world_names || (window as any).world_names || [];
+            const targetBookName = candidateName;
+
+            // Nếu chưa tồn tại trong ST, tạo file Worldbook mới trên server
+            if (!existingNames.includes(targetBookName)) {
+                try {
+                    if (ST_WorldInfo && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                        await ST_WorldInfo.saveWorldInfo(targetBookName, { entries: {} }, true);
+                        if (typeof ST_WorldInfo.updateWorldInfoList === 'function') {
+                            await ST_WorldInfo.updateWorldInfoList();
+                        }
+                    }
+                } catch (e) {
+                    console.warn('[MvuManager] Lỗi khi tạo mới Worldbook cho card đơn thuần:', e);
+                }
+            }
+
+            // Gán liên kết Worldbook vào nhân vật
+            linkedWorld = targetBookName;
+            liveChar.data.extensions.world = targetBookName;
+            liveChar.world = targetBookName;
+            if (liveChar.data.character_book) {
+                liveChar.data.character_book.name = targetBookName;
+            }
+
+            // Đồng bộ giao diện SillyTavern UI
+            try {
+                const $ = (window as any).$;
+                if ($) {
+                    $('#character_world').val(targetBookName);
+                    if (ST_WorldInfo && typeof ST_WorldInfo.setWorldInfoButtonClass === 'function') {
+                        ST_WorldInfo.setWorldInfoButtonClass(undefined, true);
+                    }
+                }
+                const th = (window as any).TavernHelper;
+                if (th && typeof th.rebindCharWorldbooks === 'function') {
+                    await th.rebindCharWorldbooks('current', { primary: targetBookName, additional: [] }).catch(() => {});
+                }
+            } catch (e) {
+                console.warn('[MvuManager] Lỗi khi đồng bộ UI liên kết Worldbook:', e);
+            }
+        }
+
         if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
             try {
-                let ST_WorldInfo: any = null;
-                try {
-                    ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
-                } catch {}
-
                 if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function' && typeof ST_WorldInfo.saveWorldInfo === 'function') {
-                    const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
-                    if (worldData) {
-                        if (!worldData.entries) worldData.entries = {};
-                        const entriesMap = worldData.entries;
-                        for (const ne of newEntries) {
-                            let foundKey: string | null = null;
-                            for (const [k, v] of Object.entries(entriesMap)) {
-                                if ((v as any)?.comment === ne.comment || (v as any)?.name === ne.comment) {
-                                    foundKey = k;
-                                    break;
-                                }
+                    let worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
+                    if (!worldData) worldData = { entries: {} };
+                    if (!worldData.entries) worldData.entries = {};
+                    const entriesMap = worldData.entries;
+                    for (const ne of newEntries) {
+                        let foundKey: string | null = null;
+                        for (const [k, v] of Object.entries(entriesMap)) {
+                            if ((v as any)?.comment === ne.comment || (v as any)?.name === ne.comment) {
+                                foundKey = k;
+                                break;
                             }
+                        }
 
-                            if (foundKey && entriesMap[foundKey]) {
-                                entriesMap[foundKey].content = ne.content;
-                                entriesMap[foundKey].disable = !ne.enabled;
-                                entriesMap[foundKey].constant = Boolean(ne.constant);
-                            } else {
-                                if (typeof ST_WorldInfo.createWorldInfoEntry === 'function') {
-                                    const created = ST_WorldInfo.createWorldInfoEntry(linkedWorld, worldData);
-                                    if (created) {
-                                        created.comment = ne.comment;
-                                        created.name = ne.comment;
-                                        created.content = ne.content;
-                                        created.constant = Boolean(ne.constant);
-                                        created.disable = !ne.enabled;
-                                        created.key = ne.keys || [];
-                                        created.keys = ne.keys || [];
-                                        created.position = 0;
-                                    }
-                                } else {
-                                    const nextUid = Date.now() + Math.floor(Math.random() * 1000);
-                                    entriesMap[nextUid] = {
-                                        uid: nextUid,
-                                        comment: ne.comment,
-                                        name: ne.comment,
-                                        content: ne.content,
-                                        constant: Boolean(ne.constant),
-                                        disable: !ne.enabled,
-                                        key: ne.keys || [],
-                                        keys: ne.keys || [],
-                                        position: 0,
-                                    };
+                        if (foundKey && entriesMap[foundKey]) {
+                            entriesMap[foundKey].content = ne.content;
+                            entriesMap[foundKey].disable = !ne.enabled;
+                            entriesMap[foundKey].constant = Boolean(ne.constant);
+                        } else {
+                            if (typeof ST_WorldInfo.createWorldInfoEntry === 'function') {
+                                const created = ST_WorldInfo.createWorldInfoEntry(linkedWorld, worldData);
+                                if (created) {
+                                    created.comment = ne.comment;
+                                    created.name = ne.comment;
+                                    created.content = ne.content;
+                                    created.constant = Boolean(ne.constant);
+                                    created.disable = !ne.enabled;
+                                    created.key = ne.keys || [];
+                                    created.keys = ne.keys || [];
+                                    created.position = 0;
                                 }
+                            } else {
+                                const nextUid = Date.now() + Math.floor(Math.random() * 1000);
+                                entriesMap[nextUid] = {
+                                    uid: nextUid,
+                                    comment: ne.comment,
+                                    name: ne.comment,
+                                    content: ne.content,
+                                    constant: Boolean(ne.constant),
+                                    disable: !ne.enabled,
+                                    key: ne.keys || [],
+                                    keys: ne.keys || [],
+                                    position: 0,
+                                };
                             }
                         }
-                        await ST_WorldInfo.saveWorldInfo(linkedWorld, worldData, true);
-                        if (typeof ST_WorldInfo.reloadEditor === 'function') {
-                            ST_WorldInfo.reloadEditor(linkedWorld);
-                        }
+                    }
+                    await ST_WorldInfo.saveWorldInfo(linkedWorld, worldData, true);
+                    if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                        ST_WorldInfo.reloadEditor(linkedWorld);
                     }
                 }
             } catch (e) {
@@ -2312,6 +2480,7 @@ format: |-
 
         return {
             success: true,
+            linkedWorldbook: linkedWorld,
             injectedScripts: ['MVU', 'Cấu trúc biến'],
             injectedRegexes: [
                 '[MVU] Ẩn cập nhật biến khỏi AI',

@@ -7,13 +7,14 @@ export const scaffoldMvuCardTool: ITool = {
         name: 'scaffold_mvu_card',
         description:
             'Nạp hạ tầng kỹ thuật MVU Zod 4 vào một thẻ nhân vật, biến card thành sàn dữ liệu trạng thái động.\n' +
-            'HOÀN TOÀN LINH HOẠT - KHÔNG HẠN CHẾ: Bạn (AI) có thể tự do định nghĩa danh sách biến tùy biến dựa theo Lore và bối cảnh card, hoặc truyền mã Zod 4 Schema / YAML tùy chỉnh.\n' +
-            'Hệ thống tự động đồng bộ và thiết lập toàn bộ hạ tầng kỹ thuật chuẩn:\n' +
-            '1. Script lõi MagVarUpdate (MVU) chạy nền.\n' +
-            '2. Script Zod 4 Schema cấu trúc dữ liệu an toàn theo kịch bản được định nghĩa.\n' +
-            '3. Bộ 4 Regex Scripts thiết yếu (ẩn cập nhật khỏi AI, làm đẹp thẻ cập nhật, thanh trạng thái, ẩn trạng thái khỏi prompt AI).\n' +
-            '4. Bộ 4 mục Worldbook chuẩn ([InitVar] Khởi tạo biến cấm bật, [mvu_update] Quy tắc cập nhật biến, [mvu_update] Định dạng đầu ra của biến, Danh sách biến).\n' +
-            'Dùng khi người dùng yêu cầu: "Thêm hệ thống biến MVU cho nhân vật này", "Tạo hệ thống thể lực, đói, khát cho card", "Biến card này thành card có chỉ số", v.v.',
+            'LƯU Ý QUAN TRỌNG VỀ PHẠM VI SỬ DỤNG:\n' +
+            '- Công cụ này dùng để "khai thiên lập địa" MVU từ con số 0 cho card CHƯA CÓ MVU.\n' +
+            '- Nếu thẻ ĐÃ CÓ MVU: hãy ưu tiên sử dụng "mutate_mvu_schema" để thêm/sửa/xoá biến nhằm bảo toàn dữ liệu hiện tại, hoặc truyền "force: true" nếu muốn xoá sạch và dựng lại từ đầu.\n' +
+            'HOÀN TOÀN TỰ ĐỘNG & TOÀN DIỆN:\n' +
+            '1. Script lõi MagVarUpdate (MVU) chạy nền & Script Zod 4 Schema cấu trúc dữ liệu an toàn.\n' +
+            '2. Tự động BẬT TOGGLE "Character Script" trong Tửu quán trợ thủ (TavernHelper) để kịch bản được phép thực thi.\n' +
+            '3. Bộ 4 Regex Scripts chuẩn (ẩn cập nhật, làm đẹp thẻ, thanh trạng thái) và tự động bật Scoped Scripts.\n' +
+            '4. Bộ 4 mục Worldbook chuẩn ([InitVar], [mvu_update] Quy tắc, [mvu_update] Định dạng đầu ra, Danh sách biến). ĐẶC BIỆT: Nếu card ban đầu là card đơn thuần KHÔNG có Worldbook liên kết, hệ thống sẽ tự động tạo mới một Worldbook chuyên dụng trên SillyTavern và liên kết vào thẻ, đảm bảo các entry prompt MVU hoạt động 100% trong phòng chat (không bị rơi vào hư vô).',
         parameters: {
             type: 'object',
             properties: {
@@ -75,6 +76,11 @@ export const scaffoldMvuCardTool: ITool = {
                     description:
                         'Mô tả ngắn gọn về hệ thống biến đang khởi tạo (VD: "Hệ thống sinh tồn", "Chỉ số tâm lý").',
                 },
+                force: {
+                    type: 'boolean',
+                    description:
+                        'Bắt buộc ghi đè lại toàn bộ hệ thống MVU từ đầu nếu thẻ nhân vật đã có sẵn MVU (mặc định false). Thẻ chưa có MVU thì không cần truyền.',
+                },
             },
         },
     },
@@ -93,6 +99,7 @@ export const scaffoldMvuCardTool: ITool = {
                 customInitvarYaml: args.custom_initvar_yaml,
                 customRulesYaml: args.custom_rules_yaml,
                 title: args.concept_summary,
+                force: Boolean(args.force),
             };
 
             const result = await MvuManager.scaffoldMvuCard(context.adapter, options);
@@ -103,7 +110,9 @@ export const scaffoldMvuCardTool: ITool = {
                         success: true,
                         concept: args.concept_summary || 'Tùy biến linh hoạt',
                         variablesCount: args.variables?.length || 0,
+                        linkedWorldbook: result.linkedWorldbook,
                         message: 'Đã nạp thành công hạ tầng kỹ thuật MVU linh hoạt vào thẻ nhân vật hiện tại.',
+                        characterScriptsEnabled: true,
                         injectedScripts: result.injectedScripts,
                         injectedRegexes: result.injectedRegexes,
                         injectedLorebookEntries: result.injectedLorebookEntries,
