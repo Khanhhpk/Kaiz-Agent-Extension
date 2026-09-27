@@ -567,6 +567,45 @@ export class MvuDashboardModal {
         return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
     }
 
+    /**
+     * Tìm giá trị tối đa động từ biến chị em (sibling max variable), ví dụ:
+     * - Linh_tính -> Linh_tính_tối_đa, Linh_tính_max, Max_Linh_tính
+     * - hp -> hp_max, max_hp
+     */
+    private findSiblingMax(desc: MvuVariableDescriptor): number | undefined {
+        const parts = desc.path.split('.');
+        const leafName = parts[parts.length - 1];
+        const parentParts = parts.slice(0, -1);
+        const parentPath = parentParts.join('.');
+
+        const lower = leafName.toLowerCase();
+        if (
+            lower.endsWith('_tối_đa') ||
+            lower.endsWith('_toi_da') ||
+            lower.endsWith('_max') ||
+            lower.startsWith('max_')
+        ) {
+            return undefined;
+        }
+
+        const candidateNames = [
+            `${leafName}_tối_đa`,
+            `${leafName}_toi_da`,
+            `${leafName}_max`,
+            `max_${leafName}`,
+            `${leafName}_limit`,
+        ];
+
+        for (const cand of candidateNames) {
+            const fullPath = parentPath ? `${parentPath}.${cand}` : cand;
+            const val = MvuManager.getLiveVariables(fullPath, this.selectedFloorId);
+            if (typeof val === 'number' && Number.isFinite(val) && val > 0 && val < 1e7) {
+                return val;
+            }
+        }
+        return undefined;
+    }
+
     private renderStatsTab(report: MvuInspectionResult): void {
         const $ = jQuery;
         const container = $('#kaiz-mvu-stats-grid');
@@ -633,7 +672,15 @@ export class MvuDashboardModal {
                     if (!dynamicDesc) dynamicDesc = currentVal[1];
                     currentVal = currentVal[0];
                 }
-                const hasClamp = desc.type === 'number' && desc.min !== undefined && desc.max !== undefined;
+                const isNumeric = desc.type === 'number' || (typeof currentVal === 'number' && Number.isFinite(currentVal));
+                const siblingMax = isNumeric ? this.findSiblingMax(desc) : undefined;
+                const effectiveMax = siblingMax !== undefined ? siblingMax : desc.max;
+                const effectiveMin = desc.min !== undefined ? desc.min : 0;
+                const showProgressGauge =
+                    isNumeric &&
+                    effectiveMax !== undefined &&
+                    effectiveMax > effectiveMin &&
+                    (siblingMax !== undefined || effectiveMax <= 1000);
                 const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
 
                 catHtml += `
@@ -651,9 +698,9 @@ export class MvuDashboardModal {
                         </div>
                 `;
 
-                if (hasClamp) {
-                    const min = desc.min!;
-                    const max = desc.max!;
+                if (showProgressGauge) {
+                    const min = effectiveMin;
+                    const max = effectiveMax!;
                     const numVal = Number(currentVal) || 0;
                     const pct = Math.min(100, Math.max(0, ((numVal - min) / (max - min)) * 100));
                     const theme = this.getProgressBarTheme(pct);
@@ -670,6 +717,13 @@ export class MvuDashboardModal {
                             <span>Min: ${min}</span>
                             <span>${pct.toFixed(0)}%</span>
                             <span>Max: ${max}</span>
+                        </div>
+                    `;
+                } else if (isNumeric) {
+                    const numVal = Number(currentVal) || 0;
+                    catHtml += `
+                        <div class="kaiz-mvu-card-numeric">
+                            <span class="kaiz-mvu-val-main" style="color: #38bdf8;">${numVal}</span>
                         </div>
                     `;
                 } else if (desc.type === 'boolean') {
@@ -823,12 +877,12 @@ export class MvuDashboardModal {
         `;
 
         for (const desc of allDescriptors) {
-            const hasBounds = desc.min !== undefined && desc.max !== undefined;
+            const hasBounds = desc.min !== undefined && desc.max !== undefined && desc.max <= 1e6 && desc.min >= -1e6;
             const boundsText = hasBounds
                 ? `${desc.min} ➔ ${desc.max}`
-                : desc.min !== undefined
+                : desc.min !== undefined && desc.min >= -1e6
                   ? `Min: ${desc.min}`
-                  : desc.max !== undefined
+                  : desc.max !== undefined && desc.max <= 1e6
                     ? `Max: ${desc.max}`
                     : '—';
             let defaultText = '—';

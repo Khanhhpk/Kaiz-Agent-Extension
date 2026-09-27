@@ -623,18 +623,18 @@ export class MvuManager {
         while ((hMatch = helperRegex.exec(code)) !== null) {
             const hName = hMatch[1] || hMatch[3];
             const hBody = hMatch[2] || hMatch[4] || '';
-            if (hBody.includes('z.coerce.number') || hBody.includes('z.number')) {
-                helpers[hName] = { type: 'number' };
-            } else if (hBody.includes('z.string')) {
-                helpers[hName] = { type: 'string' };
-            } else if (hBody.includes('z.boolean')) {
-                helpers[hName] = { type: 'boolean' };
-            } else if (hBody.includes('z.record')) {
+            if (hBody.includes('z.record')) {
                 helpers[hName] = { type: 'record' };
-            } else if (hBody.includes('z.array')) {
-                helpers[hName] = { type: 'array' };
             } else if (hBody.includes('z.object')) {
                 helpers[hName] = { type: 'object' };
+            } else if (hBody.includes('z.array')) {
+                helpers[hName] = { type: 'array' };
+            } else if (hBody.includes('z.coerce.number') || hBody.includes('z.number')) {
+                helpers[hName] = { type: 'number' };
+            } else if (hBody.includes('z.boolean')) {
+                helpers[hName] = { type: 'boolean' };
+            } else if (hBody.includes('z.string')) {
+                helpers[hName] = { type: 'string' };
             }
         }
 
@@ -884,6 +884,17 @@ export class MvuManager {
                             if (args.length > 0) {
                                 defaultValue = args[0].trim() === 'true';
                             }
+                        } else if (hInfo.type === 'record' || hInfo.type === 'object') {
+                            defaultValue = {};
+                            const innerArg = args[0] || '';
+                            for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
+                                if (innerArg.includes(subName)) {
+                                    recordTemplate = subDescriptors;
+                                    break;
+                                }
+                            }
+                        } else if (hInfo.type === 'array') {
+                            defaultValue = [];
                         }
                         break;
                     }

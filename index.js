@@ -16839,23 +16839,23 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           while ((hMatch = helperRegex.exec(code)) !== null) {
               const hName = hMatch[1] || hMatch[3];
               const hBody = hMatch[2] || hMatch[4] || '';
-              if (hBody.includes('z.coerce.number') || hBody.includes('z.number')) {
-                  helpers[hName] = { type: 'number' };
-              }
-              else if (hBody.includes('z.string')) {
-                  helpers[hName] = { type: 'string' };
-              }
-              else if (hBody.includes('z.boolean')) {
-                  helpers[hName] = { type: 'boolean' };
-              }
-              else if (hBody.includes('z.record')) {
+              if (hBody.includes('z.record')) {
                   helpers[hName] = { type: 'record' };
+              }
+              else if (hBody.includes('z.object')) {
+                  helpers[hName] = { type: 'object' };
               }
               else if (hBody.includes('z.array')) {
                   helpers[hName] = { type: 'array' };
               }
-              else if (hBody.includes('z.object')) {
-                  helpers[hName] = { type: 'object' };
+              else if (hBody.includes('z.coerce.number') || hBody.includes('z.number')) {
+                  helpers[hName] = { type: 'number' };
+              }
+              else if (hBody.includes('z.boolean')) {
+                  helpers[hName] = { type: 'boolean' };
+              }
+              else if (hBody.includes('z.string')) {
+                  helpers[hName] = { type: 'string' };
               }
           }
           // 2. Quét các Zod Object con độc lập khai báo trước Schema (TaiSan, NPC, DiChung, VatPham...)
@@ -17100,6 +17100,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                               if (args.length > 0) {
                                   defaultValue = args[0].trim() === 'true';
                               }
+                          }
+                          else if (hInfo.type === 'record' || hInfo.type === 'object') {
+                              defaultValue = {};
+                              const innerArg = args[0] || '';
+                              for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
+                                  if (innerArg.includes(subName)) {
+                                      recordTemplate = subDescriptors;
+                                      break;
+                                  }
+                              }
+                          }
+                          else if (hInfo.type === 'array') {
+                              defaultValue = [];
                           }
                           break;
                       }
@@ -27523,6 +27536,39 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
       }
+      /**
+       * Tìm giá trị tối đa động từ biến chị em (sibling max variable), ví dụ:
+       * - Linh_tính -> Linh_tính_tối_đa, Linh_tính_max, Max_Linh_tính
+       * - hp -> hp_max, max_hp
+       */
+      findSiblingMax(desc) {
+          const parts = desc.path.split('.');
+          const leafName = parts[parts.length - 1];
+          const parentParts = parts.slice(0, -1);
+          const parentPath = parentParts.join('.');
+          const lower = leafName.toLowerCase();
+          if (lower.endsWith('_tối_đa') ||
+              lower.endsWith('_toi_da') ||
+              lower.endsWith('_max') ||
+              lower.startsWith('max_')) {
+              return undefined;
+          }
+          const candidateNames = [
+              `${leafName}_tối_đa`,
+              `${leafName}_toi_da`,
+              `${leafName}_max`,
+              `max_${leafName}`,
+              `${leafName}_limit`,
+          ];
+          for (const cand of candidateNames) {
+              const fullPath = parentPath ? `${parentPath}.${cand}` : cand;
+              const val = MvuManager.getLiveVariables(fullPath, this.selectedFloorId);
+              if (typeof val === 'number' && Number.isFinite(val) && val > 0 && val < 1e7) {
+                  return val;
+              }
+          }
+          return undefined;
+      }
       renderStatsTab(report) {
           const $ = jQuery;
           const container = $('#kaiz-mvu-stats-grid');
@@ -27572,7 +27618,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           dynamicDesc = currentVal[1];
                       currentVal = currentVal[0];
                   }
-                  const hasClamp = desc.type === 'number' && desc.min !== undefined && desc.max !== undefined;
+                  const isNumeric = desc.type === 'number' || (typeof currentVal === 'number' && Number.isFinite(currentVal));
+                  const siblingMax = isNumeric ? this.findSiblingMax(desc) : undefined;
+                  const effectiveMax = siblingMax !== undefined ? siblingMax : desc.max;
+                  const effectiveMin = desc.min !== undefined ? desc.min : 0;
+                  const showProgressGauge = isNumeric &&
+                      effectiveMax !== undefined &&
+                      effectiveMax > effectiveMin &&
+                      (siblingMax !== undefined || effectiveMax <= 1000);
                   const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
                   catHtml += `
                     <div class="kaiz-mvu-stat-card" data-path="${escapeHtml(desc.path)}">
@@ -27588,9 +27641,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             </div>
                         </div>
                 `;
-                  if (hasClamp) {
-                      const min = desc.min;
-                      const max = desc.max;
+                  if (showProgressGauge) {
+                      const min = effectiveMin;
+                      const max = effectiveMax;
                       const numVal = Number(currentVal) || 0;
                       const pct = Math.min(100, Math.max(0, ((numVal - min) / (max - min)) * 100));
                       const theme = this.getProgressBarTheme(pct);
@@ -27606,6 +27659,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             <span>Min: ${min}</span>
                             <span>${pct.toFixed(0)}%</span>
                             <span>Max: ${max}</span>
+                        </div>
+                    `;
+                  }
+                  else if (isNumeric) {
+                      const numVal = Number(currentVal) || 0;
+                      catHtml += `
+                        <div class="kaiz-mvu-card-numeric">
+                            <span class="kaiz-mvu-val-main" style="color: #38bdf8;">${numVal}</span>
                         </div>
                     `;
                   }
@@ -27762,12 +27823,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     <tbody>
         `;
           for (const desc of allDescriptors) {
-              const hasBounds = desc.min !== undefined && desc.max !== undefined;
+              const hasBounds = desc.min !== undefined && desc.max !== undefined && desc.max <= 1e6 && desc.min >= -1e6;
               const boundsText = hasBounds
                   ? `${desc.min} ➔ ${desc.max}`
-                  : desc.min !== undefined
+                  : desc.min !== undefined && desc.min >= -1e6
                       ? `Min: ${desc.min}`
-                      : desc.max !== undefined
+                      : desc.max !== undefined && desc.max <= 1e6
                           ? `Max: ${desc.max}`
                           : '—';
               let defaultText = '—';
