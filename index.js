@@ -16499,11 +16499,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       /**
        * Quét danh sách các lượt tin nhắn (floor) có dữ liệu stat_data trong cuộc hội thoại hiện tại
        */
-      static async listValidFloors() {
+      static async listValidFloors(maxScan = 100) {
           const { stContext } = this.getGlobalContext();
           const chat = Array.isArray(stContext?.chat) ? stContext.chat : [];
           const floors = [];
-          for (let i = chat.length - 1; i >= 0; i--) {
+          const scanStart = Math.max(0, chat.length - maxScan);
+          for (let i = chat.length - 1; i >= scanStart; i--) {
               const msg = chat[i];
               if (!msg)
                   continue;
@@ -16542,12 +16543,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               try {
                   if (mvu && typeof mvu.getMvuData === 'function') {
                       raw = mvu.getMvuData();
+                      // Guard: nếu API trả về Promise, giải quyết đồng bộ fallback sang cache
+                      if (raw && typeof raw === 'object' && typeof raw.then === 'function') {
+                          raw = null; // Bỏ qua Promise, dùng readFloor async thay thế
+                      }
                   }
               }
               catch { }
               if (!raw && th && typeof th.getVariables === 'function') {
                   try {
                       raw = th.getVariables();
+                      if (raw && typeof raw === 'object' && typeof raw.then === 'function') {
+                          raw = null;
+                      }
                   }
                   catch { }
               }
@@ -17654,9 +17662,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           }
           else if (options.action === 'modify') {
               const zodLine = buildZodLine();
-              const modifyRegex = new RegExp(`(['"])?${leafName}\\1?\\s*:\\s*z\\.[^,\\n]+`, 'g');
+              // Scope chính xác hơn: chỉ match dòng key: value, word boundary trước leafName
+              const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const modifyRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:\\s*z\\.[^,\\n]+`, 'gm');
               if (modifyRegex.test(zodCode)) {
-                  zodCode = zodCode.replace(modifyRegex, `'${leafName}': ${zodLine}`);
+                  modifyRegex.lastIndex = 0; // Reset lastIndex sau test()
+                  zodCode = zodCode.replace(modifyRegex, `$1'${leafName}': ${zodLine}`);
                   modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
               }
           }
@@ -17664,12 +17675,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               if (!options.newName) {
                   throw new Error('Cần cung cấp "newName" khi thực hiện đổi tên biến.');
               }
-              const renameRegex = new RegExp(`(['"])?${leafName}\\1?\\s*:`, 'g');
-              zodCode = zodCode.replace(renameRegex, `'${options.newName}':`);
+              const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const renameRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:`, 'gm');
+              zodCode = zodCode.replace(renameRegex, `$1'${options.newName}':`);
               modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
           }
           else if (options.action === 'delete') {
-              const removeRegex = new RegExp(`['"]?${leafName}['"]?\\s*:\\s*z\\.[^,\\n]+,?\\n?`, 'g');
+              const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const removeRegex = new RegExp(`^\\s*['"]?${escapedLeaf}['"]?\\s*:\\s*z\\.[^,\\n]+,?\\n?`, 'gm');
               zodCode = zodCode.replace(removeRegex, '');
               modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
           }
@@ -17951,6 +17964,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const liveChar = this.getActiveCharacter();
           if (!liveChar)
               throw new Error('Không có nhân vật nào đang hoạt động để nạp MVU.');
+          if (this.hasMvu(liveChar)) {
+              console.warn('[MvuManager] Cảnh báo: Card đã có hệ thống MVU. Thao tác scaffold sẽ ghi đè lên cấu hình hiện tại.');
+          }
           if (!liveChar.data)
               liveChar.data = {};
           if (!liveChar.data.extensions)
@@ -18888,17 +18904,22 @@ await Mvu.replaceMvuData(currentData, { type: 'message', message_id: -1 });
 Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt template prompt và macro**:
 - **Khi tạo / chỉnh sửa Card**: TẮT -> Để AI nhìn thấy mã nguồn thô (raw macros/EJS) phục vụ biên soạn.
 - **Khi test / trò chuyện**: BẬT -> Để các macro và biến render thành dữ liệu thực tế.`,
-              tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 4 CÔNG CỤ MVU CỦA KAIZ
+              tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 5 CÔNG CỤ MVU CỦA KAIZ
 
 1. **Khi cần kiểm tra/đánh giá hiện trạng Card**:
    - Gọi \`inspect_mvu\` -> Trả về tình trạng Zod Schema, cây biến thực tế trong chat, nội dung Worldbook, và cảnh báo sai lệch.
 2. **Khi cần khởi tạo hệ thống MVU cho Card mới/Card thường**:
    - Phân tích bối cảnh, lore của nhân vật để đề xuất bộ biến phù hợp.
    - Gọi \`scaffold_mvu_card\` với danh sách \`variables\` tùy biến (hoặc schema Zod/YAML riêng). **Tuyệt đối không dùng template cứng!**
+   - Nếu card đã có MVU từ trước, hệ thống sẽ cảnh báo về việc ghi đè.
 3. **Khi cần thêm/sửa/đổi tên/xóa biến**:
    - Gọi \`mutate_mvu_schema\` với các hành động (\`add\`, \`modify\`, \`rename\`, \`delete\`). Công cụ này tự động đồng bộ hóa toàn bộ 3 tầng (Zod Script, [InitVar] YAML, [mvu_update] Rules YAML).
 4. **Khi cần điều chỉnh nhanh giá trị biến trong phiên chat**:
-   - Gọi \`set_mvu_variable\` với đường dẫn \`path\` và giá trị \`value\` mới.`,
+   - Gọi \`set_mvu_variable\` với đường dẫn \`path\` và giá trị \`value\` mới.
+5. **Khi cần tra cứu kiến trúc và cú pháp chuẩn**:
+   - Gọi \`mvu_instruct\` với các chủ đề cần tìm hiểu.
+
+**Nguyên tắc an toàn**: Trước khi thực hiện scaffold, mutate đa biến, hoặc bất kỳ chỉnh sửa sâu nào đối với Card, hãy luôn nhắc người dùng chủ động sử dụng tính năng **Export** của SillyTavern để lưu lại thẻ gốc về máy tính. Điều này bảo đảm an toàn dữ liệu 100% và người dùng luôn có đường lui vững chắc.`,
           };
           if (topic === 'all') {
               const allContent = Object.values(sections).join('\n\n---\n\n');
@@ -19807,14 +19828,132 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           const ctx = SillyTavern.getContext();
           try {
               if (type === 'character') {
+                  if (typeof ctx.unshallowCharacter === 'function' && ctx.characterId !== undefined) {
+                      try {
+                          await ctx.unshallowCharacter(ctx.characterId);
+                      }
+                      catch (unshallowErr) {
+                          console.warn('[KaizAgent] unshallowCharacter failed, proceeding with current in-memory state:', unshallowErr);
+                      }
+                  }
                   const char = ctx.characters?.[ctx.characterId];
                   if (!char)
                       throw new Error('No active character found');
                   const charName = char.name || 'Unknown_Character';
-                  const charData = char.data || char;
+                  const rawData = char.data || {};
+                  // 1. Đồng bộ các trường V2 Spec cốt lõi (ưu tiên char.data, fallback về root char)
+                  const name = rawData.name ?? char.name ?? 'Unknown';
+                  const description = rawData.description ?? char.description ?? '';
+                  const personality = rawData.personality ?? char.personality ?? '';
+                  const scenario = rawData.scenario ?? char.scenario ?? '';
+                  const first_mes = rawData.first_mes ?? char.first_mes ?? '';
+                  const mes_example = rawData.mes_example ?? char.mes_example ?? '';
+                  const creator_notes = rawData.creator_notes ?? char.creatorcomment ?? '';
+                  const system_prompt = rawData.system_prompt ?? char.system_prompt ?? '';
+                  const post_history_instructions = rawData.post_history_instructions ?? char.post_history_instructions ?? '';
+                  const alternate_greetings = Array.isArray(rawData.alternate_greetings)
+                      ? rawData.alternate_greetings
+                      : Array.isArray(char.alternate_greetings)
+                          ? char.alternate_greetings
+                          : [];
+                  const creator = rawData.creator ?? char.creator ?? '';
+                  const character_version = rawData.character_version ?? char.character_version ?? '';
+                  // 2. Thu thập Tags đầy đủ
+                  let tags = Array.isArray(rawData.tags) && rawData.tags.length > 0
+                      ? [...rawData.tags]
+                      : Array.isArray(char.tags) && char.tags.length > 0
+                          ? [...char.tags]
+                          : [];
+                  if (tags.length === 0 && ctx.tagMap && ctx.tags && char.avatar) {
+                      const currentTagIds = ctx.tagMap[char.avatar] || [];
+                      tags = currentTagIds
+                          .map((id) => ctx.tags.find((t) => t.id === id)?.name)
+                          .filter(Boolean);
+                  }
+                  // 3. Đóng gói Extensions (bảo toàn tavern_helper, regex_scripts, talkativeness, fav, world, v.v.)
+                  const extensions = {
+                      ...(rawData.extensions || {}),
+                  };
+                  if (char.talkativeness !== undefined && extensions.talkativeness === undefined) {
+                      extensions.talkativeness = char.talkativeness;
+                  }
+                  if (char.fav !== undefined && extensions.fav === undefined) {
+                      extensions.fav = char.fav;
+                  }
+                  const linkedWorldName = extensions.world || char.world || null;
+                  if (linkedWorldName && !extensions.world) {
+                      extensions.world = linkedWorldName;
+                  }
+                  // 4. Thu thập Lorebook (Embedded hoặc đóng gói từ Linked Worldbook)
+                  let characterBook = rawData.character_book ? JSON.parse(JSON.stringify(rawData.character_book)) : null;
+                  if ((!characterBook || !characterBook.entries || characterBook.entries.length === 0) && linkedWorldName) {
+                      try {
+                          let worldData = null;
+                          if (typeof ctx.loadWorldInfo === 'function') {
+                              worldData = await ctx.loadWorldInfo(linkedWorldName);
+                          }
+                          else {
+                              const res = await fetch('/api/worldinfo/get', {
+                                  method: 'POST',
+                                  headers: {
+                                      ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                                      'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({ name: linkedWorldName }),
+                              });
+                              if (res.ok)
+                                  worldData = await res.json();
+                          }
+                          if (worldData && worldData.entries) {
+                              const entriesArray = Array.isArray(worldData.entries)
+                                  ? worldData.entries
+                                  : Object.values(worldData.entries);
+                              characterBook = {
+                                  name: linkedWorldName,
+                                  description: `Tự động đóng gói từ Worldbook liên kết [${linkedWorldName}] vào bản sao lưu thẻ.`,
+                                  scan_depth: worldData.scan_depth ?? 2,
+                                  token_budget: worldData.token_budget ?? 500,
+                                  recursive_scanning: worldData.recursive_scanning ?? false,
+                                  extensions: worldData.extensions ?? {},
+                                  entries: entriesArray,
+                              };
+                          }
+                      }
+                      catch (wbErr) {
+                          console.warn('[KaizAgent] Không thể nhúng linked worldbook vào bản sao lưu thẻ:', wbErr);
+                      }
+                  }
+                  const fullCharData = {
+                      name,
+                      description,
+                      personality,
+                      scenario,
+                      first_mes,
+                      mes_example,
+                      creator_notes,
+                      system_prompt,
+                      post_history_instructions,
+                      alternate_greetings,
+                      character_book: characterBook,
+                      tags,
+                      creator,
+                      character_version,
+                      extensions,
+                  };
+                  const cardPayload = {
+                      spec: 'chara_card_v2',
+                      spec_version: '2.0',
+                      data: fullCharData,
+                      metadata: {
+                          avatar: char.avatar || '',
+                          exportDate: new Date().toISOString(),
+                          source: 'KaizAgent_FullCardBackup',
+                          linkedWorld: linkedWorldName,
+                      },
+                  };
                   return {
                       name: charName,
-                      data: JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: charData }, null, 2),
+                      data: JSON.stringify(cardPayload, null, 2),
                   };
               }
               if (type === 'chat') {

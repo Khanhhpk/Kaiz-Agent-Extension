@@ -249,12 +249,13 @@ export class MvuManager {
     /**
      * Quét danh sách các lượt tin nhắn (floor) có dữ liệu stat_data trong cuộc hội thoại hiện tại
      */
-    public static async listValidFloors(): Promise<MvuFloorInfo[]> {
+    public static async listValidFloors(maxScan: number = 100): Promise<MvuFloorInfo[]> {
         const { stContext } = this.getGlobalContext();
         const chat = Array.isArray(stContext?.chat) ? stContext.chat : [];
         const floors: MvuFloorInfo[] = [];
+        const scanStart = Math.max(0, chat.length - maxScan);
 
-        for (let i = chat.length - 1; i >= 0; i--) {
+        for (let i = chat.length - 1; i >= scanStart; i--) {
             const msg = chat[i];
             if (!msg) continue;
             const isSystem = !!(msg.is_system || msg.role === 'system' || msg.mes_role === 'system');
@@ -296,11 +297,18 @@ export class MvuManager {
             try {
                 if (mvu && typeof mvu.getMvuData === 'function') {
                     raw = mvu.getMvuData();
+                    // Guard: nếu API trả về Promise, giải quyết đồng bộ fallback sang cache
+                    if (raw && typeof raw === 'object' && typeof raw.then === 'function') {
+                        raw = null; // Bỏ qua Promise, dùng readFloor async thay thế
+                    }
                 }
             } catch {}
             if (!raw && th && typeof th.getVariables === 'function') {
                 try {
                     raw = th.getVariables();
+                    if (raw && typeof raw === 'object' && typeof raw.then === 'function') {
+                        raw = null;
+                    }
                 } catch {}
             }
             if (raw && typeof raw === 'object') {
@@ -1469,20 +1477,25 @@ export class MvuManager {
             modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
         } else if (options.action === 'modify') {
             const zodLine = buildZodLine();
-            const modifyRegex = new RegExp(`(['"])?${leafName}\\1?\\s*:\\s*z\\.[^,\\n]+`, 'g');
+            // Scope chính xác hơn: chỉ match dòng key: value, word boundary trước leafName
+            const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const modifyRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:\\s*z\\.[^,\\n]+`, 'gm');
             if (modifyRegex.test(zodCode)) {
-                zodCode = zodCode.replace(modifyRegex, `'${leafName}': ${zodLine}`);
+                modifyRegex.lastIndex = 0; // Reset lastIndex sau test()
+                zodCode = zodCode.replace(modifyRegex, `$1'${leafName}': ${zodLine}`);
                 modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
             }
         } else if (options.action === 'rename') {
             if (!options.newName) {
                 throw new Error('Cần cung cấp "newName" khi thực hiện đổi tên biến.');
             }
-            const renameRegex = new RegExp(`(['"])?${leafName}\\1?\\s*:`, 'g');
-            zodCode = zodCode.replace(renameRegex, `'${options.newName}':`);
+            const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const renameRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:`, 'gm');
+            zodCode = zodCode.replace(renameRegex, `$1'${options.newName}':`);
             modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
         } else if (options.action === 'delete') {
-            const removeRegex = new RegExp(`['"]?${leafName}['"]?\\s*:\\s*z\\.[^,\\n]+,?\\n?`, 'g');
+            const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const removeRegex = new RegExp(`^\\s*['"]?${escapedLeaf}['"]?\\s*:\\s*z\\.[^,\\n]+,?\\n?`, 'gm');
             zodCode = zodCode.replace(removeRegex, '');
             modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
         }
@@ -1760,6 +1773,10 @@ export class MvuManager {
     }> {
         const liveChar = this.getActiveCharacter();
         if (!liveChar) throw new Error('Không có nhân vật nào đang hoạt động để nạp MVU.');
+
+        if (this.hasMvu(liveChar)) {
+            console.warn('[MvuManager] Cảnh báo: Card đã có hệ thống MVU. Thao tác scaffold sẽ ghi đè lên cấu hình hiện tại.');
+        }
 
         if (!liveChar.data) liveChar.data = {};
         if (!liveChar.data.extensions) liveChar.data.extensions = {};

@@ -398,17 +398,22 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
 - **Khi tạo / chỉnh sửa Card**: TẮT -> Để AI nhìn thấy mã nguồn thô (raw macros/EJS) phục vụ biên soạn.
 - **Khi test / trò chuyện**: BẬT -> Để các macro và biến render thành dữ liệu thực tế.`,
 
-            tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 4 CÔNG CỤ MVU CỦA KAIZ
+            tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 5 CÔNG CỤ MVU CỦA KAIZ
 
 1. **Khi cần kiểm tra/đánh giá hiện trạng Card**:
    - Gọi \`inspect_mvu\` -> Trả về tình trạng Zod Schema, cây biến thực tế trong chat, nội dung Worldbook, và cảnh báo sai lệch.
 2. **Khi cần khởi tạo hệ thống MVU cho Card mới/Card thường**:
    - Phân tích bối cảnh, lore của nhân vật để đề xuất bộ biến phù hợp.
    - Gọi \`scaffold_mvu_card\` với danh sách \`variables\` tùy biến (hoặc schema Zod/YAML riêng). **Tuyệt đối không dùng template cứng!**
+   - Nếu card đã có MVU từ trước, hệ thống sẽ cảnh báo về việc ghi đè.
 3. **Khi cần thêm/sửa/đổi tên/xóa biến**:
    - Gọi \`mutate_mvu_schema\` với các hành động (\`add\`, \`modify\`, \`rename\`, \`delete\`). Công cụ này tự động đồng bộ hóa toàn bộ 3 tầng (Zod Script, [InitVar] YAML, [mvu_update] Rules YAML).
 4. **Khi cần điều chỉnh nhanh giá trị biến trong phiên chat**:
-   - Gọi \`set_mvu_variable\` với đường dẫn \`path\` và giá trị \`value\` mới.`,
+   - Gọi \`set_mvu_variable\` với đường dẫn \`path\` và giá trị \`value\` mới.
+5. **Khi cần tra cứu kiến trúc và cú pháp chuẩn**:
+   - Gọi \`mvu_instruct\` với các chủ đề cần tìm hiểu.
+
+**Nguyên tắc an toàn**: Trước khi thực hiện scaffold, mutate đa biến, hoặc bất kỳ chỉnh sửa sâu nào đối với Card, hãy luôn nhắc người dùng chủ động sử dụng tính năng **Export** của SillyTavern để lưu lại thẻ gốc về máy tính. Điều này bảo đảm an toàn dữ liệu 100% và người dùng luôn có đường lui vững chắc.`,
         };
 
         if (topic === 'all') {
