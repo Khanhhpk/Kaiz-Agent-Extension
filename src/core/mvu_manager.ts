@@ -199,25 +199,47 @@ export class MvuManager {
             const vueApp = (el as any)?.__vue_app__;
             const provides = vueApp?._context?.provides;
             if (provides) {
-                const pinia =
-                    provides[Symbol.for('pinia')] ||
-                    provides.pinia ||
-                    Object.values(provides).find((p: any) => p && (p as any)._s);
+                // QUAN TRỌNG: Pinia được lưu dưới private Symbol('pinia'), KHÔNG phải Symbol.for('pinia').
+                // Object.values() bỏ qua Symbol keys, nên phải dùng Object.getOwnPropertySymbols().
+                let pinia: any = null;
+                const symbols = Object.getOwnPropertySymbols(provides);
+                for (const sym of symbols) {
+                    const val = provides[sym];
+                    if (val && val._s instanceof Map) {
+                        pinia = val;
+                        break;
+                    }
+                }
+                // Fallback: thử key thông thường
+                if (!pinia) {
+                    pinia = provides[Symbol.for('pinia')] || provides.pinia || null;
+                }
+
                 if (pinia && (pinia as any)._s) {
+                    // 2a. Cập nhật global_settings store: thêm avatar vào danh sách enabled + popuped
                     const globalStore = (pinia as any)._s.get('global_settings');
-                    if (globalStore?.settings?.script?.enabled?.characters) {
-                        const chars = globalStore.settings.script.enabled.characters;
-                        if (!chars.includes(avatar)) chars.push(avatar);
-                        if (avatarPng !== avatar && !chars.includes(avatarPng)) chars.push(avatarPng);
+                    if (globalStore?.settings?.script) {
+                        const scriptSettings = globalStore.settings.script;
+                        if (!scriptSettings.enabled) scriptSettings.enabled = {};
+                        if (!Array.isArray(scriptSettings.enabled.characters)) scriptSettings.enabled.characters = [];
+                        if (!scriptSettings.popuped) scriptSettings.popuped = {};
+                        if (!Array.isArray(scriptSettings.popuped.characters)) scriptSettings.popuped.characters = [];
+
+                        for (const av of [avatar, avatarPng]) {
+                            if (av && !scriptSettings.enabled.characters.includes(av)) {
+                                scriptSettings.enabled.characters.push(av);
+                            }
+                            if (av && !scriptSettings.popuped.characters.includes(av)) {
+                                scriptSettings.popuped.characters.push(av);
+                            }
+                        }
                     }
-                    if (globalStore?.settings?.script?.popuped?.characters) {
-                        const popups = globalStore.settings.script.popuped.characters;
-                        if (!popups.includes(avatar)) popups.push(avatar);
-                        if (avatarPng !== avatar && !popups.includes(avatarPng)) popups.push(avatarPng);
-                    }
-                    const charScriptsStore = (pinia as any)._s.get('character_scripts');
-                    if (charScriptsStore) {
-                        charScriptsStore.enabled = true;
+
+                    // 2b. Force reload character_setttings store (LƯU Ý: store ID có 3 chữ 't' - đây là typo gốc từ JS-Slash-Runner)
+                    // Đảm bảo Pinia đồng bộ scripts mới nhất từ characters[] array sau getOneCharacter
+                    const charSettingsStore = (pinia as any)._s.get('character_setttings');
+                    if (charSettingsStore && typeof charSettingsStore.forceReload === 'function') {
+                        charSettingsStore.forceReload();
                     }
                 }
             }
@@ -227,14 +249,35 @@ export class MvuManager {
 
         // 3. Đồng bộ checkbox trên giao diện DOM nếu panel kịch bản đang mở
         try {
-            const charContainer = document.querySelector('[data-container-type="character"]');
-            if (charContainer) {
-                const parentBox = charContainer.closest('.flex-col') || charContainer.parentElement;
-                const checkbox = parentBox?.querySelector(
-                    'input[type="checkbox"][id*="script-enable-toggle"]',
-                ) as HTMLInputElement;
-                if (checkbox && !checkbox.checked) {
-                    checkbox.click();
+            // Toggle ID format trong Container.vue: `${title}-script-enable-toggle`
+            // trong đó title là tên đã dịch (VD: "Character Script", "角色脚本", "Kịch bản nhân vật")
+            const allToggles = document.querySelectorAll('input[type="checkbox"][id$="-script-enable-toggle"]');
+            for (const toggle of allToggles) {
+                const toggleId = (toggle as HTMLInputElement).id || '';
+                const parentEl = toggle.closest('.flex, [class*="mt-"]') || toggle.parentElement;
+                const parentText = parentEl?.textContent?.toLowerCase() || '';
+
+                // Xác định toggle của "Character Script" (角色脚本 / Kịch bản nhân vật)
+                const isCharToggle =
+                    toggleId.toLowerCase().includes('character') ||
+                    toggleId.includes('角色') ||
+                    toggleId.includes('nhân vật') ||
+                    parentText.includes('character') ||
+                    parentText.includes('角色') ||
+                    parentText.includes('nhân vật') ||
+                    parentText.includes('bind to the current character');
+
+                if (isCharToggle && !(toggle as HTMLInputElement).checked) {
+                    // Click vào label thay vì input để đảm bảo Vue v-model reactive cập nhật
+                    const escapedId = CSS.escape(toggleId);
+                    const label = document.querySelector(`label[for="${escapedId}"]`) as HTMLElement;
+                    if (label) {
+                        label.click();
+                    } else {
+                        (toggle as HTMLInputElement).checked = true;
+                        toggle.dispatchEvent(new Event('change', { bubbles: true }));
+                        toggle.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
                 }
             }
         } catch (e) {
@@ -1780,7 +1823,24 @@ export class MvuManager {
             }
         }
 
-        // 4. Lưu lại toàn bộ vào SillyTavern Backend qua merge-attributes
+        // 4a. Đồng bộ json_data để tránh TavernHelper watcher ghi đè bằng dữ liệu cũ
+        try {
+            if (liveChar.json_data) {
+                const jd = JSON.parse(liveChar.json_data);
+                jd.data = jd.data || {};
+                jd.data.extensions = liveChar.data.extensions;
+                jd.data.character_book = liveChar.data.character_book;
+                liveChar.json_data = JSON.stringify(jd);
+                const $ = (window as any).$;
+                if ($ && typeof $ === 'function') {
+                    $('#character_json_data').val(liveChar.json_data);
+                }
+            }
+        } catch (e) {
+            console.warn('[MvuManager] Lỗi khi đồng bộ json_data trong mutate:', e);
+        }
+
+        // 4b. Lưu lại toàn bộ vào SillyTavern Backend qua merge-attributes
         const mergePayload = {
             avatar: liveChar.avatar,
             avatar_url: liveChar.avatar,
@@ -2142,8 +2202,7 @@ export class MvuManager {
             console.warn('[MvuManager] TavernHelper updateScriptTreesWith warning in scaffold:', e);
         }
 
-        // Bật toggle "Character Script" trong Tửu quán trợ thủ (TavernHelper)
-        await this.enableCharacterScriptsInTavernHelper(liveChar);
+        // (enableCharacterScriptsInTavernHelper đã được di chuyển xuống sau khi lưu backend và reload xong)
 
         // 3. Tiêm Regex Scripts chuẩn (Tiếng Việt / English)
         const regexes = [
@@ -2447,7 +2506,24 @@ format: |-
             }
         }
 
-        // 5. Lưu lại vào SillyTavern Backend
+        // 5a. Đồng bộ json_data để tránh TavernHelper watcher ghi đè bằng dữ liệu cũ
+        try {
+            if (liveChar.json_data) {
+                const jd = JSON.parse(liveChar.json_data);
+                jd.data = jd.data || {};
+                jd.data.extensions = liveChar.data.extensions;
+                jd.data.character_book = liveChar.data.character_book;
+                liveChar.json_data = JSON.stringify(jd);
+                const $ = (window as any).$;
+                if ($ && typeof $ === 'function') {
+                    $('#character_json_data').val(liveChar.json_data);
+                }
+            }
+        } catch (e) {
+            console.warn('[MvuManager] Lỗi khi đồng bộ json_data trong scaffold:', e);
+        }
+
+        // 5b. Lưu lại vào SillyTavern Backend
         const ctx = this.getContext();
         const res = await fetch('/api/characters/merge-attributes', {
             method: 'POST',
@@ -2477,6 +2553,9 @@ format: |-
             const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
             eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: liveChar } });
         } catch {}
+
+        // Đảm bảo toggle Character Scripts trong TavernHelper được kích hoạt SAU KHI đã lưu backend và reload
+        await this.enableCharacterScriptsInTavernHelper(liveChar);
 
         return {
             success: true,
