@@ -25761,6 +25761,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (modal)
                   modal.close();
           });
+          // Click ra ngoài backdrop để đóng Gallery Modal
+          $('#kaiz-gallery-modal')
+              .off('click.backdrop')
+              .on('click.backdrop', (e) => {
+              if (e.target && e.target.id === 'kaiz-gallery-modal') {
+                  e.target.close();
+              }
+          });
           // Tìm kiếm prompt thời gian thực có debounce chống giật lag
           let gallerySearchDebounce = null;
           $('#kaiz-gallery-search')
@@ -25837,6 +25845,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const previewModal = $('#kaiz-gallery-preview-modal')[0];
               if (previewModal)
                   previewModal.close();
+          });
+          // Click ra ngoài backdrop để đóng Preview Modal
+          $('#kaiz-gallery-preview-modal')
+              .off('click.backdrop')
+              .on('click.backdrop', (e) => {
+              if (e.target && e.target.id === 'kaiz-gallery-preview-modal') {
+                  e.target.close();
+              }
           });
           // Sao chép Prompt trong Preview Modal
           $('#kaiz-preview-copy-prompt-btn')
@@ -26227,8 +26243,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               .off('click')
               .on('click', () => {
               const diffModal = $('#kaiz-preset-diff-modal')[0];
-              if (diffModal)
+              if (diffModal) {
                   diffModal.close();
+                  diffModal.style.display = 'none';
+              }
           });
           // 13. Tự động đồng bộ khi quay lại cửa sổ hoặc SillyTavern cập nhật preset
           window.addEventListener('focus', async () => {

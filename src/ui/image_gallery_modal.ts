@@ -44,6 +44,15 @@ export class ImageGalleryModal {
                 if (modal) modal.close();
             });
 
+        // Click ra ngoài backdrop để đóng Gallery Modal
+        $('#kaiz-gallery-modal')
+            .off('click.backdrop')
+            .on('click.backdrop', (e: any) => {
+                if (e.target && e.target.id === 'kaiz-gallery-modal') {
+                    (e.target as HTMLDialogElement).close();
+                }
+            });
+
         // Tìm kiếm prompt thời gian thực có debounce chống giật lag
         let gallerySearchDebounce: any = null;
         $('#kaiz-gallery-search')
@@ -124,6 +133,15 @@ export class ImageGalleryModal {
             .on('click', () => {
                 const previewModal = $('#kaiz-gallery-preview-modal')[0] as HTMLDialogElement;
                 if (previewModal) previewModal.close();
+            });
+
+        // Click ra ngoài backdrop để đóng Preview Modal
+        $('#kaiz-gallery-preview-modal')
+            .off('click.backdrop')
+            .on('click.backdrop', (e: any) => {
+                if (e.target && e.target.id === 'kaiz-gallery-preview-modal') {
+                    (e.target as HTMLDialogElement).close();
+                }
             });
 
         // Sao chép Prompt trong Preview Modal

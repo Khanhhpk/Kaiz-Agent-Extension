@@ -95,6 +95,11 @@
     backdrop-filter: blur(5px);
 }
 
+#kaiz-gallery-modal[open],
+#kaiz-gallery-preview-modal[open] {
+    display: flex;
+}
+
 .kaiz-chat-window.kaiz-phone-mode {
     width: 100vw !important;
     height: 100dvh !important;
