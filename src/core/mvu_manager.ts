@@ -385,6 +385,10 @@ export class MvuManager {
             }
         }
 
+        if (targetMessageId === undefined) {
+            throw new Error('Chưa có tin nhắn nào trong phòng chat để gán biến runtime. Hãy gửi ít nhất một tin nhắn (hoặc bắt đầu cuộc hội thoại) trước khi dùng set_mvu_variable.');
+        }
+
         const cleanPath = path.replace(/^stat_data\./, '');
         const cleanParts = cleanPath.split('.');
         const oldValue = this.getLiveVariables(cleanPath, targetMessageId);
@@ -485,12 +489,12 @@ export class MvuManager {
         // Phương thức 3: TavernHelper.setVariable / updateVariable
         if (!updated && th && typeof th.setVariable === 'function') {
             const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
-            const opts = targetMessageId !== undefined ? { type: 'message', message_id: targetMessageId } : undefined;
+            const opts = { type: 'message', message_id: targetMessageId };
             await th.setVariable(fullPath, parsedValue, opts);
             updated = true;
         } else if (!updated && th && typeof th.updateVariable === 'function') {
             const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
-            const opts = targetMessageId !== undefined ? { type: 'message', message_id: targetMessageId } : undefined;
+            const opts = { type: 'message', message_id: targetMessageId };
             await th.updateVariable(fullPath, parsedValue, opts);
             updated = true;
         }
@@ -562,7 +566,40 @@ export class MvuManager {
             }
         }
 
-        // 2. Nếu chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
+        // 2. Nếu nhân vật có linked Worldbook (Sổ tay thế giới liên kết ngoài), kiểm tra trong đó
+        const linkedWorld = char?.data?.extensions?.world || char?.world;
+        if (linkedWorld && (!result.initvarEntry || !result.updateRulesEntry)) {
+            try {
+                const ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+                if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function') {
+                    const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
+                    const entries = worldData?.entries
+                        ? (Array.isArray(worldData.entries) ? worldData.entries : Object.values(worldData.entries))
+                        : [];
+                    for (const entry of entries as any[]) {
+                        const comment = (entry?.comment || entry?.name || '').toLowerCase();
+                        const content = (entry?.content || '').toLowerCase();
+                        if (!result.initvarEntry && (comment.includes('initvar') || comment.includes('khởi tạo biến') || comment.includes('[initvar]'))) {
+                            result.initvarEntry = entry;
+                        }
+                        if (
+                            !result.updateRulesEntry &&
+                            (comment.includes('mvu_update') ||
+                                comment.includes('quy tắc cập nhật') ||
+                                comment.includes('cập nhật biến') ||
+                                content.includes('【cập nhật biến】') ||
+                                content.includes('quy tắc cập nhật'))
+                        ) {
+                            result.updateRulesEntry = entry;
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore
+            }
+        }
+
+        // 3. Nếu vẫn chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
         if (!result.initvarEntry || !result.updateRulesEntry) {
             try {
                 const worldInfo = (window as any).world_info;
@@ -1500,8 +1537,41 @@ export class MvuManager {
             modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
         }
 
-        // Cập nhật script trong bộ nhớ của nhân vật
-        liveChar.data.extensions.tavern_helper.scripts[zodScriptInfo.key].content = zodCode;
+        // Cập nhật script trong bộ nhớ của nhân vật (Hỗ trợ cả dạng mảng chuẩn TavernHelper và Object)
+        if (zodScriptInfo.script) {
+            zodScriptInfo.script.content = zodCode;
+        }
+        if (Array.isArray(liveChar.data?.extensions?.tavern_helper?.scripts)) {
+            const idx = liveChar.data.extensions.tavern_helper.scripts.findIndex(
+                (s: any) => s && (s.name === zodScriptInfo.name || s.id === zodScriptInfo.key),
+            );
+            if (idx !== -1) {
+                liveChar.data.extensions.tavern_helper.scripts[idx].content = zodCode;
+            }
+        } else if (liveChar.data?.extensions?.tavern_helper?.scripts?.[zodScriptInfo.key]) {
+            liveChar.data.extensions.tavern_helper.scripts[zodScriptInfo.key].content = zodCode;
+        }
+
+        try {
+            const th = (window as any).TavernHelper;
+            if (th && typeof th.updateScriptTreesWith === 'function') {
+                await th.updateScriptTreesWith(
+                    (trees: any[]) => {
+                        if (Array.isArray(trees)) {
+                            for (const node of trees) {
+                                if (node && (node.name === zodScriptInfo.name || node.id === zodScriptInfo.key)) {
+                                    node.content = zodCode;
+                                }
+                            }
+                        }
+                        return trees;
+                    },
+                    { type: 'character' },
+                );
+            }
+        } catch (e) {
+            console.warn('[MvuManager] TavernHelper updateScriptTreesWith warning in mutate:', e);
+        }
 
         // 2. Cập nhật [InitVar] YAML
         if (lorebookMvu.initvarEntry?.content) {
@@ -1583,6 +1653,34 @@ export class MvuManager {
             }
         }
 
+        // Nếu nhân vật có linked Worldbook (Sổ tay liên kết), đồng bộ ghi đè vào file Worldbook ngoài
+        const linkedWorld = liveChar.data?.extensions?.world || liveChar.world;
+        if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
+            try {
+                const ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+                if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function' && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                    const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
+                    if (worldData && worldData.entries) {
+                        for (const entry of Object.values(worldData.entries) as any[]) {
+                            const c = (entry.comment || entry.name || '').toLowerCase();
+                            if (lorebookMvu.initvarEntry && (c.includes('initvar') || c.includes('khởi tạo biến'))) {
+                                entry.content = lorebookMvu.initvarEntry.content;
+                            }
+                            if (lorebookMvu.updateRulesEntry && (c.includes('mvu_update') || c.includes('quy tắc cập nhật') || c.includes('cập nhật biến'))) {
+                                entry.content = lorebookMvu.updateRulesEntry.content;
+                            }
+                        }
+                        await ST_WorldInfo.saveWorldInfo(linkedWorld, worldData, true);
+                        if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                            ST_WorldInfo.reloadEditor(linkedWorld);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[MvuManager] Lỗi khi đồng bộ Worldbook liên kết ngoài trong mutate:', e);
+            }
+        }
+
         // 4. Lưu lại toàn bộ vào SillyTavern Backend qua merge-attributes
         const mergePayload = {
             avatar: liveChar.avatar,
@@ -1605,9 +1703,16 @@ export class MvuManager {
             throw new Error(`Lỗi khi lưu vào SillyTavern Backend: HTTP ${res.status}`);
         }
 
-        if (typeof ctx.saveCharacterDebounced === 'function') {
-            ctx.saveCharacterDebounced();
+        // Tải lại dữ liệu nhân vật mới nhất vào bộ nhớ ST Frontend (TUYỆT ĐỐI KHÔNG GỌI saveCharacterDebounced vì sẽ trigger form submit đè mất extensions)
+        if (typeof (window as any).getOneCharacter === 'function') {
+            await (window as any).getOneCharacter(liveChar.avatar);
+        } else if (typeof ctx.getOneCharacter === 'function') {
+            await ctx.getOneCharacter(liveChar.avatar);
         }
+        try {
+            const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+            eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: liveChar } });
+        } catch {}
 
         return {
             success: true,
@@ -1785,8 +1890,21 @@ export class MvuManager {
 
         if (!liveChar.data) liveChar.data = {};
         if (!liveChar.data.extensions) liveChar.data.extensions = {};
-        if (!liveChar.data.extensions.tavern_helper) liveChar.data.extensions.tavern_helper = { scripts: {} };
-        if (!liveChar.data.extensions.regex_scripts) liveChar.data.extensions.regex_scripts = [];
+        if (!liveChar.data.extensions.tavern_helper) liveChar.data.extensions.tavern_helper = { scripts: [], variables: {} };
+        if (!Array.isArray(liveChar.data.extensions.tavern_helper.scripts)) {
+            if (liveChar.data.extensions.tavern_helper.scripts && typeof liveChar.data.extensions.tavern_helper.scripts === 'object') {
+                liveChar.data.extensions.tavern_helper.scripts = Object.values(liveChar.data.extensions.tavern_helper.scripts);
+            } else {
+                liveChar.data.extensions.tavern_helper.scripts = [];
+            }
+        }
+        if (!Array.isArray(liveChar.data.extensions.regex_scripts)) {
+            if (liveChar.data.extensions.regex_scripts && typeof liveChar.data.extensions.regex_scripts === 'object') {
+                liveChar.data.extensions.regex_scripts = Object.values(liveChar.data.extensions.regex_scripts);
+            } else {
+                liveChar.data.extensions.regex_scripts = [];
+            }
+        }
         if (!liveChar.data.character_book) {
             liveChar.data.character_book = {
                 name: liveChar.name ? `${liveChar.name}'s Lorebook` : 'Character Book',
@@ -1859,24 +1977,61 @@ export class MvuManager {
             }
         }
 
-        // 2. Tiêm Scripts Tửu quán trợ thủ (TavernHelper)
+        // 2. Tiêm Scripts Tửu quán trợ thủ (TavernHelper) dạng MẢNG chuẩn SillyTavern
         const mvuBundleCode = `import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate/artifact/bundle.js';`;
 
-        liveChar.data.extensions.tavern_helper.scripts['MVU'] = {
+        const mvuScript = {
             type: 'script',
             name: 'MVU',
             content: mvuBundleCode,
             enabled: true,
             id: 'mvu-core-' + Date.now(),
+            info: 'MagVarUpdate Core Engine',
+            button: { enabled: true, buttons: [] },
+            data: {},
+            export_with: { data: true, button: true },
         };
 
-        liveChar.data.extensions.tavern_helper.scripts['Cấu trúc biến'] = {
+        const zodScript = {
             type: 'script',
             name: 'Cấu trúc biến',
             content: zodCode,
             enabled: true,
             id: 'zod-schema-' + Date.now(),
+            info: 'Zod 4 Schema for MVU',
+            button: { enabled: true, buttons: [] },
+            data: {},
+            export_with: { data: true, button: true },
         };
+
+        const upsertTavernScript = (arr: any[], scriptObj: any) => {
+            const idx = arr.findIndex((s: any) => s && (s.name === scriptObj.name || (s.id && s.id === scriptObj.id)));
+            if (idx !== -1) {
+                arr[idx] = { ...arr[idx], ...scriptObj };
+            } else {
+                arr.push(scriptObj);
+            }
+        };
+
+        upsertTavernScript(liveChar.data.extensions.tavern_helper.scripts, mvuScript);
+        upsertTavernScript(liveChar.data.extensions.tavern_helper.scripts, zodScript);
+
+        try {
+            const th = (window as any).TavernHelper;
+            if (th && typeof th.updateScriptTreesWith === 'function') {
+                await th.updateScriptTreesWith(
+                    (trees: any[]) => {
+                        const arr = Array.isArray(trees) ? trees : [];
+                        upsertTavernScript(arr, mvuScript);
+                        upsertTavernScript(arr, zodScript);
+                        return arr;
+                    },
+                    { type: 'character' },
+                );
+            }
+        } catch (e) {
+            console.warn('[MvuManager] TavernHelper updateScriptTreesWith warning in scaffold:', e);
+        }
 
         // 3. Tiêm Regex Scripts chuẩn (Tiếng Việt / English)
         const regexes = [
@@ -1916,22 +2071,47 @@ export class MvuManager {
             },
         ];
 
-        const existingRegexes = liveChar.data.extensions.regex_scripts || [];
-        for (const reg of regexes) {
-            const isPresent = existingRegexes.some((r: any) => {
-                if (r.scriptName === reg.scriptName) return true;
-                if (
-                    r.findRegex === reg.findRegex &&
-                    Boolean(r.promptOnly) === Boolean(reg.promptOnly) &&
-                    Boolean(r.markdownOnly) === Boolean(reg.markdownOnly)
-                ) {
-                    return true;
-                }
-                return false;
-            });
-            if (!isPresent) {
-                existingRegexes.push(reg);
+        const upsertRegexScript = (arr: any[], reg: any) => {
+            const idx = arr.findIndex((r: any) => r && (r.scriptName === reg.scriptName || r.id === reg.id));
+            const regData = {
+                id: idx !== -1 ? arr[idx].id : `regex-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                ...reg,
+                runOnEdit: true,
+                substituteRegex: 0,
+                minDepth: null,
+                maxDepth: null,
+            };
+            if (idx !== -1) {
+                arr[idx] = { ...arr[idx], ...regData };
+            } else {
+                arr.push(regData);
             }
+        };
+
+        for (const reg of regexes) {
+            upsertRegexScript(liveChar.data.extensions.regex_scripts, reg);
+        }
+
+        try {
+            const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
+            if (regexEngine && regexEngine.SCRIPT_TYPES && typeof regexEngine.saveScriptsByType === 'function') {
+                const { SCRIPT_TYPES, getScriptsByType, saveScriptsByType, allowScopedScripts } = regexEngine;
+                let scoped = (typeof getScriptsByType === 'function' ? getScriptsByType(SCRIPT_TYPES.SCOPED) : null) || [];
+                if (!Array.isArray(scoped)) scoped = [];
+                for (const reg of regexes) {
+                    upsertRegexScript(scoped, reg);
+                }
+                await saveScriptsByType(scoped, SCRIPT_TYPES.SCOPED);
+                if (typeof allowScopedScripts === 'function') {
+                    allowScopedScripts(liveChar);
+                }
+                try {
+                    const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+                    eventSource.emit(event_types.PRESET_CHANGED);
+                } catch {}
+            }
+        } catch (e) {
+            console.warn('[MvuManager] Regex Engine sync warning in scaffold:', e);
         }
 
         // 4. Tiêm Worldbook Entries chuẩn
@@ -2018,6 +2198,73 @@ format: |-
             },
         ];
 
+        // 4. Tiêm Worldbook Entries chuẩn (hỗ trợ cả linked worldbook và embedded character_book)
+        const linkedWorld = liveChar.data?.extensions?.world || liveChar.world;
+        if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
+            try {
+                let ST_WorldInfo: any = null;
+                try {
+                    ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+                } catch {}
+
+                if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function' && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                    const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
+                    if (worldData) {
+                        if (!worldData.entries) worldData.entries = {};
+                        const entriesMap = worldData.entries;
+                        for (const ne of newEntries) {
+                            let foundKey: string | null = null;
+                            for (const [k, v] of Object.entries(entriesMap)) {
+                                if ((v as any)?.comment === ne.comment || (v as any)?.name === ne.comment) {
+                                    foundKey = k;
+                                    break;
+                                }
+                            }
+
+                            if (foundKey && entriesMap[foundKey]) {
+                                entriesMap[foundKey].content = ne.content;
+                                entriesMap[foundKey].disable = !ne.enabled;
+                                entriesMap[foundKey].constant = Boolean(ne.constant);
+                            } else {
+                                if (typeof ST_WorldInfo.createWorldInfoEntry === 'function') {
+                                    const created = ST_WorldInfo.createWorldInfoEntry(linkedWorld, worldData);
+                                    if (created) {
+                                        created.comment = ne.comment;
+                                        created.name = ne.comment;
+                                        created.content = ne.content;
+                                        created.constant = Boolean(ne.constant);
+                                        created.disable = !ne.enabled;
+                                        created.key = ne.keys || [];
+                                        created.keys = ne.keys || [];
+                                        created.position = 0;
+                                    }
+                                } else {
+                                    const nextUid = Date.now() + Math.floor(Math.random() * 1000);
+                                    entriesMap[nextUid] = {
+                                        uid: nextUid,
+                                        comment: ne.comment,
+                                        name: ne.comment,
+                                        content: ne.content,
+                                        constant: Boolean(ne.constant),
+                                        disable: !ne.enabled,
+                                        key: ne.keys || [],
+                                        keys: ne.keys || [],
+                                        position: 0,
+                                    };
+                                }
+                            }
+                        }
+                        await ST_WorldInfo.saveWorldInfo(linkedWorld, worldData, true);
+                        if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                            ST_WorldInfo.reloadEditor(linkedWorld);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[MvuManager] Lỗi khi lưu vào linked Worldbook trong scaffold:', e);
+            }
+        }
+
         const existingComments = new Set((liveChar.data.character_book.entries || []).map((e: any) => e.comment));
         for (const ne of newEntries) {
             if (!existingComments.has(ne.comment)) {
@@ -2026,6 +2273,8 @@ format: |-
                 const found = liveChar.data.character_book.entries.find((e: any) => e.comment === ne.comment);
                 if (found) {
                     found.content = ne.content;
+                    found.enabled = ne.enabled;
+                    found.constant = ne.constant;
                 }
             }
         }
@@ -2050,9 +2299,16 @@ format: |-
             throw new Error(`Lưu MVU vào SillyTavern thất bại: HTTP ${res.status}`);
         }
 
-        if (typeof ctx.saveCharacterDebounced === 'function') {
-            ctx.saveCharacterDebounced();
+        // Tải lại dữ liệu nhân vật mới nhất vào bộ nhớ ST Frontend (TUYỆT ĐỐI KHÔNG GỌI saveCharacterDebounced vì sẽ trigger form submit đè mất extensions/lorebook)
+        if (typeof (window as any).getOneCharacter === 'function') {
+            await (window as any).getOneCharacter(liveChar.avatar);
+        } else if (typeof ctx.getOneCharacter === 'function') {
+            await ctx.getOneCharacter(liveChar.avatar);
         }
+        try {
+            const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+            eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: liveChar } });
+        } catch {}
 
         return {
             success: true,
