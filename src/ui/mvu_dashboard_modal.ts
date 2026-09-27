@@ -426,7 +426,7 @@ export class MvuDashboardModal {
             }
         }
 
-        const allDescriptors = this.flattenDescriptors(report.parsedSchema);
+        const allDescriptors = this.flattenDescriptorsForSchema(report.parsedSchema);
         $('#kaiz-mvu-stat-count').text(allDescriptors.length);
         $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'Zod 4 Schema');
 
@@ -478,11 +478,11 @@ export class MvuDashboardModal {
         this.renderRawTab(report);
     }
 
-    private flattenDescriptors(descriptors: MvuVariableDescriptor[]): MvuVariableDescriptor[] {
+    private flattenDescriptorsForSchema(descriptors: MvuVariableDescriptor[]): MvuVariableDescriptor[] {
         const flat: MvuVariableDescriptor[] = [];
         for (const d of descriptors) {
             if (d.type === 'object' && d.children && d.children.length > 0) {
-                flat.push(...this.flattenDescriptors(d.children));
+                flat.push(...this.flattenDescriptorsForSchema(d.children));
             } else {
                 flat.push(d);
             }
@@ -490,18 +490,81 @@ export class MvuDashboardModal {
         return flat;
     }
 
+    /**
+     * Thu thập danh sách descriptor cần hiển thị dưới dạng card.
+     * Hoàn toàn cấu trúc dữ liệu thuần túy (100% Data-Driven - không hardcode bất kỳ tên card hay biến cụ thể nào):
+     * 1. Nếu là z.object có children: tiếp tục đệ quy xuống các thuộc tính bên trong.
+     * 2. Nếu là z.record: các item thực tế bên trong record (ví dụ từng NPC, vật phẩm, nhiệm vụ) hiển thị thành từng card riêng. Nếu record rỗng ({}) thì hiển thị chính record đó.
+     * 3. Nếu là biến lá nguyên thủy (number, string, boolean, array): hiển thị thành card.
+     */
+    private collectDisplayDescriptors(descriptors: MvuVariableDescriptor[]): MvuVariableDescriptor[] {
+        const result: MvuVariableDescriptor[] = [];
+
+        const traverse = (items: MvuVariableDescriptor[]) => {
+            for (const d of items) {
+                if (d.type === 'object' && d.children && d.children.length > 0) {
+                    traverse(d.children);
+                } else if (d.type === 'record') {
+                    if (d.children && d.children.length > 0) {
+                        for (const child of d.children) {
+                            result.push(child);
+                        }
+                    } else {
+                        result.push(d);
+                    }
+                } else {
+                    result.push(d);
+                }
+            }
+        };
+
+        traverse(descriptors);
+        return result;
+    }
+
+    /**
+     * Suy diễn danh mục hoàn toàn tự động theo cấu trúc cây Schema (100% Generic):
+     * - Tên danh mục tự động lấy theo đường dẫn nhánh cha: "Nhánh_1 ➔ Nhánh_2"
+     * - Các trường hệ thống bắt đầu bằng "_" tự động gom lên đầu.
+     * - Không chứa bất kỳ từ khóa hay logic riêng biệt của card nào.
+     */
+    private getCategoryForDescriptor(desc: MvuVariableDescriptor): { name: string; icon: string; order: number } {
+        const parts = desc.path.split('.');
+        const parentParts = parts.length > 1 ? parts.slice(0, parts.length - 1) : [desc.name];
+        const categoryName = parentParts.join(' ➔ ');
+
+        let icon = 'fa-solid fa-folder-open';
+        let order = 50;
+
+        // Ưu tiên các trường cấu hình/hệ thống có tiền tố "_"
+        if (categoryName.startsWith('_')) {
+            icon = 'fa-solid fa-gear';
+            order = 10;
+        } else if (parentParts.length === 1) {
+            order = 20;
+        } else {
+            order = 30;
+        }
+
+        return { name: categoryName, icon, order };
+    }
+
     private getProgressBarTheme(name: string): { fillClass: string; color: string } {
         const n = name.toLowerCase();
-        if (n.includes('sinh_mệnh') || n.includes('hp') || n.includes('máu') || n.includes('thể_lực')) {
+        // Nhóm Sinh lực / Sức khỏe / Máu
+        if (n.includes('hp') || n.includes('health') || n.includes('máu') || n.includes('sinh_')) {
             return { fillClass: 'mvu-bar-crimson', color: '#f43f5e' };
         }
-        if (n.includes('ma_lực') || n.includes('mp') || n.includes('chân_nguyên') || n.includes('mana')) {
+        // Nhóm Năng lượng / Tinh thần / Ma lực
+        if (n.includes('mp') || n.includes('mana') || n.includes('energy') || n.includes('spirit') || n.includes('linh_')) {
             return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
         }
-        if (n.includes('hảo_cảm') || n.includes('tình_cảm') || n.includes('affection') || n.includes('yêu')) {
+        // Nhóm Xã hội / Quan hệ / Hảo cảm
+        if (n.includes('love') || n.includes('affection') || n.includes('hảo_cảm') || n.includes('trust') || n.includes('tin_tưởng')) {
             return { fillClass: 'mvu-bar-rose', color: '#ec4899' };
         }
-        if (n.includes('vàng') || n.includes('tiền') || n.includes('linh_thạch') || n.includes('gold')) {
+        // Nhóm Tiền tệ / Tài nguyên
+        if (n.includes('gold') || n.includes('money') || n.includes('coin') || n.includes('tiền') || n.includes('bảng') || n.includes('xu')) {
             return { fillClass: 'mvu-bar-amber', color: '#eab308' };
         }
         return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
@@ -512,56 +575,47 @@ export class MvuDashboardModal {
         const container = $('#kaiz-mvu-stats-grid');
         container.empty();
 
-        // Gom nhóm theo category (Root object hoặc Parent)
-        const groups: Record<string, MvuVariableDescriptor[]> = {};
+        let displayDescriptors = this.collectDisplayDescriptors(report.parsedSchema);
 
-        for (const d of report.parsedSchema) {
-            if (d.type === 'object' && d.children && d.children.length > 0) {
-                groups[d.name] = this.flattenDescriptors(d.children);
-            } else {
-                if (!groups['Chỉ số chung']) groups['Chỉ số chung'] = [];
-                groups['Chỉ số chung'].push(d);
-            }
+        // Fallback nếu parsedSchema trống nhưng có liveVariables
+        if (displayDescriptors.length === 0 && report.liveVariables) {
+            const fallbackSchema = MvuManager.generateSchemaFromData(report.liveVariables);
+            MvuManager.enrichWithLiveData(fallbackSchema, report.liveVariables);
+            displayDescriptors = this.collectDisplayDescriptors(fallbackSchema);
         }
 
-        // Nếu parsedSchema trống nhưng có liveVariables
-        if (Object.keys(groups).length === 0 && report.liveVariables) {
-            groups['Chỉ số thời gian thực'] = [];
-            for (const [k, v] of Object.entries(report.liveVariables)) {
-                if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-                    for (const [subK, subV] of Object.entries(v)) {
-                        groups[k] = groups[k] || [];
-                        groups[k].push({
-                            name: subK,
-                            path: `${k}.${subK}`,
-                            type:
-                                typeof subV === 'number' ? 'number' : typeof subV === 'boolean' ? 'boolean' : 'string',
-                            defaultValue: subV,
-                        });
-                    }
-                } else {
-                    groups['Chỉ số thời gian thực'].push({
-                        name: k,
-                        path: k,
-                        type: typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'string',
-                        defaultValue: v,
-                    });
-                }
-            }
-        }
-
-        if (Object.keys(groups).length === 0) {
+        if (displayDescriptors.length === 0) {
             container.html(
                 '<div class="kaiz-mvu-empty-text">Chưa phát hiện biến nào trong Schema hoặc Live Variables. Hãy bấm "+ Thêm Biến".</div>',
             );
             return;
         }
 
-        for (const [groupName, descriptors] of Object.entries(groups)) {
+        // Gom nhóm theo domain category
+        const groups: Record<
+            string,
+            { info: { name: string; icon: string; order: number }; items: MvuVariableDescriptor[] }
+        > = {};
+
+        for (const desc of displayDescriptors) {
+            const cat = this.getCategoryForDescriptor(desc);
+            if (!groups[cat.name]) {
+                groups[cat.name] = { info: cat, items: [] };
+            }
+            groups[cat.name].items.push(desc);
+        }
+
+        // Sắp xếp các danh mục theo thứ tự logic nghiệp vụ
+        const sortedCats = Object.values(groups).sort((a, b) => a.info.order - b.info.order);
+
+        for (const group of sortedCats) {
+            const groupInfo = group.info;
+            const descriptors = group.items;
+
             let catHtml = `
                 <div class="kaiz-mvu-category-section">
                     <div class="kaiz-mvu-cat-header">
-                        <span class="kaiz-mvu-cat-title"><i class="fa-solid fa-folder-open"></i> ${escapeHtml(groupName)}</span>
+                        <span class="kaiz-mvu-cat-title"><i class="${groupInfo.icon}"></i> ${escapeHtml(groupInfo.name)}</span>
                         <span class="kaiz-mvu-cat-count">${descriptors.length} chỉ số</span>
                     </div>
                     <div class="kaiz-mvu-cards-grid">
@@ -583,6 +637,7 @@ export class MvuDashboardModal {
                     currentVal = currentVal[0];
                 }
                 const hasClamp = desc.type === 'number' && desc.min !== undefined && desc.max !== undefined;
+                const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
 
                 catHtml += `
                     <div class="kaiz-mvu-stat-card" data-path="${escapeHtml(desc.path)}">
@@ -633,9 +688,35 @@ export class MvuDashboardModal {
                     const arr = Array.isArray(currentVal) ? currentVal : [];
                     catHtml += `
                         <div class="kaiz-mvu-card-value">
-                            ${arr.length > 0 ? arr.map((item: any) => `<span class="kaiz-mvu-tag">${escapeHtml(item)}</span>`).join('') : '<span class="kaiz-mvu-empty-badge">Trống</span>'}
+                            ${arr.length > 0 ? arr.map((item: any) => `<span class="kaiz-mvu-tag">${escapeHtml(item)}</span>`).join('') : '<span class="kaiz-mvu-empty-badge">Trống ([])</span>'}
                         </div>
                     `;
+                } else if (isObject) {
+                    const entries = Object.entries(currentVal);
+                    if (entries.length === 0) {
+                        catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-empty-badge">Trống ({})</span>
+                            </div>
+                        `;
+                    } else {
+                        catHtml += `<div class="kaiz-mvu-card-value"><div class="kaiz-mvu-object-badge">`;
+                        for (const [subK, subV] of entries) {
+                            let valStr = '';
+                            if (typeof subV === 'object' && subV !== null) {
+                                try { valStr = JSON.stringify(subV); } catch { valStr = String(subV); }
+                            } else {
+                                valStr = String(subV);
+                            }
+                            catHtml += `
+                                <div class="kaiz-mvu-obj-row">
+                                    <span class="kaiz-mvu-obj-k">${escapeHtml(subK)}:</span>
+                                    <span class="kaiz-mvu-obj-v" title="${escapeHtml(valStr)}">${escapeHtml(valStr)}</span>
+                                </div>
+                            `;
+                        }
+                        catHtml += `</div></div>`;
+                    }
                 } else {
                     catHtml += `
                         <div class="kaiz-mvu-card-value">
@@ -645,14 +726,28 @@ export class MvuDashboardModal {
                 }
 
                 // Inline Edit Form (Hidden by default)
-                catHtml += `
-                    <div class="kaiz-mvu-inline-editor" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
-                        <input type="text" class="text_pole kaiz-mvu-inline-input" value="${escapeHtml(currentVal)}">
-                        <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" title="Lưu">
-                            <i class="fa-solid fa-check"></i>
-                        </button>
-                    </div>
-                `;
+                if (isObject) {
+                    const formattedJson = JSON.stringify(currentVal, null, 2);
+                    catHtml += `
+                        <div class="kaiz-mvu-inline-editor is-textarea" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
+                            <textarea class="text_pole kaiz-mvu-inline-textarea" rows="4">${escapeHtml(formattedJson)}</textarea>
+                            <div class="kaiz-mvu-editor-btns">
+                                <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" data-is-json="true" title="Lưu JSON">
+                                    <i class="fa-solid fa-check"></i> Lưu JSON
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    catHtml += `
+                        <div class="kaiz-mvu-inline-editor" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
+                            <input type="text" class="text_pole kaiz-mvu-inline-input" value="${escapeHtml(currentVal)}">
+                            <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" title="Lưu">
+                                <i class="fa-solid fa-check"></i>
+                            </button>
+                        </div>
+                    `;
+                }
 
                 catHtml += `</div>`; // Close stat-card
             }
@@ -670,14 +765,29 @@ export class MvuDashboardModal {
 
         container.find('.kaiz-mvu-inline-save-btn').on('click', async (e: any) => {
             const path = $(e.currentTarget).data('path');
+            const isJson = $(e.currentTarget).data('is-json') === true;
             const editorId = `#editor-${path.replace(/\./g, '_')}`;
-            const inputVal = $(editorId).find('.kaiz-mvu-inline-input').val();
+            const inputVal = isJson
+                ? $(editorId).find('.kaiz-mvu-inline-textarea').val()
+                : $(editorId).find('.kaiz-mvu-inline-input').val();
+
+            let finalVal: any = inputVal;
+            if (isJson) {
+                try {
+                    finalVal = JSON.parse(inputVal);
+                } catch {
+                    if (typeof toastr !== 'undefined') {
+                        toastr.error('Định dạng JSON không hợp lệ. Vui lòng kiểm tra lại cú pháp.');
+                    }
+                    return;
+                }
+            }
 
             try {
-                const res = await MvuManager.setLiveVariable(path, inputVal, this.selectedFloorId);
+                const res = await MvuManager.setLiveVariable(path, finalVal, this.selectedFloorId);
                 if (res.success) {
                     if (typeof toastr !== 'undefined') {
-                        toastr.success(`Đã cập nhật ${path} = ${inputVal}`);
+                        toastr.success(`Đã cập nhật ${path}`);
                     }
                     await this.refresh(this.selectedFloorId);
                 }
@@ -724,7 +834,18 @@ export class MvuDashboardModal {
                   : desc.max !== undefined
                     ? `Max: ${desc.max}`
                     : '—';
-            const defaultText = desc.defaultValue !== undefined ? escapeHtml(desc.defaultValue) : '—';
+            let defaultText = '—';
+            if (desc.defaultValue !== undefined) {
+                if (typeof desc.defaultValue === 'object' && desc.defaultValue !== null) {
+                    try {
+                        defaultText = JSON.stringify(desc.defaultValue);
+                    } catch {
+                        defaultText = String(desc.defaultValue);
+                    }
+                } else {
+                    defaultText = String(desc.defaultValue);
+                }
+            }
 
             tableHtml += `
                 <tr>

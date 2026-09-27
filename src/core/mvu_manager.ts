@@ -10,6 +10,7 @@ export interface MvuVariableDescriptor {
     defaultValue?: any;
     description?: string;
     children?: MvuVariableDescriptor[];
+    recordTemplate?: MvuVariableDescriptor[];
 }
 
 export interface MvuFloorInfo {
@@ -568,17 +569,101 @@ export class MvuManager {
     /**
      * Bóc tách cây Schema từ code Zod JavaScript (hỗ trợ nested z.object đệ quy)
      */
+    /**
+     * Tách đối số của một lời gọi hàm (ví dụ: So(100, 0, 100) -> ['100', '0', '100'])
+     */
+    private static parseCallArgs(argsStr: string): string[] {
+        if (!argsStr) return [];
+        const args: string[] = [];
+        let i = 0;
+        const len = argsStr.length;
+        let start = 0;
+        let parenDepth = 0;
+        let inStr: string | null = null;
+
+        while (i < len) {
+            const ch = argsStr[i];
+            const prev = i > 0 ? argsStr[i - 1] : '';
+
+            if (inStr) {
+                if (ch === inStr && prev !== '\\') inStr = null;
+            } else if (ch === '"' || ch === "'" || ch === '`') {
+                inStr = ch;
+            } else if (ch === '(') {
+                parenDepth++;
+            } else if (ch === ')') {
+                parenDepth--;
+            } else if (ch === ',' && parenDepth === 0) {
+                args.push(argsStr.substring(start, i).trim());
+                start = i + 1;
+            }
+            i++;
+        }
+        if (start < len) {
+            args.push(argsStr.substring(start).trim());
+        }
+        return args;
+    }
+
+    /**
+     * Bóc tách cây Schema từ code Zod JavaScript (hỗ trợ nested z.object đệ quy, helpers và sub-schemas)
+     */
     public static parseZodCode(code: string): MvuVariableDescriptor[] {
         if (!code) return [];
 
-        const match = code.match(/Schema\s*=\s*z\.object\s*\(\s*\{/i) || code.match(/z\.object\s*\(\s*\{/i);
+        // 1. Tự động phát hiện mọi hàm helper tạo kiểu Schema Zod trong code
+        const helpers: Record<
+            string,
+            { type: 'string' | 'number' | 'boolean' | 'record' | 'array' | 'object' }
+        > = {};
+
+        const helperRegex =
+            /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:\([^)]*\)|[A-Za-z0-9_$]+)?\s*=>([\s\S]*?)(?=(?:const|let|var|function|\/\*|export|\n\s*\n[a-zA-Z_$]|$))|function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{([\s\S]*?)\}/g;
+        let hMatch: RegExpExecArray | null;
+        while ((hMatch = helperRegex.exec(code)) !== null) {
+            const hName = hMatch[1] || hMatch[3];
+            const hBody = hMatch[2] || hMatch[4] || '';
+            if (hBody.includes('z.coerce.number') || hBody.includes('z.number')) {
+                helpers[hName] = { type: 'number' };
+            } else if (hBody.includes('z.string')) {
+                helpers[hName] = { type: 'string' };
+            } else if (hBody.includes('z.boolean')) {
+                helpers[hName] = { type: 'boolean' };
+            } else if (hBody.includes('z.record')) {
+                helpers[hName] = { type: 'record' };
+            } else if (hBody.includes('z.array')) {
+                helpers[hName] = { type: 'array' };
+            } else if (hBody.includes('z.object')) {
+                helpers[hName] = { type: 'object' };
+            }
+        }
+
+        // 2. Quét các Zod Object con độc lập khai báo trước Schema (TaiSan, NPC, DiChung, VatPham...)
+        const knownSubSchemas: Record<string, MvuVariableDescriptor[]> = {};
+        const subSchemaRegex = /const\s+([A-Za-z0-9_]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
+        let sMatch: RegExpExecArray | null;
+        while ((sMatch = subSchemaRegex.exec(code)) !== null) {
+            const sName = sMatch[1];
+            if (sName === 'Schema') continue;
+            const braceIdx = sMatch.index + sMatch[0].length - 1;
+            const inner = this.extractMatchingBraceContent(code, braceIdx);
+            if (inner) {
+                knownSubSchemas[sName] = this.parseZodObjectContent(inner, '', knownSubSchemas, helpers);
+            }
+        }
+
+        // 3. Tìm Schema chính
+        const match =
+            code.match(/(?:export\s+)?const\s+Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+            code.match(/Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+            code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
         if (!match || match.index === undefined) return [];
 
         const startIdx = match.index + match[0].length - 1; // vị trí ký tự '{'
         const innerContent = this.extractMatchingBraceContent(code, startIdx);
         if (!innerContent) return [];
 
-        return this.parseZodObjectContent(innerContent, '');
+        return this.parseZodObjectContent(innerContent, '', knownSubSchemas, helpers);
     }
 
     /**
@@ -621,7 +706,12 @@ export class MvuManager {
     /**
      * Parse nội dung bên trong z.object({ ... }) thành danh sách descriptor
      */
-    private static parseZodObjectContent(content: string, parentPath: string): MvuVariableDescriptor[] {
+    private static parseZodObjectContent(
+        content: string,
+        parentPath: string,
+        knownSubSchemas: Record<string, MvuVariableDescriptor[]> = {},
+        helpers: Record<string, { type: 'string' | 'number' | 'boolean' | 'record' | 'array' | 'object' }> = {},
+    ): MvuVariableDescriptor[] {
         const descriptors: MvuVariableDescriptor[] = [];
         let i = 0;
         const len = content.length;
@@ -717,50 +807,130 @@ export class MvuManager {
             // Phân tích biểu thức
             let type: MvuVariableDescriptor['type'] = 'unknown';
             let children: MvuVariableDescriptor[] | undefined;
-
-            if (expr.includes('z.object')) {
-                type = 'object';
-                const openIdx = expr.indexOf('{');
-                if (openIdx !== -1) {
-                    const inner = this.extractMatchingBraceContent(expr, openIdx);
-                    if (inner) {
-                        children = this.parseZodObjectContent(inner, currentPath);
-                    }
-                }
-            } else if (expr.includes('z.number()') || expr.includes('z.coerce.number()')) {
-                type = 'number';
-            } else if (expr.includes('z.string()')) {
-                type = 'string';
-            } else if (expr.includes('z.boolean()')) {
-                type = 'boolean';
-            } else if (expr.includes('z.array(')) {
-                type = 'array';
-            } else if (expr.includes('z.record(')) {
-                type = 'record';
-            }
-
+            let recordTemplate: MvuVariableDescriptor[] | undefined;
             let min: number | undefined;
             let max: number | undefined;
-            const clampMatch = expr.match(/clamp\s*\([^,]+,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/i);
-            if (clampMatch) {
-                min = Number(clampMatch[1]);
-                max = Number(clampMatch[2]);
-            } else {
+            let defaultValue: any;
+
+            // 1. Kiểm tra nested z.object({ ... })
+            const hasZObject = /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr);
+            if (hasZObject) {
+                type = 'object';
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                if (objMatch && objMatch.index !== undefined) {
+                    const openIdx = expr.indexOf('{', objMatch.index);
+                    if (openIdx !== -1) {
+                        const inner = this.extractMatchingBraceContent(expr, openIdx);
+                        if (inner) {
+                            children = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                        }
+                    }
+                }
+            }
+
+            // 2. Kiểm tra tham chiếu tới knownSubSchemas (ví dụ: `Tài_sản: TaiSan` hoặc `Bang(NPC)`)
+            if (type === 'unknown' || (type === 'object' && (!children || children.length === 0))) {
+                for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
+                    const wordRegex = new RegExp(`\\b${subName}\\b`);
+                    if (wordRegex.test(expr)) {
+                        if (
+                            expr.includes(`Bang(${subName})`) ||
+                            expr.includes(`z.record`) ||
+                            (helpers['Bang'] && expr.includes(subName))
+                        ) {
+                            type = 'record';
+                            recordTemplate = subDescriptors;
+                            children = [];
+                        } else {
+                            type = 'object';
+                            children = subDescriptors.map(d => ({
+                                ...d,
+                                path: `${currentPath}.${d.name}`,
+                                children: d.children
+                                    ? d.children.map(c => ({ ...c, path: `${currentPath}.${d.name}.${c.name}` }))
+                                    : undefined,
+                            }));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 3. Kiểm tra các hàm helper kiểu dữ liệu (So, Chuoi, Co, Bang...)
+            if (type === 'unknown') {
+                for (const [hName, hInfo] of Object.entries(helpers)) {
+                    const callRegex = new RegExp(`^${hName}\\s*\\((.*)\\)`, 's');
+                    const callMatch = expr.match(callRegex);
+                    if (callMatch) {
+                        type = hInfo.type;
+                        const args = this.parseCallArgs(callMatch[1].trim());
+                        if (hInfo.type === 'number') {
+                            if (args.length > 0 && args[0] !== '' && !isNaN(Number(args[0]))) {
+                                defaultValue = Number(args[0]);
+                            }
+                            if (args.length > 1 && !isNaN(Number(args[1])) && args[1] !== '-Infinity') {
+                                min = Number(args[1]);
+                            }
+                            if (args.length > 2 && !isNaN(Number(args[2])) && args[2] !== 'Infinity') {
+                                const m = Number(args[2]);
+                                if (m <= 1e7) max = m;
+                            }
+                        } else if (hInfo.type === 'string') {
+                            if (args.length > 0) {
+                                defaultValue = args[0].replace(/^['"`]|['"`]$/g, '');
+                            }
+                        } else if (hInfo.type === 'boolean') {
+                            if (args.length > 0) {
+                                defaultValue = args[0].trim() === 'true';
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 4. Kiểm tra các kiểu Zod cơ bản trực tiếp
+            if (type === 'unknown') {
+                if (/\bz(?:\s*\.\s*)(?:coerce\s*\.\s*)?number\b/.test(expr)) {
+                    type = 'number';
+                } else if (/\bz(?:\s*\.\s*)string\b/.test(expr)) {
+                    type = 'string';
+                } else if (/\bz(?:\s*\.\s*)boolean\b/.test(expr)) {
+                    type = 'boolean';
+                } else if (/\bz(?:\s*\.\s*)record\b/.test(expr)) {
+                    type = 'record';
+                } else if (/\bz(?:\s*\.\s*)array\b/.test(expr)) {
+                    type = 'array';
+                }
+            }
+
+            // 5. Trích xuất min / max / clamp / prefault
+            if (min === undefined || max === undefined) {
+                const clampMatch = expr.match(/clamp\s*\([^,]+,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/i);
+                if (clampMatch) {
+                    if (min === undefined) min = Number(clampMatch[1]);
+                    if (max === undefined) max = Number(clampMatch[2]);
+                }
+            }
+            if (min === undefined) {
                 const minMatch = expr.match(/\.min\s*\(\s*(-?\d+)\s*\)/);
                 if (minMatch) min = Number(minMatch[1]);
+            }
+            if (max === undefined) {
                 const maxMatch = expr.match(/\.max\s*\(\s*(-?\d+)\s*\)/);
                 if (maxMatch) max = Number(maxMatch[1]);
             }
 
-            let defaultValue: any;
-            const prefaultMatch = expr.match(
-                /\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/,
-            );
-            if (prefaultMatch) {
-                try {
-                    defaultValue = JSON.parse(prefaultMatch[1].replace(/'/g, '"'));
-                } catch {
-                    defaultValue = prefaultMatch[1];
+            if (defaultValue === undefined) {
+                const prefaultMatch = expr.match(
+                    /\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/,
+                );
+                if (prefaultMatch) {
+                    try {
+                        defaultValue = JSON.parse(prefaultMatch[1].replace(/'/g, '"'));
+                    } catch {
+                        defaultValue = prefaultMatch[1];
+                    }
                 }
             }
 
@@ -772,10 +942,200 @@ export class MvuManager {
                 max,
                 defaultValue,
                 children,
+                recordTemplate,
             });
         }
 
         return descriptors;
+    }
+
+    /**
+     * Bổ sung kiểu dữ liệu, giới hạn min/max và các instance động dựa trên dữ liệu Runtime thực tế
+     */
+    public static enrichWithLiveData(descriptors: MvuVariableDescriptor[], liveData: any): void {
+        if (!liveData || typeof liveData !== 'object') return;
+
+        for (const desc of descriptors) {
+            const parts = desc.path.split('.');
+            let curr = liveData;
+            for (const p of parts) {
+                if (curr && typeof curr === 'object' && p in curr) {
+                    curr = curr[p];
+                } else {
+                    curr = undefined;
+                    break;
+                }
+            }
+
+            if (curr !== undefined) {
+                const isTuple =
+                    Array.isArray(curr) &&
+                    curr.length === 2 &&
+                    typeof curr[1] === 'string' &&
+                    (curr[0] === null || ['string', 'number', 'boolean'].includes(typeof curr[0]));
+
+                const realVal = isTuple ? curr[0] : curr;
+
+                if (desc.type === 'unknown') {
+                    if (typeof realVal === 'number') {
+                        desc.type = 'number';
+                    } else if (typeof realVal === 'string') {
+                        desc.type = 'string';
+                    } else if (typeof realVal === 'boolean') {
+                        desc.type = 'boolean';
+                    } else if (Array.isArray(realVal)) {
+                        desc.type = 'array';
+                    } else if (typeof realVal === 'object' && realVal !== null) {
+                        desc.type = 'object';
+                    }
+                }
+
+                // Gán giới hạn số học động (Mathematical dynamic bounds) nếu Zod Script không khai báo min/max
+                if (desc.type === 'number' && typeof realVal === 'number' && Number.isFinite(realVal)) {
+                    if (desc.min === undefined && desc.max === undefined) {
+                        const bounds = this.getDynamicNumberBounds(realVal);
+                        desc.min = bounds.min;
+                        desc.max = bounds.max;
+                    }
+                }
+
+                // Nếu là object/record nhưng chưa có children, tự sinh children từ keys thực tế
+                // Nếu là record có recordTemplate và có live data object:
+                if (
+                    desc.type === 'record' &&
+                    typeof realVal === 'object' &&
+                    realVal !== null &&
+                    !Array.isArray(realVal)
+                ) {
+                    desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                        const subPath = `${desc.path}.${subK}`;
+                        if (
+                            desc.recordTemplate &&
+                            desc.recordTemplate.length > 0 &&
+                            typeof subV === 'object' &&
+                            subV !== null
+                        ) {
+                            const instanceChildren: MvuVariableDescriptor[] = desc.recordTemplate.map(t => ({
+                                ...t,
+                                path: `${subPath}.${t.name}`,
+                                children: t.children
+                                    ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
+                                    : undefined,
+                            }));
+                            this.enrichWithLiveData(instanceChildren, subV);
+                            return {
+                                name: subK,
+                                path: subPath,
+                                type: 'object' as const,
+                                defaultValue: subV,
+                                children: instanceChildren,
+                            };
+                        } else {
+                            const subType =
+                                typeof subV === 'number'
+                                    ? 'number'
+                                    : typeof subV === 'boolean'
+                                      ? 'boolean'
+                                      : Array.isArray(subV)
+                                        ? 'array'
+                                        : typeof subV === 'object' && subV !== null
+                                          ? 'object'
+                                          : 'string';
+                            return {
+                                name: subK,
+                                path: subPath,
+                                type: subType as any,
+                                defaultValue: subV,
+                            };
+                        }
+                    });
+                } else if (
+                    desc.type === 'object' &&
+                    (!desc.children || desc.children.length === 0) &&
+                    typeof realVal === 'object' &&
+                    realVal !== null &&
+                    !Array.isArray(realVal)
+                ) {
+                    desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                        const subPath = `${desc.path}.${subK}`;
+                        const subType =
+                            typeof subV === 'number'
+                                ? 'number'
+                                : typeof subV === 'boolean'
+                                  ? 'boolean'
+                                  : Array.isArray(subV)
+                                    ? 'array'
+                                    : typeof subV === 'object' && subV !== null
+                                      ? 'object'
+                                      : 'string';
+                        return {
+                            name: subK,
+                            path: subPath,
+                            type: subType,
+                            defaultValue: subV,
+                        };
+                    });
+                }
+            }
+
+            if (desc.children && desc.children.length > 0) {
+                this.enrichWithLiveData(desc.children, liveData);
+            }
+        }
+    }
+
+    /**
+     * Tự động suy diễn giới hạn min / max toán học linh hoạt cho mọi giá trị số bất kỳ
+     * (Dựa trên thuật toán của TavernHelper Portable MVU Editor - không phụ thuộc card hay ngôn ngữ)
+     */
+    public static getDynamicNumberBounds(value: number): { min: number; max: number } {
+        const val = Number.isFinite(value) ? value : 0;
+        if (val >= 0) {
+            if (val <= 100) {
+                return { min: 0, max: 100 };
+            }
+            const target = val * 1.25;
+            const power = Math.pow(10, Math.floor(Math.log10(target)));
+            const mult = target / power;
+            const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
+            return { min: 0, max: factor * power };
+        } else {
+            const absTarget = Math.abs(val) * 1.25;
+            const power = Math.pow(10, Math.floor(Math.log10(absTarget)));
+            const mult = absTarget / power;
+            const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
+            return { min: -factor * power, max: 0 };
+        }
+    }
+
+    /**
+     * Tự động sinh cấu trúc Schema từ dữ liệu Live Variables nếu không có Zod Script
+     */
+    public static generateSchemaFromData(data: any, parentPath = ''): MvuVariableDescriptor[] {
+        if (!data || typeof data !== 'object') return [];
+        return Object.entries(data).map(([key, val]) => {
+            const currentPath = parentPath ? `${parentPath}.${key}` : key;
+            if (typeof val === 'number') {
+                return { name: key, path: currentPath, type: 'number', defaultValue: val };
+            } else if (typeof val === 'boolean') {
+                return { name: key, path: currentPath, type: 'boolean', defaultValue: val };
+            } else if (Array.isArray(val)) {
+                return { name: key, path: currentPath, type: 'array', defaultValue: val };
+            } else if (typeof val === 'object' && val !== null) {
+                const isTuple =
+                    Array.isArray(val) &&
+                    val.length === 2 &&
+                    typeof val[1] === 'string' &&
+                    (val[0] === null || ['string', 'number', 'boolean'].includes(typeof val[0]));
+                if (isTuple) {
+                    const t = typeof val[0] === 'number' ? 'number' : typeof val[0] === 'boolean' ? 'boolean' : 'string';
+                    return { name: key, path: currentPath, type: t, defaultValue: val[0], description: val[1] };
+                }
+                const children = this.generateSchemaFromData(val, currentPath);
+                return { name: key, path: currentPath, type: 'object', children };
+            }
+            return { name: key, path: currentPath, type: 'string', defaultValue: String(val) };
+        });
     }
 
     /**
@@ -876,7 +1236,13 @@ export class MvuManager {
             }
         }
 
-        const parsedSchema = zodScript ? this.parseZodCode(zodScript.content) : [];
+        let parsedSchema = zodScript ? this.parseZodCode(zodScript.content) : [];
+        if (liveVars) {
+            if (parsedSchema.length === 0) {
+                parsedSchema = this.generateSchemaFromData(liveVars);
+            }
+            this.enrichWithLiveData(parsedSchema, liveVars);
+        }
 
         // Kiểm tra tính nhất quán giữa Schema và InitVar
         if (parsedSchema.length > 0 && initvarParsed) {

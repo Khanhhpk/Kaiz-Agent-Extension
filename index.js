@@ -16787,17 +16787,102 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       /**
        * Bóc tách cây Schema từ code Zod JavaScript (hỗ trợ nested z.object đệ quy)
        */
+      /**
+       * Tách đối số của một lời gọi hàm (ví dụ: So(100, 0, 100) -> ['100', '0', '100'])
+       */
+      static parseCallArgs(argsStr) {
+          if (!argsStr)
+              return [];
+          const args = [];
+          let i = 0;
+          const len = argsStr.length;
+          let start = 0;
+          let parenDepth = 0;
+          let inStr = null;
+          while (i < len) {
+              const ch = argsStr[i];
+              const prev = i > 0 ? argsStr[i - 1] : '';
+              if (inStr) {
+                  if (ch === inStr && prev !== '\\')
+                      inStr = null;
+              }
+              else if (ch === '"' || ch === "'" || ch === '`') {
+                  inStr = ch;
+              }
+              else if (ch === '(') {
+                  parenDepth++;
+              }
+              else if (ch === ')') {
+                  parenDepth--;
+              }
+              else if (ch === ',' && parenDepth === 0) {
+                  args.push(argsStr.substring(start, i).trim());
+                  start = i + 1;
+              }
+              i++;
+          }
+          if (start < len) {
+              args.push(argsStr.substring(start).trim());
+          }
+          return args;
+      }
+      /**
+       * Bóc tách cây Schema từ code Zod JavaScript (hỗ trợ nested z.object đệ quy, helpers và sub-schemas)
+       */
       static parseZodCode(code) {
           if (!code)
               return [];
-          const match = code.match(/Schema\s*=\s*z\.object\s*\(\s*\{/i) || code.match(/z\.object\s*\(\s*\{/i);
+          // 1. Tự động phát hiện mọi hàm helper tạo kiểu Schema Zod trong code
+          const helpers = {};
+          const helperRegex = /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:\([^)]*\)|[A-Za-z0-9_$]+)?\s*=>([\s\S]*?)(?=(?:const|let|var|function|\/\*|export|\n\s*\n[a-zA-Z_$]|$))|function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{([\s\S]*?)\}/g;
+          let hMatch;
+          while ((hMatch = helperRegex.exec(code)) !== null) {
+              const hName = hMatch[1] || hMatch[3];
+              const hBody = hMatch[2] || hMatch[4] || '';
+              if (hBody.includes('z.coerce.number') || hBody.includes('z.number')) {
+                  helpers[hName] = { type: 'number' };
+              }
+              else if (hBody.includes('z.string')) {
+                  helpers[hName] = { type: 'string' };
+              }
+              else if (hBody.includes('z.boolean')) {
+                  helpers[hName] = { type: 'boolean' };
+              }
+              else if (hBody.includes('z.record')) {
+                  helpers[hName] = { type: 'record' };
+              }
+              else if (hBody.includes('z.array')) {
+                  helpers[hName] = { type: 'array' };
+              }
+              else if (hBody.includes('z.object')) {
+                  helpers[hName] = { type: 'object' };
+              }
+          }
+          // 2. Quét các Zod Object con độc lập khai báo trước Schema (TaiSan, NPC, DiChung, VatPham...)
+          const knownSubSchemas = {};
+          const subSchemaRegex = /const\s+([A-Za-z0-9_]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
+          let sMatch;
+          while ((sMatch = subSchemaRegex.exec(code)) !== null) {
+              const sName = sMatch[1];
+              if (sName === 'Schema')
+                  continue;
+              const braceIdx = sMatch.index + sMatch[0].length - 1;
+              const inner = this.extractMatchingBraceContent(code, braceIdx);
+              if (inner) {
+                  knownSubSchemas[sName] = this.parseZodObjectContent(inner, '', knownSubSchemas, helpers);
+              }
+          }
+          // 3. Tìm Schema chính
+          const match = code.match(/(?:export\s+)?const\s+Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+              code.match(/Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+              code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
           if (!match || match.index === undefined)
               return [];
           const startIdx = match.index + match[0].length - 1; // vị trí ký tự '{'
           const innerContent = this.extractMatchingBraceContent(code, startIdx);
           if (!innerContent)
               return [];
-          return this.parseZodObjectContent(innerContent, '');
+          return this.parseZodObjectContent(innerContent, '', knownSubSchemas, helpers);
       }
       /**
        * Trích xuất nội dung bên trong cặp ngoặc nhọn { ... } tương ứng
@@ -16836,7 +16921,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       /**
        * Parse nội dung bên trong z.object({ ... }) thành danh sách descriptor
        */
-      static parseZodObjectContent(content, parentPath) {
+      static parseZodObjectContent(content, parentPath, knownSubSchemas = {}, helpers = {}) {
           const descriptors = [];
           let i = 0;
           const len = content.length;
@@ -16940,54 +17025,133 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               // Phân tích biểu thức
               let type = 'unknown';
               let children;
-              if (expr.includes('z.object')) {
+              let recordTemplate;
+              let min;
+              let max;
+              let defaultValue;
+              // 1. Kiểm tra nested z.object({ ... })
+              const hasZObject = /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr);
+              if (hasZObject) {
                   type = 'object';
-                  const openIdx = expr.indexOf('{');
-                  if (openIdx !== -1) {
-                      const inner = this.extractMatchingBraceContent(expr, openIdx);
-                      if (inner) {
-                          children = this.parseZodObjectContent(inner, currentPath);
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                  if (objMatch && objMatch.index !== undefined) {
+                      const openIdx = expr.indexOf('{', objMatch.index);
+                      if (openIdx !== -1) {
+                          const inner = this.extractMatchingBraceContent(expr, openIdx);
+                          if (inner) {
+                              children = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                          }
                       }
                   }
               }
-              else if (expr.includes('z.number()') || expr.includes('z.coerce.number()')) {
-                  type = 'number';
+              // 2. Kiểm tra tham chiếu tới knownSubSchemas (ví dụ: `Tài_sản: TaiSan` hoặc `Bang(NPC)`)
+              if (type === 'unknown' || (type === 'object' && (!children || children.length === 0))) {
+                  for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
+                      const wordRegex = new RegExp(`\\b${subName}\\b`);
+                      if (wordRegex.test(expr)) {
+                          if (expr.includes(`Bang(${subName})`) ||
+                              expr.includes(`z.record`) ||
+                              (helpers['Bang'] && expr.includes(subName))) {
+                              type = 'record';
+                              recordTemplate = subDescriptors;
+                              children = [];
+                          }
+                          else {
+                              type = 'object';
+                              children = subDescriptors.map(d => ({
+                                  ...d,
+                                  path: `${currentPath}.${d.name}`,
+                                  children: d.children
+                                      ? d.children.map(c => ({ ...c, path: `${currentPath}.${d.name}.${c.name}` }))
+                                      : undefined,
+                              }));
+                          }
+                          break;
+                      }
+                  }
               }
-              else if (expr.includes('z.string()')) {
-                  type = 'string';
+              // 3. Kiểm tra các hàm helper kiểu dữ liệu (So, Chuoi, Co, Bang...)
+              if (type === 'unknown') {
+                  for (const [hName, hInfo] of Object.entries(helpers)) {
+                      const callRegex = new RegExp(`^${hName}\\s*\\((.*)\\)`, 's');
+                      const callMatch = expr.match(callRegex);
+                      if (callMatch) {
+                          type = hInfo.type;
+                          const args = this.parseCallArgs(callMatch[1].trim());
+                          if (hInfo.type === 'number') {
+                              if (args.length > 0 && args[0] !== '' && !isNaN(Number(args[0]))) {
+                                  defaultValue = Number(args[0]);
+                              }
+                              if (args.length > 1 && !isNaN(Number(args[1])) && args[1] !== '-Infinity') {
+                                  min = Number(args[1]);
+                              }
+                              if (args.length > 2 && !isNaN(Number(args[2])) && args[2] !== 'Infinity') {
+                                  const m = Number(args[2]);
+                                  if (m <= 1e7)
+                                      max = m;
+                              }
+                          }
+                          else if (hInfo.type === 'string') {
+                              if (args.length > 0) {
+                                  defaultValue = args[0].replace(/^['"`]|['"`]$/g, '');
+                              }
+                          }
+                          else if (hInfo.type === 'boolean') {
+                              if (args.length > 0) {
+                                  defaultValue = args[0].trim() === 'true';
+                              }
+                          }
+                          break;
+                      }
+                  }
               }
-              else if (expr.includes('z.boolean()')) {
-                  type = 'boolean';
+              // 4. Kiểm tra các kiểu Zod cơ bản trực tiếp
+              if (type === 'unknown') {
+                  if (/\bz(?:\s*\.\s*)(?:coerce\s*\.\s*)?number\b/.test(expr)) {
+                      type = 'number';
+                  }
+                  else if (/\bz(?:\s*\.\s*)string\b/.test(expr)) {
+                      type = 'string';
+                  }
+                  else if (/\bz(?:\s*\.\s*)boolean\b/.test(expr)) {
+                      type = 'boolean';
+                  }
+                  else if (/\bz(?:\s*\.\s*)record\b/.test(expr)) {
+                      type = 'record';
+                  }
+                  else if (/\bz(?:\s*\.\s*)array\b/.test(expr)) {
+                      type = 'array';
+                  }
               }
-              else if (expr.includes('z.array(')) {
-                  type = 'array';
+              // 5. Trích xuất min / max / clamp / prefault
+              if (min === undefined || max === undefined) {
+                  const clampMatch = expr.match(/clamp\s*\([^,]+,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/i);
+                  if (clampMatch) {
+                      if (min === undefined)
+                          min = Number(clampMatch[1]);
+                      if (max === undefined)
+                          max = Number(clampMatch[2]);
+                  }
               }
-              else if (expr.includes('z.record(')) {
-                  type = 'record';
-              }
-              let min;
-              let max;
-              const clampMatch = expr.match(/clamp\s*\([^,]+,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/i);
-              if (clampMatch) {
-                  min = Number(clampMatch[1]);
-                  max = Number(clampMatch[2]);
-              }
-              else {
+              if (min === undefined) {
                   const minMatch = expr.match(/\.min\s*\(\s*(-?\d+)\s*\)/);
                   if (minMatch)
                       min = Number(minMatch[1]);
+              }
+              if (max === undefined) {
                   const maxMatch = expr.match(/\.max\s*\(\s*(-?\d+)\s*\)/);
                   if (maxMatch)
                       max = Number(maxMatch[1]);
               }
-              let defaultValue;
-              const prefaultMatch = expr.match(/\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/);
-              if (prefaultMatch) {
-                  try {
-                      defaultValue = JSON.parse(prefaultMatch[1].replace(/'/g, '"'));
-                  }
-                  catch {
-                      defaultValue = prefaultMatch[1];
+              if (defaultValue === undefined) {
+                  const prefaultMatch = expr.match(/\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/);
+                  if (prefaultMatch) {
+                      try {
+                          defaultValue = JSON.parse(prefaultMatch[1].replace(/'/g, '"'));
+                      }
+                      catch {
+                          defaultValue = prefaultMatch[1];
+                      }
                   }
               }
               descriptors.push({
@@ -16998,9 +17162,192 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   max,
                   defaultValue,
                   children,
+                  recordTemplate,
               });
           }
           return descriptors;
+      }
+      /**
+       * Bổ sung kiểu dữ liệu, giới hạn min/max và các instance động dựa trên dữ liệu Runtime thực tế
+       */
+      static enrichWithLiveData(descriptors, liveData) {
+          if (!liveData || typeof liveData !== 'object')
+              return;
+          for (const desc of descriptors) {
+              const parts = desc.path.split('.');
+              let curr = liveData;
+              for (const p of parts) {
+                  if (curr && typeof curr === 'object' && p in curr) {
+                      curr = curr[p];
+                  }
+                  else {
+                      curr = undefined;
+                      break;
+                  }
+              }
+              if (curr !== undefined) {
+                  const isTuple = Array.isArray(curr) &&
+                      curr.length === 2 &&
+                      typeof curr[1] === 'string' &&
+                      (curr[0] === null || ['string', 'number', 'boolean'].includes(typeof curr[0]));
+                  const realVal = isTuple ? curr[0] : curr;
+                  if (desc.type === 'unknown') {
+                      if (typeof realVal === 'number') {
+                          desc.type = 'number';
+                      }
+                      else if (typeof realVal === 'string') {
+                          desc.type = 'string';
+                      }
+                      else if (typeof realVal === 'boolean') {
+                          desc.type = 'boolean';
+                      }
+                      else if (Array.isArray(realVal)) {
+                          desc.type = 'array';
+                      }
+                      else if (typeof realVal === 'object' && realVal !== null) {
+                          desc.type = 'object';
+                      }
+                  }
+                  // Gán giới hạn số học động (Mathematical dynamic bounds) nếu Zod Script không khai báo min/max
+                  if (desc.type === 'number' && typeof realVal === 'number' && Number.isFinite(realVal)) {
+                      if (desc.min === undefined && desc.max === undefined) {
+                          const bounds = this.getDynamicNumberBounds(realVal);
+                          desc.min = bounds.min;
+                          desc.max = bounds.max;
+                      }
+                  }
+                  // Nếu là object/record nhưng chưa có children, tự sinh children từ keys thực tế
+                  // Nếu là record có recordTemplate và có live data object:
+                  if (desc.type === 'record' &&
+                      typeof realVal === 'object' &&
+                      realVal !== null &&
+                      !Array.isArray(realVal)) {
+                      desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                          const subPath = `${desc.path}.${subK}`;
+                          if (desc.recordTemplate &&
+                              desc.recordTemplate.length > 0 &&
+                              typeof subV === 'object' &&
+                              subV !== null) {
+                              const instanceChildren = desc.recordTemplate.map(t => ({
+                                  ...t,
+                                  path: `${subPath}.${t.name}`,
+                                  children: t.children
+                                      ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
+                                      : undefined,
+                              }));
+                              this.enrichWithLiveData(instanceChildren, subV);
+                              return {
+                                  name: subK,
+                                  path: subPath,
+                                  type: 'object',
+                                  defaultValue: subV,
+                                  children: instanceChildren,
+                              };
+                          }
+                          else {
+                              const subType = typeof subV === 'number'
+                                  ? 'number'
+                                  : typeof subV === 'boolean'
+                                      ? 'boolean'
+                                      : Array.isArray(subV)
+                                          ? 'array'
+                                          : typeof subV === 'object' && subV !== null
+                                              ? 'object'
+                                              : 'string';
+                              return {
+                                  name: subK,
+                                  path: subPath,
+                                  type: subType,
+                                  defaultValue: subV,
+                              };
+                          }
+                      });
+                  }
+                  else if (desc.type === 'object' &&
+                      (!desc.children || desc.children.length === 0) &&
+                      typeof realVal === 'object' &&
+                      realVal !== null &&
+                      !Array.isArray(realVal)) {
+                      desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                          const subPath = `${desc.path}.${subK}`;
+                          const subType = typeof subV === 'number'
+                              ? 'number'
+                              : typeof subV === 'boolean'
+                                  ? 'boolean'
+                                  : Array.isArray(subV)
+                                      ? 'array'
+                                      : typeof subV === 'object' && subV !== null
+                                          ? 'object'
+                                          : 'string';
+                          return {
+                              name: subK,
+                              path: subPath,
+                              type: subType,
+                              defaultValue: subV,
+                          };
+                      });
+                  }
+              }
+              if (desc.children && desc.children.length > 0) {
+                  this.enrichWithLiveData(desc.children, liveData);
+              }
+          }
+      }
+      /**
+       * Tự động suy diễn giới hạn min / max toán học linh hoạt cho mọi giá trị số bất kỳ
+       * (Dựa trên thuật toán của TavernHelper Portable MVU Editor - không phụ thuộc card hay ngôn ngữ)
+       */
+      static getDynamicNumberBounds(value) {
+          const val = Number.isFinite(value) ? value : 0;
+          if (val >= 0) {
+              if (val <= 100) {
+                  return { min: 0, max: 100 };
+              }
+              const target = val * 1.25;
+              const power = Math.pow(10, Math.floor(Math.log10(target)));
+              const mult = target / power;
+              const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
+              return { min: 0, max: factor * power };
+          }
+          else {
+              const absTarget = Math.abs(val) * 1.25;
+              const power = Math.pow(10, Math.floor(Math.log10(absTarget)));
+              const mult = absTarget / power;
+              const factor = mult <= 1 ? 1 : mult <= 2 ? 2 : mult <= 5 ? 5 : 10;
+              return { min: -factor * power, max: 0 };
+          }
+      }
+      /**
+       * Tự động sinh cấu trúc Schema từ dữ liệu Live Variables nếu không có Zod Script
+       */
+      static generateSchemaFromData(data, parentPath = '') {
+          if (!data || typeof data !== 'object')
+              return [];
+          return Object.entries(data).map(([key, val]) => {
+              const currentPath = parentPath ? `${parentPath}.${key}` : key;
+              if (typeof val === 'number') {
+                  return { name: key, path: currentPath, type: 'number', defaultValue: val };
+              }
+              else if (typeof val === 'boolean') {
+                  return { name: key, path: currentPath, type: 'boolean', defaultValue: val };
+              }
+              else if (Array.isArray(val)) {
+                  return { name: key, path: currentPath, type: 'array', defaultValue: val };
+              }
+              else if (typeof val === 'object' && val !== null) {
+                  const isTuple = Array.isArray(val) &&
+                      val.length === 2 &&
+                      typeof val[1] === 'string' &&
+                      (val[0] === null || ['string', 'number', 'boolean'].includes(typeof val[0]));
+                  if (isTuple) {
+                      const t = typeof val[0] === 'number' ? 'number' : typeof val[0] === 'boolean' ? 'boolean' : 'string';
+                      return { name: key, path: currentPath, type: t, defaultValue: val[0], description: val[1] };
+                  }
+                  const children = this.generateSchemaFromData(val, currentPath);
+                  return { name: key, path: currentPath, type: 'object', children };
+              }
+              return { name: key, path: currentPath, type: 'string', defaultValue: String(val) };
+          });
       }
       /**
        * Báo cáo toàn diện hệ thống MVU của nhân vật hiện hành
@@ -17090,7 +17437,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   warnings.push('Chưa tìm thấy dữ liệu stat_data trong bộ nhớ (có thể cuộc hội thoại chưa bắt đầu hoặc chưa gửi tin nhắn).');
               }
           }
-          const parsedSchema = zodScript ? this.parseZodCode(zodScript.content) : [];
+          let parsedSchema = zodScript ? this.parseZodCode(zodScript.content) : [];
+          if (liveVars) {
+              if (parsedSchema.length === 0) {
+                  parsedSchema = this.generateSchemaFromData(liveVars);
+              }
+              this.enrichWithLiveData(parsedSchema, liveVars);
+          }
           // Kiểm tra tính nhất quán giữa Schema và InitVar
           if (parsedSchema.length > 0 && initvarParsed) {
               for (const desc of parsedSchema) {
@@ -27034,7 +27387,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               }
           }
-          const allDescriptors = this.flattenDescriptors(report.parsedSchema);
+          const allDescriptors = this.flattenDescriptorsForSchema(report.parsedSchema);
           $('#kaiz-mvu-stat-count').text(allDescriptors.length);
           $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'Zod 4 Schema');
           if (report.initvarVariables) {
@@ -27082,11 +27435,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // 5. Render Tab 3: Raw / YAML Panes
           this.renderRawTab(report);
       }
-      flattenDescriptors(descriptors) {
+      flattenDescriptorsForSchema(descriptors) {
           const flat = [];
           for (const d of descriptors) {
               if (d.type === 'object' && d.children && d.children.length > 0) {
-                  flat.push(...this.flattenDescriptors(d.children));
+                  flat.push(...this.flattenDescriptorsForSchema(d.children));
               }
               else {
                   flat.push(d);
@@ -27094,18 +27447,79 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           return flat;
       }
+      /**
+       * Thu thập danh sách descriptor cần hiển thị dưới dạng card.
+       * Hoàn toàn cấu trúc dữ liệu thuần túy (100% Data-Driven - không hardcode bất kỳ tên card hay biến cụ thể nào):
+       * 1. Nếu là z.object có children: tiếp tục đệ quy xuống các thuộc tính bên trong.
+       * 2. Nếu là z.record: các item thực tế bên trong record (ví dụ từng NPC, vật phẩm, nhiệm vụ) hiển thị thành từng card riêng. Nếu record rỗng ({}) thì hiển thị chính record đó.
+       * 3. Nếu là biến lá nguyên thủy (number, string, boolean, array): hiển thị thành card.
+       */
+      collectDisplayDescriptors(descriptors) {
+          const result = [];
+          const traverse = (items) => {
+              for (const d of items) {
+                  if (d.type === 'object' && d.children && d.children.length > 0) {
+                      traverse(d.children);
+                  }
+                  else if (d.type === 'record') {
+                      if (d.children && d.children.length > 0) {
+                          for (const child of d.children) {
+                              result.push(child);
+                          }
+                      }
+                      else {
+                          result.push(d);
+                      }
+                  }
+                  else {
+                      result.push(d);
+                  }
+              }
+          };
+          traverse(descriptors);
+          return result;
+      }
+      /**
+       * Suy diễn danh mục hoàn toàn tự động theo cấu trúc cây Schema (100% Generic):
+       * - Tên danh mục tự động lấy theo đường dẫn nhánh cha: "Nhánh_1 ➔ Nhánh_2"
+       * - Các trường hệ thống bắt đầu bằng "_" tự động gom lên đầu.
+       * - Không chứa bất kỳ từ khóa hay logic riêng biệt của card nào.
+       */
+      getCategoryForDescriptor(desc) {
+          const parts = desc.path.split('.');
+          const parentParts = parts.length > 1 ? parts.slice(0, parts.length - 1) : [desc.name];
+          const categoryName = parentParts.join(' ➔ ');
+          let icon = 'fa-solid fa-folder-open';
+          let order = 50;
+          // Ưu tiên các trường cấu hình/hệ thống có tiền tố "_"
+          if (categoryName.startsWith('_')) {
+              icon = 'fa-solid fa-gear';
+              order = 10;
+          }
+          else if (parentParts.length === 1) {
+              order = 20;
+          }
+          else {
+              order = 30;
+          }
+          return { name: categoryName, icon, order };
+      }
       getProgressBarTheme(name) {
           const n = name.toLowerCase();
-          if (n.includes('sinh_mệnh') || n.includes('hp') || n.includes('máu') || n.includes('thể_lực')) {
+          // Nhóm Sinh lực / Sức khỏe / Máu
+          if (n.includes('hp') || n.includes('health') || n.includes('máu') || n.includes('sinh_')) {
               return { fillClass: 'mvu-bar-crimson', color: '#f43f5e' };
           }
-          if (n.includes('ma_lực') || n.includes('mp') || n.includes('chân_nguyên') || n.includes('mana')) {
+          // Nhóm Năng lượng / Tinh thần / Ma lực
+          if (n.includes('mp') || n.includes('mana') || n.includes('energy') || n.includes('spirit') || n.includes('linh_')) {
               return { fillClass: 'mvu-bar-cyan', color: '#06b6d4' };
           }
-          if (n.includes('hảo_cảm') || n.includes('tình_cảm') || n.includes('affection') || n.includes('yêu')) {
+          // Nhóm Xã hội / Quan hệ / Hảo cảm
+          if (n.includes('love') || n.includes('affection') || n.includes('hảo_cảm') || n.includes('trust') || n.includes('tin_tưởng')) {
               return { fillClass: 'mvu-bar-rose', color: '#ec4899' };
           }
-          if (n.includes('vàng') || n.includes('tiền') || n.includes('linh_thạch') || n.includes('gold')) {
+          // Nhóm Tiền tệ / Tài nguyên
+          if (n.includes('gold') || n.includes('money') || n.includes('coin') || n.includes('tiền') || n.includes('bảng') || n.includes('xu')) {
               return { fillClass: 'mvu-bar-amber', color: '#eab308' };
           }
           return { fillClass: 'mvu-bar-emerald', color: '#10b981' };
@@ -27114,52 +27528,35 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const $ = jQuery;
           const container = $('#kaiz-mvu-stats-grid');
           container.empty();
-          // Gom nhóm theo category (Root object hoặc Parent)
-          const groups = {};
-          for (const d of report.parsedSchema) {
-              if (d.type === 'object' && d.children && d.children.length > 0) {
-                  groups[d.name] = this.flattenDescriptors(d.children);
-              }
-              else {
-                  if (!groups['Chỉ số chung'])
-                      groups['Chỉ số chung'] = [];
-                  groups['Chỉ số chung'].push(d);
-              }
+          let displayDescriptors = this.collectDisplayDescriptors(report.parsedSchema);
+          // Fallback nếu parsedSchema trống nhưng có liveVariables
+          if (displayDescriptors.length === 0 && report.liveVariables) {
+              const fallbackSchema = MvuManager.generateSchemaFromData(report.liveVariables);
+              MvuManager.enrichWithLiveData(fallbackSchema, report.liveVariables);
+              displayDescriptors = this.collectDisplayDescriptors(fallbackSchema);
           }
-          // Nếu parsedSchema trống nhưng có liveVariables
-          if (Object.keys(groups).length === 0 && report.liveVariables) {
-              groups['Chỉ số thời gian thực'] = [];
-              for (const [k, v] of Object.entries(report.liveVariables)) {
-                  if (typeof v === 'object' && v !== null && !Array.isArray(v)) {
-                      for (const [subK, subV] of Object.entries(v)) {
-                          groups[k] = groups[k] || [];
-                          groups[k].push({
-                              name: subK,
-                              path: `${k}.${subK}`,
-                              type: typeof subV === 'number' ? 'number' : typeof subV === 'boolean' ? 'boolean' : 'string',
-                              defaultValue: subV,
-                          });
-                      }
-                  }
-                  else {
-                      groups['Chỉ số thời gian thực'].push({
-                          name: k,
-                          path: k,
-                          type: typeof v === 'number' ? 'number' : typeof v === 'boolean' ? 'boolean' : 'string',
-                          defaultValue: v,
-                      });
-                  }
-              }
-          }
-          if (Object.keys(groups).length === 0) {
+          if (displayDescriptors.length === 0) {
               container.html('<div class="kaiz-mvu-empty-text">Chưa phát hiện biến nào trong Schema hoặc Live Variables. Hãy bấm "+ Thêm Biến".</div>');
               return;
           }
-          for (const [groupName, descriptors] of Object.entries(groups)) {
+          // Gom nhóm theo domain category
+          const groups = {};
+          for (const desc of displayDescriptors) {
+              const cat = this.getCategoryForDescriptor(desc);
+              if (!groups[cat.name]) {
+                  groups[cat.name] = { info: cat, items: [] };
+              }
+              groups[cat.name].items.push(desc);
+          }
+          // Sắp xếp các danh mục theo thứ tự logic nghiệp vụ
+          const sortedCats = Object.values(groups).sort((a, b) => a.info.order - b.info.order);
+          for (const group of sortedCats) {
+              const groupInfo = group.info;
+              const descriptors = group.items;
               let catHtml = `
                 <div class="kaiz-mvu-category-section">
                     <div class="kaiz-mvu-cat-header">
-                        <span class="kaiz-mvu-cat-title"><i class="fa-solid fa-folder-open"></i> ${escapeHtml(groupName)}</span>
+                        <span class="kaiz-mvu-cat-title"><i class="${groupInfo.icon}"></i> ${escapeHtml(groupInfo.name)}</span>
                         <span class="kaiz-mvu-cat-count">${descriptors.length} chỉ số</span>
                     </div>
                     <div class="kaiz-mvu-cards-grid">
@@ -27177,6 +27574,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       currentVal = currentVal[0];
                   }
                   const hasClamp = desc.type === 'number' && desc.min !== undefined && desc.max !== undefined;
+                  const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
                   catHtml += `
                     <div class="kaiz-mvu-stat-card" data-path="${escapeHtml(desc.path)}">
                         <div class="kaiz-mvu-card-top">
@@ -27226,9 +27624,43 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const arr = Array.isArray(currentVal) ? currentVal : [];
                       catHtml += `
                         <div class="kaiz-mvu-card-value">
-                            ${arr.length > 0 ? arr.map((item) => `<span class="kaiz-mvu-tag">${escapeHtml(item)}</span>`).join('') : '<span class="kaiz-mvu-empty-badge">Trống</span>'}
+                            ${arr.length > 0 ? arr.map((item) => `<span class="kaiz-mvu-tag">${escapeHtml(item)}</span>`).join('') : '<span class="kaiz-mvu-empty-badge">Trống ([])</span>'}
                         </div>
                     `;
+                  }
+                  else if (isObject) {
+                      const entries = Object.entries(currentVal);
+                      if (entries.length === 0) {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-empty-badge">Trống ({})</span>
+                            </div>
+                        `;
+                      }
+                      else {
+                          catHtml += `<div class="kaiz-mvu-card-value"><div class="kaiz-mvu-object-badge">`;
+                          for (const [subK, subV] of entries) {
+                              let valStr = '';
+                              if (typeof subV === 'object' && subV !== null) {
+                                  try {
+                                      valStr = JSON.stringify(subV);
+                                  }
+                                  catch {
+                                      valStr = String(subV);
+                                  }
+                              }
+                              else {
+                                  valStr = String(subV);
+                              }
+                              catHtml += `
+                                <div class="kaiz-mvu-obj-row">
+                                    <span class="kaiz-mvu-obj-k">${escapeHtml(subK)}:</span>
+                                    <span class="kaiz-mvu-obj-v" title="${escapeHtml(valStr)}">${escapeHtml(valStr)}</span>
+                                </div>
+                            `;
+                          }
+                          catHtml += `</div></div>`;
+                      }
                   }
                   else {
                       catHtml += `
@@ -27238,14 +27670,29 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     `;
                   }
                   // Inline Edit Form (Hidden by default)
-                  catHtml += `
-                    <div class="kaiz-mvu-inline-editor" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
-                        <input type="text" class="text_pole kaiz-mvu-inline-input" value="${escapeHtml(currentVal)}">
-                        <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" title="Lưu">
-                            <i class="fa-solid fa-check"></i>
-                        </button>
-                    </div>
-                `;
+                  if (isObject) {
+                      const formattedJson = JSON.stringify(currentVal, null, 2);
+                      catHtml += `
+                        <div class="kaiz-mvu-inline-editor is-textarea" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
+                            <textarea class="text_pole kaiz-mvu-inline-textarea" rows="4">${escapeHtml(formattedJson)}</textarea>
+                            <div class="kaiz-mvu-editor-btns">
+                                <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" data-is-json="true" title="Lưu JSON">
+                                    <i class="fa-solid fa-check"></i> Lưu JSON
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                  }
+                  else {
+                      catHtml += `
+                        <div class="kaiz-mvu-inline-editor" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
+                            <input type="text" class="text_pole kaiz-mvu-inline-input" value="${escapeHtml(currentVal)}">
+                            <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" title="Lưu">
+                                <i class="fa-solid fa-check"></i>
+                            </button>
+                        </div>
+                    `;
+                  }
                   catHtml += `</div>`; // Close stat-card
               }
               catHtml += `</div></div>`; // Close category-section
@@ -27259,13 +27706,28 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           });
           container.find('.kaiz-mvu-inline-save-btn').on('click', async (e) => {
               const path = $(e.currentTarget).data('path');
+              const isJson = $(e.currentTarget).data('is-json') === true;
               const editorId = `#editor-${path.replace(/\./g, '_')}`;
-              const inputVal = $(editorId).find('.kaiz-mvu-inline-input').val();
+              const inputVal = isJson
+                  ? $(editorId).find('.kaiz-mvu-inline-textarea').val()
+                  : $(editorId).find('.kaiz-mvu-inline-input').val();
+              let finalVal = inputVal;
+              if (isJson) {
+                  try {
+                      finalVal = JSON.parse(inputVal);
+                  }
+                  catch {
+                      if (typeof toastr !== 'undefined') {
+                          toastr.error('Định dạng JSON không hợp lệ. Vui lòng kiểm tra lại cú pháp.');
+                      }
+                      return;
+                  }
+              }
               try {
-                  const res = await MvuManager.setLiveVariable(path, inputVal, this.selectedFloorId);
+                  const res = await MvuManager.setLiveVariable(path, finalVal, this.selectedFloorId);
                   if (res.success) {
                       if (typeof toastr !== 'undefined') {
-                          toastr.success(`Đã cập nhật ${path} = ${inputVal}`);
+                          toastr.success(`Đã cập nhật ${path}`);
                       }
                       await this.refresh(this.selectedFloorId);
                   }
@@ -27309,7 +27771,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       : desc.max !== undefined
                           ? `Max: ${desc.max}`
                           : '—';
-              const defaultText = desc.defaultValue !== undefined ? escapeHtml(desc.defaultValue) : '—';
+              let defaultText = '—';
+              if (desc.defaultValue !== undefined) {
+                  if (typeof desc.defaultValue === 'object' && desc.defaultValue !== null) {
+                      try {
+                          defaultText = JSON.stringify(desc.defaultValue);
+                      }
+                      catch {
+                          defaultText = String(desc.defaultValue);
+                      }
+                  }
+                  else {
+                      defaultText = String(desc.defaultValue);
+                  }
+              }
               tableHtml += `
                 <tr>
                     <td class="kaiz-mvu-td-path"><code>${escapeHtml(desc.path)}</code></td>
