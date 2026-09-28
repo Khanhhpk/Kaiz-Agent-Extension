@@ -431,6 +431,46 @@
                     <!-- Menu items will be injected here -->
                 </div>
 
+                <!-- Quick Tools Reference Menu -->
+                <div
+                    id="kaiz-quick-tool-menu"
+                    class="kaiz-quick-tool-menu"
+                    style="
+                        display: none;
+                        position: absolute;
+                        bottom: 100%;
+                        left: 16px;
+                        margin-bottom: 10px;
+                        background: rgba(18, 22, 31, 0.96);
+                        backdrop-filter: blur(12px);
+                        border: 1px solid rgba(255, 255, 255, 0.12);
+                        border-radius: 10px;
+                        width: 320px;
+                        max-height: 280px;
+                        z-index: 10003;
+                        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+                        flex-direction: column;
+                        overflow: hidden;
+                    "
+                >
+                    <div style="padding: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08)">
+                        <input
+                            type="text"
+                            id="kaiz-quick-tool-search"
+                            class="text_pole"
+                            placeholder="Tìm tool nhanh..."
+                            style="
+                                width: 100%;
+                                box-sizing: border-box;
+                                font-size: 12px;
+                                padding: 5px 8px;
+                                border-radius: 6px;
+                            "
+                        />
+                    </div>
+                    <div id="kaiz-quick-tool-list" style="overflow-y: auto; flex: 1; padding: 4px"></div>
+                </div>
+
                 <div class="kaiz-chat-input-box" id="kaiz-chat-input-box">
                     <textarea
                         id="kaiz-chat-input"
@@ -448,6 +488,14 @@
                                 title="Quick Prompts"
                             >
                                 <i class="fa-solid fa-fan"></i>
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-quick-tool-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Chèn nhanh công cụ (Quick Tools)"
+                            >
+                                <i class="fa-solid fa-screwdriver-wrench"></i>
                             </button>
                             <button
                                 type="button"

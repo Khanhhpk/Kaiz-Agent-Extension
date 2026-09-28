@@ -171,6 +171,7 @@ export class ChatWindowUI {
 
         quickPromptBtn.on('click', (e: any) => {
             e.stopPropagation();
+            quickToolMenu.hide();
             if (quickPromptMenu.is(':visible')) {
                 quickPromptMenu.hide();
             } else {
@@ -187,6 +188,120 @@ export class ChatWindowUI {
             ) {
                 quickPromptMenu.hide();
             }
+            if (
+                !$(e.target).closest('#kaiz-quick-tool-btn').length &&
+                !$(e.target).closest('#kaiz-quick-tool-menu').length
+            ) {
+                quickToolMenu.hide();
+            }
+        });
+        // ------------------------------------
+
+        // --- Quick Tools Reference Logic ---
+        const quickToolBtn = $('#kaiz-quick-tool-btn');
+        const quickToolMenu = $('#kaiz-quick-tool-menu');
+        const quickToolSearch = $('#kaiz-quick-tool-search');
+        const quickToolList = $('#kaiz-quick-tool-list');
+
+        function getActiveToolsForCurrentSpace() {
+            const allSchemas = registry.getAllSchemas();
+            const currentWs = stateManager.currentWorkspace;
+            if (stateManager.currentWorkspaceId && currentWs) {
+                const wsConfig = currentWs.toolsConfig || {};
+                return allSchemas.filter((s) => wsConfig[s.name] === true);
+            } else {
+                const liveSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                const disabled = liveSettings.disabledTools || {};
+                return allSchemas.filter((s) => !disabled[s.name]);
+            }
+        }
+
+        function insertToolNameToInput(toolName: string) {
+            const inputEl = input[0] as HTMLTextAreaElement;
+            const insertStr = toolName + ' ';
+            if (!inputEl) {
+                const val = String(input.val() || '');
+                input.val((val ? val + (val.endsWith(' ') ? '' : ' ') : '') + insertStr).trigger('input');
+                input.focus();
+                return;
+            }
+
+            const start = inputEl.selectionStart ?? inputEl.value.length;
+            const end = inputEl.selectionEnd ?? inputEl.value.length;
+            const text = inputEl.value;
+            const before = text.substring(0, start);
+            const after = text.substring(end);
+
+            const prefixSpace = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : '';
+            const newText = before + prefixSpace + insertStr + after;
+            const newCursorPos = start + prefixSpace.length + insertStr.length;
+
+            input.val(newText).trigger('input');
+            inputEl.focus();
+            inputEl.setSelectionRange(newCursorPos, newCursorPos);
+        }
+
+        function populateQuickTools(filterText = '') {
+            quickToolList.empty();
+            const available = getActiveToolsForCurrentSpace();
+            const q = filterText.trim().toLowerCase();
+            const matches = q
+                ? available.filter(
+                      (s) =>
+                          s.name.toLowerCase().includes(q) ||
+                          (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
+                          (s.description && s.description.toLowerCase().includes(q)),
+                  )
+                : available;
+
+            if (matches.length === 0) {
+                quickToolList.append(
+                    '<div style="padding: 14px; color: #888; text-align: center; font-size: 12px;">Không có công cụ nào khả dụng trong không gian hiện tại.</div>',
+                );
+                return;
+            }
+
+            matches.forEach((schema) => {
+                const desc = schema.userDescription || schema.description || '';
+                const $item = $(`
+                    <div class="kaiz-quick-tool-item" style="
+                        padding: 7px 10px; cursor: pointer; border-radius: 6px; margin-bottom: 2px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+                        transition: background 0.15s ease;
+                    ">
+                        <div style="font-size: 12.5px; font-weight: 600; color: #38bdf8;">${escapeHtml(schema.name)}</div>
+                        ${desc ? `<div style="font-size: 11px; color: #94a3b8; line-height: 1.35; margin-top: 2px;">${escapeHtml(desc)}</div>` : ''}
+                    </div>
+                `);
+                $item.on('mouseenter', function (this: HTMLElement) {
+                    $(this).css('background', 'rgba(255, 255, 255, 0.08)');
+                });
+                $item.on('mouseleave', function (this: HTMLElement) {
+                    $(this).css('background', 'transparent');
+                });
+                $item.on('click', () => {
+                    insertToolNameToInput(schema.name);
+                    quickToolMenu.hide();
+                });
+                quickToolList.append($item);
+            });
+        }
+
+        quickToolBtn.on('click', (e: any) => {
+            e.stopPropagation();
+            if (quickToolMenu.is(':visible')) {
+                quickToolMenu.hide();
+            } else {
+                quickPromptMenu.hide();
+                quickToolSearch.val('');
+                populateQuickTools('');
+                quickToolMenu.css('display', 'flex');
+                setTimeout(() => quickToolSearch.focus(), 50);
+            }
+        });
+
+        quickToolSearch.on('input', function (this: HTMLInputElement) {
+            populateQuickTools(this.value);
         });
         // ------------------------------------
 
