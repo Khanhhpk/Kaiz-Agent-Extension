@@ -11,6 +11,7 @@ export const manageTavernHelperScriptTool: ITool = {
             '- scope: "global", "preset", "character" (chỉ dùng cho create, mặc định global). Nếu là action khác create, tool sẽ tự động tìm đúng scope.\n' +
             '- data: Đối tượng JSON chứa các trường CẦN THAY ĐỔI. Tool dùng Object.assign, nên bạn CHỈ CẦN truyền những gì muốn sửa (VD: { info: "Sửa info thôi" }). KHÔNG CẦN truyền lại toàn bộ code (content) hay name nếu không muốn đổi chúng.\n' +
             '  + ĐẶC BIỆT MẠNH MẼ: Nếu chỉ muốn sửa 1 đoạn code trong `content` cực dài, KHÔNG CẦN chép lại cả content. Hãy dùng cú pháp patch: truyền vào data mảng `content_replacements: [{ target: "code cũ", replacement: "code mới" }]`. Tool sẽ tự động tìm `target` trong mã nguồn và thay bằng `replacement`.',
+        userDescription: 'Tạo mới, sửa mã nguồn, bật/tắt hoặc xóa kịch bản Tavern Helper Script.',
         parameters: {
             type: 'object',
             properties: {

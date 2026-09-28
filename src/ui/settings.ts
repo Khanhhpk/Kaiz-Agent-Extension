@@ -34,7 +34,7 @@ export class SettingsUI {
                 }
             } catch (e) {
                 console.error('[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:', e);
-                toastr.error('Kaiz Agent: Failed to load UI settings.');
+                toastr.error('Agent: Failed to load UI settings.');
                 return;
             }
         } else {
@@ -229,12 +229,13 @@ export class SettingsUI {
 
             tools.forEach((tool) => {
                 const name = escapeHtml(tool.schema.name);
-                const desc = escapeHtml(tool.schema.description);
+                const desc = escapeHtml(tool.schema.userDescription || tool.schema.description);
+                const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
 
                 if (
                     lowerFilter &&
                     !name.toLowerCase().includes(lowerFilter) &&
-                    !desc.toLowerCase().includes(lowerFilter)
+                    !rawDesc.toLowerCase().includes(lowerFilter)
                 ) {
                     return;
                 }
@@ -724,18 +725,41 @@ export class SettingsUI {
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
 
+        function updateToolsCount() {
+            const total = tools.length;
+            const active = tools.filter((t) => !settings.disabledTools[t.schema.name]).length;
+            $('#kaiz-tools-count-text').text(`${active}/${total}`);
+            if (active === 0) {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#ef4444',
+                    boxShadow: '0 0 6px rgba(239, 68, 68, 0.6)',
+                });
+            } else if (active < total) {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#f59e0b',
+                    boxShadow: '0 0 6px rgba(245, 158, 11, 0.6)',
+                });
+            } else {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#10b981',
+                    boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                });
+            }
+        }
+
         function renderTools(filterText = '') {
             $toolsList.empty();
             const lowerFilter = filterText.toLowerCase();
 
             tools.forEach((tool) => {
                 const name = escapeHtml(tool.schema.name);
-                const desc = escapeHtml(tool.schema.description);
+                const desc = escapeHtml(tool.schema.userDescription || tool.schema.description);
+                const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
 
                 if (
                     lowerFilter &&
                     !name.toLowerCase().includes(lowerFilter) &&
-                    !desc.toLowerCase().includes(lowerFilter)
+                    !rawDesc.toLowerCase().includes(lowerFilter)
                 ) {
                     return; // Bỏ qua nếu không khớp filter
                 }
@@ -771,7 +795,10 @@ export class SettingsUI {
                     settings.disabledTools[toolName] = true;
                 }
                 ctx.saveSettingsDebounced();
+                updateToolsCount();
             });
+
+            updateToolsCount();
         }
 
         // Render lần đầu
@@ -996,7 +1023,7 @@ export class SettingsUI {
             const key = String($('#kaiz-custom-key').val()).trim();
 
             if (!url) {
-                toastr.error('Please enter an API URL first.', 'Kaiz Agent');
+                toastr.error('Please enter an API URL first.', 'Agent');
                 return;
             }
 
@@ -1022,13 +1049,13 @@ export class SettingsUI {
                         const id = m.id || m.name || m;
                         select.append(`<option value="${id}">${id}</option>`);
                     });
-                    toastr.success(`Found ${models.length} models.`, 'Kaiz Agent');
+                    toastr.success(`Found ${models.length} models.`, 'Agent');
                 } else {
                     throw new Error('Invalid models response format.');
                 }
             } catch (e: any) {
                 console.error('[KaizAgent] Fetch models error:', e);
-                toastr.error('Failed to fetch models: ' + e.message, 'Kaiz Agent');
+                toastr.error('Failed to fetch models: ' + e.message, 'Agent');
             } finally {
                 $('#kaiz-fetch-models').find('i').removeClass('fa-spin');
             }

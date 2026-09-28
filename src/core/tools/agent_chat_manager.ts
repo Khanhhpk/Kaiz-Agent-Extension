@@ -6,6 +6,7 @@ export const renameAgentChatTool: ITool = {
         name: 'rename_agent_chat',
         description:
             'Đổi tên một phiên chat NỘI BỘ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Hoạt động trong phạm vi Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Đổi tên phiên chat riêng với Agent.',
         parameters: {
             type: 'object',
             properties: {
@@ -43,6 +44,7 @@ export const openNewAgentChatTool: ITool = {
         name: 'open_new_agent_chat',
         description:
             'Đóng phiên chat nội bộ hiện tại của agent và mở một phiên chat nội bộ trống mới trong Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Mở một phiên chat mới riêng biệt với Agent.',
         parameters: {
             type: 'object',
             properties: {},
@@ -72,6 +74,7 @@ export const listAgentChatsTool: ITool = {
         name: 'list_agent_chats',
         description:
             'Liệt kê tất cả các phiên chat nội bộ của agent (ID, Tên, Ngày tạo, Ngày cập nhật) TRONG PHẠM VI Workspace đang kích hoạt. Nếu ở chế độ Default, sẽ liệt kê toàn bộ các đoạn chat global. Sử dụng list_agent_workspaces trước để hiểu cấu trúc workspace. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Liệt kê danh sách các phiên chat riêng với Agent.',
         parameters: {
             type: 'object',
             properties: {},
@@ -102,6 +105,7 @@ export const deleteAgentChatTool: ITool = {
         name: 'delete_agent_chat',
         description:
             'Xóa một đoạn chat nội bộ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Chỉ xóa các đoạn chat nằm trong phạm vi Workspace đang kích hoạt. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Xóa một phiên chat riêng với Agent.',
         parameters: {
             type: 'object',
             properties: {

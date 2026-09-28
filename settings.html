@@ -378,6 +378,37 @@
                             <div class="kaiz-card-title">
                                 <i class="fa-solid fa-screwdriver-wrench"></i> Tools Manager
                             </div>
+                            <div
+                                id="kaiz-tools-counter"
+                                class="kaiz-card-badge"
+                                title="Số tool đang bật (Active) / Tổng số tools đang có"
+                                style="
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    padding: 2px 8px;
+                                    border-radius: 12px;
+                                    background: rgba(99, 102, 241, 0.12);
+                                    border: 1px solid rgba(99, 102, 241, 0.25);
+                                    color: #a5b4fc;
+                                    display: flex;
+                                    align-items: center;
+                                    gap: 5px;
+                                "
+                            >
+                                <span
+                                    id="kaiz-tools-status-dot"
+                                    style="
+                                        width: 6px;
+                                        height: 6px;
+                                        border-radius: 50%;
+                                        background: #10b981;
+                                        box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+                                        display: inline-block;
+                                    "
+                                ></span>
+                                <span id="kaiz-tools-count-text">0/0</span>
+                                <span style="opacity: 0.75; font-size: 10px; font-weight: 500">Active</span>
+                            </div>
                         </div>
 
                         <div class="kaiz-card-body">

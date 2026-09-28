@@ -34,6 +34,7 @@ export const managePresetPromptTool: ITool = {
             '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).\n' +
             '  - "prune_commits": Dọn dẹp các commit cũ, chỉ giữ lại N commit gần nhất (data: { keep_count?: number }).\n' +
             '  - "clear_history": Xóa sạch toàn bộ lịch sử commit của preset hiện tại để làm mới.',
+        userDescription: 'Quản trị, chỉnh sửa và kiểm soát phiên bản (Git version) các khối prompt trong AI Preset.',
         parameters: {
             type: 'object',
             properties: {

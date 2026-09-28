@@ -6,6 +6,7 @@ export const listCharactersTool: ITool = {
         name: 'list_characters',
         description:
             'Lấy danh sách các thẻ nhân vật hiện có trong kho của SillyTavern. Trả về tên, avatar, creator, và mô tả ngắn.',
+        userDescription: 'Liệt kê danh sách tất cả thẻ nhân vật đang có trong SillyTavern.',
         parameters: {
             type: 'object',
             properties: {

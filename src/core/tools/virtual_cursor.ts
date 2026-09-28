@@ -4,6 +4,7 @@ export const toggleVirtualCursorTool: ITool = {
     schema: {
         name: 'toggle_virtual_cursor',
         description: 'Bật hoặc tắt con trỏ chuột ảo trên màn hình. Dùng khi người dùng yêu cầu bật/tắt con trỏ ảo.',
+        userDescription: 'Bật hoặc tắt con trỏ chuột ảo mô phỏng hành vi trên màn hình.',
         parameters: {
             type: 'object',
             properties: {},

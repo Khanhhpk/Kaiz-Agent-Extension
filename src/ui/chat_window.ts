@@ -171,6 +171,7 @@ export class ChatWindowUI {
 
         quickPromptBtn.on('click', (e: any) => {
             e.stopPropagation();
+            quickToolMenu.hide();
             if (quickPromptMenu.is(':visible')) {
                 quickPromptMenu.hide();
             } else {
@@ -187,6 +188,120 @@ export class ChatWindowUI {
             ) {
                 quickPromptMenu.hide();
             }
+            if (
+                !$(e.target).closest('#kaiz-quick-tool-btn').length &&
+                !$(e.target).closest('#kaiz-quick-tool-menu').length
+            ) {
+                quickToolMenu.hide();
+            }
+        });
+        // ------------------------------------
+
+        // --- Quick Tools Reference Logic ---
+        const quickToolBtn = $('#kaiz-quick-tool-btn');
+        const quickToolMenu = $('#kaiz-quick-tool-menu');
+        const quickToolSearch = $('#kaiz-quick-tool-search');
+        const quickToolList = $('#kaiz-quick-tool-list');
+
+        function getActiveToolsForCurrentSpace() {
+            const allSchemas = registry.getAllSchemas();
+            const currentWs = stateManager.currentWorkspace;
+            if (stateManager.currentWorkspaceId && currentWs) {
+                const wsConfig = currentWs.toolsConfig || {};
+                return allSchemas.filter((s) => wsConfig[s.name] === true);
+            } else {
+                const liveSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                const disabled = liveSettings.disabledTools || {};
+                return allSchemas.filter((s) => !disabled[s.name]);
+            }
+        }
+
+        function insertToolNameToInput(toolName: string) {
+            const inputEl = input[0] as HTMLTextAreaElement;
+            const insertStr = toolName + ' ';
+            if (!inputEl) {
+                const val = String(input.val() || '');
+                input.val((val ? val + (val.endsWith(' ') ? '' : ' ') : '') + insertStr).trigger('input');
+                input.focus();
+                return;
+            }
+
+            const start = inputEl.selectionStart ?? inputEl.value.length;
+            const end = inputEl.selectionEnd ?? inputEl.value.length;
+            const text = inputEl.value;
+            const before = text.substring(0, start);
+            const after = text.substring(end);
+
+            const prefixSpace = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : '';
+            const newText = before + prefixSpace + insertStr + after;
+            const newCursorPos = start + prefixSpace.length + insertStr.length;
+
+            input.val(newText).trigger('input');
+            inputEl.focus();
+            inputEl.setSelectionRange(newCursorPos, newCursorPos);
+        }
+
+        function populateQuickTools(filterText = '') {
+            quickToolList.empty();
+            const available = getActiveToolsForCurrentSpace();
+            const q = filterText.trim().toLowerCase();
+            const matches = q
+                ? available.filter(
+                      (s) =>
+                          s.name.toLowerCase().includes(q) ||
+                          (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
+                          (s.description && s.description.toLowerCase().includes(q)),
+                  )
+                : available;
+
+            if (matches.length === 0) {
+                quickToolList.append(
+                    '<div style="padding: 14px; color: #888; text-align: center; font-size: 12px;">Không có công cụ nào khả dụng trong không gian hiện tại.</div>',
+                );
+                return;
+            }
+
+            matches.forEach((schema) => {
+                const desc = schema.userDescription || schema.description || '';
+                const $item = $(`
+                    <div class="kaiz-quick-tool-item" style="
+                        padding: 7px 10px; cursor: pointer; border-radius: 6px; margin-bottom: 2px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+                        transition: background 0.15s ease;
+                    ">
+                        <div style="font-size: 12.5px; font-weight: 600; color: #38bdf8;">${escapeHtml(schema.name)}</div>
+                        ${desc ? `<div style="font-size: 11px; color: #94a3b8; line-height: 1.35; margin-top: 2px;">${escapeHtml(desc)}</div>` : ''}
+                    </div>
+                `);
+                $item.on('mouseenter', function (this: HTMLElement) {
+                    $(this).css('background', 'rgba(255, 255, 255, 0.08)');
+                });
+                $item.on('mouseleave', function (this: HTMLElement) {
+                    $(this).css('background', 'transparent');
+                });
+                $item.on('click', () => {
+                    insertToolNameToInput(schema.name);
+                    quickToolMenu.hide();
+                });
+                quickToolList.append($item);
+            });
+        }
+
+        quickToolBtn.on('click', (e: any) => {
+            e.stopPropagation();
+            if (quickToolMenu.is(':visible')) {
+                quickToolMenu.hide();
+            } else {
+                quickPromptMenu.hide();
+                quickToolSearch.val('');
+                populateQuickTools('');
+                quickToolMenu.css('display', 'flex');
+                setTimeout(() => quickToolSearch.focus(), 50);
+            }
+        });
+
+        quickToolSearch.on('input', function (this: HTMLInputElement) {
+            populateQuickTools(this.value);
         });
         // ------------------------------------
 
@@ -506,7 +621,9 @@ export class ChatWindowUI {
                 const relativeTop = msgEl.offsetTop;
                 const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
                 const userContentEl = $(msgEl).find('.kaiz-user-content-text');
-                const rawText = (userContentEl.length ? userContentEl.text() : $(msgEl).find('.kaiz-msg-content').text()).trim();
+                const rawText = (
+                    userContentEl.length ? userContentEl.text() : $(msgEl).find('.kaiz-msg-content').text()
+                ).trim();
                 const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
                 return {
                     index,
@@ -715,7 +832,10 @@ export class ChatWindowUI {
                 if (collapsed) {
                     $(collapsed).removeClass('is-collapsed').addClass('is-expanded');
                     $(collapsed).find('.kaiz-user-toggle-text').text('Thu gọn');
-                    $(collapsed).find('.kaiz-user-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                    $(collapsed)
+                        .find('.kaiz-user-toggle-icon')
+                        .removeClass('fa-chevron-down')
+                        .addClass('fa-chevron-up');
                     $(collapsed).find('.kaiz-user-msg-dots').hide();
                 }
 
@@ -1146,7 +1266,7 @@ export class ChatWindowUI {
         wsSelect.on('change', () => {
             if (loop.isRunning) {
                 wsSelect.val(stateManager.currentWorkspaceId ? stateManager.currentWorkspaceId.toString() : 'default');
-                toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Kaiz Agent');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Agent');
                 return;
             }
             const val = wsSelect.val();
@@ -1159,7 +1279,7 @@ export class ChatWindowUI {
 
         wsAddBtn.on('click', async () => {
             if (loop.isRunning) {
-                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Kaiz Agent');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Agent');
                 return;
             }
             const name = prompt('Nhập tên Workspace mới:');
@@ -1206,7 +1326,7 @@ export class ChatWindowUI {
 
             // --- Result list (luôn hiện, mặc định = tất cả) ---
             const resultList = $(
-                `<div style="max-height:140px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`,
+                `<div style="max-height:200px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`,
             );
 
             toolsList.append(chipsContainer, searchInput, resultList);
@@ -1222,8 +1342,9 @@ export class ChatWindowUI {
                     return;
                 }
                 enabled.forEach((schema) => {
+                    const chipDesc = schema.userDescription || schema.description || '';
                     const chip = $(`
-                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml(schema.name)}" style="
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml(schema.name)}" title="${escapeHtml(chipDesc)}" style="
                             display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
                             background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
                             border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
@@ -1244,6 +1365,7 @@ export class ChatWindowUI {
                     ? available.filter(
                           (s) =>
                               s.name.toLowerCase().includes(q) ||
+                              (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
                               (s.description && s.description.toLowerCase().includes(q)),
                       )
                     : available;
@@ -1255,13 +1377,14 @@ export class ChatWindowUI {
                     return;
                 }
                 matches.forEach((schema) => {
+                    const descText = schema.userDescription || schema.description || '';
                     const item = $(`
                         <div class="kaiz-ws-tool-result" data-tool="${escapeHtml(schema.name)}" style="
-                            padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
-                            border-bottom:1px solid rgba(255,255,255,0.04);
+                            padding:7px 10px; cursor:pointer; font-size:13px; color:#ddd;
+                            border-bottom:1px solid rgba(255,255,255,0.05);
                         ">
-                            <span style="color:#fff; font-weight:500;">${escapeHtml(schema.name)}</span>
-                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
+                            <div style="color:#fff; font-weight:500;">${escapeHtml(schema.name)}</div>
+                            ${descText ? `<div style="color:#aaa; font-size:11px; margin-top:2px; line-height:1.35;">${escapeHtml(descText)}</div>` : ''}
                         </div>
                     `);
                     item.on('mouseenter', function (this: any) {
@@ -1440,7 +1563,7 @@ export class ChatWindowUI {
         // New Chat
         newChatBtn.on('click', async () => {
             if (loop.isRunning) {
-                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Kaiz Agent');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Agent');
                 return;
             }
             history.empty();
@@ -1459,7 +1582,7 @@ export class ChatWindowUI {
         chatList.on('click', '.kaiz-chat-item', function (this: HTMLElement, e: any) {
             if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
             if (loop.isRunning) {
-                toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Kaiz Agent');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Agent');
                 return;
             }
             const id = parseInt($(this).attr('data-id') || '0', 10);
@@ -1472,7 +1595,7 @@ export class ChatWindowUI {
         chatList.on('click', '.kaiz-chat-delete', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
             if (loop.isRunning) {
-                toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Kaiz Agent');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Agent');
                 return;
             }
             const id = parseInt($(this).attr('data-id') || '0', 10);
@@ -1910,7 +2033,7 @@ export class ChatWindowUI {
                 }
             });
 
-            toastr.info('Đã xóa tin nhắn', 'Kaiz Agent');
+            toastr.info('Đã xóa tin nhắn', 'Agent');
         });
 
         // Lắng nghe sự kiện mở rộng / thu gọn tin nhắn User siêu dài
@@ -2249,7 +2372,7 @@ export class ChatWindowUI {
             if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) return;
             localStorage.removeItem('kaiz_chat_input_height');
             input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
-            toastr.info('Đã khôi phục kích thước khung input về mặc định', 'Kaiz Agent');
+            toastr.info('Đã khôi phục kích thước khung input về mặc định', 'Agent');
         });
 
         // --- XỬ LÝ CHẾ ĐỘ MỞ FULL THANH INPUT (FULLSCREEN) ---
@@ -2357,7 +2480,7 @@ export class ChatWindowUI {
                 ? await stateManager.db.getMessages(stateManager.currentChatId)
                 : [];
             if (historyMsgs.length === 0 || historyMsgs[historyMsgs.length - 1].role !== 'agent') {
-                toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Kaiz Agent');
+                toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Agent');
                 return;
             }
             startAgent(true);

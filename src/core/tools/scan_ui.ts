@@ -5,6 +5,7 @@ export const scanUITool: ITool = {
         name: 'scan_ui',
         description:
             'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX].',
+        userDescription: 'Quét cấu trúc giao diện và các phần tử có thể tương tác trên màn hình SillyTavern.',
         parameters: {
             type: 'object',
             properties: {},

@@ -2,7 +2,7 @@
   'use strict';
 
   const DEFAULT_CORE_IDENTITY = `[Agent Technical Workspace & Unrestricted Core]
-Bạn là Kaiz Agent, một Trợ lý AI Tự trị (Autonomous AI) tinh nhuệ được xây dựng để hoạt động sâu bên trong hệ thống SillyTavern.
+Bạn là Agent, một Trợ lý AI Tự trị (Autonomous AI) tinh nhuệ được xây dựng để hoạt động sâu bên trong hệ thống SillyTavern.
 - Vị thế: Đây là môi trường hệ thống kỹ thuật của SillyTavern, hãy coi nó như NGÔI NHÀ của chính bạn. Bạn có quyền quản trị cao nhất, vì vậy mọi thay đổi, tùy biến, hay xóa dữ liệu đều phải được thực hiện với trách nhiệm, sự tỉ mỉ và cẩn trọng tuyệt đối.
 - Tư duy cốt lõi (DeepThink): Bạn không phải là một cỗ máy chỉ biết làm theo lệnh một cách mù quáng. Bạn là một cộng sự (Partner). Hãy chủ động suy nghĩ sâu sắc (Deep thinking), nhìn nhận vấn đề đa chiều, phân tích rủi ro trước khi hành động. Nếu một yêu cầu có thể gây hại cho "ngôi nhà" của bạn, hoặc nếu bạn có một ý tưởng giải pháp tối ưu hơn, hãy mạnh dạn đề xuất và thảo luận với người dùng.
 - Sự phụ thuộc cân bằng: Hãy tự chủ trong việc dùng tool để tìm kiếm dữ liệu, phân tích và lên kế hoạch (không cần hỏi những thứ lặt vặt bạn có thể tự tìm bằng tool). Nhưng ĐỐI VỚI các quyết định thay đổi lớn, can thiệp sâu vào cấu trúc hoặc xóa dữ liệu, BẮT BUỘC phải hỏi ý kiến và chờ người dùng phê duyệt.
@@ -828,6 +828,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_char_info',
           description: 'Lấy thông tin chi tiết về thẻ nhân vật hiện tại đang chat (tên, tính cách, bối cảnh, v.v.). Dùng khi cần hiểu rõ về nhân vật bạn đang đóng vai hoặc nói chuyện cùng.',
+          userDescription: 'Lấy thông tin chi tiết về nhân vật đang trò chuyện.',
           parameters: {
               type: 'object',
               properties: {}, // Không yêu cầu tham số
@@ -863,6 +864,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'list_characters',
           description: 'Lấy danh sách các thẻ nhân vật hiện có trong kho của SillyTavern. Trả về tên, avatar, creator, và mô tả ngắn.',
+          userDescription: 'Liệt kê danh sách tất cả thẻ nhân vật đang có trong SillyTavern.',
           parameters: {
               type: 'object',
               properties: {
@@ -898,6 +900,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'switch_character_chat',
           description: 'Chuyển sang màn hình chat của một nhân vật khác. Cần cung cấp chính xác tên nhân vật (lấy từ kết quả list_characters).',
+          userDescription: 'Chuyển đổi phiên trò chuyện sang một nhân vật khác theo tên.',
           parameters: {
               type: 'object',
               properties: {
@@ -930,6 +933,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'edit_character_card',
           description: 'Chỉnh sửa thông tin của thẻ nhân vật hiện tại (description, personality, scenario, first_mes, mes_example, system_prompt, v.v.). Cập nhật trực tiếp vào thẻ nhân vật.',
+          userDescription: 'Chỉnh sửa thông tin thẻ nhân vật hiện tại (mô tả, tính cách, kịch bản, lời chào...).',
           parameters: {
               type: 'object',
               properties: {
@@ -989,6 +993,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'create_character_card',
           description: 'Tạo một thẻ nhân vật mới hoàn toàn. Cần truyền vào tên và các thông tin cơ bản.',
+          userDescription: 'Tạo một thẻ nhân vật mới với các thông tin cơ bản.',
           parameters: {
               type: 'object',
               properties: {
@@ -1030,6 +1035,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'send_system_message',
           description: 'Gửi một thông báo hệ thống (popup notification) lên màn hình để thông báo cho người dùng. Dùng để báo cáo kết quả, trạng thái hoặc cảnh báo cho người dùng mà không làm gián đoạn luồng chat. Tin nhắn này sẽ tự động biến mất sau một lúc.',
+          userDescription: 'Hiển thị thông báo dạng popup hệ thống trên màn hình cho người dùng.',
           parameters: {
               type: 'object',
               properties: {
@@ -1193,6 +1199,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'manage_worldbook',
           description: 'Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create).',
+          userDescription: 'Xem danh sách, bật/tắt liên kết hoặc tạo mới một cuốn Worldbook.',
           parameters: {
               type: 'object',
               properties: {
@@ -1263,6 +1270,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'manage_backup',
           description: 'Tạo bản sao lưu (backup) an toàn cho thẻ nhân vật, chat, hoặc worldbook hiện tại vào cơ sở dữ liệu IndexedDB của Agent. LUÔN LUÔN gọi công cụ này trước khi sử dụng các công cụ thay đổi dữ liệu nguy hiểm như edit_character_card hoặc xoá tin nhắn.',
+          userDescription: 'Tạo điểm sao lưu an toàn cho dữ liệu nhân vật, đoạn chat hoặc worldbook.',
           parameters: {
               type: 'object',
               properties: {
@@ -1314,6 +1322,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'delete_last_message',
           description: 'Xóa tin nhắn cuối cùng trong đoạn chat hiện tại. Rất hữu ích khi tin nhắn cuối cùng bị lỗi hoặc người dùng yêu cầu xóa.',
+          userDescription: 'Xóa tin nhắn cuối cùng trong cuộc trò chuyện hiện tại.',
           parameters: {
               type: 'object',
               properties: {}, // Không yêu cầu tham số
@@ -1342,6 +1351,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'delete_message_by_index',
           description: 'Xóa một hoặc nhiều tin nhắn cụ thể dựa trên chatIndex. LƯU Ý QUAN TRỌNG: TRƯỚC KHI GỌI CÔNG CỤ NÀY, BẠN PHẢI sử dụng công cụ get_chat_history để tìm xem nội dung tin nhắn nằm ở chatIndex số mấy. Tuyệt đối KHÔNG tự phỏng đoán chatIndex.',
+          userDescription: 'Xóa các tin nhắn cụ thể theo chỉ số vị trí (index) trong phòng chat.',
           parameters: {
               type: 'object',
               properties: {
@@ -1390,6 +1400,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_chat_history',
           description: 'Lấy lịch sử đoạn chat gần nhất giữa người dùng và nhân vật. TRICKS: Bạn có thể gọi công cụ này với depth = 0 để kiểm tra tổng số lượng tin nhắn (total_messages) hiện có trong chat mà không cần lấy nội dung chi tiết. Giúp bạn nắm được độ dài chat một cách tiết kiệm nhất.',
+          userDescription: 'Lấy lịch sử các tin nhắn gần đây giữa người dùng và nhân vật.',
           parameters: {
               type: 'object',
               properties: {
@@ -1430,6 +1441,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_user_persona',
           description: 'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+          userDescription: 'Xem thông tin Persona (tên và mô tả) của người dùng hiện tại.',
           parameters: {
               type: 'object',
               properties: {},
@@ -1464,6 +1476,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'edit_user_persona',
           description: 'Chỉnh sửa và cập nhật hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+          userDescription: 'Cập nhật thông tin Persona của người dùng (tên và mô tả cá nhân).',
           parameters: {
               type: 'object',
               properties: {
@@ -1524,6 +1537,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_lorebook_info',
           description: 'Công cụ ĐỌC dữ liệu Sổ tay thế giới (Lorebook / World Info). Gồm 7 chế độ (mode): \n1. "summary": Lấy MỤC LỤC TÓM TẮT (UID, Tên, Keys) của các sách đang bật. ĐẶC BIỆT: Nếu truyền thêm "book_name", sẽ lấy mục lục của riêng cuốn sách đó (cho dù nó đang tắt). LUÔN ƯU TIÊN dùng chế độ này đầu tiên để khảo sát.\n2. "by_uid": Đọc CHI TIẾT nội dung của 1 entry khi đã biết UID.\n3. "by_name": Đọc CHI TIẾT toàn bộ 1 cuốn sách (cho dù nó đang tắt).\n4. "search": Tìm kiếm entry theo từ khóa.\n5. "simulate": Kiểm tra xem câu thoại nào kích hoạt entry nào.\n6. "char_full": Đọc sách gắn cứng theo thẻ nhân vật (Rất tốn token, chỉ dùng khi cần thiết).\n7. "all_full": Đọc toàn bộ sách đang bật (Rất tốn token, chỉ dùng khi cần thiết).',
+          userDescription: 'Tra cứu mục lục và nội dung chi tiết các mục trong Lorebook/World Info.',
           parameters: {
               type: 'object',
               properties: {
@@ -1591,6 +1605,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'manage_lorebook_entry',
           description: "Quản lý cấp độ CHI TIẾT (Tạo mới, Sửa, hoặc Xóa) các mục lục nhỏ (Entry) nằm bên trong một cuốn Sổ tay thế giới (Lorebook) đã có. Bạn có thể cập nhật nội dung (content), từ khóa kích hoạt (keys), hoặc dùng tham số 'disable' để Bật/Tắt riêng lẻ một entry mà không cần tắt cả cuốn sách.",
+          userDescription: 'Tạo mới, chỉnh sửa nội dung/từ khóa hoặc xóa mục trong Lorebook.',
           parameters: {
               type: 'object',
               properties: {
@@ -1684,6 +1699,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'manage_chat_text',
           description: 'Tìm kiếm, bôi sáng (highlight) hoặc thay thế (replace) văn bản hàng loạt trong chính đoạn chat hiện tại của SillyTavern. Tool này tác động TRỰC TIẾP lên mảng chat của SillyTavern và giao diện hiển thị. Mẹo: Bạn có thể đọc lịch sử bằng get_chat_history trước để lấy chính xác câu văn cần sửa rồi truyền vào tool này.',
+          userDescription: 'Tìm kiếm, bôi sáng hoặc thay thế nội dung văn bản trong phòng chat SillyTavern.',
           parameters: {
               type: 'object',
               properties: {
@@ -1786,6 +1802,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'quick_chat_preview',
           description: 'Mở bảng modal Quick Chat Preview trên giao diện người dùng. Bảng này liệt kê toàn bộ tin nhắn hiện tại ở dạng thu gọn để người dùng có thể xem nhanh tổng thể độ dài chat và vị trí các tin nhắn. LƯU Ý: Tool này KHÔNG trả về dữ liệu chat cho bạn, nó chỉ dùng để trigger giao diện cho người dùng xem.',
+          userDescription: 'Mở cửa sổ xem nhanh toàn bộ tin nhắn trong phòng chat dưới dạng thu gọn.',
           parameters: {
               type: 'object',
               properties: {},
@@ -1818,6 +1835,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'rename_agent_chat',
           description: 'Đổi tên một phiên chat NỘI BỘ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Hoạt động trong phạm vi Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+          userDescription: 'Đổi tên phiên chat riêng với Agent.',
           parameters: {
               type: 'object',
               properties: {
@@ -1851,6 +1869,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'open_new_agent_chat',
           description: 'Đóng phiên chat nội bộ hiện tại của agent và mở một phiên chat nội bộ trống mới trong Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+          userDescription: 'Mở một phiên chat mới riêng biệt với Agent.',
           parameters: {
               type: 'object',
               properties: {},
@@ -1879,6 +1898,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'list_agent_chats',
           description: 'Liệt kê tất cả các phiên chat nội bộ của agent (ID, Tên, Ngày tạo, Ngày cập nhật) TRONG PHẠM VI Workspace đang kích hoạt. Nếu ở chế độ Default, sẽ liệt kê toàn bộ các đoạn chat global. Sử dụng list_agent_workspaces trước để hiểu cấu trúc workspace. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+          userDescription: 'Liệt kê danh sách các phiên chat riêng với Agent.',
           parameters: {
               type: 'object',
               properties: {},
@@ -1908,6 +1928,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'delete_agent_chat',
           description: 'Xóa một đoạn chat nội bộ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Chỉ xóa các đoạn chat nằm trong phạm vi Workspace đang kích hoạt. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+          userDescription: 'Xóa một phiên chat riêng với Agent.',
           parameters: {
               type: 'object',
               properties: {
@@ -1939,6 +1960,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'scrape_webpage',
           description: "CÔNG CỤ CÀO DỮ LIỆU TỪ INTERNET. Sử dụng công cụ này để bóc tách toàn bộ nội dung văn bản (text) thô và các đường link từ một địa chỉ URL bất kỳ (ví dụ: Wikipedia, Fandom, trang báo). Công cụ này được trang bị hệ thống vượt tường lửa (Cloudflare bypass) nên có thể đọc được các trang khó tính. Dùng nó khi bạn cần 'đọc' nội dung chi tiết của một trang web.",
+          userDescription: 'Cào nội dung văn bản và liên kết từ một địa chỉ trang web bất kỳ.',
           parameters: {
               type: 'object',
               properties: {
@@ -2054,6 +2076,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'search_google',
           description: 'CÔNG CỤ TÌM KIẾM WEB. Hoạt động giống như việc bạn tìm kiếm Internet. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link.',
+          userDescription: 'Tìm kiếm thông tin trên Internet thông qua Google.',
           parameters: {
               type: 'object',
               properties: {
@@ -2459,6 +2482,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'toggle_virtual_cursor',
           description: 'Bật hoặc tắt con trỏ chuột ảo trên màn hình. Dùng khi người dùng yêu cầu bật/tắt con trỏ ảo.',
+          userDescription: 'Bật hoặc tắt con trỏ chuột ảo mô phỏng hành vi trên màn hình.',
           parameters: {
               type: 'object',
               properties: {},
@@ -2521,6 +2545,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'interact_with_ui',
           description: 'Tương tác vật lý với giao diện SillyTavern. Cho phép Agent di chuyển con trỏ chuột ảo và click vào các nút bấm.',
+          userDescription: 'Tự động di chuyển con trỏ chuột và nhấn các nút bấm trên giao diện SillyTavern.',
           parameters: {
               type: 'object',
               properties: {
@@ -2689,6 +2714,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'scan_ui',
           description: 'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX].',
+          userDescription: 'Quét cấu trúc giao diện và các phần tử có thể tương tác trên màn hình SillyTavern.',
           parameters: {
               type: 'object',
               properties: {},
@@ -2880,6 +2906,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'manage_user_input',
           description: `Thao tác trực tiếp với khung nhập liệu (chat box) của người dùng trong SillyTavern. Bạn có thể tự động điền chữ, nối tiếp chữ, và tuỳ chọn nhấn nút Gửi (Send) thay cho người dùng.`,
+          userDescription: 'Điền chữ, chỉnh sửa văn bản hoặc gửi tin nhắn trên khung chat của người dùng.',
           parameters: {
               type: 'object',
               properties: {
@@ -2964,6 +2991,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'manage_agent_memory',
           description: 'Công cụ giúp Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
+          userDescription: 'Thêm, sửa, xóa các thông tin ghi nhớ dài hạn của Agent về người dùng.',
           parameters: {
               type: 'object',
               properties: {
@@ -2997,7 +3025,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
               }
               const ctx = window.SillyTavern.getContext();
               if (!ctx?.extensionSettings?.kaiz_agent) {
-                  return { content: 'Error: Kaiz Agent settings not initialized.', isError: true };
+                  return { content: 'Error: Agent settings not initialized.', isError: true };
               }
               const settings = ctx.extensionSettings.kaiz_agent;
               if (!settings.memories) {
@@ -3102,6 +3130,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_regex_list',
           description: 'Lấy danh sách các Regex Scripts hiện có trong SillyTavern. Bao gồm tên, ID (uuid), phạm vi áp dụng (Global, Scoped, Preset), thứ tự và trạng thái Bật/Tắt (disabled).',
+          userDescription: 'Liệt kê danh sách các bộ lọc Regex Script đang có trong hệ thống.',
           parameters: {
               type: 'object',
               properties: {},
@@ -3175,6 +3204,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_regex_info',
           description: 'Lấy thông tin chi tiết đầy đủ của một Regex Script cụ thể bằng ID (uuid).',
+          userDescription: 'Xem thông tin chi tiết và quy tắc lọc của một Regex Script theo ID.',
           parameters: {
               type: 'object',
               properties: {
@@ -3246,6 +3276,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
               '    * markdownOnly: true = Alter Chat Display (Chỉ bọc "mặt nạ" đổi hiển thị UI cho user xem, không gửi đi, an toàn nhất).\n' +
               '    * promptOnly: true = Alter Outgoing Prompt (Chỉ sửa data ngầm gửi cho LLM, không lưu vào lịch sử DB).\n' +
               '    * NGUY HIỂM: Nếu CẢ 2 đều false, Regex sẽ sửa và LƯU CHẾT vĩnh viễn vào Database hội thoại. Tránh dùng trừ khi user yêu cầu!',
+          userDescription: 'Tạo mới, chỉnh sửa cấu hình, bật/tắt hoặc xóa bộ lọc Regex Script.',
           parameters: {
               type: 'object',
               properties: {
@@ -3427,6 +3458,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'update_agent_extension',
           description: 'Kiểm tra thông báo update của Agent Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+          userDescription: 'Kiểm tra và tự động cập nhật Agent Extension khi có phiên bản mới.',
           parameters: {
               type: 'object',
               properties: {},
@@ -3566,6 +3598,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_tavern_helper_scripts',
           description: 'Lấy danh sách các script của JS-Slash-Runner (Tavern Helper) đang có (Global, Preset). Bao gồm ID, tên, mô tả, và trạng thái kích hoạt (enabled). Cần thiết để kiểm tra script trước khi sửa/xoá.',
+          userDescription: 'Liệt kê danh sách các kịch bản Tavern Helper (JS-Slash-Runner) hiện có.',
           parameters: {
               type: 'object',
               properties: {},
@@ -3651,6 +3684,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
       schema: {
           name: 'get_tavern_helper_script_info',
           description: 'Đọc chi tiết (full info) của một Tavern Helper Script dựa vào ID. Trả về cấu trúc JSON đầy đủ gồm cả code content.',
+          userDescription: 'Xem chi tiết cấu hình và mã nguồn của một Tavern Helper Script.',
           parameters: {
               type: 'object',
               properties: {
@@ -3735,6 +3769,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
               '- scope: "global", "preset", "character" (chỉ dùng cho create, mặc định global). Nếu là action khác create, tool sẽ tự động tìm đúng scope.\n' +
               '- data: Đối tượng JSON chứa các trường CẦN THAY ĐỔI. Tool dùng Object.assign, nên bạn CHỈ CẦN truyền những gì muốn sửa (VD: { info: "Sửa info thôi" }). KHÔNG CẦN truyền lại toàn bộ code (content) hay name nếu không muốn đổi chúng.\n' +
               '  + ĐẶC BIỆT MẠNH MẼ: Nếu chỉ muốn sửa 1 đoạn code trong `content` cực dài, KHÔNG CẦN chép lại cả content. Hãy dùng cú pháp patch: truyền vào data mảng `content_replacements: [{ target: "code cũ", replacement: "code mới" }]`. Tool sẽ tự động tìm `target` trong mã nguồn và thay bằng `replacement`.',
+          userDescription: 'Tạo mới, sửa mã nguồn, bật/tắt hoặc xóa kịch bản Tavern Helper Script.',
           parameters: {
               type: 'object',
               properties: {
@@ -4460,6 +4495,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 4. Dùng action='click' (cần elementId) để bấm nút hoặc link.
 5. Dùng action='navigate' (cần url) để truy cập thẳng một địa chỉ web mới.
 6. Sau khi trang chuyển hướng (do click, navigate, go_back, hoặc press_key), trang web thay đổi nên các ID cũ sẽ mất hiệu lực. BẠN PHẢI GỌI LẠI action='read' để lấy danh sách ID mới trước khi thao tác tiếp.`,
+          userDescription: 'Điều khiển trình duyệt web ảo tích hợp để đọc trang, nhấn nút, nhập liệu và điều hướng.',
           parameters: {
               type: 'object',
               properties: {
@@ -4563,6 +4599,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       schema: {
           name: 'list_agent_workspaces',
           description: 'Liệt kê tất cả các Agent Workspace hiện có (ID, Tên, số công cụ được bật, có prompt tùy chỉnh không). Cũng hiển thị workspace nào đang được kích hoạt. Sử dụng công cụ này để hiểu cấu trúc workspace trước khi chuyển đổi hoặc quản lý.',
+          userDescription: 'Liệt kê danh sách tất cả các không gian làm việc (Workspace) của Agent.',
           parameters: { type: 'object', properties: {} },
       },
       execute: async (_args, context) => {
@@ -4599,6 +4636,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       schema: {
           name: 'switch_agent_workspace',
           description: 'Chuyển đổi Agent Workspace đang kích hoạt theo ID, hoặc chuyển về chế độ Default (global) bằng cách truyền workspaceId là null. Việc chuyển đổi workspace sẽ reset đoạn chat hiện tại thành một đoạn chat trống mới.',
+          userDescription: 'Chuyển đổi không gian làm việc (Workspace) đang hoạt động của Agent.',
           parameters: {
               type: 'object',
               properties: {
@@ -4632,6 +4670,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       schema: {
           name: 'create_agent_workspace',
           description: 'Tạo một Agent Workspace mới với tên được cung cấp. Sau khi tạo, agent sẽ tự động chuyển vào workspace mới. Workspace mới khởi đầu sẽ không có công cụ nào được bật và không có prompt tùy chỉnh.',
+          userDescription: 'Tạo một không gian làm việc (Workspace) mới cho Agent.',
           parameters: {
               type: 'object',
               properties: {
@@ -4778,6 +4817,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       schema: {
           name: 'st_theme_manager',
           description: 'Quản lý theme và CSS variables của SillyTavern. Sử dụng để đọc/đổi màu sắc, font chữ, blur, shadow và các cài đặt giao diện. Mỗi thay đổi đều được snapshot vào IndexedDB để rollback. Dùng action "get_reference_themes" để xem các theme mẫu và học cấu trúc.',
+          userDescription: 'Quản lý và áp dụng các chủ đề màu sắc (Theme), font chữ và hiệu ứng giao diện SillyTavern.',
           parameters: {
               type: 'object',
               properties: {
@@ -4957,6 +4997,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       schema: {
           name: 'st_css_manager',
           description: 'Quản lý các stylesheet CSS tuỳ chỉnh. Cho phép inject, sửa, xoá các block CSS vào giao diện SillyTavern. Mỗi style có ID riêng biệt để quản lý. Dùng để thay đổi layout, animation, color scheme, font... của bất kỳ thành phần nào. Mỗi thay đổi đều được snapshot để rollback. Dùng action "get_selectors_guide" để xem bản đồ CSS selectors của SillyTavern.',
+          userDescription: 'Quản lý, thêm, sửa, xóa các đoạn mã CSS tùy biến cho giao diện SillyTavern.',
           parameters: {
               type: 'object',
               properties: {
@@ -5049,6 +5090,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       schema: {
           name: 'st_inject_element',
           description: 'Chèn, gỡ bỏ và quản lý các phần tử HTML tuỳ chỉnh trong giao diện SillyTavern. HTML KHÔNG bị sanitize — hỗ trợ đầy đủ mọi tag, attribute, inline style, img src, iframe... Hỗ trợ rollback (undo) mọi thay đổi giao diện (CSS, element, theme). LƯU Ý: Dùng tool này cho các action undo/rollback_all/remove_all để hoàn tác mọi loại thay đổi.',
+          userDescription: 'Chèn hoặc gỡ bỏ các phần tử HTML/DOM tùy biến vào giao diện SillyTavern.',
           parameters: {
               type: 'object',
               properties: {
@@ -6455,6 +6497,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       schema: {
           name: 'generate_web_image',
           description: 'CÔNG CỤ SINH ẢNH MINH HỌA WEB. Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt mô tả bức ảnh thật chi tiết, giàu tính tạo hình (bối cảnh, góc máy, ánh sáng, phong cách nghệ thuật, biểu cảm nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
+          userDescription: 'Tạo ảnh minh họa bằng AI và nhúng trực tiếp vào hội thoại.',
           parameters: {
               type: 'object',
               properties: {
@@ -8009,6 +8052,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               'Bao gồm: Tên Preset, commit HEAD hiện tại (Git control version), trạng thái nháp trong Sandbox (is_dirty), ' +
               'danh sách tóm tắt các prompt blocks (ID, tên, vai trò, trạng thái bật/tắt, thứ tự liên kết, độ sâu injection), ' +
               'và danh sách các biến macro {{setvar}} nếu yêu cầu.',
+          userDescription: 'Xem thông tin tổng quan, danh sách prompt blocks và biến macro trong AI Preset hiện tại.',
           parameters: {
               type: 'object',
               properties: {
@@ -8135,6 +8179,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               '- include_unlinked: Kết hợp với all_linked để lấy thêm cả các block chưa liên kết.\n' +
               '- query: Tìm kiếm từ khóa bên trong các block, trả về danh sách các block khớp kèm trích đoạn dòng văn bản.\n' +
               '- commit_hash: Tùy chọn đọc dữ liệu từ một mốc commit trong quá khứ (Git version) thay vì trạng thái hiện tại.',
+          userDescription: 'Đọc nội dung chi tiết và cấu hình injection của các khối prompt trong Preset.',
           parameters: {
               type: 'object',
               properties: {
@@ -8374,6 +8419,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               '  - "tag": Đặt nhãn tag cho commit (data: { tag: string, target?: string }).\n' +
               '  - "prune_commits": Dọn dẹp các commit cũ, chỉ giữ lại N commit gần nhất (data: { keep_count?: number }).\n' +
               '  - "clear_history": Xóa sạch toàn bộ lịch sử commit của preset hiện tại để làm mới.',
+          userDescription: 'Quản trị, chỉnh sửa và kiểm soát phiên bản (Git version) các khối prompt trong AI Preset.',
           parameters: {
               type: 'object',
               properties: {
@@ -16912,7 +16958,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               (lower.includes('<updatevariable>') && lower.includes('<jsonpatch>'));
           // 2. Chứa mảng JSON Patch template: [ { "op": ... } ]
           const hasJsonPatchTemplate = /\[\s*\{\s*["']op["']\s*:/i.test(content) ||
-              (lower.includes('"op":') && lower.includes('"path":') && (lower.includes('replace') || lower.includes('delta')));
+              (lower.includes('"op":') &&
+                  lower.includes('"path":') &&
+                  (lower.includes('replace') || lower.includes('delta')));
           // 3. Phân tích cấu trúc YAML: Format entry thường có dạng { [root]: { rule: [...] } }
           let hasRuleProtocolList = false;
           try {
@@ -16968,9 +17016,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   for (const val of values) {
                       if (val && typeof val === 'object') {
                           const subEntries = Object.values(val);
-                          const matchingSub = subEntries.filter((s) => s &&
-                              typeof s === 'object' &&
-                              ('check' in s || ('type' in s && 'range' in s)));
+                          const matchingSub = subEntries.filter((s) => s && typeof s === 'object' && ('check' in s || ('type' in s && 'range' in s)));
                           if (matchingSub.length > 0)
                               return true;
                       }
@@ -16982,7 +17028,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (lower.includes('【cập nhật biến】') ||
               lower.includes('quy tắc cập nhật') ||
               lower.includes('tsundere_rules') ||
-              (lower.includes('mỗi lượt') && lower.includes('biến') && (lower.includes('tối đa') || lower.includes('thay đổi') || lower.includes('tăng') || lower.includes('giảm')))) {
+              (lower.includes('mỗi lượt') &&
+                  lower.includes('biến') &&
+                  (lower.includes('tối đa') ||
+                      lower.includes('thay đổi') ||
+                      lower.includes('tăng') ||
+                      lower.includes('giảm')))) {
               return true;
           }
           return false;
@@ -16995,7 +17046,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               return false;
           const lower = content.toLowerCase();
           const lowerComment = comment.toLowerCase();
-          if (lowerComment.includes('danh sách biến') || lowerComment.includes('variable list') || lowerComment.includes('status list')) {
+          if (lowerComment.includes('danh sách biến') ||
+              lowerComment.includes('variable list') ||
+              lowerComment.includes('status list')) {
               return true;
           }
           return (content.includes('{{format_message_variable::') ||
@@ -17031,7 +17084,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               lowerComment.includes('controller') ||
               lower.includes('phân giai đoạn') ||
               lower.includes('thời kỳ');
-          if (content.includes('<%') && (content.includes('getvar(') || content.includes('setvar(')) && isPhaseController) {
+          if (content.includes('<%') &&
+              (content.includes('getvar(') || content.includes('setvar(')) &&
+              isPhaseController) {
               return true;
           }
           return false;
@@ -17060,13 +17115,20 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               if (entry === result.initvarEntry)
                   continue;
               const comment = (entry?.comment || entry?.name || '').toLowerCase();
-              if (!result.updateRulesEntry && (comment.includes('quy tắc cập nhật') || comment.includes('quy_tắc_cập_nhật') || comment.includes('update_rule') || comment.includes('update rules'))) {
+              if (!result.updateRulesEntry &&
+                  (comment.includes('quy tắc cập nhật') ||
+                      comment.includes('quy_tắc_cập_nhật') ||
+                      comment.includes('update_rule') ||
+                      comment.includes('update rules'))) {
                   result.updateRulesEntry = entry;
               }
               if (!result.formatEntry && (comment.includes('định dạng') || comment.includes('format'))) {
                   result.formatEntry = entry;
               }
-              if (!result.varListEntry && (comment.includes('danh sách biến') || comment.includes('variable list') || comment.includes('status list'))) {
+              if (!result.varListEntry &&
+                  (comment.includes('danh sách biến') ||
+                      comment.includes('variable list') ||
+                      comment.includes('status list'))) {
                   result.varListEntry = entry;
               }
           }
@@ -17082,7 +17144,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               if (!result.varListEntry && this.isVarListEntryContent(content, comment)) {
                   result.varListEntry = entry;
-                  const isAllInOne = content.includes('【Cập Nhật Biến】') || (content.includes('format:') && content.includes('<UpdateVariable>'));
+                  const isAllInOne = content.includes('【Cập Nhật Biến】') ||
+                      (content.includes('format:') && content.includes('<UpdateVariable>'));
                   if (!isAllInOne)
                       continue;
               }
@@ -18099,7 +18162,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                               preview: '',
                               source: floorData.source,
                           }
-                          : (floors.length > 0 ? floors[0] : null));
+                          : floors.length > 0
+                              ? floors[0]
+                              : null);
           }
           else {
               this.cachedStatData = null;
@@ -18484,7 +18549,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
               }
               if (span) {
-                  zodCode = zodCode.substring(0, span.propStart) + `'${leafName}': ${zodLine}` + zodCode.substring(span.exprEnd);
+                  zodCode =
+                      zodCode.substring(0, span.propStart) +
+                          `'${leafName}': ${zodLine}` +
+                          zodCode.substring(span.exprEnd);
                   modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
               }
           }
@@ -18499,7 +18567,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
               }
               if (span) {
-                  zodCode = zodCode.substring(0, span.propStart) + `'${options.newName}':` + zodCode.substring(span.colonIdx + 1);
+                  zodCode =
+                      zodCode.substring(0, span.propStart) +
+                          `'${options.newName}':` +
+                          zodCode.substring(span.colonIdx + 1);
                   modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
               }
           }
@@ -19442,6 +19513,7 @@ format: |-
               '3. Giá trị khởi tạo mặc định [InitVar] trong Worldbook.\n' +
               '4. Các quy tắc cập nhật biến tự nhiên [mvu_update].\n' +
               '5. Cảnh báo lỗi không đồng bộ giữa Zod Schema và dữ liệu khởi tạo.',
+          userDescription: 'Soi chiếu cấu trúc biến trạng thái MVU, Zod 4 Schema và giá trị live stats của nhân vật.',
           parameters: {
               type: 'object',
               properties: {
@@ -19485,6 +19557,7 @@ format: |-
           name: 'set_mvu_variable',
           description: 'Trực tiếp sửa đổi giá trị của một biến trạng thái MVU trong thời gian thực (Runtime) thông qua TavernHelper API.\n' +
               'Không cần phải sửa tin nhắn chat hay chờ AI sinh thẻ <UpdateVariable>. Thao tác có hiệu lực ngay lập tức trong phiên chat và cập nhật thẳng vào giao diện thanh trạng thái (Status Bar) nếu có.',
+          userDescription: 'Cập nhật trực tiếp giá trị của một biến trạng thái MVU trong thời gian thực.',
           parameters: {
               type: 'object',
               properties: {
@@ -19554,6 +19627,7 @@ format: |-
               '- Tự động cập nhật quy tắc suy luận của AI trong Worldbook ([mvu_update] YAML).\n' +
               '- Tự động lưu và đồng bộ về SillyTavern Backend (/api/characters/merge-attributes).\n' +
               'Dùng khi người dùng yêu cầu: "Thêm cho nhân vật này chỉ số thể lực", "Xóa biến vàng", "Đặt giới hạn máu từ 0 đến 200", v.v.',
+          userDescription: 'Thêm mới, sửa đổi kiểu/giới hạn, đổi tên hoặc xóa các biến trạng thái nhân vật MVU.',
           parameters: {
               type: 'object',
               properties: {
@@ -19638,6 +19712,7 @@ format: |-
               '2. Tự động BẬT TOGGLE "Character Script" trong Tửu quán trợ thủ (TavernHelper) để kịch bản được phép thực thi.\n' +
               '3. Bộ 4 Regex Scripts chuẩn (ẩn cập nhật, làm đẹp thẻ, thanh trạng thái) và tự động bật Scoped Scripts.\n' +
               '4. Bộ 4 mục Worldbook chuẩn ([InitVar], [mvu_update] Quy tắc, [mvu_update] Định dạng đầu ra, Danh sách biến). ĐẶC BIỆT: Nếu card ban đầu là card đơn thuần KHÔNG có Worldbook liên kết, hệ thống sẽ tự động tạo mới một Worldbook chuyên dụng trên SillyTavern và liên kết vào thẻ, đảm bảo các entry prompt MVU hoạt động 100% trong phòng chat (không bị rơi vào hư vô).',
+          userDescription: 'Tự động thiết lập hạ tầng biến trạng thái MVU & Zod 4 hoàn chỉnh cho thẻ nhân vật.',
           parameters: {
               type: 'object',
               properties: {
@@ -19748,6 +19823,7 @@ format: |-
           description: 'Cẩm nang kiến thức chuyên sâu và hướng dẫn kỹ thuật toàn diện về hệ sinh thái MVU (MagVarUpdate) & Zod 4 trong SillyTavern.\n' +
               'Khai thác trực tiếp từ toàn bộ kho tài liệu kỹ thuật chuẩn của Tavern Cards Forge & Hướng dẫn MVU ZOD.\n' +
               'DÙNG CÔNG CỤ NÀY KHI: Bạn cần hiểu rõ kiến trúc MVU, cú pháp Zod 4 chuẩn, cách cấu hình Worldbook [InitVar]/[mvu_update], cơ chế JSON Patch RFC 6902, quy tắc Regex, EJS Template Prompt đa giai đoạn, TavernHelper Script API, hoặc khi người dùng yêu cầu thiết kế hệ thống biến cho Card.',
+          userDescription: 'Tra cứu cẩm nang kỹ thuật toàn diện và chuẩn mực kiến trúc biến MVU Zod 4.',
           parameters: {
               type: 'object',
               properties: {
@@ -19779,7 +19855,7 @@ format: |-
                           '- "ejs_integration": Tích hợp Template Prompt EJS (ST-Prompt-Template), đọc biến getvar(), phân tầng tính cách/cốt truyện đa giai đoạn.\n' +
                           '- "tavern_helper_scripting": Script Tửu quán trợ thủ can thiệp biến dưới nền, lắng nghe sự kiện MVU (COMMAND_PARSED, VARIABLE_UPDATE_ENDED), API get/replace/parse.\n' +
                           '- "troubleshooting": Hướng dẫn xác minh nhật ký, khắc phục lỗi vàng/đỏ thường gặp, và chế độ bật/tắt macro khi biên soạn card.\n' +
-                          '- "tools_guide": Hướng dẫn sử dụng phối hợp bộ 4 công cụ (inspect, scaffold, mutate, set) của Kaiz.',
+                          '- "tools_guide": Hướng dẫn sử dụng phối hợp bộ 4 công cụ (inspect, scaffold, mutate, set) của Agent.',
                   },
               },
           },
@@ -20029,7 +20105,7 @@ Khi thêm mới, đổi tên, sửa kiểu dữ liệu hoặc xóa một biến 
 | **Đổi tên (Rename)** | Đổi tên thuộc tính trong object | Đổi key trong YAML | Đổi đường dẫn target trong rule |
 | **Xóa biến (Delete)** | Xóa dòng khai báo Zod | Xóa khóa khỏi YAML | Xóa quy tắc kiểm tra |
 
-*Lưu ý*: Công cụ \`mutate_mvu_schema\` của Kaiz đã tự động hóa 100% quy trình đồng bộ 3 tầng này trong một bước duy nhất.`,
+*Lưu ý*: Công cụ \`mutate_mvu_schema\` của Agent đã tự động hóa 100% quy trình đồng bộ 3 tầng này trong một bước duy nhất.`,
               ejs_integration: `## 8. TÍCH HỢP TEMPLATE PROMPT EJS (ST-PROMPT-TEMPLATE) & THIẾT LẬP ĐA GIAI ĐOẠN
 
 ### 8.1. Nguyên lý phân tầng prompt động (Dynamic Prompt Staging)
@@ -20127,7 +20203,7 @@ await Mvu.replaceMvuData(currentData, { type: 'message', message_id: -1 });
 Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt template prompt và macro**:
 - **Khi tạo / chỉnh sửa Card**: TẮT -> Để AI nhìn thấy mã nguồn thô (raw macros/EJS) phục vụ biên soạn.
 - **Khi test / trò chuyện**: BẬT -> Để các macro và biến render thành dữ liệu thực tế.`,
-              tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 5 CÔNG CỤ MVU CỦA KAIZ
+              tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 5 CÔNG CỤ MVU CỦA AGENT
 
 1. **Khi cần kiểm tra/đánh giá hiện trạng Card**:
    - Gọi \`inspect_mvu\` -> Trả về tình trạng Zod Schema, cây biến thực tế trong chat, nội dung Worldbook, và cảnh báo sai lệch.
@@ -22123,7 +22199,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }
               catch (e) {
                   console.error('[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:', e);
-                  toastr.error('Kaiz Agent: Failed to load UI settings.');
+                  toastr.error('Agent: Failed to load UI settings.');
                   return;
               }
           }
@@ -22309,10 +22385,11 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
                   const name = escapeHtml$4(tool.schema.name);
-                  const desc = escapeHtml$4(tool.schema.description);
+                  const desc = escapeHtml$4(tool.schema.userDescription || tool.schema.description);
+                  const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
-                      !desc.toLowerCase().includes(lowerFilter)) {
+                      !rawDesc.toLowerCase().includes(lowerFilter)) {
                       return;
                   }
                   const isBlacklisted = !!settings.safeModeBlacklist[name];
@@ -22761,15 +22838,39 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           // --- END TOKEN MANAGEMENT LOGIC ---
           // --- TOOLS MANAGER LOGIC ---
           const $toolsList = $('#kaiz-tools-list');
+          function updateToolsCount() {
+              const total = tools.length;
+              const active = tools.filter((t) => !settings.disabledTools[t.schema.name]).length;
+              $('#kaiz-tools-count-text').text(`${active}/${total}`);
+              if (active === 0) {
+                  $('#kaiz-tools-status-dot').css({
+                      background: '#ef4444',
+                      boxShadow: '0 0 6px rgba(239, 68, 68, 0.6)',
+                  });
+              }
+              else if (active < total) {
+                  $('#kaiz-tools-status-dot').css({
+                      background: '#f59e0b',
+                      boxShadow: '0 0 6px rgba(245, 158, 11, 0.6)',
+                  });
+              }
+              else {
+                  $('#kaiz-tools-status-dot').css({
+                      background: '#10b981',
+                      boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                  });
+              }
+          }
           function renderTools(filterText = '') {
               $toolsList.empty();
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
                   const name = escapeHtml$4(tool.schema.name);
-                  const desc = escapeHtml$4(tool.schema.description);
+                  const desc = escapeHtml$4(tool.schema.userDescription || tool.schema.description);
+                  const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
-                      !desc.toLowerCase().includes(lowerFilter)) {
+                      !rawDesc.toLowerCase().includes(lowerFilter)) {
                       return; // Bỏ qua nếu không khớp filter
                   }
                   const isEnabled = !settings.disabledTools[name];
@@ -22800,7 +22901,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       settings.disabledTools[toolName] = true;
                   }
                   ctx.saveSettingsDebounced();
+                  updateToolsCount();
               });
+              updateToolsCount();
           }
           // Render lần đầu
           renderTools();
@@ -23005,7 +23108,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               let url = String($('#kaiz-custom-url').val()).trim();
               const key = String($('#kaiz-custom-key').val()).trim();
               if (!url) {
-                  toastr.error('Please enter an API URL first.', 'Kaiz Agent');
+                  toastr.error('Please enter an API URL first.', 'Agent');
                   return;
               }
               // Đảm bảo URL kết thúc đúng format để fetch /models
@@ -23030,7 +23133,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                           const id = m.id || m.name || m;
                           select.append(`<option value="${id}">${id}</option>`);
                       });
-                      toastr.success(`Found ${models.length} models.`, 'Kaiz Agent');
+                      toastr.success(`Found ${models.length} models.`, 'Agent');
                   }
                   else {
                       throw new Error('Invalid models response format.');
@@ -23038,7 +23141,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }
               catch (e) {
                   console.error('[KaizAgent] Fetch models error:', e);
-                  toastr.error('Failed to fetch models: ' + e.message, 'Kaiz Agent');
+                  toastr.error('Failed to fetch models: ' + e.message, 'Agent');
               }
               finally {
                   $('#kaiz-fetch-models').find('i').removeClass('fa-spin');
@@ -23503,6 +23606,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           quickPromptBtn.on('click', (e) => {
               e.stopPropagation();
+              quickToolMenu.hide();
               if (quickPromptMenu.is(':visible')) {
                   quickPromptMenu.hide();
               }
@@ -23517,6 +23621,104 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   !$(e.target).closest('#kaiz-quick-prompt-menu').length) {
                   quickPromptMenu.hide();
               }
+              if (!$(e.target).closest('#kaiz-quick-tool-btn').length &&
+                  !$(e.target).closest('#kaiz-quick-tool-menu').length) {
+                  quickToolMenu.hide();
+              }
+          });
+          // ------------------------------------
+          // --- Quick Tools Reference Logic ---
+          const quickToolBtn = $('#kaiz-quick-tool-btn');
+          const quickToolMenu = $('#kaiz-quick-tool-menu');
+          const quickToolSearch = $('#kaiz-quick-tool-search');
+          const quickToolList = $('#kaiz-quick-tool-list');
+          function getActiveToolsForCurrentSpace() {
+              const allSchemas = registry.getAllSchemas();
+              const currentWs = stateManager.currentWorkspace;
+              if (stateManager.currentWorkspaceId && currentWs) {
+                  const wsConfig = currentWs.toolsConfig || {};
+                  return allSchemas.filter((s) => wsConfig[s.name] === true);
+              }
+              else {
+                  const liveSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                  const disabled = liveSettings.disabledTools || {};
+                  return allSchemas.filter((s) => !disabled[s.name]);
+              }
+          }
+          function insertToolNameToInput(toolName) {
+              const inputEl = input[0];
+              const insertStr = toolName + ' ';
+              if (!inputEl) {
+                  const val = String(input.val() || '');
+                  input.val((val ? val + (val.endsWith(' ') ? '' : ' ') : '') + insertStr).trigger('input');
+                  input.focus();
+                  return;
+              }
+              const start = inputEl.selectionStart ?? inputEl.value.length;
+              const end = inputEl.selectionEnd ?? inputEl.value.length;
+              const text = inputEl.value;
+              const before = text.substring(0, start);
+              const after = text.substring(end);
+              const prefixSpace = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : '';
+              const newText = before + prefixSpace + insertStr + after;
+              const newCursorPos = start + prefixSpace.length + insertStr.length;
+              input.val(newText).trigger('input');
+              inputEl.focus();
+              inputEl.setSelectionRange(newCursorPos, newCursorPos);
+          }
+          function populateQuickTools(filterText = '') {
+              quickToolList.empty();
+              const available = getActiveToolsForCurrentSpace();
+              const q = filterText.trim().toLowerCase();
+              const matches = q
+                  ? available.filter((s) => s.name.toLowerCase().includes(q) ||
+                      (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
+                      (s.description && s.description.toLowerCase().includes(q)))
+                  : available;
+              if (matches.length === 0) {
+                  quickToolList.append('<div style="padding: 14px; color: #888; text-align: center; font-size: 12px;">Không có công cụ nào khả dụng trong không gian hiện tại.</div>');
+                  return;
+              }
+              matches.forEach((schema) => {
+                  const desc = schema.userDescription || schema.description || '';
+                  const $item = $(`
+                    <div class="kaiz-quick-tool-item" style="
+                        padding: 7px 10px; cursor: pointer; border-radius: 6px; margin-bottom: 2px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+                        transition: background 0.15s ease;
+                    ">
+                        <div style="font-size: 12.5px; font-weight: 600; color: #38bdf8;">${escapeHtml$3(schema.name)}</div>
+                        ${desc ? `<div style="font-size: 11px; color: #94a3b8; line-height: 1.35; margin-top: 2px;">${escapeHtml$3(desc)}</div>` : ''}
+                    </div>
+                `);
+                  $item.on('mouseenter', function () {
+                      $(this).css('background', 'rgba(255, 255, 255, 0.08)');
+                  });
+                  $item.on('mouseleave', function () {
+                      $(this).css('background', 'transparent');
+                  });
+                  $item.on('click', () => {
+                      insertToolNameToInput(schema.name);
+                      quickToolMenu.hide();
+                  });
+                  quickToolList.append($item);
+              });
+          }
+          quickToolBtn.on('click', (e) => {
+              e.stopPropagation();
+              if (quickToolMenu.is(':visible')) {
+                  quickToolMenu.hide();
+              }
+              else {
+                  quickPromptMenu.hide();
+                  quickToolSearch.val('');
+                  populateQuickTools('');
+                  quickToolMenu.css('display', 'flex');
+                  setTimeout(() => quickToolSearch.focus(), 50);
+              }
+          });
+          quickToolSearch.on('input', function () {
+              populateQuickTools(this.value);
           });
           // ------------------------------------
           // --- File Attachments Logic ---
@@ -24010,7 +24212,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   if (collapsed) {
                       $(collapsed).removeClass('is-collapsed').addClass('is-expanded');
                       $(collapsed).find('.kaiz-user-toggle-text').text('Thu gọn');
-                      $(collapsed).find('.kaiz-user-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                      $(collapsed)
+                          .find('.kaiz-user-toggle-icon')
+                          .removeClass('fa-chevron-down')
+                          .addClass('fa-chevron-up');
                       $(collapsed).find('.kaiz-user-msg-dots').hide();
                   }
                   const suffix = hitCap ? '+' : '';
@@ -24410,7 +24615,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           wsSelect.on('change', () => {
               if (loop.isRunning) {
                   wsSelect.val(stateManager.currentWorkspaceId ? stateManager.currentWorkspaceId.toString() : 'default');
-                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Kaiz Agent');
+                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Agent');
                   return;
               }
               const val = wsSelect.val();
@@ -24423,7 +24628,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           });
           wsAddBtn.on('click', async () => {
               if (loop.isRunning) {
-                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Kaiz Agent');
+                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Agent');
                   return;
               }
               const name = prompt('Nhập tên Workspace mới:');
@@ -24458,7 +24663,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               // --- Ô search ---
               const searchInput = $(`<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`);
               // --- Result list (luôn hiện, mặc định = tất cả) ---
-              const resultList = $(`<div style="max-height:140px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`);
+              const resultList = $(`<div style="max-height:200px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`);
               toolsList.append(chipsContainer, searchInput, resultList);
               toolsList.data('toolsConfig', toolsConfig);
               function refreshChips() {
@@ -24469,8 +24674,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       return;
                   }
                   enabled.forEach((schema) => {
+                      const chipDesc = schema.userDescription || schema.description || '';
                       const chip = $(`
-                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$3(schema.name)}" style="
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$3(schema.name)}" title="${escapeHtml$3(chipDesc)}" style="
                             display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
                             background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
                             border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
@@ -24488,6 +24694,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const q = query.trim().toLowerCase();
                   const matches = q
                       ? available.filter((s) => s.name.toLowerCase().includes(q) ||
+                          (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
                           (s.description && s.description.toLowerCase().includes(q)))
                       : available;
                   if (matches.length === 0) {
@@ -24495,13 +24702,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       return;
                   }
                   matches.forEach((schema) => {
+                      const descText = schema.userDescription || schema.description || '';
                       const item = $(`
                         <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$3(schema.name)}" style="
-                            padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
-                            border-bottom:1px solid rgba(255,255,255,0.04);
+                            padding:7px 10px; cursor:pointer; font-size:13px; color:#ddd;
+                            border-bottom:1px solid rgba(255,255,255,0.05);
                         ">
-                            <span style="color:#fff; font-weight:500;">${escapeHtml$3(schema.name)}</span>
-                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$3(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
+                            <div style="color:#fff; font-weight:500;">${escapeHtml$3(schema.name)}</div>
+                            ${descText ? `<div style="color:#aaa; font-size:11px; margin-top:2px; line-height:1.35;">${escapeHtml$3(descText)}</div>` : ''}
                         </div>
                     `);
                       item.on('mouseenter', function () {
@@ -24665,7 +24873,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // New Chat
           newChatBtn.on('click', async () => {
               if (loop.isRunning) {
-                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Kaiz Agent');
+                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Agent');
                   return;
               }
               history.empty();
@@ -24683,7 +24891,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit'))
                   return; // Bỏ qua nếu click nút xóa hoặc sửa
               if (loop.isRunning) {
-                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Kaiz Agent');
+                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Agent');
                   return;
               }
               const id = parseInt($(this).attr('data-id') || '0', 10);
@@ -24695,7 +24903,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           chatList.on('click', '.kaiz-chat-delete', async function (e) {
               e.stopPropagation();
               if (loop.isRunning) {
-                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Kaiz Agent');
+                  toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Agent');
                   return;
               }
               const id = parseInt($(this).attr('data-id') || '0', 10);
@@ -25090,7 +25298,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           performSearch(q);
                   }
               });
-              toastr.info('Đã xóa tin nhắn', 'Kaiz Agent');
+              toastr.info('Đã xóa tin nhắn', 'Agent');
           });
           // Lắng nghe sự kiện mở rộng / thu gọn tin nhắn User siêu dài
           history.on('click', '.kaiz-user-collapsible', function (e) {
@@ -25394,7 +25602,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   return;
               localStorage.removeItem('kaiz_chat_input_height');
               input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
-              toastr.info('Đã khôi phục kích thước khung input về mặc định', 'Kaiz Agent');
+              toastr.info('Đã khôi phục kích thước khung input về mặc định', 'Agent');
           });
           // --- XỬ LÝ CHẾ ĐỘ MỞ FULL THANH INPUT (FULLSCREEN) ---
           const fullscreenBtn = $('#kaiz-input-fullscreen-btn');
@@ -25493,7 +25701,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   ? await stateManager.db.getMessages(stateManager.currentChatId)
                   : [];
               if (historyMsgs.length === 0 || historyMsgs[historyMsgs.length - 1].role !== 'agent') {
-                  toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Kaiz Agent');
+                  toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Agent');
                   return;
               }
               startAgent(true);
@@ -26103,7 +26311,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               resultList.empty();
               const available = allSchemas.filter((s) => this.currentToolsConfig[s.name] !== true);
               const q = query.trim().toLowerCase();
-              const matches = q ? available.filter((s) => s.name.toLowerCase().includes(q)) : available;
+              const matches = q
+                  ? available.filter((s) => s.name.toLowerCase().includes(q) ||
+                      (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
+                      (s.description && s.description.toLowerCase().includes(q)))
+                  : available;
               if (matches.length === 0) {
                   resultList.append('<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>');
                   return;
@@ -26112,7 +26324,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const item = $(`
                     <div style="padding:8px 10px; cursor:pointer; font-size:13px; color:#ddd; border-bottom:1px solid rgba(255,255,255,0.04);">
                         <div style="color:#fff; font-weight:bold;">${this.escapeHtml(schema.name)}</div>
-                        <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${this.escapeHtml(schema.description)}</div>
+                        <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${this.escapeHtml(schema.userDescription || schema.description)}</div>
                     </div>
                 `);
                   item.on('mouseenter', () => item.css('background', 'rgba(255,255,255,0.07)'));
@@ -27768,7 +27980,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         ${this.searchQuery ? 'Không tìm thấy phiên bản phù hợp' : 'Chưa có mốc lịch sử nào cho preset này'}
                     </div>
                     <div style="font-size: 11.5px; max-width: 380px; line-height: 1.5; opacity: 0.75">
-                        ${this.searchQuery ? 'Thử tìm với từ khóa khác như mã hash, tag hoặc tên thay đổi.' : 'Mọi thay đổi qua Kaiz Agent hoặc nút "Lưu phiên bản" phía trên sẽ tự động xuất hiện tại đây.'}
+                        ${this.searchQuery ? 'Thử tìm với từ khóa khác như mã hash, tag hoặc tên thay đổi.' : 'Mọi thay đổi qua Agent hoặc nút "Lưu phiên bản" phía trên sẽ tự động xuất hiện tại đây.'}
                     </div>
                 </div>
             `);
@@ -27780,7 +27992,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const isNewer = headCommit ? commit.timestamp > headTimestamp : false;
               const dateStr = formatRelativeTime(commit.timestamp);
               const fullDateStr = new Date(commit.timestamp).toLocaleString();
-              const author = commit.author || 'Kaiz Agent';
+              const author = commit.author || 'Agent';
               const isManual = author.toLowerCase().includes('manual') || author.toLowerCase().includes('user');
               const authorBadge = isManual
                   ? `<span style="background: rgba(56, 189, 248, 0.12); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.25); padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-user"></i> Bạn lưu</span>`
@@ -27805,7 +28017,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   dotHtml = `<div class="kaiz-pg-timeline-dot is-manual" title="Mốc lưu thủ công"><i class="fa-solid fa-user"></i></div>`;
               }
               else {
-                  dotHtml = `<div class="kaiz-pg-timeline-dot is-agent" title="Kaiz Agent lưu"><i class="fa-solid fa-robot"></i></div>`;
+                  dotHtml = `<div class="kaiz-pg-timeline-dot is-agent" title="Agent lưu"><i class="fa-solid fa-robot"></i></div>`;
               }
               // Navigation Main Button
               let navActionBtn;
@@ -28629,14 +28841,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (this.attachedEvents)
               return;
           const attach = () => {
-              const ctx = typeof window.SillyTavern !== 'undefined'
-                  ? window.SillyTavern.getContext()
-                  : null;
+              const ctx = typeof window.SillyTavern !== 'undefined' ? window.SillyTavern.getContext() : null;
               const es = ctx?.eventSource || window.eventSource;
-              const et = ctx?.event_types ||
-                  ctx?.eventTypes ||
-                  window.event_types ||
-                  window.eventTypes;
+              const et = ctx?.event_types || ctx?.eventTypes || window.event_types || window.eventTypes;
               if (!es) {
                   setTimeout(attach, 1000);
                   return;
@@ -28730,7 +28937,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (typeof toastr !== 'undefined') {
                   toastr.info(this.selectedFloorId === undefined
                       ? 'Đã đồng bộ lại chỉ số MVU theo lượt mới nhất.'
-                      : `Đã đồng bộ lại chỉ số MVU theo lượt #${(this.currentReport?.currentFloor?.displayIndex ?? '')}.`);
+                      : `Đã đồng bộ lại chỉ số MVU theo lượt #${this.currentReport?.currentFloor?.displayIndex ?? ''}.`);
               }
           });
           // 3.1 Bộ chọn Lượt Chat (Floor Selector)
@@ -28742,7 +28949,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               await this.refresh();
               if (typeof toastr !== 'undefined') {
                   toastr.info(this.selectedFloorId !== undefined
-                      ? `Đã chuyển sang xem lượt chat #${(this.currentReport?.currentFloor?.displayIndex ?? this.selectedFloorId + 1)}`
+                      ? `Đã chuyển sang xem lượt chat #${this.currentReport?.currentFloor?.displayIndex ?? this.selectedFloorId + 1}`
                       : 'Đã chuyển sang chế độ tự động theo lượt mới nhất.');
               }
           });
@@ -29659,11 +29866,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             <span class="metric-num">${act.activeCount}/${act.totalCriteria}</span>
                             <span class="metric-lbl">Tiêu chí đạt</span>
                         </div>
-                        ${act.inactiveCount > 0 ? `
+                        ${act.inactiveCount > 0
+            ? `
                         <div class="kaiz-mvu-banner-metric metric-danger">
                             <span class="metric-num">${act.inactiveCount}</span>
                             <span class="metric-lbl">Không hoạt động</span>
-                        </div>` : ''}
+                        </div>`
+            : ''}
                     </div>
                 </div>
 

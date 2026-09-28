@@ -6,6 +6,7 @@ export const listWorkspacesTool: ITool = {
         name: 'list_agent_workspaces',
         description:
             'Liệt kê tất cả các Agent Workspace hiện có (ID, Tên, số công cụ được bật, có prompt tùy chỉnh không). Cũng hiển thị workspace nào đang được kích hoạt. Sử dụng công cụ này để hiểu cấu trúc workspace trước khi chuyển đổi hoặc quản lý.',
+        userDescription: 'Liệt kê danh sách tất cả các không gian làm việc (Workspace) của Agent.',
         parameters: { type: 'object', properties: {} },
     },
     execute: async (_args: any, context?: any) => {
@@ -47,6 +48,7 @@ export const switchWorkspaceTool: ITool = {
         name: 'switch_agent_workspace',
         description:
             'Chuyển đổi Agent Workspace đang kích hoạt theo ID, hoặc chuyển về chế độ Default (global) bằng cách truyền workspaceId là null. Việc chuyển đổi workspace sẽ reset đoạn chat hiện tại thành một đoạn chat trống mới.',
+        userDescription: 'Chuyển đổi không gian làm việc (Workspace) đang hoạt động của Agent.',
         parameters: {
             type: 'object',
             properties: {
@@ -83,6 +85,7 @@ export const createWorkspaceTool: ITool = {
         name: 'create_agent_workspace',
         description:
             'Tạo một Agent Workspace mới với tên được cung cấp. Sau khi tạo, agent sẽ tự động chuyển vào workspace mới. Workspace mới khởi đầu sẽ không có công cụ nào được bật và không có prompt tùy chỉnh.',
+        userDescription: 'Tạo một không gian làm việc (Workspace) mới cho Agent.',
         parameters: {
             type: 'object',
             properties: {

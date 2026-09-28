@@ -8,6 +8,7 @@ export const sendSystemMessageTool: ITool = {
         name: 'send_system_message',
         description:
             'Gửi một thông báo hệ thống (popup notification) lên màn hình để thông báo cho người dùng. Dùng để báo cáo kết quả, trạng thái hoặc cảnh báo cho người dùng mà không làm gián đoạn luồng chat. Tin nhắn này sẽ tự động biến mất sau một lúc.',
+        userDescription: 'Hiển thị thông báo dạng popup hệ thống trên màn hình cho người dùng.',
         parameters: {
             type: 'object',
             properties: {

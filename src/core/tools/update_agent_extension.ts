@@ -6,6 +6,7 @@ export const updateAgentExtensionTool: ITool = {
         name: 'update_agent_extension',
         description:
             'Kiểm tra thông báo update của Agent Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+        userDescription: 'Kiểm tra và tự động cập nhật Agent Extension khi có phiên bản mới.',
         parameters: {
             type: 'object',
             properties: {},

@@ -281,7 +281,14 @@ export class AutoTaskModal {
             resultList.empty();
             const available = allSchemas.filter((s) => this.currentToolsConfig[s.name] !== true);
             const q = query.trim().toLowerCase();
-            const matches = q ? available.filter((s) => s.name.toLowerCase().includes(q)) : available;
+            const matches = q
+                ? available.filter(
+                      (s) =>
+                          s.name.toLowerCase().includes(q) ||
+                          (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
+                          (s.description && s.description.toLowerCase().includes(q)),
+                  )
+                : available;
 
             if (matches.length === 0) {
                 resultList.append(
@@ -293,7 +300,7 @@ export class AutoTaskModal {
                 const item = $(`
                     <div style="padding:8px 10px; cursor:pointer; font-size:13px; color:#ddd; border-bottom:1px solid rgba(255,255,255,0.04);">
                         <div style="color:#fff; font-weight:bold;">${this.escapeHtml(schema.name)}</div>
-                        <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${this.escapeHtml(schema.description)}</div>
+                        <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${this.escapeHtml(schema.userDescription || schema.description)}</div>
                     </div>
                 `);
                 item.on('mouseenter', () => item.css('background', 'rgba(255,255,255,0.07)'));

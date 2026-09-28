@@ -707,7 +707,9 @@ export class MvuManager {
         // 2. Chứa mảng JSON Patch template: [ { "op": ... } ]
         const hasJsonPatchTemplate =
             /\[\s*\{\s*["']op["']\s*:/i.test(content) ||
-            (lower.includes('"op":') && lower.includes('"path":') && (lower.includes('replace') || lower.includes('delta')));
+            (lower.includes('"op":') &&
+                lower.includes('"path":') &&
+                (lower.includes('replace') || lower.includes('delta')));
 
         // 3. Phân tích cấu trúc YAML: Format entry thường có dạng { [root]: { rule: [...] } }
         let hasRuleProtocolList = false;
@@ -768,10 +770,7 @@ export class MvuManager {
                     if (val && typeof val === 'object') {
                         const subEntries = Object.values(val as any);
                         const matchingSub = subEntries.filter(
-                            (s: any) =>
-                                s &&
-                                typeof s === 'object' &&
-                                ('check' in s || ('type' in s && 'range' in s)),
+                            (s: any) => s && typeof s === 'object' && ('check' in s || ('type' in s && 'range' in s)),
                         );
                         if (matchingSub.length > 0) return true;
                     }
@@ -784,7 +783,12 @@ export class MvuManager {
             lower.includes('【cập nhật biến】') ||
             lower.includes('quy tắc cập nhật') ||
             lower.includes('tsundere_rules') ||
-            (lower.includes('mỗi lượt') && lower.includes('biến') && (lower.includes('tối đa') || lower.includes('thay đổi') || lower.includes('tăng') || lower.includes('giảm')))
+            (lower.includes('mỗi lượt') &&
+                lower.includes('biến') &&
+                (lower.includes('tối đa') ||
+                    lower.includes('thay đổi') ||
+                    lower.includes('tăng') ||
+                    lower.includes('giảm')))
         ) {
             return true;
         }
@@ -800,7 +804,11 @@ export class MvuManager {
         const lower = content.toLowerCase();
         const lowerComment = comment.toLowerCase();
 
-        if (lowerComment.includes('danh sách biến') || lowerComment.includes('variable list') || lowerComment.includes('status list')) {
+        if (
+            lowerComment.includes('danh sách biến') ||
+            lowerComment.includes('variable list') ||
+            lowerComment.includes('status list')
+        ) {
             return true;
         }
 
@@ -845,7 +853,11 @@ export class MvuManager {
             lower.includes('phân giai đoạn') ||
             lower.includes('thời kỳ');
 
-        if (content.includes('<%') && (content.includes('getvar(') || content.includes('setvar(')) && isPhaseController) {
+        if (
+            content.includes('<%') &&
+            (content.includes('getvar(') || content.includes('setvar(')) &&
+            isPhaseController
+        ) {
             return true;
         }
 
@@ -892,13 +904,24 @@ export class MvuManager {
             if (entry === result.initvarEntry) continue;
             const comment = (entry?.comment || entry?.name || '').toLowerCase();
 
-            if (!result.updateRulesEntry && (comment.includes('quy tắc cập nhật') || comment.includes('quy_tắc_cập_nhật') || comment.includes('update_rule') || comment.includes('update rules'))) {
+            if (
+                !result.updateRulesEntry &&
+                (comment.includes('quy tắc cập nhật') ||
+                    comment.includes('quy_tắc_cập_nhật') ||
+                    comment.includes('update_rule') ||
+                    comment.includes('update rules'))
+            ) {
                 result.updateRulesEntry = entry;
             }
             if (!result.formatEntry && (comment.includes('định dạng') || comment.includes('format'))) {
                 result.formatEntry = entry;
             }
-            if (!result.varListEntry && (comment.includes('danh sách biến') || comment.includes('variable list') || comment.includes('status list'))) {
+            if (
+                !result.varListEntry &&
+                (comment.includes('danh sách biến') ||
+                    comment.includes('variable list') ||
+                    comment.includes('status list'))
+            ) {
                 result.varListEntry = entry;
             }
         }
@@ -916,7 +939,9 @@ export class MvuManager {
 
             if (!result.varListEntry && this.isVarListEntryContent(content, comment)) {
                 result.varListEntry = entry;
-                const isAllInOne = content.includes('【Cập Nhật Biến】') || (content.includes('format:') && content.includes('<UpdateVariable>'));
+                const isAllInOne =
+                    content.includes('【Cập Nhật Biến】') ||
+                    (content.includes('format:') && content.includes('<UpdateVariable>'));
                 if (!isAllInOne) continue;
             }
 
@@ -995,11 +1020,15 @@ export class MvuManager {
                         }
                     }
                     const linkedResult = this.classifyLorebookEntries(entries);
-                    if (!result.initvarEntry && linkedResult.initvarEntry) result.initvarEntry = linkedResult.initvarEntry;
-                    if (!result.updateRulesEntry && linkedResult.updateRulesEntry) result.updateRulesEntry = linkedResult.updateRulesEntry;
+                    if (!result.initvarEntry && linkedResult.initvarEntry)
+                        result.initvarEntry = linkedResult.initvarEntry;
+                    if (!result.updateRulesEntry && linkedResult.updateRulesEntry)
+                        result.updateRulesEntry = linkedResult.updateRulesEntry;
                     if (!result.formatEntry && linkedResult.formatEntry) result.formatEntry = linkedResult.formatEntry;
-                    if (!result.varListEntry && linkedResult.varListEntry) result.varListEntry = linkedResult.varListEntry;
-                    if (!result.ejsControllerEntry && linkedResult.ejsControllerEntry) result.ejsControllerEntry = linkedResult.ejsControllerEntry;
+                    if (!result.varListEntry && linkedResult.varListEntry)
+                        result.varListEntry = linkedResult.varListEntry;
+                    if (!result.ejsControllerEntry && linkedResult.ejsControllerEntry)
+                        result.ejsControllerEntry = linkedResult.ejsControllerEntry;
                 }
             } catch (e) {
                 // Ignore
@@ -1022,10 +1051,12 @@ export class MvuManager {
                 }
                 const globalResult = this.classifyLorebookEntries(entries);
                 if (!result.initvarEntry && globalResult.initvarEntry) result.initvarEntry = globalResult.initvarEntry;
-                if (!result.updateRulesEntry && globalResult.updateRulesEntry) result.updateRulesEntry = globalResult.updateRulesEntry;
+                if (!result.updateRulesEntry && globalResult.updateRulesEntry)
+                    result.updateRulesEntry = globalResult.updateRulesEntry;
                 if (!result.formatEntry && globalResult.formatEntry) result.formatEntry = globalResult.formatEntry;
                 if (!result.varListEntry && globalResult.varListEntry) result.varListEntry = globalResult.varListEntry;
-                if (!result.ejsControllerEntry && globalResult.ejsControllerEntry) result.ejsControllerEntry = globalResult.ejsControllerEntry;
+                if (!result.ejsControllerEntry && globalResult.ejsControllerEntry)
+                    result.ejsControllerEntry = globalResult.ejsControllerEntry;
             } catch {
                 // Ignore lorebook search errors
             }
@@ -1065,7 +1096,8 @@ export class MvuManager {
                     isActive: true,
                     status: 'active',
                     statusText: 'Đang hoạt động (Đã tắt đúng chuẩn)',
-                    details: 'Đã tìm thấy entry khởi tạo biến và đã được vô hiệu hóa đúng chuẩn MVU để tiết kiệm 100% token.',
+                    details:
+                        'Đã tìm thấy entry khởi tạo biến và đã được vô hiệu hóa đúng chuẩn MVU để tiết kiệm 100% token.',
                 });
             } else {
                 items.push({
@@ -1079,7 +1111,8 @@ export class MvuManager {
                     isActive: true,
                     status: 'warning',
                     statusText: 'Cảnh báo: Đang bật',
-                    details: 'Đã tìm thấy entry nhưng đang BẬT. Nên TẮT (disable) mục này trong Worldbook để tránh tốn prompt token thừa.',
+                    details:
+                        'Đã tìm thấy entry nhưng đang BẬT. Nên TẮT (disable) mục này trong Worldbook để tránh tốn prompt token thừa.',
                 });
             }
         } else {
@@ -1129,7 +1162,8 @@ export class MvuManager {
                     isActive: false,
                     status: 'inactive',
                     statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
-                    details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhận được quy tắc cập nhật biến.',
+                    details:
+                        'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhận được quy tắc cập nhật biến.',
                 });
             }
         } else {
@@ -1193,7 +1227,8 @@ export class MvuManager {
                 isActive: false,
                 status: 'inactive',
                 statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
-                details: 'Chưa có entry định dạng xuất trong Lorebook. AI có thể chỉ trả lời văn xuôi mà không cập nhật biến.',
+                details:
+                    'Chưa có entry định dạng xuất trong Lorebook. AI có thể chỉ trả lời văn xuôi mà không cập nhật biến.',
             });
         }
 
@@ -1207,7 +1242,8 @@ export class MvuManager {
                 items.push({
                     id: 'varlist',
                     name: 'Danh sách biến hiện tại (Variable List)',
-                    description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                    description:
+                        'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
                     entryName,
                     entryId: varList.id,
                     location,
@@ -1215,13 +1251,15 @@ export class MvuManager {
                     isActive: true,
                     status: 'active',
                     statusText: 'Đang hoạt động (Đang Bật)',
-                    details: 'Entry danh sách biến đang BẬT. AI luôn nắm bắt được trạng thái biến mới nhất trước khi phản hồi.',
+                    details:
+                        'Entry danh sách biến đang BẬT. AI luôn nắm bắt được trạng thái biến mới nhất trước khi phản hồi.',
                 });
             } else {
                 items.push({
                     id: 'varlist',
                     name: 'Danh sách biến hiện tại (Variable List)',
-                    description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                    description:
+                        'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
                     entryName,
                     entryId: varList.id,
                     location,
@@ -1229,14 +1267,16 @@ export class MvuManager {
                     isActive: false,
                     status: 'inactive',
                     statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
-                    details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhìn thấy giá trị biến hiện tại.',
+                    details:
+                        'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhìn thấy giá trị biến hiện tại.',
                 });
             }
         } else {
             items.push({
                 id: 'varlist',
                 name: 'Danh sách biến hiện tại (Variable List)',
-                description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                description:
+                    'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
                 entryName: 'Không tìm thấy',
                 location: '—',
                 isRequired: true,
@@ -1255,7 +1295,8 @@ export class MvuManager {
             items.push({
                 id: 'controller',
                 name: 'Bộ điều khiển động EJS / Preprocessing (Tùy chọn)',
-                description: 'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
+                description:
+                    'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
                 entryName,
                 entryId: ejs.id,
                 location,
@@ -1263,13 +1304,15 @@ export class MvuManager {
                 isActive: true,
                 status: 'active',
                 statusText: 'Đã kích hoạt',
-                details: 'Đã phát hiện bộ điều khiển EJS trong Lorebook, hỗ trợ render bối cảnh và tính cách nhân vật động.',
+                details:
+                    'Đã phát hiện bộ điều khiển EJS trong Lorebook, hỗ trợ render bối cảnh và tính cách nhân vật động.',
             });
         } else {
             items.push({
                 id: 'controller',
                 name: 'Bộ điều khiển động EJS / Preprocessing (Tùy chọn)',
-                description: 'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
+                description:
+                    'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
                 entryName: 'Không sử dụng',
                 location: '—',
                 isRequired: false,
@@ -1952,7 +1995,9 @@ export class MvuManager {
                           preview: '',
                           source: floorData.source,
                       }
-                    : (floors.length > 0 ? floors[0] : null));
+                    : floors.length > 0
+                      ? floors[0]
+                      : null);
         } else {
             this.cachedStatData = null;
             this.cachedWrapper = null;
@@ -2367,7 +2412,10 @@ export class MvuManager {
                 span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
             }
             if (span) {
-                zodCode = zodCode.substring(0, span.propStart) + `'${leafName}': ${zodLine}` + zodCode.substring(span.exprEnd);
+                zodCode =
+                    zodCode.substring(0, span.propStart) +
+                    `'${leafName}': ${zodLine}` +
+                    zodCode.substring(span.exprEnd);
                 modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
             }
         } else if (options.action === 'rename') {
@@ -2381,7 +2429,10 @@ export class MvuManager {
                 span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
             }
             if (span) {
-                zodCode = zodCode.substring(0, span.propStart) + `'${options.newName}':` + zodCode.substring(span.colonIdx + 1);
+                zodCode =
+                    zodCode.substring(0, span.propStart) +
+                    `'${options.newName}':` +
+                    zodCode.substring(span.colonIdx + 1);
                 modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
             }
         } else if (options.action === 'delete') {

@@ -12,6 +12,7 @@ export const getPromptBlockTool: ITool = {
             '- include_unlinked: Kết hợp với all_linked để lấy thêm cả các block chưa liên kết.\n' +
             '- query: Tìm kiếm từ khóa bên trong các block, trả về danh sách các block khớp kèm trích đoạn dòng văn bản.\n' +
             '- commit_hash: Tùy chọn đọc dữ liệu từ một mốc commit trong quá khứ (Git version) thay vì trạng thái hiện tại.',
+        userDescription: 'Đọc nội dung chi tiết và cấu hình injection của các khối prompt trong Preset.',
         parameters: {
             type: 'object',
             properties: {

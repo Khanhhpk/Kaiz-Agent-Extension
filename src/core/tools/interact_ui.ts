@@ -5,6 +5,7 @@ export const interactUITool: ITool = {
         name: 'interact_with_ui',
         description:
             'Tương tác vật lý với giao diện SillyTavern. Cho phép Agent di chuyển con trỏ chuột ảo và click vào các nút bấm.',
+        userDescription: 'Tự động di chuyển con trỏ chuột và nhấn các nút bấm trên giao diện SillyTavern.',
         parameters: {
             type: 'object',
             properties: {

@@ -6,6 +6,7 @@ export const generateWebImageTool: ITool = {
         name: 'generate_web_image',
         description:
             'CÔNG CỤ SINH ẢNH MINH HỌA WEB. Sử dụng công cụ này khi bạn muốn vẽ một bức ảnh minh họa sống động cho bối cảnh câu chuyện, chân dung nhân vật, hoặc cảnh hành động. Hãy viết prompt mô tả bức ảnh thật chi tiết, giàu tính tạo hình (bối cảnh, góc máy, ánh sáng, phong cách nghệ thuật, biểu cảm nhân vật). Ảnh sau khi tạo sẽ được nhúng trực tiếp vào hội thoại.',
+        userDescription: 'Tạo ảnh minh họa bằng AI và nhúng trực tiếp vào hội thoại.',
         parameters: {
             type: 'object',
             properties: {

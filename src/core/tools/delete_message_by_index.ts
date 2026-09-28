@@ -6,6 +6,7 @@ export const deleteMessageByIndexTool: ITool = {
         name: 'delete_message_by_index',
         description:
             'Xóa một hoặc nhiều tin nhắn cụ thể dựa trên chatIndex. LƯU Ý QUAN TRỌNG: TRƯỚC KHI GỌI CÔNG CỤ NÀY, BẠN PHẢI sử dụng công cụ get_chat_history để tìm xem nội dung tin nhắn nằm ở chatIndex số mấy. Tuyệt đối KHÔNG tự phỏng đoán chatIndex.',
+        userDescription: 'Xóa các tin nhắn cụ thể theo chỉ số vị trí (index) trong phòng chat.',
         parameters: {
             type: 'object',
             properties: {

@@ -6,6 +6,7 @@ export const getRegexListTool: ITool = {
         name: 'get_regex_list',
         description:
             'Lấy danh sách các Regex Scripts hiện có trong SillyTavern. Bao gồm tên, ID (uuid), phạm vi áp dụng (Global, Scoped, Preset), thứ tự và trạng thái Bật/Tắt (disabled).',
+        userDescription: 'Liệt kê danh sách các bộ lọc Regex Script đang có trong hệ thống.',
         parameters: {
             type: 'object',
             properties: {},
