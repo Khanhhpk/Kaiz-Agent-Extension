@@ -1482,10 +1482,26 @@ export class MvuManager {
                 continue;
             }
 
-            // Tìm dấu ':'
-            while (i < len && content[i] !== ':') i++;
-            if (i >= len) break;
-            i++; // qua ':'
+            // Tìm dấu ':' ngay sau key (không nhảy qua dòng mới hoặc nuốt ký tự không hợp lệ)
+            let foundColon = false;
+            while (i < len) {
+                const ch = content[i];
+                if (ch === ':') {
+                    foundColon = true;
+                    i++;
+                    break;
+                }
+                if (ch === '\n' || ch === ',' || ch === '}' || ch === ';') {
+                    break;
+                }
+                if (!/\s/.test(ch)) {
+                    break;
+                }
+                i++;
+            }
+            if (!foundColon) {
+                continue;
+            }
 
             // Bỏ qua khoảng trắng
             while (i < len && /\s/.test(content[i])) i++;
@@ -2161,15 +2177,26 @@ export class MvuManager {
          */
         const findParentObjectBlock = (
             code: string,
-            parentName: string,
+            parentName?: string,
         ): { blockStart: number; blockEnd: number } | null => {
-            const escapedParent = parentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const parentPattern = new RegExp(`(['"])?${escapedParent}\\1?\\s*:\\s*z\\.object\\s*\\(\\s*\\{`, 'g');
-            const match = parentPattern.exec(code);
-            if (!match) return null;
-
-            // Tìm vị trí dấu { mở đầu của z.object({
-            const openBraceIdx = code.indexOf('{', match.index + match[0].length - 1);
+            let openBraceIdx = -1;
+            if (parentName) {
+                const escapedParent = parentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const parentPattern = new RegExp(
+                    `(?:(['"])?${escapedParent}\\1?\\s*:\\s*z\\.object\\s*\\(\\s*\\{|(?:const|let|var)\\s+${escapedParent}\\s*=\\s*z\\.object\\s*\\(\\s*\\{)`,
+                    'g',
+                );
+                const match = parentPattern.exec(code);
+                if (match) {
+                    openBraceIdx = code.indexOf('{', match.index + match[0].length - 1);
+                }
+            } else {
+                const rootPattern = /(?:export\s+const\s+Schema\s*=\s*z\.object\s*\(\s*\{|z\.object\s*\(\s*\{)/g;
+                const match = rootPattern.exec(code);
+                if (match) {
+                    openBraceIdx = code.indexOf('{', match.index + match[0].length - 1);
+                }
+            }
             if (openBraceIdx === -1) return null;
 
             // Đếm ngoặc nhọn để tìm dấu } đóng tương ứng
@@ -2186,40 +2213,90 @@ export class MvuManager {
         };
 
         /**
-         * Áp dụng regex replacement CHỈ trong phạm vi block cha (precision-scoped).
-         * Nếu biến là top-level (parts.length === 1), áp dụng toàn cục.
-         * Nếu biến lồng nhau, chỉ áp dụng trong z.object({...}) của parent.
+         * Tìm vị trí chính xác của thuộc tính (propName) và biểu thức Zod tương ứng của nó.
+         * Phân tích cú pháp đầy đủ bằng cách theo dõi độ sâu ngoặc đơn (), ngoặc nhọn {}, ngoặc vuông []
+         * và chuỗi văn bản (quotes) để KHÔNG BAO GIỜ bị cắt đứt giữa chừng bởi dấu phẩy bên trong tham số hàm
+         * như _.clamp(v, 0, 100) hay So(100, 0, 100).
          */
-        const applyScopedReplace = (
+        const findPropertySpan = (
             code: string,
-            regex: RegExp,
-            replacer: string | ((match: string, ...groups: any[]) => string),
-        ): string => {
-            if (parts.length <= 1) {
-                // Top-level: áp dụng trên toàn bộ code nhưng chỉ match lần đầu tiên
-                const nonGlobalRegex = new RegExp(regex.source, regex.flags.replace('g', ''));
-                return code.replace(nonGlobalRegex, replacer as any);
+            propName: string,
+            searchStart = 0,
+            searchEnd = code.length,
+        ): {
+            propStart: number;
+            colonIdx: number;
+            exprStart: number;
+            exprEnd: number;
+            endWithComma: number;
+            hasTrailingComma: boolean;
+        } | null => {
+            const escaped = propName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const pattern = new RegExp(`(['"])?${escaped}\\1?\\s*:`, 'g');
+            pattern.lastIndex = searchStart;
+
+            let match: RegExpExecArray | null;
+            while ((match = pattern.exec(code)) !== null) {
+                if (match.index >= searchEnd) break;
+
+                const propStart = match.index;
+                const colonIdx = match.index + match[0].length - 1;
+
+                let i = colonIdx + 1;
+                while (i < searchEnd && /\s/.test(code[i])) i++;
+                const exprStart = i;
+
+                let parenDepth = 0;
+                let braceDepth = 0;
+                let bracketDepth = 0;
+                let inStr: string | null = null;
+
+                while (i < searchEnd) {
+                    const c = code[i];
+                    const prev = i > 0 ? code[i - 1] : '';
+
+                    if (inStr) {
+                        if (c === inStr && prev !== '\\') inStr = null;
+                    } else if (c === '"' || c === "'" || c === '`') {
+                        inStr = c;
+                    } else if (c === '(') {
+                        parenDepth++;
+                    } else if (c === ')') {
+                        if (parenDepth === 0) break;
+                        parenDepth--;
+                    } else if (c === '{') {
+                        braceDepth++;
+                    } else if (c === '}') {
+                        if (braceDepth === 0) break;
+                        braceDepth--;
+                    } else if (c === '[') {
+                        bracketDepth++;
+                    } else if (c === ']') {
+                        bracketDepth--;
+                    } else if (c === ',' && parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
+                        break;
+                    }
+                    i++;
+                }
+
+                const exprEnd = i;
+                let hasTrailingComma = false;
+                let endWithComma = exprEnd;
+                if (i < searchEnd && code[i] === ',') {
+                    hasTrailingComma = true;
+                    endWithComma = i + 1;
+                }
+
+                return {
+                    propStart,
+                    colonIdx,
+                    exprStart,
+                    exprEnd,
+                    endWithComma,
+                    hasTrailingComma,
+                };
             }
-
-            // Lồng nhau: tìm block cha và chỉ thay thế trong phạm vi đó
-            const parentName = parts[parts.length - 2];
-            const block = findParentObjectBlock(code, parentName);
-            if (!block) {
-                // Fallback: không tìm thấy block cha → thay thế lần đầu trên toàn cục
-                const nonGlobalRegex = new RegExp(regex.source, regex.flags.replace('g', ''));
-                return code.replace(nonGlobalRegex, replacer as any);
-            }
-
-            // Chỉ áp dụng regex trên phần code bên trong block cha
-            const before = code.substring(0, block.blockStart + 1);
-            const inside = code.substring(block.blockStart + 1, block.blockEnd - 1);
-            const after = code.substring(block.blockEnd - 1);
-
-            // Reset regex và chỉ replace lần đầu trong inside
-            const scopedRegex = new RegExp(regex.source, regex.flags.replace('g', ''));
-            const newInside = inside.replace(scopedRegex, replacer as any);
-
-            return before + newInside + after;
+            return null;
         };
 
         if (options.action === 'add') {
@@ -2242,53 +2319,70 @@ export class MvuManager {
             }
 
             if (!inserted) {
-                const insertPattern = /(export\s+const\s+Schema\s*=\s*z\.object\s*\(\s*\{)/i;
-                if (insertPattern.test(zodCode)) {
-                    zodCode = zodCode.replace(insertPattern, `$1\n  '${leafName}': ${zodLine},`);
+                const rootBlock = findParentObjectBlock(zodCode);
+                if (rootBlock) {
+                    const insertPos = rootBlock.blockStart + 1;
+                    zodCode =
+                        zodCode.substring(0, insertPos) +
+                        `\n  '${leafName}': ${zodLine},` +
+                        zodCode.substring(insertPos);
                 } else {
-                    const objMatch = zodCode.match(/(z\.object\s*\(\s*\{)/);
-                    if (objMatch) {
-                        zodCode = zodCode.replace(objMatch[1], `${objMatch[1]}\n  '${leafName}': ${zodLine},`);
+                    const insertPattern = /(export\s+const\s+Schema\s*=\s*z\.object\s*\(\s*\{)/i;
+                    if (insertPattern.test(zodCode)) {
+                        zodCode = zodCode.replace(insertPattern, `$1\n  '${leafName}': ${zodLine},`);
+                    } else {
+                        const objMatch = zodCode.match(/(z\.object\s*\(\s*\{)/);
+                        if (objMatch) {
+                            zodCode = zodCode.replace(objMatch[1], `${objMatch[1]}\n  '${leafName}': ${zodLine},`);
+                        }
                     }
                 }
             }
             modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
         } else if (options.action === 'modify') {
             const zodLine = buildZodLine();
-            const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const modifyRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:\\s*z\\.[^,\\n]+`, 'gm');
-
-            // Kiểm tra tồn tại trong scope đúng trước khi thay thế
-            if (parts.length > 1) {
-                const parentName = parts[parts.length - 2];
-                const block = findParentObjectBlock(zodCode, parentName);
-                if (block) {
-                    const inside = zodCode.substring(block.blockStart + 1, block.blockEnd - 1);
-                    if (modifyRegex.test(inside)) {
-                        zodCode = applyScopedReplace(zodCode, modifyRegex, `$1'${leafName}': ${zodLine}`);
-                        modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
-                    }
-                }
-            } else {
-                if (modifyRegex.test(zodCode)) {
-                    modifyRegex.lastIndex = 0;
-                    zodCode = applyScopedReplace(zodCode, modifyRegex, `$1'${leafName}': ${zodLine}`);
-                    modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
-                }
+            const parentName = parts.length > 1 ? parts[parts.length - 2] : undefined;
+            const block = findParentObjectBlock(zodCode, parentName);
+            let span = block ? findPropertySpan(zodCode, leafName, block.blockStart + 1, block.blockEnd - 1) : null;
+            if (!span) {
+                span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
+            }
+            if (span) {
+                zodCode = zodCode.substring(0, span.propStart) + `'${leafName}': ${zodLine}` + zodCode.substring(span.exprEnd);
+                modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
             }
         } else if (options.action === 'rename') {
             if (!options.newName) {
                 throw new Error('Cần cung cấp "newName" khi thực hiện đổi tên biến.');
             }
-            const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const renameRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:`, 'gm');
-            zodCode = applyScopedReplace(zodCode, renameRegex, `$1'${options.newName}':`);
-            modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+            const parentName = parts.length > 1 ? parts[parts.length - 2] : undefined;
+            const block = findParentObjectBlock(zodCode, parentName);
+            let span = block ? findPropertySpan(zodCode, leafName, block.blockStart + 1, block.blockEnd - 1) : null;
+            if (!span) {
+                span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
+            }
+            if (span) {
+                zodCode = zodCode.substring(0, span.propStart) + `'${options.newName}':` + zodCode.substring(span.colonIdx + 1);
+                modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+            }
         } else if (options.action === 'delete') {
-            const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const removeRegex = new RegExp(`^\\s*['"]?${escapedLeaf}['"]?\\s*:\\s*z\\.[^,\\n]+,?\\n?`, 'gm');
-            zodCode = applyScopedReplace(zodCode, removeRegex, '');
-            modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+            const parentName = parts.length > 1 ? parts[parts.length - 2] : undefined;
+            const block = findParentObjectBlock(zodCode, parentName);
+            let span = block ? findPropertySpan(zodCode, leafName, block.blockStart + 1, block.blockEnd - 1) : null;
+            if (!span) {
+                span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
+            }
+            if (span) {
+                let delStart = span.propStart;
+                while (delStart > 0 && (zodCode[delStart - 1] === ' ' || zodCode[delStart - 1] === '\t')) {
+                    delStart--;
+                }
+                let delEnd = span.endWithComma;
+                if (delEnd < zodCode.length && zodCode[delEnd] === '\r') delEnd++;
+                if (delEnd < zodCode.length && zodCode[delEnd] === '\n') delEnd++;
+                zodCode = zodCode.substring(0, delStart) + zodCode.substring(delEnd);
+                modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+            }
         }
 
         // Cập nhật script trong bộ nhớ của nhân vật (Hỗ trợ cả dạng mảng chuẩn TavernHelper và Object)
