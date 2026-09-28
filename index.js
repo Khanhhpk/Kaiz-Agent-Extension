@@ -17813,15 +17813,76 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               return zodLine;
           };
+          /**
+           * Tìm vùng code (start, end) thuộc về z.object({...}) của parentName trong zodCode.
+           * Dùng đếm ngoặc nhọn {} để xác định chính xác phạm vi block.
+           * Trả về { blockStart, blockEnd } hoặc null nếu không tìm thấy.
+           */
+          const findParentObjectBlock = (code, parentName) => {
+              const escapedParent = parentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const parentPattern = new RegExp(`(['"])?${escapedParent}\\1?\\s*:\\s*z\\.object\\s*\\(\\s*\\{`, 'g');
+              const match = parentPattern.exec(code);
+              if (!match)
+                  return null;
+              // Tìm vị trí dấu { mở đầu của z.object({
+              const openBraceIdx = code.indexOf('{', match.index + match[0].length - 1);
+              if (openBraceIdx === -1)
+                  return null;
+              // Đếm ngoặc nhọn để tìm dấu } đóng tương ứng
+              let depth = 1;
+              let i = openBraceIdx + 1;
+              while (i < code.length && depth > 0) {
+                  if (code[i] === '{')
+                      depth++;
+                  else if (code[i] === '}')
+                      depth--;
+                  i++;
+              }
+              if (depth !== 0)
+                  return null;
+              return { blockStart: openBraceIdx, blockEnd: i };
+          };
+          /**
+           * Áp dụng regex replacement CHỈ trong phạm vi block cha (precision-scoped).
+           * Nếu biến là top-level (parts.length === 1), áp dụng toàn cục.
+           * Nếu biến lồng nhau, chỉ áp dụng trong z.object({...}) của parent.
+           */
+          const applyScopedReplace = (code, regex, replacer) => {
+              if (parts.length <= 1) {
+                  // Top-level: áp dụng trên toàn bộ code nhưng chỉ match lần đầu tiên
+                  const nonGlobalRegex = new RegExp(regex.source, regex.flags.replace('g', ''));
+                  return code.replace(nonGlobalRegex, replacer);
+              }
+              // Lồng nhau: tìm block cha và chỉ thay thế trong phạm vi đó
+              const parentName = parts[parts.length - 2];
+              const block = findParentObjectBlock(code, parentName);
+              if (!block) {
+                  // Fallback: không tìm thấy block cha → thay thế lần đầu trên toàn cục
+                  const nonGlobalRegex = new RegExp(regex.source, regex.flags.replace('g', ''));
+                  return code.replace(nonGlobalRegex, replacer);
+              }
+              // Chỉ áp dụng regex trên phần code bên trong block cha
+              const before = code.substring(0, block.blockStart + 1);
+              const inside = code.substring(block.blockStart + 1, block.blockEnd - 1);
+              const after = code.substring(block.blockEnd - 1);
+              // Reset regex và chỉ replace lần đầu trong inside
+              const scopedRegex = new RegExp(regex.source, regex.flags.replace('g', ''));
+              const newInside = inside.replace(scopedRegex, replacer);
+              return before + newInside + after;
+          };
           if (options.action === 'add') {
               const zodLine = buildZodLine();
-              // Nếu là biến lồng nhau, thử chèn vào object cha
+              // Nếu là biến lồng nhau, tìm CHÍNH XÁC block cha bằng brace counting
               let inserted = false;
               if (parts.length > 1) {
                   const parentName = parts[parts.length - 2];
-                  const parentPattern = new RegExp(`(['"])?${parentName}\\1?\\s*:\\s*z\\.object\\s*\\(\\s*\\{`, 'i');
-                  if (parentPattern.test(zodCode)) {
-                      zodCode = zodCode.replace(parentPattern, `$&\n    '${leafName}': ${zodLine},`);
+                  const block = findParentObjectBlock(zodCode, parentName);
+                  if (block) {
+                      // Chèn ngay sau dấu { mở
+                      const insertPos = block.blockStart + 1;
+                      zodCode = zodCode.substring(0, insertPos) +
+                          `\n    '${leafName}': ${zodLine},` +
+                          zodCode.substring(insertPos);
                       inserted = true;
                   }
               }
@@ -17841,13 +17902,26 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           }
           else if (options.action === 'modify') {
               const zodLine = buildZodLine();
-              // Scope chính xác hơn: chỉ match dòng key: value, word boundary trước leafName
               const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const modifyRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:\\s*z\\.[^,\\n]+`, 'gm');
-              if (modifyRegex.test(zodCode)) {
-                  modifyRegex.lastIndex = 0; // Reset lastIndex sau test()
-                  zodCode = zodCode.replace(modifyRegex, `$1'${leafName}': ${zodLine}`);
-                  modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+              // Kiểm tra tồn tại trong scope đúng trước khi thay thế
+              if (parts.length > 1) {
+                  const parentName = parts[parts.length - 2];
+                  const block = findParentObjectBlock(zodCode, parentName);
+                  if (block) {
+                      const inside = zodCode.substring(block.blockStart + 1, block.blockEnd - 1);
+                      if (modifyRegex.test(inside)) {
+                          zodCode = applyScopedReplace(zodCode, modifyRegex, `$1'${leafName}': ${zodLine}`);
+                          modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+                      }
+                  }
+              }
+              else {
+                  if (modifyRegex.test(zodCode)) {
+                      modifyRegex.lastIndex = 0;
+                      zodCode = applyScopedReplace(zodCode, modifyRegex, `$1'${leafName}': ${zodLine}`);
+                      modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+                  }
               }
           }
           else if (options.action === 'rename') {
@@ -17856,13 +17930,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const renameRegex = new RegExp(`^(\\s*)(['"])?${escapedLeaf}\\2?\\s*:`, 'gm');
-              zodCode = zodCode.replace(renameRegex, `$1'${options.newName}':`);
+              zodCode = applyScopedReplace(zodCode, renameRegex, `$1'${options.newName}':`);
               modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
           }
           else if (options.action === 'delete') {
               const escapedLeaf = leafName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const removeRegex = new RegExp(`^\\s*['"]?${escapedLeaf}['"]?\\s*:\\s*z\\.[^,\\n]+,?\\n?`, 'gm');
-              zodCode = zodCode.replace(removeRegex, '');
+              zodCode = applyScopedReplace(zodCode, removeRegex, '');
               modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
           }
           // Cập nhật script trong bộ nhớ của nhân vật (Hỗ trợ cả dạng mảng chuẩn TavernHelper và Object)
