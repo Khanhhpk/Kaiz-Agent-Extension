@@ -1791,35 +1791,18 @@
                 </div>
 
                 <div class="kaiz-mvu-ribbon-actions">
-                    <div class="kaiz-mvu-floor-control" style="display: flex; align-items: center; gap: 6px">
-                        <label
-                            for="kaiz-mvu-floor-select"
-                            style="font-size: 11.5px; color: #94a3b8; white-space: nowrap"
-                            ><i class="fa-solid fa-layer-group"></i> Lượt chat:</label
-                        >
-                        <select
-                            id="kaiz-mvu-floor-select"
-                            class="kaiz-mvu-floor-select"
-                            style="
-                                background: rgba(15, 23, 42, 0.8);
-                                border: 1px solid rgba(56, 189, 248, 0.35);
-                                border-radius: 6px;
-                                color: #f1f5f9;
-                                padding: 4px 8px;
-                                font-size: 11.5px;
-                                max-width: 230px;
-                                outline: none;
-                                cursor: pointer;
-                            "
-                        >
+                    <div class="kaiz-mvu-floor-control">
+                        <label for="kaiz-mvu-floor-select" class="kaiz-mvu-floor-label">
+                            <i class="fa-solid fa-layer-group"></i> Lượt chat:
+                        </label>
+                        <select id="kaiz-mvu-floor-select" class="kaiz-mvu-floor-select">
                             <option value="">Lượt mới nhất (Tự động)</option>
                         </select>
                     </div>
                     <button
                         type="button"
                         id="kaiz-mvu-toggle-add-btn"
-                        class="menu_button interactable"
-                        style="background: rgba(56, 189, 248, 0.2); border-color: rgba(56, 189, 248, 0.4)"
+                        class="menu_button interactable kaiz-mvu-toggle-add-btn"
                     >
                         <i class="fa-solid fa-plus"></i> Thêm Biến
                     </button>

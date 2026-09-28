@@ -526,8 +526,11 @@ export class MvuDashboardModal {
             if (report.availableFloors && report.availableFloors.length > 0) {
                 for (const fl of report.availableFloors) {
                     const isSel = this.selectedFloorId === fl.messageId ? 'selected' : '';
-                    const optText = `Lượt #${fl.displayIndex} · ${escapeHtml(fl.name)} ${fl.preview ? '— ' + escapeHtml(fl.preview) : ''}`;
-                    floorSelect.append(`<option value="${fl.messageId}" ${isSel}>${optText}</option>`);
+                    const previewSnippet = fl.preview
+                        ? `— ${fl.preview.length > 45 ? fl.preview.slice(0, 45) + '...' : fl.preview}`
+                        : '';
+                    const optText = `Lượt #${fl.displayIndex} · ${fl.name} ${previewSnippet}`;
+                    floorSelect.append(`<option value="${fl.messageId}" ${isSel}>${escapeHtml(optText)}</option>`);
                 }
             }
             // Đồng bộ trực tiếp giá trị của DOM select để tránh lệch trạng thái hiển thị
