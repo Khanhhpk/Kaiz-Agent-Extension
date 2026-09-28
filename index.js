@@ -16897,16 +16897,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (!content)
               return false;
           const lower = content.toLowerCase();
-          // Loại trừ nếu là controller hoặc status variable list
-          if (this.isControllerEntryContent(content) ||
-              (this.isVarListEntryContent(content) && !lower.includes('jsonpatch'))) {
+          const lowerComment = comment.toLowerCase();
+          if (this.isControllerEntryContent(content, comment))
               return false;
+          if (lowerComment.includes('định dạng') || lowerComment.includes('format')) {
+              return true;
           }
           // 1. Chứa closing tags hoặc block giao thức MVU Output đặc thù
           const hasOutputProtocolTags = lower.includes('</update_variable_rules>') ||
               lower.includes('</updatevariable>') ||
               lower.includes('</jsonpatch>') ||
               lower.includes('<update_variable_rules>') ||
+              (lower.includes('<updatevariable>') && lower.includes('<analysis>')) ||
               (lower.includes('<updatevariable>') && lower.includes('<jsonpatch>'));
           // 2. Chứa mảng JSON Patch template: [ { "op": ... } ]
           const hasJsonPatchTemplate = /\[\s*\{\s*["']op["']\s*:/i.test(content) ||
@@ -16933,6 +16935,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               return true;
           if (hasJsonPatchTemplate && !hasVariableCheckBlocks)
               return true;
+          // Trường hợp all-in-one như Shirley có format block riêng
+          if (lower.includes('format:') && lower.includes('<updatevariable>'))
+              return true;
           return false;
       }
       /**
@@ -16941,10 +16946,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       static isRulesEntryContent(content, comment = '') {
           if (!content)
               return false;
-          if (this.isFormatEntryContent(content, comment))
+          const lower = content.toLowerCase();
+          const lowerComment = comment.toLowerCase();
+          if (this.isControllerEntryContent(content, comment))
               return false;
-          if (this.isControllerEntryContent(content))
-              return false;
+          if (lowerComment.includes('quy tắc cập nhật') ||
+              lowerComment.includes('quy_tắc_cập_nhật') ||
+              lowerComment.includes('update_rule') ||
+              lowerComment.includes('update rules')) {
+              return true;
+          }
           // 1. Đặc trưng cốt lõi: Khối YAML 'check:' thụt lề định nghĩa điều kiện cập nhật từng biến
           const hasVariableCheckBlocks = /^\s{2,}(?:check|\bcheck\b)\s*:\s*(?:$|\n|\s*\[)/m.test(content);
           if (hasVariableCheckBlocks)
@@ -16967,9 +16978,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
           }
           catch { }
-          // 3. Fallback: Định dạng Markdown rule liệt kê điều kiện cập nhật biến (như Shirley)
-          const lower = content.toLowerCase();
-          if (lower.includes('【cập nhật biến】') || lower.includes('quy tắc cập nhật') || lower.includes('update rules')) {
+          // 3. Fallback: Định dạng Markdown rule liệt kê điều kiện cập nhật biến (như Shirley, Quỷ Bí, Tiên Kiếm)
+          if (lower.includes('【cập nhật biến】') ||
+              lower.includes('quy tắc cập nhật') ||
+              lower.includes('tsundere_rules') ||
+              (lower.includes('mỗi lượt') && lower.includes('biến') && (lower.includes('tối đa') || lower.includes('thay đổi') || lower.includes('tăng') || lower.includes('giảm')))) {
               return true;
           }
           return false;
@@ -16977,21 +16990,51 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       /**
        * Nhận diện entry Status / Variable List dựa trên macro hiển thị biến hoặc thẻ trạng thái
        */
-      static isVarListEntryContent(content) {
+      static isVarListEntryContent(content, comment = '') {
           if (!content)
               return false;
+          const lower = content.toLowerCase();
+          const lowerComment = comment.toLowerCase();
+          if (lowerComment.includes('danh sách biến') || lowerComment.includes('variable list') || lowerComment.includes('status list')) {
+              return true;
+          }
           return (content.includes('{{format_message_variable::') ||
-              content.includes('<status_current_variable>') ||
-              content.includes('<status_current_variables>'));
+              lower.includes('<status_current_variable>') ||
+              lower.includes('<status_current_variables>') ||
+              lower.includes('<biến_trạng_thái') ||
+              lower.includes('<current_variables>') ||
+              (lower.includes("getvar('stat_data')") && (lower.includes('yaml(') || lower.includes('json.stringify'))));
       }
       /**
        * Nhận diện entry Controller / Preprocessing dựa trên @@preprocessing hoặc EJS code
        */
-      static isControllerEntryContent(content) {
+      static isControllerEntryContent(content, comment = '') {
           if (!content)
               return false;
-          return (content.includes('@@preprocessing') ||
-              (content.includes('<%') && (content.includes('getvar(') || content.includes('setvar('))));
+          const lower = content.toLowerCase();
+          const lowerComment = comment.toLowerCase();
+          // Không bao giờ nhận vơ nếu comment chỉ rõ là danh sách biến, quy tắc hoặc định dạng
+          if (lowerComment.includes('danh sách biến') ||
+              lowerComment.includes('quy tắc') ||
+              lowerComment.includes('định dạng') ||
+              lowerComment.includes('format') ||
+              lowerComment.includes('update_rule') ||
+              lowerComment.includes('initvar')) {
+              return false;
+          }
+          // 1. Chỉ dẫn @@preprocessing đặc thù của SillyTavern / TavernHelper
+          if (content.includes('@@preprocessing'))
+              return true;
+          // 2. Chứa EJS điều khiển phân giai đoạn (phase / stage / controller)
+          const isPhaseController = lowerComment.includes('bộ điều khiển') ||
+              lowerComment.includes('giai đoạn') ||
+              lowerComment.includes('controller') ||
+              lower.includes('phân giai đoạn') ||
+              lower.includes('thời kỳ');
+          if (content.includes('<%') && (content.includes('getvar(') || content.includes('setvar(')) && isPhaseController) {
+              return true;
+          }
+          return false;
       }
       /**
        * Phân loại một tập hợp các Lorebook Entry thành cấu trúc MVU dựa trên đặc trưng cấu trúc nội dung (Content DNA).
@@ -17012,37 +17055,65 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   break;
               }
           }
+          // Pass 1.5: Ưu tiên nhận diện các entry có tên gọi chỉ định rõ ràng
+          for (const entry of entries) {
+              if (entry === result.initvarEntry)
+                  continue;
+              const comment = (entry?.comment || entry?.name || '').toLowerCase();
+              if (!result.updateRulesEntry && (comment.includes('quy tắc cập nhật') || comment.includes('quy_tắc_cập_nhật') || comment.includes('update_rule') || comment.includes('update rules'))) {
+                  result.updateRulesEntry = entry;
+              }
+              if (!result.formatEntry && (comment.includes('định dạng') || comment.includes('format'))) {
+                  result.formatEntry = entry;
+              }
+              if (!result.varListEntry && (comment.includes('danh sách biến') || comment.includes('variable list') || comment.includes('status list'))) {
+                  result.varListEntry = entry;
+              }
+          }
           // Pass 2: Phân loại các entry còn lại theo đặc trưng cấu trúc nội dung
           for (const entry of entries) {
               if (entry === result.initvarEntry)
                   continue;
               const content = entry?.content || '';
               const comment = entry?.comment || entry?.name || '';
-              if (!result.ejsControllerEntry && this.isControllerEntryContent(content)) {
+              if (!result.ejsControllerEntry && this.isControllerEntryContent(content, comment)) {
                   result.ejsControllerEntry = entry;
                   continue;
               }
-              if (!result.varListEntry && this.isVarListEntryContent(content)) {
+              if (!result.varListEntry && this.isVarListEntryContent(content, comment)) {
                   result.varListEntry = entry;
-                  continue;
+                  const isAllInOne = content.includes('【Cập Nhật Biến】') || (content.includes('format:') && content.includes('<UpdateVariable>'));
+                  if (!isAllInOne)
+                      continue;
               }
               if (!result.formatEntry && this.isFormatEntryContent(content, comment)) {
                   result.formatEntry = entry;
-                  continue;
+                  const isAllInOne = content.includes('【Cập Nhật Biến】') || content.includes('tsundere_rules');
+                  if (!isAllInOne)
+                      continue;
               }
               if (!result.updateRulesEntry && this.isRulesEntryContent(content, comment)) {
                   result.updateRulesEntry = entry;
                   continue;
               }
           }
-          // Pass 3: Fallback trường hợp đặc biệt (ví dụ card Shirley kết hợp văn bản cập nhật biến bên trong mục chứa status_current_variable)
-          if (!result.updateRulesEntry) {
-              for (const entry of entries) {
-                  const content = entry?.content || '';
-                  if (content.includes('【Cập Nhật Biến】') || content.includes('【cập nhật biến】')) {
-                      result.updateRulesEntry = entry;
-                      break;
-                  }
+          // Pass 3: Fallback nếu còn thiếu format hoặc rules do gom chung entry (All-in-one pattern như Shirley)
+          if (!result.formatEntry && result.updateRulesEntry) {
+              const content = result.updateRulesEntry?.content || '';
+              if (this.isFormatEntryContent(content)) {
+                  result.formatEntry = result.updateRulesEntry;
+              }
+          }
+          if (!result.updateRulesEntry && result.formatEntry) {
+              const content = result.formatEntry?.content || '';
+              if (this.isRulesEntryContent(content)) {
+                  result.updateRulesEntry = result.formatEntry;
+              }
+          }
+          if (!result.updateRulesEntry && result.varListEntry) {
+              const content = result.varListEntry?.content || '';
+              if (this.isRulesEntryContent(content)) {
+                  result.updateRulesEntry = result.varListEntry;
               }
           }
           return result;
