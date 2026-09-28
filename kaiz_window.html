@@ -1569,18 +1569,31 @@
 <dialog id="kaiz-mvu-dashboard-modal" class="kaiz-modal kaiz-mvu-dialog">
     <!-- Header -->
     <div class="kaiz-mvu-header">
-        <div class="kaiz-mvu-header-left">
-            <div class="kaiz-mvu-header-icon">
-                <i class="fa-solid fa-chart-pie"></i>
-            </div>
-            <div class="kaiz-mvu-header-titles">
-                <h3 class="kaiz-mvu-header-title">
-                    Bảng Chỉ Số & Quản Lý MVU
-                    <span id="kaiz-mvu-status-badge" class="kaiz-status-pill badge-neutral">Đang tải...</span>
-                </h3>
-                <div id="kaiz-mvu-subtitle" class="kaiz-mvu-header-subtitle">
-                    Hệ thống biến trạng thái thời gian thực & Zod 4 Schema
+        <div class="kaiz-mvu-header-top">
+            <div class="kaiz-mvu-header-left">
+                <div class="kaiz-mvu-header-icon">
+                    <i class="fa-solid fa-chart-pie"></i>
                 </div>
+                <div class="kaiz-mvu-header-titles">
+                    <h3 class="kaiz-mvu-header-title">
+                        Bảng Chỉ Số & Quản Lý MVU
+                        <span id="kaiz-mvu-status-badge" class="kaiz-status-pill badge-neutral">Đang tải...</span>
+                    </h3>
+                    <div id="kaiz-mvu-subtitle" class="kaiz-mvu-header-subtitle">
+                        Hệ thống biến trạng thái thời gian thực & Zod 4 Schema
+                    </div>
+                </div>
+            </div>
+
+            <div class="kaiz-mvu-header-actions">
+                <button type="button" id="kaiz-mvu-refresh-btn" class="menu_button interactable" title="Đồng bộ lại biến">
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <i
+                    id="kaiz-mvu-close-btn"
+                    class="fa-solid fa-xmark interactable kaiz-mvu-header-close"
+                    title="Đóng cửa sổ"
+                ></i>
             </div>
         </div>
 
@@ -1600,15 +1613,6 @@
                     <i class="fa-solid fa-code"></i> <span>Raw / YAML</span>
                 </button>
             </div>
-
-            <button type="button" id="kaiz-mvu-refresh-btn" class="menu_button interactable" title="Đồng bộ lại biến">
-                <i class="fa-solid fa-rotate-right"></i>
-            </button>
-            <i
-                id="kaiz-mvu-close-btn"
-                class="fa-solid fa-xmark interactable kaiz-mvu-header-close"
-                title="Đóng cửa sổ"
-            ></i>
         </div>
     </div>
 
