@@ -916,13 +916,149 @@ export class SillyTavernAdapter {
         const ctx = SillyTavern.getContext();
         try {
             if (type === 'character') {
+                if (typeof (ctx as any).unshallowCharacter === 'function' && ctx.characterId !== undefined) {
+                    try {
+                        await (ctx as any).unshallowCharacter(ctx.characterId);
+                    } catch (unshallowErr) {
+                        console.warn(
+                            '[KaizAgent] unshallowCharacter failed, proceeding with current in-memory state:',
+                            unshallowErr,
+                        );
+                    }
+                }
+
                 const char = ctx.characters?.[ctx.characterId];
                 if (!char) throw new Error('No active character found');
                 const charName = char.name || 'Unknown_Character';
-                const charData = char.data || char;
+                const rawData = char.data || {};
+
+                // 1. Đồng bộ các trường V2 Spec cốt lõi (ưu tiên char.data, fallback về root char)
+                const name = rawData.name ?? char.name ?? 'Unknown';
+                const description = rawData.description ?? char.description ?? '';
+                const personality = rawData.personality ?? char.personality ?? '';
+                const scenario = rawData.scenario ?? char.scenario ?? '';
+                const first_mes = rawData.first_mes ?? char.first_mes ?? '';
+                const mes_example = rawData.mes_example ?? char.mes_example ?? '';
+                const creator_notes = rawData.creator_notes ?? char.creatorcomment ?? '';
+                const system_prompt = rawData.system_prompt ?? char.system_prompt ?? '';
+                const post_history_instructions =
+                    rawData.post_history_instructions ?? char.post_history_instructions ?? '';
+                const alternate_greetings = Array.isArray(rawData.alternate_greetings)
+                    ? rawData.alternate_greetings
+                    : Array.isArray(char.alternate_greetings)
+                      ? char.alternate_greetings
+                      : [];
+                const creator = rawData.creator ?? char.creator ?? '';
+                const character_version = rawData.character_version ?? char.character_version ?? '';
+
+                // 2. Thu thập Tags đầy đủ
+                let tags =
+                    Array.isArray(rawData.tags) && rawData.tags.length > 0
+                        ? [...rawData.tags]
+                        : Array.isArray(char.tags) && char.tags.length > 0
+                          ? [...char.tags]
+                          : [];
+                if (tags.length === 0 && ctx.tagMap && ctx.tags && char.avatar) {
+                    const currentTagIds = ctx.tagMap[char.avatar] || [];
+                    tags = currentTagIds
+                        .map((id: string) => ctx.tags.find((t: any) => t.id === id)?.name)
+                        .filter(Boolean);
+                }
+
+                // 3. Đóng gói Extensions (bảo toàn tavern_helper, regex_scripts, talkativeness, fav, world, v.v.)
+                const extensions: Record<string, any> = {
+                    ...(rawData.extensions || {}),
+                };
+                if (char.talkativeness !== undefined && extensions.talkativeness === undefined) {
+                    extensions.talkativeness = char.talkativeness;
+                }
+                if (char.fav !== undefined && extensions.fav === undefined) {
+                    extensions.fav = char.fav;
+                }
+                const linkedWorldName = extensions.world || char.world || null;
+                if (linkedWorldName && !extensions.world) {
+                    extensions.world = linkedWorldName;
+                }
+
+                // 4. Thu thập Lorebook (Embedded hoặc đóng gói từ Linked Worldbook)
+                let characterBook = rawData.character_book ? JSON.parse(JSON.stringify(rawData.character_book)) : null;
+                if (
+                    (!characterBook || !characterBook.entries || characterBook.entries.length === 0) &&
+                    linkedWorldName
+                ) {
+                    try {
+                        let worldData: any = null;
+                        if (typeof ctx.loadWorldInfo === 'function') {
+                            worldData = await ctx.loadWorldInfo(linkedWorldName);
+                        } else {
+                            const res = await fetch('/api/worldinfo/get', {
+                                method: 'POST',
+                                headers: {
+                                    ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ name: linkedWorldName }),
+                            });
+                            if (res.ok) worldData = await res.json();
+                        }
+                        if (worldData && worldData.entries) {
+                            const entriesArray = Array.isArray(worldData.entries)
+                                ? worldData.entries
+                                : Object.values(worldData.entries);
+                            characterBook = {
+                                name: linkedWorldName,
+                                description: `Tự động đóng gói từ Worldbook liên kết [${linkedWorldName}] vào bản sao lưu thẻ.`,
+                                extensions: worldData.extensions ?? {},
+                                entries: entriesArray,
+                            };
+                            if (worldData.scan_depth !== undefined && worldData.scan_depth !== null) {
+                                characterBook.scan_depth = worldData.scan_depth;
+                            }
+                            if (worldData.token_budget !== undefined && worldData.token_budget !== null) {
+                                characterBook.token_budget = worldData.token_budget;
+                            }
+                            if (worldData.recursive_scanning !== undefined && worldData.recursive_scanning !== null) {
+                                characterBook.recursive_scanning = worldData.recursive_scanning;
+                            }
+                        }
+                    } catch (wbErr) {
+                        console.warn('[KaizAgent] Không thể nhúng linked worldbook vào bản sao lưu thẻ:', wbErr);
+                    }
+                }
+
+                const fullCharData: Record<string, any> = {
+                    name,
+                    description,
+                    personality,
+                    scenario,
+                    first_mes,
+                    mes_example,
+                    creator_notes,
+                    system_prompt,
+                    post_history_instructions,
+                    alternate_greetings,
+                    character_book: characterBook,
+                    tags,
+                    creator,
+                    character_version,
+                    extensions,
+                };
+
+                const cardPayload = {
+                    spec: 'chara_card_v2',
+                    spec_version: '2.0',
+                    data: fullCharData,
+                    metadata: {
+                        avatar: char.avatar || '',
+                        exportDate: new Date().toISOString(),
+                        source: 'KaizAgent_FullCardBackup',
+                        linkedWorld: linkedWorldName,
+                    },
+                };
+
                 return {
                     name: charName,
-                    data: JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: charData }, null, 2),
+                    data: JSON.stringify(cardPayload, null, 2),
                 };
             }
             if (type === 'chat') {

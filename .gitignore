@@ -14,3 +14,7 @@ _references/
 
 # Generated source maps (build artifacts)
 *.map
+
+# Temporary plans & scratch files
+docs/superpowers/
+superpowers/

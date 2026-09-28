@@ -417,7 +417,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
           }
           if (!(continueMode && step === 1)) {
               const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
-              msgs.push({ role: 'assistant', content: prefill });
+              const prefillRole = settings.prefillAsSystem ? 'system' : 'assistant';
+              msgs.push({ role: prefillRole, content: prefill });
           }
           else {
               let isCutOffInsideCot = false;
@@ -8854,6 +8855,11314 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       },
   };
 
+  const ALIAS = Symbol.for('yaml.alias');
+  const DOC = Symbol.for('yaml.document');
+  const MAP = Symbol.for('yaml.map');
+  const PAIR = Symbol.for('yaml.pair');
+  const SCALAR$1 = Symbol.for('yaml.scalar');
+  const SEQ = Symbol.for('yaml.seq');
+  const NODE_TYPE = Symbol.for('yaml.node.type');
+  const isAlias = (node) => !!node && typeof node === 'object' && node[NODE_TYPE] === ALIAS;
+  const isDocument = (node) => !!node && typeof node === 'object' && node[NODE_TYPE] === DOC;
+  const isMap = (node) => !!node && typeof node === 'object' && node[NODE_TYPE] === MAP;
+  const isPair = (node) => !!node && typeof node === 'object' && node[NODE_TYPE] === PAIR;
+  const isScalar$1 = (node) => !!node && typeof node === 'object' && node[NODE_TYPE] === SCALAR$1;
+  const isSeq = (node) => !!node && typeof node === 'object' && node[NODE_TYPE] === SEQ;
+  function isCollection$1(node) {
+      if (node && typeof node === 'object')
+          switch (node[NODE_TYPE]) {
+              case MAP:
+              case SEQ:
+                  return true;
+          }
+      return false;
+  }
+  function isNode(node) {
+      if (node && typeof node === 'object')
+          switch (node[NODE_TYPE]) {
+              case ALIAS:
+              case MAP:
+              case SCALAR$1:
+              case SEQ:
+                  return true;
+          }
+      return false;
+  }
+  const hasAnchor = (node) => (isScalar$1(node) || isCollection$1(node)) && !!node.anchor;
+
+  const BREAK$1 = Symbol('break visit');
+  const SKIP$1 = Symbol('skip children');
+  const REMOVE$1 = Symbol('remove node');
+  /**
+   * Apply a visitor to an AST node or document.
+   *
+   * Walks through the tree (depth-first) starting from `node`, calling a
+   * `visitor` function with three arguments:
+   *   - `key`: For sequence values and map `Pair`, the node's index in the
+   *     collection. Within a `Pair`, `'key'` or `'value'`, correspondingly.
+   *     `null` for the root node.
+   *   - `node`: The current node.
+   *   - `path`: The ancestry of the current node.
+   *
+   * The return value of the visitor may be used to control the traversal:
+   *   - `undefined` (default): Do nothing and continue
+   *   - `visit.SKIP`: Do not visit the children of this node, continue with next
+   *     sibling
+   *   - `visit.BREAK`: Terminate traversal completely
+   *   - `visit.REMOVE`: Remove the current node, then continue with the next one
+   *   - `Node`: Replace the current node, then continue by visiting it
+   *   - `number`: While iterating the items of a sequence or map, set the index
+   *     of the next step. This is useful especially if the index of the current
+   *     node has changed.
+   *
+   * If `visitor` is a single function, it will be called with all values
+   * encountered in the tree, including e.g. `null` values. Alternatively,
+   * separate visitor functions may be defined for each `Map`, `Pair`, `Seq`,
+   * `Alias` and `Scalar` node. To define the same visitor function for more than
+   * one node type, use the `Collection` (map and seq), `Value` (map, seq & scalar)
+   * and `Node` (alias, map, seq & scalar) targets. Of all these, only the most
+   * specific defined one will be used for each node.
+   */
+  function visit$1(node, visitor) {
+      const visitor_ = initVisitor(visitor);
+      if (isDocument(node)) {
+          const cd = visit_(null, node.contents, visitor_, Object.freeze([node]));
+          if (cd === REMOVE$1)
+              node.contents = null;
+      }
+      else
+          visit_(null, node, visitor_, Object.freeze([]));
+  }
+  // Without the `as symbol` casts, TS declares these in the `visit`
+  // namespace using `var`, but then complains about that because
+  // `unique symbol` must be `const`.
+  /** Terminate visit traversal completely */
+  visit$1.BREAK = BREAK$1;
+  /** Do not visit the children of the current node */
+  visit$1.SKIP = SKIP$1;
+  /** Remove the current node */
+  visit$1.REMOVE = REMOVE$1;
+  function visit_(key, node, visitor, path) {
+      const ctrl = callVisitor(key, node, visitor, path);
+      if (isNode(ctrl) || isPair(ctrl)) {
+          replaceNode(key, path, ctrl);
+          return visit_(key, ctrl, visitor, path);
+      }
+      if (typeof ctrl !== 'symbol') {
+          if (isCollection$1(node)) {
+              path = Object.freeze(path.concat(node));
+              for (let i = 0; i < node.items.length; ++i) {
+                  const ci = visit_(i, node.items[i], visitor, path);
+                  if (typeof ci === 'number')
+                      i = ci - 1;
+                  else if (ci === BREAK$1)
+                      return BREAK$1;
+                  else if (ci === REMOVE$1) {
+                      node.items.splice(i, 1);
+                      i -= 1;
+                  }
+              }
+          }
+          else if (isPair(node)) {
+              path = Object.freeze(path.concat(node));
+              const ck = visit_('key', node.key, visitor, path);
+              if (ck === BREAK$1)
+                  return BREAK$1;
+              else if (ck === REMOVE$1)
+                  node.key = null;
+              const cv = visit_('value', node.value, visitor, path);
+              if (cv === BREAK$1)
+                  return BREAK$1;
+              else if (cv === REMOVE$1)
+                  node.value = null;
+          }
+      }
+      return ctrl;
+  }
+  /**
+   * Apply an async visitor to an AST node or document.
+   *
+   * Walks through the tree (depth-first) starting from `node`, calling a
+   * `visitor` function with three arguments:
+   *   - `key`: For sequence values and map `Pair`, the node's index in the
+   *     collection. Within a `Pair`, `'key'` or `'value'`, correspondingly.
+   *     `null` for the root node.
+   *   - `node`: The current node.
+   *   - `path`: The ancestry of the current node.
+   *
+   * The return value of the visitor may be used to control the traversal:
+   *   - `Promise`: Must resolve to one of the following values
+   *   - `undefined` (default): Do nothing and continue
+   *   - `visit.SKIP`: Do not visit the children of this node, continue with next
+   *     sibling
+   *   - `visit.BREAK`: Terminate traversal completely
+   *   - `visit.REMOVE`: Remove the current node, then continue with the next one
+   *   - `Node`: Replace the current node, then continue by visiting it
+   *   - `number`: While iterating the items of a sequence or map, set the index
+   *     of the next step. This is useful especially if the index of the current
+   *     node has changed.
+   *
+   * If `visitor` is a single function, it will be called with all values
+   * encountered in the tree, including e.g. `null` values. Alternatively,
+   * separate visitor functions may be defined for each `Map`, `Pair`, `Seq`,
+   * `Alias` and `Scalar` node. To define the same visitor function for more than
+   * one node type, use the `Collection` (map and seq), `Value` (map, seq & scalar)
+   * and `Node` (alias, map, seq & scalar) targets. Of all these, only the most
+   * specific defined one will be used for each node.
+   */
+  async function visitAsync(node, visitor) {
+      const visitor_ = initVisitor(visitor);
+      if (isDocument(node)) {
+          const cd = await visitAsync_(null, node.contents, visitor_, Object.freeze([node]));
+          if (cd === REMOVE$1)
+              node.contents = null;
+      }
+      else
+          await visitAsync_(null, node, visitor_, Object.freeze([]));
+  }
+  // Without the `as symbol` casts, TS declares these in the `visit`
+  // namespace using `var`, but then complains about that because
+  // `unique symbol` must be `const`.
+  /** Terminate visit traversal completely */
+  visitAsync.BREAK = BREAK$1;
+  /** Do not visit the children of the current node */
+  visitAsync.SKIP = SKIP$1;
+  /** Remove the current node */
+  visitAsync.REMOVE = REMOVE$1;
+  async function visitAsync_(key, node, visitor, path) {
+      const ctrl = await callVisitor(key, node, visitor, path);
+      if (isNode(ctrl) || isPair(ctrl)) {
+          replaceNode(key, path, ctrl);
+          return visitAsync_(key, ctrl, visitor, path);
+      }
+      if (typeof ctrl !== 'symbol') {
+          if (isCollection$1(node)) {
+              path = Object.freeze(path.concat(node));
+              for (let i = 0; i < node.items.length; ++i) {
+                  const ci = await visitAsync_(i, node.items[i], visitor, path);
+                  if (typeof ci === 'number')
+                      i = ci - 1;
+                  else if (ci === BREAK$1)
+                      return BREAK$1;
+                  else if (ci === REMOVE$1) {
+                      node.items.splice(i, 1);
+                      i -= 1;
+                  }
+              }
+          }
+          else if (isPair(node)) {
+              path = Object.freeze(path.concat(node));
+              const ck = await visitAsync_('key', node.key, visitor, path);
+              if (ck === BREAK$1)
+                  return BREAK$1;
+              else if (ck === REMOVE$1)
+                  node.key = null;
+              const cv = await visitAsync_('value', node.value, visitor, path);
+              if (cv === BREAK$1)
+                  return BREAK$1;
+              else if (cv === REMOVE$1)
+                  node.value = null;
+          }
+      }
+      return ctrl;
+  }
+  function initVisitor(visitor) {
+      if (typeof visitor === 'object' &&
+          (visitor.Collection || visitor.Node || visitor.Value)) {
+          return Object.assign({
+              Alias: visitor.Node,
+              Map: visitor.Node,
+              Scalar: visitor.Node,
+              Seq: visitor.Node
+          }, visitor.Value && {
+              Map: visitor.Value,
+              Scalar: visitor.Value,
+              Seq: visitor.Value
+          }, visitor.Collection && {
+              Map: visitor.Collection,
+              Seq: visitor.Collection
+          }, visitor);
+      }
+      return visitor;
+  }
+  function callVisitor(key, node, visitor, path) {
+      if (typeof visitor === 'function')
+          return visitor(key, node, path);
+      if (isMap(node))
+          return visitor.Map?.(key, node, path);
+      if (isSeq(node))
+          return visitor.Seq?.(key, node, path);
+      if (isPair(node))
+          return visitor.Pair?.(key, node, path);
+      if (isScalar$1(node))
+          return visitor.Scalar?.(key, node, path);
+      if (isAlias(node))
+          return visitor.Alias?.(key, node, path);
+      return undefined;
+  }
+  function replaceNode(key, path, node) {
+      const parent = path[path.length - 1];
+      if (isCollection$1(parent)) {
+          parent.items[key] = node;
+      }
+      else if (isPair(parent)) {
+          if (key === 'key')
+              parent.key = node;
+          else
+              parent.value = node;
+      }
+      else if (isDocument(parent)) {
+          parent.contents = node;
+      }
+      else {
+          const pt = isAlias(parent) ? 'alias' : 'scalar';
+          throw new Error(`Cannot replace node with ${pt} parent`);
+      }
+  }
+
+  const escapeChars = {
+      '!': '%21',
+      ',': '%2C',
+      '[': '%5B',
+      ']': '%5D',
+      '{': '%7B',
+      '}': '%7D'
+  };
+  const escapeTagName = (tn) => tn.replace(/[!,[\]{}]/g, ch => escapeChars[ch]);
+  class Directives {
+      constructor(yaml, tags) {
+          /**
+           * The directives-end/doc-start marker `---`. If `null`, a marker may still be
+           * included in the document's stringified representation.
+           */
+          this.docStart = null;
+          /** The doc-end marker `...`.  */
+          this.docEnd = false;
+          this.yaml = Object.assign({}, Directives.defaultYaml, yaml);
+          this.tags = Object.assign({}, Directives.defaultTags, tags);
+      }
+      clone() {
+          const copy = new Directives(this.yaml, this.tags);
+          copy.docStart = this.docStart;
+          return copy;
+      }
+      /**
+       * During parsing, get a Directives instance for the current document and
+       * update the stream state according to the current version's spec.
+       */
+      atDocument() {
+          const res = new Directives(this.yaml, this.tags);
+          switch (this.yaml.version) {
+              case '1.1':
+                  this.atNextDocument = true;
+                  break;
+              case '1.2':
+                  this.atNextDocument = false;
+                  this.yaml = {
+                      explicit: Directives.defaultYaml.explicit,
+                      version: '1.2'
+                  };
+                  this.tags = Object.assign({}, Directives.defaultTags);
+                  break;
+          }
+          return res;
+      }
+      /**
+       * @param onError - May be called even if the action was successful
+       * @returns `true` on success
+       */
+      add(line, onError) {
+          if (this.atNextDocument) {
+              this.yaml = { explicit: Directives.defaultYaml.explicit, version: '1.1' };
+              this.tags = Object.assign({}, Directives.defaultTags);
+              this.atNextDocument = false;
+          }
+          const parts = line.trim().split(/[ \t]+/);
+          const name = parts.shift();
+          switch (name) {
+              case '%TAG': {
+                  if (parts.length !== 2) {
+                      onError(0, '%TAG directive should contain exactly two parts');
+                      if (parts.length < 2)
+                          return false;
+                  }
+                  const [handle, prefix] = parts;
+                  this.tags[handle] = prefix;
+                  return true;
+              }
+              case '%YAML': {
+                  this.yaml.explicit = true;
+                  if (parts.length !== 1) {
+                      onError(0, '%YAML directive should contain exactly one part');
+                      return false;
+                  }
+                  const [version] = parts;
+                  if (version === '1.1' || version === '1.2') {
+                      this.yaml.version = version;
+                      return true;
+                  }
+                  else {
+                      const isValid = /^\d+\.\d+$/.test(version);
+                      onError(6, `Unsupported YAML version ${version}`, isValid);
+                      return false;
+                  }
+              }
+              default:
+                  onError(0, `Unknown directive ${name}`, true);
+                  return false;
+          }
+      }
+      /**
+       * Resolves a tag, matching handles to those defined in %TAG directives.
+       *
+       * @returns Resolved tag, which may also be the non-specific tag `'!'` or a
+       *   `'!local'` tag, or `null` if unresolvable.
+       */
+      tagName(source, onError) {
+          if (source === '!')
+              return '!'; // non-specific tag
+          if (source[0] !== '!') {
+              onError(`Not a valid tag: ${source}`);
+              return null;
+          }
+          if (source[1] === '<') {
+              const verbatim = source.slice(2, -1);
+              if (verbatim === '!' || verbatim === '!!') {
+                  onError(`Verbatim tags aren't resolved, so ${source} is invalid.`);
+                  return null;
+              }
+              if (source[source.length - 1] !== '>')
+                  onError('Verbatim tags must end with a >');
+              return verbatim;
+          }
+          const [, handle, suffix] = source.match(/^(.*!)([^!]*)$/s);
+          if (!suffix)
+              onError(`The ${source} tag has no suffix`);
+          const prefix = this.tags[handle];
+          if (prefix) {
+              try {
+                  return prefix + decodeURIComponent(suffix);
+              }
+              catch (error) {
+                  onError(String(error));
+                  return null;
+              }
+          }
+          if (handle === '!')
+              return source; // local tag
+          onError(`Could not resolve tag: ${source}`);
+          return null;
+      }
+      /**
+       * Given a fully resolved tag, returns its printable string form,
+       * taking into account current tag prefixes and defaults.
+       */
+      tagString(tag) {
+          for (const [handle, prefix] of Object.entries(this.tags)) {
+              if (tag.startsWith(prefix))
+                  return handle + escapeTagName(tag.substring(prefix.length));
+          }
+          return tag[0] === '!' ? tag : `!<${tag}>`;
+      }
+      toString(doc) {
+          const lines = this.yaml.explicit
+              ? [`%YAML ${this.yaml.version || '1.2'}`]
+              : [];
+          const tagEntries = Object.entries(this.tags);
+          let tagNames;
+          if (doc && tagEntries.length > 0 && isNode(doc.contents)) {
+              const tags = {};
+              visit$1(doc.contents, (_key, node) => {
+                  if (isNode(node) && node.tag)
+                      tags[node.tag] = true;
+              });
+              tagNames = Object.keys(tags);
+          }
+          else
+              tagNames = [];
+          for (const [handle, prefix] of tagEntries) {
+              if (handle === '!!' && prefix === 'tag:yaml.org,2002:')
+                  continue;
+              if (!doc || tagNames.some(tn => tn.startsWith(prefix)))
+                  lines.push(`%TAG ${handle} ${prefix}`);
+          }
+          return lines.join('\n');
+      }
+  }
+  Directives.defaultYaml = { explicit: false, version: '1.2' };
+  Directives.defaultTags = { '!!': 'tag:yaml.org,2002:' };
+
+  /**
+   * Verify that the input string is a valid anchor.
+   *
+   * Will throw on errors.
+   */
+  function anchorIsValid(anchor) {
+      if (/[\x00-\x19\s,[\]{}]/.test(anchor)) {
+          const sa = JSON.stringify(anchor);
+          const msg = `Anchor must not contain whitespace or control characters: ${sa}`;
+          throw new Error(msg);
+      }
+      return true;
+  }
+  function anchorNames(root) {
+      const anchors = new Set();
+      visit$1(root, {
+          Value(_key, node) {
+              if (node.anchor)
+                  anchors.add(node.anchor);
+          }
+      });
+      return anchors;
+  }
+  /** Find a new anchor name with the given `prefix` and a one-indexed suffix. */
+  function findNewAnchor(prefix, exclude) {
+      for (let i = 1; true; ++i) {
+          const name = `${prefix}${i}`;
+          if (!exclude.has(name))
+              return name;
+      }
+  }
+  function createNodeAnchors(doc, prefix) {
+      const aliasObjects = [];
+      const sourceObjects = new Map();
+      let prevAnchors = null;
+      return {
+          onAnchor: (source) => {
+              aliasObjects.push(source);
+              prevAnchors ?? (prevAnchors = anchorNames(doc));
+              const anchor = findNewAnchor(prefix, prevAnchors);
+              prevAnchors.add(anchor);
+              return anchor;
+          },
+          /**
+           * With circular references, the source node is only resolved after all
+           * of its child nodes are. This is why anchors are set only after all of
+           * the nodes have been created.
+           */
+          setAnchors: () => {
+              for (const source of aliasObjects) {
+                  const ref = sourceObjects.get(source);
+                  if (typeof ref === 'object' &&
+                      ref.anchor &&
+                      (isScalar$1(ref.node) || isCollection$1(ref.node))) {
+                      ref.node.anchor = ref.anchor;
+                  }
+                  else {
+                      const error = new Error('Failed to resolve repeated object (this should not happen)');
+                      error.source = source;
+                      throw error;
+                  }
+              }
+          },
+          sourceObjects
+      };
+  }
+
+  /**
+   * Applies the JSON.parse reviver algorithm as defined in the ECMA-262 spec,
+   * in section 24.5.1.1 "Runtime Semantics: InternalizeJSONProperty" of the
+   * 2021 edition: https://tc39.es/ecma262/#sec-json.parse
+   *
+   * Includes extensions for handling Map and Set objects.
+   */
+  function applyReviver(reviver, obj, key, val) {
+      if (val && typeof val === 'object') {
+          if (Array.isArray(val)) {
+              for (let i = 0, len = val.length; i < len; ++i) {
+                  const v0 = val[i];
+                  const v1 = applyReviver(reviver, val, String(i), v0);
+                  // eslint-disable-next-line @typescript-eslint/no-array-delete
+                  if (v1 === undefined)
+                      delete val[i];
+                  else if (v1 !== v0)
+                      val[i] = v1;
+              }
+          }
+          else if (val instanceof Map) {
+              for (const k of Array.from(val.keys())) {
+                  const v0 = val.get(k);
+                  const v1 = applyReviver(reviver, val, k, v0);
+                  if (v1 === undefined)
+                      val.delete(k);
+                  else if (v1 !== v0)
+                      val.set(k, v1);
+              }
+          }
+          else if (val instanceof Set) {
+              for (const v0 of Array.from(val)) {
+                  const v1 = applyReviver(reviver, val, v0, v0);
+                  if (v1 === undefined)
+                      val.delete(v0);
+                  else if (v1 !== v0) {
+                      val.delete(v0);
+                      val.add(v1);
+                  }
+              }
+          }
+          else {
+              for (const [k, v0] of Object.entries(val)) {
+                  const v1 = applyReviver(reviver, val, k, v0);
+                  if (v1 === undefined)
+                      delete val[k];
+                  else if (v1 !== v0)
+                      val[k] = v1;
+              }
+          }
+      }
+      return reviver.call(obj, key, val);
+  }
+
+  /**
+   * Recursively convert any node or its contents to native JavaScript
+   *
+   * @param value - The input value
+   * @param arg - If `value` defines a `toJSON()` method, use this
+   *   as its first argument
+   * @param ctx - Conversion context, originally set in Document#toJS(). If
+   *   `{ keep: true }` is not set, output should be suitable for JSON
+   *   stringification.
+   */
+  function toJS(value, arg, ctx) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      if (Array.isArray(value))
+          return value.map((v, i) => toJS(v, String(i), ctx));
+      if (value && typeof value.toJSON === 'function') {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+          if (!ctx || !hasAnchor(value))
+              return value.toJSON(arg, ctx);
+          const data = { aliasCount: 0, count: 1, res: undefined };
+          ctx.anchors.set(value, data);
+          ctx.onCreate = res => {
+              data.res = res;
+              delete ctx.onCreate;
+          };
+          const res = value.toJSON(arg, ctx);
+          if (ctx.onCreate)
+              ctx.onCreate(res);
+          return res;
+      }
+      if (typeof value === 'bigint' && !ctx?.keep)
+          return Number(value);
+      return value;
+  }
+
+  class NodeBase {
+      constructor(type) {
+          Object.defineProperty(this, NODE_TYPE, { value: type });
+      }
+      /** Create a copy of this node.  */
+      clone() {
+          const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+          if (this.range)
+              copy.range = this.range.slice();
+          return copy;
+      }
+      /** A plain JavaScript representation of this node. */
+      toJS(doc, { mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
+          if (!isDocument(doc))
+              throw new TypeError('A document argument is required');
+          const ctx = {
+              anchors: new Map(),
+              doc,
+              keep: true,
+              mapAsMap: mapAsMap === true,
+              mapKeyWarned: false,
+              maxAliasCount: typeof maxAliasCount === 'number' ? maxAliasCount : 100
+          };
+          const res = toJS(this, '', ctx);
+          if (typeof onAnchor === 'function')
+              for (const { count, res } of ctx.anchors.values())
+                  onAnchor(res, count);
+          return typeof reviver === 'function'
+              ? applyReviver(reviver, { '': res }, '', res)
+              : res;
+      }
+  }
+
+  class Alias extends NodeBase {
+      constructor(source) {
+          super(ALIAS);
+          this.source = source;
+          Object.defineProperty(this, 'tag', {
+              set() {
+                  throw new Error('Alias nodes cannot have tags');
+              }
+          });
+      }
+      /**
+       * Resolve the value of this alias within `doc`, finding the last
+       * instance of the `source` anchor before this node.
+       */
+      resolve(doc, ctx) {
+          if (ctx?.maxAliasCount === 0)
+              throw new ReferenceError('Alias resolution is disabled');
+          let nodes;
+          if (ctx?.aliasResolveCache) {
+              nodes = ctx.aliasResolveCache;
+          }
+          else {
+              nodes = [];
+              visit$1(doc, {
+                  Node: (_key, node) => {
+                      if (isAlias(node) || hasAnchor(node))
+                          nodes.push(node);
+                  }
+              });
+              if (ctx)
+                  ctx.aliasResolveCache = nodes;
+          }
+          let found = undefined;
+          for (const node of nodes) {
+              if (node === this)
+                  break;
+              if (node.anchor === this.source)
+                  found = node;
+          }
+          if (found && ctx) {
+              const { anchors, doc, maxAliasCount } = ctx;
+              let data = anchors.get(found);
+              if (!data) {
+                  // Resolve anchors for Node.prototype.toJS()
+                  toJS(found, null, ctx);
+                  data = anchors.get(found);
+              }
+              /* istanbul ignore if */
+              if (data?.res === undefined) {
+                  const msg = 'This should not happen: Alias anchor was not resolved?';
+                  throw new ReferenceError(msg);
+              }
+              if (maxAliasCount >= 0) {
+                  data.count += 1;
+                  if (data.aliasCount === 0)
+                      data.aliasCount = getAliasCount(doc, found, anchors);
+                  if (data.count * data.aliasCount > maxAliasCount) {
+                      const msg = 'Excessive alias count indicates a resource exhaustion attack';
+                      throw new ReferenceError(msg);
+                  }
+              }
+          }
+          return found;
+      }
+      toJSON(_arg, ctx) {
+          if (!ctx)
+              return { source: this.source };
+          const source = this.resolve(ctx.doc, ctx);
+          if (!source) {
+              const msg = `Unresolved alias (the anchor must be set before the alias): ${this.source}`;
+              throw new ReferenceError(msg);
+          }
+          return ctx.anchors.get(source).res;
+      }
+      toString(ctx, _onComment, _onChompKeep) {
+          const src = `*${this.source}`;
+          if (ctx) {
+              anchorIsValid(this.source);
+              if (ctx.options.verifyAliasOrder && !ctx.anchors.has(this.source)) {
+                  const msg = `Unresolved alias (the anchor must be set before the alias): ${this.source}`;
+                  throw new Error(msg);
+              }
+              if (ctx.implicitKey)
+                  return `${src} `;
+          }
+          return src;
+      }
+  }
+  function getAliasCount(doc, node, anchors) {
+      if (isAlias(node)) {
+          const source = node.resolve(doc);
+          const anchor = anchors && source && anchors.get(source);
+          return anchor ? anchor.count * anchor.aliasCount : 0;
+      }
+      else if (isCollection$1(node)) {
+          let count = 0;
+          for (const item of node.items) {
+              const c = getAliasCount(doc, item, anchors);
+              if (c > count)
+                  count = c;
+          }
+          return count;
+      }
+      else if (isPair(node)) {
+          const kc = getAliasCount(doc, node.key, anchors);
+          const vc = getAliasCount(doc, node.value, anchors);
+          return Math.max(kc, vc);
+      }
+      return 1;
+  }
+
+  const isScalarValue = (value) => !value || (typeof value !== 'function' && typeof value !== 'object');
+  class Scalar extends NodeBase {
+      constructor(value) {
+          super(SCALAR$1);
+          this.value = value;
+      }
+      toJSON(arg, ctx) {
+          return ctx?.keep ? this.value : toJS(this.value, arg, ctx);
+      }
+      toString() {
+          return String(this.value);
+      }
+  }
+  Scalar.BLOCK_FOLDED = 'BLOCK_FOLDED';
+  Scalar.BLOCK_LITERAL = 'BLOCK_LITERAL';
+  Scalar.PLAIN = 'PLAIN';
+  Scalar.QUOTE_DOUBLE = 'QUOTE_DOUBLE';
+  Scalar.QUOTE_SINGLE = 'QUOTE_SINGLE';
+
+  const defaultTagPrefix = 'tag:yaml.org,2002:';
+  function findTagObject(value, tagName, tags) {
+      if (tagName) {
+          const match = tags.filter(t => t.tag === tagName);
+          const tagObj = match.find(t => !t.format) ?? match[0];
+          if (!tagObj)
+              throw new Error(`Tag ${tagName} not found`);
+          return tagObj;
+      }
+      return tags.find(t => t.identify?.(value) && !t.format);
+  }
+  function createNode(value, tagName, ctx) {
+      if (isDocument(value))
+          value = value.contents;
+      if (isNode(value))
+          return value;
+      if (isPair(value)) {
+          const map = ctx.schema[MAP].createNode?.(ctx.schema, null, ctx);
+          map.items.push(value);
+          return map;
+      }
+      if (value instanceof String ||
+          value instanceof Number ||
+          value instanceof Boolean ||
+          (typeof BigInt !== 'undefined' && value instanceof BigInt) // not supported everywhere
+      ) {
+          // https://tc39.es/ecma262/#sec-serializejsonproperty
+          value = value.valueOf();
+      }
+      const { aliasDuplicateObjects, onAnchor, onTagObj, schema, sourceObjects } = ctx;
+      // Detect duplicate references to the same object & use Alias nodes for all
+      // after first. The `ref` wrapper allows for circular references to resolve.
+      let ref = undefined;
+      if (aliasDuplicateObjects && value && typeof value === 'object') {
+          ref = sourceObjects.get(value);
+          if (ref) {
+              ref.anchor ?? (ref.anchor = onAnchor(value));
+              return new Alias(ref.anchor);
+          }
+          else {
+              ref = { anchor: null, node: null };
+              sourceObjects.set(value, ref);
+          }
+      }
+      if (tagName?.startsWith('!!'))
+          tagName = defaultTagPrefix + tagName.slice(2);
+      let tagObj = findTagObject(value, tagName, schema.tags);
+      if (!tagObj) {
+          if (value && typeof value.toJSON === 'function') {
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+              value = value.toJSON();
+          }
+          if (!value || typeof value !== 'object') {
+              const node = new Scalar(value);
+              if (ref)
+                  ref.node = node;
+              return node;
+          }
+          tagObj =
+              value instanceof Map
+                  ? schema[MAP]
+                  : Symbol.iterator in Object(value)
+                      ? schema[SEQ]
+                      : schema[MAP];
+      }
+      if (onTagObj) {
+          onTagObj(tagObj);
+          delete ctx.onTagObj;
+      }
+      const node = tagObj?.createNode
+          ? tagObj.createNode(ctx.schema, value, ctx)
+          : typeof tagObj?.nodeClass?.from === 'function'
+              ? tagObj.nodeClass.from(ctx.schema, value, ctx)
+              : new Scalar(value);
+      if (tagName)
+          node.tag = tagName;
+      else if (!tagObj.default)
+          node.tag = tagObj.tag;
+      if (ref)
+          ref.node = node;
+      return node;
+  }
+
+  function collectionFromPath(schema, path, value) {
+      let v = value;
+      for (let i = path.length - 1; i >= 0; --i) {
+          const k = path[i];
+          if (typeof k === 'number' && Number.isInteger(k) && k >= 0) {
+              const a = [];
+              a[k] = v;
+              v = a;
+          }
+          else {
+              v = new Map([[k, v]]);
+          }
+      }
+      return createNode(v, undefined, {
+          aliasDuplicateObjects: false,
+          keepUndefined: false,
+          onAnchor: () => {
+              throw new Error('This should not happen, please report a bug.');
+          },
+          schema,
+          sourceObjects: new Map()
+      });
+  }
+  // Type guard is intentionally a little wrong so as to be more useful,
+  // as it does not cover untypable empty non-string iterables (e.g. []).
+  const isEmptyPath = (path) => path == null ||
+      (typeof path === 'object' && !!path[Symbol.iterator]().next().done);
+  class Collection extends NodeBase {
+      constructor(type, schema) {
+          super(type);
+          Object.defineProperty(this, 'schema', {
+              value: schema,
+              configurable: true,
+              enumerable: false,
+              writable: true
+          });
+      }
+      /**
+       * Create a copy of this collection.
+       *
+       * @param schema - If defined, overwrites the original's schema
+       */
+      clone(schema) {
+          const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+          if (schema)
+              copy.schema = schema;
+          copy.items = copy.items.map(it => isNode(it) || isPair(it) ? it.clone(schema) : it);
+          if (this.range)
+              copy.range = this.range.slice();
+          return copy;
+      }
+      /**
+       * Adds a value to the collection. For `!!map` and `!!omap` the value must
+       * be a Pair instance or a `{ key, value }` object, which may not have a key
+       * that already exists in the map.
+       */
+      addIn(path, value) {
+          if (isEmptyPath(path))
+              this.add(value);
+          else {
+              const [key, ...rest] = path;
+              const node = this.get(key, true);
+              if (isCollection$1(node))
+                  node.addIn(rest, value);
+              else if (node === undefined && this.schema)
+                  this.set(key, collectionFromPath(this.schema, rest, value));
+              else
+                  throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
+          }
+      }
+      /**
+       * Removes a value from the collection.
+       * @returns `true` if the item was found and removed.
+       */
+      deleteIn(path) {
+          const [key, ...rest] = path;
+          if (rest.length === 0)
+              return this.delete(key);
+          const node = this.get(key, true);
+          if (isCollection$1(node))
+              return node.deleteIn(rest);
+          else
+              throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
+      }
+      /**
+       * Returns item at `key`, or `undefined` if not found. By default unwraps
+       * scalar values from their surrounding node; to disable set `keepScalar` to
+       * `true` (collections are always returned intact).
+       */
+      getIn(path, keepScalar) {
+          const [key, ...rest] = path;
+          const node = this.get(key, true);
+          if (rest.length === 0)
+              return !keepScalar && isScalar$1(node) ? node.value : node;
+          else
+              return isCollection$1(node) ? node.getIn(rest, keepScalar) : undefined;
+      }
+      hasAllNullValues(allowScalar) {
+          return this.items.every(node => {
+              if (!isPair(node))
+                  return false;
+              const n = node.value;
+              return (n == null ||
+                  (allowScalar &&
+                      isScalar$1(n) &&
+                      n.value == null &&
+                      !n.commentBefore &&
+                      !n.comment &&
+                      !n.tag));
+          });
+      }
+      /**
+       * Checks if the collection includes a value with the key `key`.
+       */
+      hasIn(path) {
+          const [key, ...rest] = path;
+          if (rest.length === 0)
+              return this.has(key);
+          const node = this.get(key, true);
+          return isCollection$1(node) ? node.hasIn(rest) : false;
+      }
+      /**
+       * Sets a value in this collection. For `!!set`, `value` needs to be a
+       * boolean to add/remove the item from the set.
+       */
+      setIn(path, value) {
+          const [key, ...rest] = path;
+          if (rest.length === 0) {
+              this.set(key, value);
+          }
+          else {
+              const node = this.get(key, true);
+              if (isCollection$1(node))
+                  node.setIn(rest, value);
+              else if (node === undefined && this.schema)
+                  this.set(key, collectionFromPath(this.schema, rest, value));
+              else
+                  throw new Error(`Expected YAML collection at ${key}. Remaining path: ${rest}`);
+          }
+      }
+  }
+
+  /**
+   * Stringifies a comment.
+   *
+   * Empty comment lines are left empty,
+   * lines consisting of a single space are replaced by `#`,
+   * and all other lines are prefixed with a `#`.
+   */
+  const stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, '#');
+  function indentComment(comment, indent) {
+      if (/^\n+$/.test(comment))
+          return comment.substring(1);
+      return indent ? comment.replace(/^(?! *$)/gm, indent) : comment;
+  }
+  const lineComment = (str, indent, comment) => str.endsWith('\n')
+      ? indentComment(comment, indent)
+      : comment.includes('\n')
+          ? '\n' + indentComment(comment, indent)
+          : (str.endsWith(' ') ? '' : ' ') + comment;
+
+  const FOLD_FLOW = 'flow';
+  const FOLD_BLOCK = 'block';
+  const FOLD_QUOTED = 'quoted';
+  /**
+   * Tries to keep input at up to `lineWidth` characters, splitting only on spaces
+   * not followed by newlines or spaces unless `mode` is `'quoted'`. Lines are
+   * terminated with `\n` and started with `indent`.
+   */
+  function foldFlowLines(text, indent, mode = 'flow', { indentAtStart, lineWidth = 80, minContentWidth = 20, onFold, onOverflow } = {}) {
+      if (!lineWidth || lineWidth < 0)
+          return text;
+      if (lineWidth < minContentWidth)
+          minContentWidth = 0;
+      const endStep = Math.max(1 + minContentWidth, 1 + lineWidth - indent.length);
+      if (text.length <= endStep)
+          return text;
+      const folds = [];
+      const escapedFolds = {};
+      let end = lineWidth - indent.length;
+      if (typeof indentAtStart === 'number') {
+          if (indentAtStart > lineWidth - Math.max(2, minContentWidth))
+              folds.push(0);
+          else
+              end = lineWidth - indentAtStart;
+      }
+      let split = undefined;
+      let prev = undefined;
+      let overflow = false;
+      let i = -1;
+      let escStart = -1;
+      let escEnd = -1;
+      if (mode === FOLD_BLOCK) {
+          i = consumeMoreIndentedLines(text, i, indent.length);
+          if (i !== -1)
+              end = i + endStep;
+      }
+      for (let ch; (ch = text[(i += 1)]);) {
+          if (mode === FOLD_QUOTED && ch === '\\') {
+              escStart = i;
+              switch (text[i + 1]) {
+                  case 'x':
+                      i += 3;
+                      break;
+                  case 'u':
+                      i += 5;
+                      break;
+                  case 'U':
+                      i += 9;
+                      break;
+                  default:
+                      i += 1;
+              }
+              escEnd = i;
+          }
+          if (ch === '\n') {
+              if (mode === FOLD_BLOCK)
+                  i = consumeMoreIndentedLines(text, i, indent.length);
+              end = i + indent.length + endStep;
+              split = undefined;
+          }
+          else {
+              if (ch === ' ' &&
+                  prev &&
+                  prev !== ' ' &&
+                  prev !== '\n' &&
+                  prev !== '\t') {
+                  // space surrounded by non-space can be replaced with newline + indent
+                  const next = text[i + 1];
+                  if (next && next !== ' ' && next !== '\n' && next !== '\t')
+                      split = i;
+              }
+              if (i >= end) {
+                  if (split) {
+                      folds.push(split);
+                      end = split + endStep;
+                      split = undefined;
+                  }
+                  else if (mode === FOLD_QUOTED) {
+                      // white-space collected at end may stretch past lineWidth
+                      while (prev === ' ' || prev === '\t') {
+                          prev = ch;
+                          ch = text[(i += 1)];
+                          overflow = true;
+                      }
+                      // Account for newline escape, but don't break preceding escape
+                      const j = i > escEnd + 1 ? i - 2 : escStart - 1;
+                      // Bail out if lineWidth & minContentWidth are shorter than an escape string
+                      if (escapedFolds[j])
+                          return text;
+                      folds.push(j);
+                      escapedFolds[j] = true;
+                      end = j + endStep;
+                      split = undefined;
+                  }
+                  else {
+                      overflow = true;
+                  }
+              }
+          }
+          prev = ch;
+      }
+      if (overflow && onOverflow)
+          onOverflow();
+      if (folds.length === 0)
+          return text;
+      if (onFold)
+          onFold();
+      let res = text.slice(0, folds[0]);
+      for (let i = 0; i < folds.length; ++i) {
+          const fold = folds[i];
+          const end = folds[i + 1] || text.length;
+          if (fold === 0)
+              res = `\n${indent}${text.slice(0, end)}`;
+          else {
+              if (mode === FOLD_QUOTED && escapedFolds[fold])
+                  res += `${text[fold]}\\`;
+              res += `\n${indent}${text.slice(fold + 1, end)}`;
+          }
+      }
+      return res;
+  }
+  /**
+   * Presumes `i + 1` is at the start of a line
+   * @returns index of last newline in more-indented block
+   */
+  function consumeMoreIndentedLines(text, i, indent) {
+      let end = i;
+      let start = i + 1;
+      let ch = text[start];
+      while (ch === ' ' || ch === '\t') {
+          if (i < start + indent) {
+              ch = text[++i];
+          }
+          else {
+              do {
+                  ch = text[++i];
+              } while (ch && ch !== '\n');
+              end = i;
+              start = i + 1;
+              ch = text[start];
+          }
+      }
+      return end;
+  }
+
+  const getFoldOptions = (ctx, isBlock) => ({
+      indentAtStart: isBlock ? ctx.indent.length : ctx.indentAtStart,
+      lineWidth: ctx.options.lineWidth,
+      minContentWidth: ctx.options.minContentWidth
+  });
+  // Also checks for lines starting with %, as parsing the output as YAML 1.1 will
+  // presume that's starting a new document.
+  const containsDocumentMarker = (str) => /^(%|---|\.\.\.)/m.test(str);
+  function lineLengthOverLimit(str, lineWidth, indentLength) {
+      if (!lineWidth || lineWidth < 0)
+          return false;
+      const limit = lineWidth - indentLength;
+      const strLen = str.length;
+      if (strLen <= limit)
+          return false;
+      for (let i = 0, start = 0; i < strLen; ++i) {
+          if (str[i] === '\n') {
+              if (i - start > limit)
+                  return true;
+              start = i + 1;
+              if (strLen - start <= limit)
+                  return false;
+          }
+      }
+      return true;
+  }
+  function doubleQuotedString(value, ctx) {
+      const json = JSON.stringify(value);
+      if (ctx.options.doubleQuotedAsJSON)
+          return json;
+      const { implicitKey } = ctx;
+      const minMultiLineLength = ctx.options.doubleQuotedMinMultiLineLength;
+      const indent = ctx.indent || (containsDocumentMarker(value) ? '  ' : '');
+      let str = '';
+      let start = 0;
+      for (let i = 0, ch = json[i]; ch; ch = json[++i]) {
+          if (ch === ' ' && json[i + 1] === '\\' && json[i + 2] === 'n') {
+              // space before newline needs to be escaped to not be folded
+              str += json.slice(start, i) + '\\ ';
+              i += 1;
+              start = i;
+              ch = '\\';
+          }
+          if (ch === '\\')
+              switch (json[i + 1]) {
+                  case 'u':
+                      {
+                          str += json.slice(start, i);
+                          const code = json.substr(i + 2, 4);
+                          switch (code) {
+                              case '0000':
+                                  str += '\\0';
+                                  break;
+                              case '0007':
+                                  str += '\\a';
+                                  break;
+                              case '000b':
+                                  str += '\\v';
+                                  break;
+                              case '001b':
+                                  str += '\\e';
+                                  break;
+                              case '0085':
+                                  str += '\\N';
+                                  break;
+                              case '00a0':
+                                  str += '\\_';
+                                  break;
+                              case '2028':
+                                  str += '\\L';
+                                  break;
+                              case '2029':
+                                  str += '\\P';
+                                  break;
+                              default:
+                                  if (code.substr(0, 2) === '00')
+                                      str += '\\x' + code.substr(2);
+                                  else
+                                      str += json.substr(i, 6);
+                          }
+                          i += 5;
+                          start = i + 1;
+                      }
+                      break;
+                  case 'n':
+                      if (implicitKey ||
+                          json[i + 2] === '"' ||
+                          json.length < minMultiLineLength) {
+                          i += 1;
+                      }
+                      else {
+                          // folding will eat first newline
+                          str += json.slice(start, i) + '\n\n';
+                          while (json[i + 2] === '\\' &&
+                              json[i + 3] === 'n' &&
+                              json[i + 4] !== '"') {
+                              str += '\n';
+                              i += 2;
+                          }
+                          str += indent;
+                          // space after newline needs to be escaped to not be folded
+                          if (json[i + 2] === ' ')
+                              str += '\\';
+                          i += 1;
+                          start = i + 1;
+                      }
+                      break;
+                  default:
+                      i += 1;
+              }
+      }
+      str = start ? str + json.slice(start) : json;
+      return implicitKey
+          ? str
+          : foldFlowLines(str, indent, FOLD_QUOTED, getFoldOptions(ctx, false));
+  }
+  function singleQuotedString(value, ctx) {
+      if (ctx.options.singleQuote === false ||
+          (ctx.implicitKey && value.includes('\n')) ||
+          /[ \t]\n|\n[ \t]/.test(value) // single quoted string can't have leading or trailing whitespace around newline
+      )
+          return doubleQuotedString(value, ctx);
+      const indent = ctx.indent || (containsDocumentMarker(value) ? '  ' : '');
+      const res = "'" + value.replace(/'/g, "''").replace(/\n+/g, `$&\n${indent}`) + "'";
+      return ctx.implicitKey
+          ? res
+          : foldFlowLines(res, indent, FOLD_FLOW, getFoldOptions(ctx, false));
+  }
+  function quotedString(value, ctx) {
+      const { singleQuote } = ctx.options;
+      let qs;
+      if (singleQuote === false)
+          qs = doubleQuotedString;
+      else {
+          const hasDouble = value.includes('"');
+          const hasSingle = value.includes("'");
+          if (hasDouble && !hasSingle)
+              qs = singleQuotedString;
+          else if (hasSingle && !hasDouble)
+              qs = doubleQuotedString;
+          else
+              qs = singleQuote ? singleQuotedString : doubleQuotedString;
+      }
+      return qs(value, ctx);
+  }
+  // The negative lookbehind avoids a polynomial search,
+  // but isn't supported yet on Safari: https://caniuse.com/js-regexp-lookbehind
+  let blockEndNewlines;
+  try {
+      blockEndNewlines = new RegExp('(^|(?<!\n))\n+(?!\n|$)', 'g');
+  }
+  catch {
+      blockEndNewlines = /\n+(?!\n|$)/g;
+  }
+  function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
+      const { blockQuote, commentString, lineWidth } = ctx.options;
+      // 1. Block can't end in whitespace unless the last line is non-empty.
+      // 2. Strings consisting of only whitespace are best rendered explicitly.
+      if (!blockQuote || /\n[\t ]+$/.test(value)) {
+          return quotedString(value, ctx);
+      }
+      const indent = ctx.indent ||
+          (ctx.forceBlockIndent || containsDocumentMarker(value) ? '  ' : '');
+      const literal = blockQuote === 'literal'
+          ? true
+          : blockQuote === 'folded' || type === Scalar.BLOCK_FOLDED
+              ? false
+              : type === Scalar.BLOCK_LITERAL
+                  ? true
+                  : !lineLengthOverLimit(value, lineWidth, indent.length);
+      if (!value)
+          return literal ? '|\n' : '>\n';
+      // determine chomping from whitespace at value end
+      let chomp;
+      let endStart;
+      for (endStart = value.length; endStart > 0; --endStart) {
+          const ch = value[endStart - 1];
+          if (ch !== '\n' && ch !== '\t' && ch !== ' ')
+              break;
+      }
+      let end = value.substring(endStart);
+      const endNlPos = end.indexOf('\n');
+      if (endNlPos === -1) {
+          chomp = '-'; // strip
+      }
+      else if (value === end || endNlPos !== end.length - 1) {
+          chomp = '+'; // keep
+          if (onChompKeep)
+              onChompKeep();
+      }
+      else {
+          chomp = ''; // clip
+      }
+      if (end) {
+          value = value.slice(0, -end.length);
+          if (end[end.length - 1] === '\n')
+              end = end.slice(0, -1);
+          end = end.replace(blockEndNewlines, `$&${indent}`);
+      }
+      // determine indent indicator from whitespace at value start
+      let startWithSpace = false;
+      let startEnd;
+      let startNlPos = -1;
+      for (startEnd = 0; startEnd < value.length; ++startEnd) {
+          const ch = value[startEnd];
+          if (ch === ' ')
+              startWithSpace = true;
+          else if (ch === '\n')
+              startNlPos = startEnd;
+          else
+              break;
+      }
+      let start = value.substring(0, startNlPos < startEnd ? startNlPos + 1 : startEnd);
+      if (start) {
+          value = value.substring(start.length);
+          start = start.replace(/\n+/g, `$&${indent}`);
+      }
+      const indentSize = indent ? '2' : '1'; // root is at -1
+      // Leading | or > is added later
+      let header = (startWithSpace ? indentSize : '') + chomp;
+      if (comment) {
+          header += ' ' + commentString(comment.replace(/ ?[\r\n]+/g, ' '));
+          if (onComment)
+              onComment();
+      }
+      if (!literal) {
+          const foldedValue = value
+              .replace(/\n+/g, '\n$&')
+              .replace(/(?:^|\n)([\t ].*)(?:([\n\t ]*)\n(?![\n\t ]))?/g, '$1$2') // more-indented lines aren't folded
+              //                ^ more-ind. ^ empty     ^ capture next empty lines only at end of indent
+              .replace(/\n+/g, `$&${indent}`);
+          let literalFallback = false;
+          const foldOptions = getFoldOptions(ctx, true);
+          if (blockQuote !== 'folded' && type !== Scalar.BLOCK_FOLDED) {
+              foldOptions.onOverflow = () => {
+                  literalFallback = true;
+              };
+          }
+          const body = foldFlowLines(`${start}${foldedValue}${end}`, indent, FOLD_BLOCK, foldOptions);
+          if (!literalFallback)
+              return `>${header}\n${indent}${body}`;
+      }
+      value = value.replace(/\n+/g, `$&${indent}`);
+      return `|${header}\n${indent}${start}${value}${end}`;
+  }
+  function plainString(item, ctx, onComment, onChompKeep) {
+      const { type, value } = item;
+      const { actualString, implicitKey, indent, indentStep, inFlow } = ctx;
+      if ((implicitKey && value.includes('\n')) ||
+          (inFlow && /[[\]{},]/.test(value))) {
+          return quotedString(value, ctx);
+      }
+      if (/^[\n\t ,[\]{}#&*!|>'"%@`]|^[?-]$|^[?-][ \t]|[\n:][ \t]|[ \t]\n|[\n\t ]#|[\n\t :]$/.test(value)) {
+          // not allowed:
+          // - '-' or '?'
+          // - start with an indicator character (except [?:-]) or /[?-] /
+          // - '\n ', ': ' or ' \n' anywhere
+          // - '#' not preceded by a non-space char
+          // - end with ' ' or ':'
+          return implicitKey || inFlow || !value.includes('\n')
+              ? quotedString(value, ctx)
+              : blockString(item, ctx, onComment, onChompKeep);
+      }
+      if (!implicitKey &&
+          !inFlow &&
+          type !== Scalar.PLAIN &&
+          value.includes('\n')) {
+          // Where allowed & type not set explicitly, prefer block style for multiline strings
+          return blockString(item, ctx, onComment, onChompKeep);
+      }
+      if (containsDocumentMarker(value)) {
+          if (indent === '') {
+              ctx.forceBlockIndent = true;
+              return blockString(item, ctx, onComment, onChompKeep);
+          }
+          else if (implicitKey && indent === indentStep) {
+              return quotedString(value, ctx);
+          }
+      }
+      const str = value.replace(/\n+/g, `$&\n${indent}`);
+      // Verify that output will be parsed as a string, as e.g. plain numbers and
+      // booleans get parsed with those types in v1.2 (e.g. '42', 'true' & '0.9e-3'),
+      // and others in v1.1.
+      if (actualString) {
+          const test = (tag) => tag.default && tag.tag !== 'tag:yaml.org,2002:str' && tag.test?.test(str);
+          const { compat, tags } = ctx.doc.schema;
+          if (tags.some(test) || compat?.some(test))
+              return quotedString(value, ctx);
+      }
+      return implicitKey
+          ? str
+          : foldFlowLines(str, indent, FOLD_FLOW, getFoldOptions(ctx, false));
+  }
+  function stringifyString(item, ctx, onComment, onChompKeep) {
+      const { implicitKey, inFlow } = ctx;
+      const ss = typeof item.value === 'string'
+          ? item
+          : Object.assign({}, item, { value: String(item.value) });
+      let { type } = item;
+      if (type !== Scalar.QUOTE_DOUBLE) {
+          // force double quotes on control characters & unpaired surrogates
+          if (/[\x00-\x08\x0b-\x1f\x7f-\x9f\u{D800}-\u{DFFF}]/u.test(ss.value))
+              type = Scalar.QUOTE_DOUBLE;
+      }
+      const _stringify = (_type) => {
+          switch (_type) {
+              case Scalar.BLOCK_FOLDED:
+              case Scalar.BLOCK_LITERAL:
+                  return implicitKey || inFlow
+                      ? quotedString(ss.value, ctx) // blocks are not valid inside flow containers
+                      : blockString(ss, ctx, onComment, onChompKeep);
+              case Scalar.QUOTE_DOUBLE:
+                  return doubleQuotedString(ss.value, ctx);
+              case Scalar.QUOTE_SINGLE:
+                  return singleQuotedString(ss.value, ctx);
+              case Scalar.PLAIN:
+                  return plainString(ss, ctx, onComment, onChompKeep);
+              default:
+                  return null;
+          }
+      };
+      let res = _stringify(type);
+      if (res === null) {
+          const { defaultKeyType, defaultStringType } = ctx.options;
+          const t = (implicitKey && defaultKeyType) || defaultStringType;
+          res = _stringify(t);
+          if (res === null)
+              throw new Error(`Unsupported default string type ${t}`);
+      }
+      return res;
+  }
+
+  function createStringifyContext(doc, options) {
+      const opt = Object.assign({
+          blockQuote: true,
+          commentString: stringifyComment,
+          defaultKeyType: null,
+          defaultStringType: 'PLAIN',
+          directives: null,
+          doubleQuotedAsJSON: false,
+          doubleQuotedMinMultiLineLength: 40,
+          falseStr: 'false',
+          flowCollectionPadding: true,
+          indentSeq: true,
+          lineWidth: 80,
+          minContentWidth: 20,
+          nullStr: 'null',
+          simpleKeys: false,
+          singleQuote: null,
+          trailingComma: false,
+          trueStr: 'true',
+          verifyAliasOrder: true
+      }, doc.schema.toStringOptions, options);
+      let inFlow;
+      switch (opt.collectionStyle) {
+          case 'block':
+              inFlow = false;
+              break;
+          case 'flow':
+              inFlow = true;
+              break;
+          default:
+              inFlow = null;
+      }
+      return {
+          anchors: new Set(),
+          doc,
+          flowCollectionPadding: opt.flowCollectionPadding ? ' ' : '',
+          indent: '',
+          indentStep: typeof opt.indent === 'number' ? ' '.repeat(opt.indent) : '  ',
+          inFlow,
+          options: opt
+      };
+  }
+  function getTagObject(tags, item) {
+      if (item.tag) {
+          const match = tags.filter(t => t.tag === item.tag);
+          if (match.length > 0)
+              return match.find(t => t.format === item.format) ?? match[0];
+      }
+      let tagObj = undefined;
+      let obj;
+      if (isScalar$1(item)) {
+          obj = item.value;
+          let match = tags.filter(t => t.identify?.(obj));
+          if (match.length > 1) {
+              const testMatch = match.filter(t => t.test);
+              if (testMatch.length > 0)
+                  match = testMatch;
+          }
+          tagObj =
+              match.find(t => t.format === item.format) ?? match.find(t => !t.format);
+      }
+      else {
+          obj = item;
+          tagObj = tags.find(t => t.nodeClass && obj instanceof t.nodeClass);
+      }
+      if (!tagObj) {
+          const name = obj?.constructor?.name ?? (obj === null ? 'null' : typeof obj);
+          throw new Error(`Tag not resolved for ${name} value`);
+      }
+      return tagObj;
+  }
+  // needs to be called before value stringifier to allow for circular anchor refs
+  function stringifyProps(node, tagObj, { anchors, doc }) {
+      if (!doc.directives)
+          return '';
+      const props = [];
+      const anchor = (isScalar$1(node) || isCollection$1(node)) && node.anchor;
+      if (anchor && anchorIsValid(anchor)) {
+          anchors.add(anchor);
+          props.push(`&${anchor}`);
+      }
+      const tag = node.tag ?? (tagObj.default ? null : tagObj.tag);
+      if (tag)
+          props.push(doc.directives.tagString(tag));
+      return props.join(' ');
+  }
+  function stringify$2(item, ctx, onComment, onChompKeep) {
+      if (isPair(item))
+          return item.toString(ctx, onComment, onChompKeep);
+      if (isAlias(item)) {
+          if (ctx.doc.directives)
+              return item.toString(ctx);
+          if (ctx.resolvedAliases?.has(item)) {
+              throw new TypeError(`Cannot stringify circular structure without alias nodes`);
+          }
+          else {
+              if (ctx.resolvedAliases)
+                  ctx.resolvedAliases.add(item);
+              else
+                  ctx.resolvedAliases = new Set([item]);
+              item = item.resolve(ctx.doc);
+          }
+      }
+      let tagObj = undefined;
+      const node = isNode(item)
+          ? item
+          : ctx.doc.createNode(item, { onTagObj: o => (tagObj = o) });
+      tagObj ?? (tagObj = getTagObject(ctx.doc.schema.tags, node));
+      const props = stringifyProps(node, tagObj, ctx);
+      if (props.length > 0)
+          ctx.indentAtStart = (ctx.indentAtStart ?? 0) + props.length + 1;
+      const str = typeof tagObj.stringify === 'function'
+          ? tagObj.stringify(node, ctx, onComment, onChompKeep)
+          : isScalar$1(node)
+              ? stringifyString(node, ctx, onComment, onChompKeep)
+              : node.toString(ctx, onComment, onChompKeep);
+      if (!props)
+          return str;
+      return isScalar$1(node) || str[0] === '{' || str[0] === '['
+          ? `${props} ${str}`
+          : `${props}\n${ctx.indent}${str}`;
+  }
+
+  function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
+      const { allNullValues, doc, indent, indentStep, options: { commentString, indentSeq, simpleKeys } } = ctx;
+      let keyComment = (isNode(key) && key.comment) || null;
+      if (simpleKeys) {
+          if (keyComment) {
+              throw new Error('With simple keys, key nodes cannot have comments');
+          }
+          if (isCollection$1(key) || (!isNode(key) && typeof key === 'object')) {
+              const msg = 'With simple keys, collection cannot be used as a key value';
+              throw new Error(msg);
+          }
+      }
+      let explicitKey = !simpleKeys &&
+          (!key ||
+              (keyComment && value == null && !ctx.inFlow) ||
+              isCollection$1(key) ||
+              (isScalar$1(key)
+                  ? key.type === Scalar.BLOCK_FOLDED || key.type === Scalar.BLOCK_LITERAL
+                  : typeof key === 'object'));
+      ctx = Object.assign({}, ctx, {
+          allNullValues: false,
+          implicitKey: !explicitKey && (simpleKeys || !allNullValues),
+          indent: indent + indentStep
+      });
+      let keyCommentDone = false;
+      let chompKeep = false;
+      let str = stringify$2(key, ctx, () => (keyCommentDone = true), () => (chompKeep = true));
+      if (!explicitKey && !ctx.inFlow && str.length > 1024) {
+          if (simpleKeys)
+              throw new Error('With simple keys, single line scalar must not span more than 1024 characters');
+          explicitKey = true;
+      }
+      if (ctx.inFlow) {
+          if (allNullValues || value == null) {
+              if (keyCommentDone && onComment)
+                  onComment();
+              return str === '' ? '?' : explicitKey ? `? ${str}` : str;
+          }
+      }
+      else if ((allNullValues && !simpleKeys) || (value == null && explicitKey)) {
+          str = `? ${str}`;
+          if (keyComment && !keyCommentDone) {
+              str += lineComment(str, ctx.indent, commentString(keyComment));
+          }
+          else if (chompKeep && onChompKeep)
+              onChompKeep();
+          return str;
+      }
+      if (keyCommentDone)
+          keyComment = null;
+      if (explicitKey) {
+          if (keyComment)
+              str += lineComment(str, ctx.indent, commentString(keyComment));
+          str = `? ${str}\n${indent}:`;
+      }
+      else {
+          str = `${str}:`;
+          if (keyComment)
+              str += lineComment(str, ctx.indent, commentString(keyComment));
+      }
+      let vsb, vcb, valueComment;
+      if (isNode(value)) {
+          vsb = !!value.spaceBefore;
+          vcb = value.commentBefore;
+          valueComment = value.comment;
+      }
+      else {
+          vsb = false;
+          vcb = null;
+          valueComment = null;
+          if (value && typeof value === 'object')
+              value = doc.createNode(value);
+      }
+      ctx.implicitKey = false;
+      if (!explicitKey && !keyComment && isScalar$1(value))
+          ctx.indentAtStart = str.length + 1;
+      chompKeep = false;
+      if (!indentSeq &&
+          indentStep.length >= 2 &&
+          !ctx.inFlow &&
+          !explicitKey &&
+          isSeq(value) &&
+          !value.flow &&
+          !value.tag &&
+          !value.anchor) {
+          // If indentSeq === false, consider '- ' as part of indentation where possible
+          ctx.indent = ctx.indent.substring(2);
+      }
+      let valueCommentDone = false;
+      const valueStr = stringify$2(value, ctx, () => (valueCommentDone = true), () => (chompKeep = true));
+      let ws = ' ';
+      if (keyComment || vsb || vcb) {
+          ws = vsb ? '\n' : '';
+          if (vcb) {
+              const cs = commentString(vcb);
+              ws += `\n${indentComment(cs, ctx.indent)}`;
+          }
+          if (valueStr === '' && !ctx.inFlow) {
+              if (ws === '\n' && valueComment)
+                  ws = '\n\n';
+          }
+          else {
+              ws += `\n${ctx.indent}`;
+          }
+      }
+      else if (!explicitKey && isCollection$1(value)) {
+          const vs0 = valueStr[0];
+          const nl0 = valueStr.indexOf('\n');
+          const hasNewline = nl0 !== -1;
+          const flow = ctx.inFlow ?? value.flow ?? value.items.length === 0;
+          if (hasNewline || !flow) {
+              let hasPropsLine = false;
+              if (hasNewline && (vs0 === '&' || vs0 === '!')) {
+                  let sp0 = valueStr.indexOf(' ');
+                  if (vs0 === '&' &&
+                      sp0 !== -1 &&
+                      sp0 < nl0 &&
+                      valueStr[sp0 + 1] === '!') {
+                      sp0 = valueStr.indexOf(' ', sp0 + 1);
+                  }
+                  if (sp0 === -1 || nl0 < sp0)
+                      hasPropsLine = true;
+              }
+              if (!hasPropsLine)
+                  ws = `\n${ctx.indent}`;
+          }
+      }
+      else if (valueStr === '' || valueStr[0] === '\n') {
+          ws = '';
+      }
+      str += ws + valueStr;
+      if (ctx.inFlow) {
+          if (valueCommentDone && onComment)
+              onComment();
+      }
+      else if (valueComment && !valueCommentDone) {
+          str += lineComment(str, ctx.indent, commentString(valueComment));
+      }
+      else if (chompKeep && onChompKeep) {
+          onChompKeep();
+      }
+      return str;
+  }
+
+  function warn(logLevel, warning) {
+      if (logLevel === 'debug' || logLevel === 'warn') {
+          console.warn(warning);
+      }
+  }
+
+  // If the value associated with a merge key is a single mapping node, each of
+  // its key/value pairs is inserted into the current mapping, unless the key
+  // already exists in it. If the value associated with the merge key is a
+  // sequence, then this sequence is expected to contain mapping nodes and each
+  // of these nodes is merged in turn according to its order in the sequence.
+  // Keys in mapping nodes earlier in the sequence override keys specified in
+  // later mapping nodes. -- http://yaml.org/type/merge.html
+  const MERGE_KEY = '<<';
+  const merge = {
+      identify: value => value === MERGE_KEY ||
+          (typeof value === 'symbol' && value.description === MERGE_KEY),
+      default: 'key',
+      tag: 'tag:yaml.org,2002:merge',
+      test: /^<<$/,
+      resolve: () => Object.assign(new Scalar(Symbol(MERGE_KEY)), {
+          addToJSMap: addMergeToJSMap
+      }),
+      stringify: () => MERGE_KEY
+  };
+  const isMergeKey = (ctx, key) => (merge.identify(key) ||
+      (isScalar$1(key) &&
+          (!key.type || key.type === Scalar.PLAIN) &&
+          merge.identify(key.value))) &&
+      ctx?.doc.schema.tags.some(tag => tag.tag === merge.tag && tag.default);
+  function addMergeToJSMap(ctx, map, value) {
+      const source = resolveAliasValue(ctx, value);
+      if (isSeq(source))
+          for (const it of source.items)
+              mergeValue(ctx, map, it);
+      else if (Array.isArray(source))
+          for (const it of source)
+              mergeValue(ctx, map, it);
+      else
+          mergeValue(ctx, map, source);
+  }
+  function mergeValue(ctx, map, value) {
+      const source = resolveAliasValue(ctx, value);
+      if (!isMap(source))
+          throw new Error('Merge sources must be maps or map aliases');
+      const srcMap = source.toJSON(null, ctx, Map);
+      for (const [key, value] of srcMap) {
+          if (map instanceof Map) {
+              if (!map.has(key))
+                  map.set(key, value);
+          }
+          else if (map instanceof Set) {
+              map.add(key);
+          }
+          else if (!Object.prototype.hasOwnProperty.call(map, key)) {
+              Object.defineProperty(map, key, {
+                  value,
+                  writable: true,
+                  enumerable: true,
+                  configurable: true
+              });
+          }
+      }
+      return map;
+  }
+  function resolveAliasValue(ctx, value) {
+      return ctx && isAlias(value) ? value.resolve(ctx.doc, ctx) : value;
+  }
+
+  function addPairToJSMap(ctx, map, { key, value }) {
+      if (isNode(key) && key.addToJSMap)
+          key.addToJSMap(ctx, map, value);
+      // TODO: Should drop this special case for bare << handling
+      else if (isMergeKey(ctx, key))
+          addMergeToJSMap(ctx, map, value);
+      else {
+          const jsKey = toJS(key, '', ctx);
+          if (map instanceof Map) {
+              map.set(jsKey, toJS(value, jsKey, ctx));
+          }
+          else if (map instanceof Set) {
+              map.add(jsKey);
+          }
+          else {
+              const stringKey = stringifyKey(key, jsKey, ctx);
+              const jsValue = toJS(value, stringKey, ctx);
+              if (stringKey in map)
+                  Object.defineProperty(map, stringKey, {
+                      value: jsValue,
+                      writable: true,
+                      enumerable: true,
+                      configurable: true
+                  });
+              else
+                  map[stringKey] = jsValue;
+          }
+      }
+      return map;
+  }
+  function stringifyKey(key, jsKey, ctx) {
+      if (jsKey === null)
+          return '';
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string
+      if (typeof jsKey !== 'object')
+          return String(jsKey);
+      if (isNode(key) && ctx?.doc) {
+          const strCtx = createStringifyContext(ctx.doc, {});
+          strCtx.anchors = new Set();
+          for (const node of ctx.anchors.keys())
+              strCtx.anchors.add(node.anchor);
+          strCtx.inFlow = true;
+          strCtx.inStringifyKey = true;
+          const strKey = key.toString(strCtx);
+          if (!ctx.mapKeyWarned) {
+              let jsonStr = JSON.stringify(strKey);
+              if (jsonStr.length > 40)
+                  jsonStr = jsonStr.substring(0, 36) + '..."';
+              warn(ctx.doc.options.logLevel, `Keys with collection values will be stringified due to JS Object restrictions: ${jsonStr}. Set mapAsMap: true to use object keys.`);
+              ctx.mapKeyWarned = true;
+          }
+          return strKey;
+      }
+      return JSON.stringify(jsKey);
+  }
+
+  function createPair(key, value, ctx) {
+      const k = createNode(key, undefined, ctx);
+      const v = createNode(value, undefined, ctx);
+      return new Pair(k, v);
+  }
+  class Pair {
+      constructor(key, value = null) {
+          Object.defineProperty(this, NODE_TYPE, { value: PAIR });
+          this.key = key;
+          this.value = value;
+      }
+      clone(schema) {
+          let { key, value } = this;
+          if (isNode(key))
+              key = key.clone(schema);
+          if (isNode(value))
+              value = value.clone(schema);
+          return new Pair(key, value);
+      }
+      toJSON(_, ctx) {
+          const pair = ctx?.mapAsMap ? new Map() : {};
+          return addPairToJSMap(ctx, pair, this);
+      }
+      toString(ctx, onComment, onChompKeep) {
+          return ctx?.doc
+              ? stringifyPair(this, ctx, onComment, onChompKeep)
+              : JSON.stringify(this);
+      }
+  }
+
+  function stringifyCollection(collection, ctx, options) {
+      const flow = ctx.inFlow ?? collection.flow;
+      const stringify = flow ? stringifyFlowCollection : stringifyBlockCollection;
+      return stringify(collection, ctx, options);
+  }
+  function stringifyBlockCollection({ comment, items }, ctx, { blockItemPrefix, flowChars, itemIndent, onChompKeep, onComment }) {
+      const { indent, options: { commentString } } = ctx;
+      const itemCtx = Object.assign({}, ctx, { indent: itemIndent, type: null });
+      let chompKeep = false; // flag for the preceding node's status
+      const lines = [];
+      for (let i = 0; i < items.length; ++i) {
+          const item = items[i];
+          let comment = null;
+          if (isNode(item)) {
+              if (!chompKeep && item.spaceBefore)
+                  lines.push('');
+              addCommentBefore(ctx, lines, item.commentBefore, chompKeep);
+              if (item.comment)
+                  comment = item.comment;
+          }
+          else if (isPair(item)) {
+              const ik = isNode(item.key) ? item.key : null;
+              if (ik) {
+                  if (!chompKeep && ik.spaceBefore)
+                      lines.push('');
+                  addCommentBefore(ctx, lines, ik.commentBefore, chompKeep);
+              }
+          }
+          chompKeep = false;
+          let str = stringify$2(item, itemCtx, () => (comment = null), () => (chompKeep = true));
+          if (comment)
+              str += lineComment(str, itemIndent, commentString(comment));
+          if (chompKeep && comment)
+              chompKeep = false;
+          lines.push(blockItemPrefix + str);
+      }
+      let str;
+      if (lines.length === 0) {
+          str = flowChars.start + flowChars.end;
+      }
+      else {
+          str = lines[0];
+          for (let i = 1; i < lines.length; ++i) {
+              const line = lines[i];
+              str += line ? `\n${indent}${line}` : '\n';
+          }
+      }
+      if (comment) {
+          str += '\n' + indentComment(commentString(comment), indent);
+          if (onComment)
+              onComment();
+      }
+      else if (chompKeep && onChompKeep)
+          onChompKeep();
+      return str;
+  }
+  function stringifyFlowCollection({ items }, ctx, { flowChars, itemIndent }) {
+      const { indent, indentStep, flowCollectionPadding: fcPadding, options: { commentString } } = ctx;
+      itemIndent += indentStep;
+      const itemCtx = Object.assign({}, ctx, {
+          indent: itemIndent,
+          inFlow: true,
+          type: null
+      });
+      let reqNewline = false;
+      let linesAtValue = 0;
+      const lines = [];
+      for (let i = 0; i < items.length; ++i) {
+          const item = items[i];
+          let comment = null;
+          if (isNode(item)) {
+              if (item.spaceBefore)
+                  lines.push('');
+              addCommentBefore(ctx, lines, item.commentBefore, false);
+              if (item.comment)
+                  comment = item.comment;
+          }
+          else if (isPair(item)) {
+              const ik = isNode(item.key) ? item.key : null;
+              if (ik) {
+                  if (ik.spaceBefore)
+                      lines.push('');
+                  addCommentBefore(ctx, lines, ik.commentBefore, false);
+                  if (ik.comment)
+                      reqNewline = true;
+              }
+              const iv = isNode(item.value) ? item.value : null;
+              if (iv) {
+                  if (iv.comment)
+                      comment = iv.comment;
+                  if (iv.commentBefore)
+                      reqNewline = true;
+              }
+              else if (item.value == null && ik?.comment) {
+                  comment = ik.comment;
+              }
+          }
+          if (comment)
+              reqNewline = true;
+          let str = stringify$2(item, itemCtx, () => (comment = null));
+          reqNewline || (reqNewline = lines.length > linesAtValue || str.includes('\n'));
+          if (i < items.length - 1) {
+              str += ',';
+          }
+          else if (ctx.options.trailingComma) {
+              if (ctx.options.lineWidth > 0) {
+                  reqNewline || (reqNewline = lines.reduce((sum, line) => sum + line.length + 2, 2) +
+                      (str.length + 2) >
+                      ctx.options.lineWidth);
+              }
+              if (reqNewline) {
+                  str += ',';
+              }
+          }
+          if (comment)
+              str += lineComment(str, itemIndent, commentString(comment));
+          lines.push(str);
+          linesAtValue = lines.length;
+      }
+      const { start, end } = flowChars;
+      if (lines.length === 0) {
+          return start + end;
+      }
+      else {
+          if (!reqNewline) {
+              const len = lines.reduce((sum, line) => sum + line.length + 2, 2);
+              reqNewline = ctx.options.lineWidth > 0 && len > ctx.options.lineWidth;
+          }
+          if (reqNewline) {
+              let str = start;
+              for (const line of lines)
+                  str += line ? `\n${indentStep}${indent}${line}` : '\n';
+              return `${str}\n${indent}${end}`;
+          }
+          else {
+              return `${start}${fcPadding}${lines.join(' ')}${fcPadding}${end}`;
+          }
+      }
+  }
+  function addCommentBefore({ indent, options: { commentString } }, lines, comment, chompKeep) {
+      if (comment && chompKeep)
+          comment = comment.replace(/^\n+/, '');
+      if (comment) {
+          const ic = indentComment(commentString(comment), indent);
+          lines.push(ic.trimStart()); // Avoid double indent on first line
+      }
+  }
+
+  function findPair(items, key) {
+      const k = isScalar$1(key) ? key.value : key;
+      for (const it of items) {
+          if (isPair(it)) {
+              if (it.key === key || it.key === k)
+                  return it;
+              if (isScalar$1(it.key) && it.key.value === k)
+                  return it;
+          }
+      }
+      return undefined;
+  }
+  class YAMLMap extends Collection {
+      static get tagName() {
+          return 'tag:yaml.org,2002:map';
+      }
+      constructor(schema) {
+          super(MAP, schema);
+          this.items = [];
+      }
+      /**
+       * A generic collection parsing method that can be extended
+       * to other node classes that inherit from YAMLMap
+       */
+      static from(schema, obj, ctx) {
+          const { keepUndefined, replacer } = ctx;
+          const map = new this(schema);
+          const add = (key, value) => {
+              if (typeof replacer === 'function')
+                  value = replacer.call(obj, key, value);
+              else if (Array.isArray(replacer) && !replacer.includes(key))
+                  return;
+              if (value !== undefined || keepUndefined)
+                  map.items.push(createPair(key, value, ctx));
+          };
+          if (obj instanceof Map) {
+              for (const [key, value] of obj)
+                  add(key, value);
+          }
+          else if (obj && typeof obj === 'object') {
+              for (const key of Object.keys(obj))
+                  add(key, obj[key]);
+          }
+          if (typeof schema.sortMapEntries === 'function') {
+              map.items.sort(schema.sortMapEntries);
+          }
+          return map;
+      }
+      /**
+       * Adds a value to the collection.
+       *
+       * @param overwrite - If not set `true`, using a key that is already in the
+       *   collection will throw. Otherwise, overwrites the previous value.
+       */
+      add(pair, overwrite) {
+          let _pair;
+          if (isPair(pair))
+              _pair = pair;
+          else if (!pair || typeof pair !== 'object' || !('key' in pair)) {
+              // In TypeScript, this never happens.
+              _pair = new Pair(pair, pair?.value);
+          }
+          else
+              _pair = new Pair(pair.key, pair.value);
+          const prev = findPair(this.items, _pair.key);
+          const sortEntries = this.schema?.sortMapEntries;
+          if (prev) {
+              if (!overwrite)
+                  throw new Error(`Key ${_pair.key} already set`);
+              // For scalars, keep the old node & its comments and anchors
+              if (isScalar$1(prev.value) && isScalarValue(_pair.value))
+                  prev.value.value = _pair.value;
+              else
+                  prev.value = _pair.value;
+          }
+          else if (sortEntries) {
+              const i = this.items.findIndex(item => sortEntries(_pair, item) < 0);
+              if (i === -1)
+                  this.items.push(_pair);
+              else
+                  this.items.splice(i, 0, _pair);
+          }
+          else {
+              this.items.push(_pair);
+          }
+      }
+      delete(key) {
+          const it = findPair(this.items, key);
+          if (!it)
+              return false;
+          const del = this.items.splice(this.items.indexOf(it), 1);
+          return del.length > 0;
+      }
+      get(key, keepScalar) {
+          const it = findPair(this.items, key);
+          const node = it?.value;
+          return (!keepScalar && isScalar$1(node) ? node.value : node) ?? undefined;
+      }
+      has(key) {
+          return !!findPair(this.items, key);
+      }
+      set(key, value) {
+          this.add(new Pair(key, value), true);
+      }
+      /**
+       * @param ctx - Conversion context, originally set in Document#toJS()
+       * @param {Class} Type - If set, forces the returned collection type
+       * @returns Instance of Type, Map, or Object
+       */
+      toJSON(_, ctx, Type) {
+          const map = Type ? new Type() : ctx?.mapAsMap ? new Map() : {};
+          if (ctx?.onCreate)
+              ctx.onCreate(map);
+          for (const item of this.items)
+              addPairToJSMap(ctx, map, item);
+          return map;
+      }
+      toString(ctx, onComment, onChompKeep) {
+          if (!ctx)
+              return JSON.stringify(this);
+          for (const item of this.items) {
+              if (!isPair(item))
+                  throw new Error(`Map items must all be pairs; found ${JSON.stringify(item)} instead`);
+          }
+          if (!ctx.allNullValues && this.hasAllNullValues(false))
+              ctx = Object.assign({}, ctx, { allNullValues: true });
+          return stringifyCollection(this, ctx, {
+              blockItemPrefix: '',
+              flowChars: { start: '{', end: '}' },
+              itemIndent: ctx.indent || '',
+              onChompKeep,
+              onComment
+          });
+      }
+  }
+
+  const map = {
+      collection: 'map',
+      default: true,
+      nodeClass: YAMLMap,
+      tag: 'tag:yaml.org,2002:map',
+      resolve(map, onError) {
+          if (!isMap(map))
+              onError('Expected a mapping for this tag');
+          return map;
+      },
+      createNode: (schema, obj, ctx) => YAMLMap.from(schema, obj, ctx)
+  };
+
+  class YAMLSeq extends Collection {
+      static get tagName() {
+          return 'tag:yaml.org,2002:seq';
+      }
+      constructor(schema) {
+          super(SEQ, schema);
+          this.items = [];
+      }
+      add(value) {
+          this.items.push(value);
+      }
+      /**
+       * Removes a value from the collection.
+       *
+       * `key` must contain a representation of an integer for this to succeed.
+       * It may be wrapped in a `Scalar`.
+       *
+       * @returns `true` if the item was found and removed.
+       */
+      delete(key) {
+          const idx = asItemIndex(key);
+          if (typeof idx !== 'number')
+              return false;
+          const del = this.items.splice(idx, 1);
+          return del.length > 0;
+      }
+      get(key, keepScalar) {
+          const idx = asItemIndex(key);
+          if (typeof idx !== 'number')
+              return undefined;
+          const it = this.items[idx];
+          return !keepScalar && isScalar$1(it) ? it.value : it;
+      }
+      /**
+       * Checks if the collection includes a value with the key `key`.
+       *
+       * `key` must contain a representation of an integer for this to succeed.
+       * It may be wrapped in a `Scalar`.
+       */
+      has(key) {
+          const idx = asItemIndex(key);
+          return typeof idx === 'number' && idx < this.items.length;
+      }
+      /**
+       * Sets a value in this collection. For `!!set`, `value` needs to be a
+       * boolean to add/remove the item from the set.
+       *
+       * If `key` does not contain a representation of an integer, this will throw.
+       * It may be wrapped in a `Scalar`.
+       */
+      set(key, value) {
+          const idx = asItemIndex(key);
+          if (typeof idx !== 'number')
+              throw new Error(`Expected a valid index, not ${key}.`);
+          const prev = this.items[idx];
+          if (isScalar$1(prev) && isScalarValue(value))
+              prev.value = value;
+          else
+              this.items[idx] = value;
+      }
+      toJSON(_, ctx) {
+          const seq = [];
+          if (ctx?.onCreate)
+              ctx.onCreate(seq);
+          let i = 0;
+          for (const item of this.items)
+              seq.push(toJS(item, String(i++), ctx));
+          return seq;
+      }
+      toString(ctx, onComment, onChompKeep) {
+          if (!ctx)
+              return JSON.stringify(this);
+          return stringifyCollection(this, ctx, {
+              blockItemPrefix: '- ',
+              flowChars: { start: '[', end: ']' },
+              itemIndent: (ctx.indent || '') + '  ',
+              onChompKeep,
+              onComment
+          });
+      }
+      static from(schema, obj, ctx) {
+          const { replacer } = ctx;
+          const seq = new this(schema);
+          if (obj && Symbol.iterator in Object(obj)) {
+              let i = 0;
+              for (let it of obj) {
+                  if (typeof replacer === 'function') {
+                      const key = obj instanceof Set ? it : String(i++);
+                      it = replacer.call(obj, key, it);
+                  }
+                  seq.items.push(createNode(it, undefined, ctx));
+              }
+          }
+          return seq;
+      }
+  }
+  function asItemIndex(key) {
+      let idx = isScalar$1(key) ? key.value : key;
+      if (idx && typeof idx === 'string')
+          idx = Number(idx);
+      return typeof idx === 'number' && Number.isInteger(idx) && idx >= 0
+          ? idx
+          : null;
+  }
+
+  const seq = {
+      collection: 'seq',
+      default: true,
+      nodeClass: YAMLSeq,
+      tag: 'tag:yaml.org,2002:seq',
+      resolve(seq, onError) {
+          if (!isSeq(seq))
+              onError('Expected a sequence for this tag');
+          return seq;
+      },
+      createNode: (schema, obj, ctx) => YAMLSeq.from(schema, obj, ctx)
+  };
+
+  const string = {
+      identify: value => typeof value === 'string',
+      default: true,
+      tag: 'tag:yaml.org,2002:str',
+      resolve: str => str,
+      stringify(item, ctx, onComment, onChompKeep) {
+          ctx = Object.assign({ actualString: true }, ctx);
+          return stringifyString(item, ctx, onComment, onChompKeep);
+      }
+  };
+
+  const nullTag = {
+      identify: value => value == null,
+      createNode: () => new Scalar(null),
+      default: true,
+      tag: 'tag:yaml.org,2002:null',
+      test: /^(?:~|[Nn]ull|NULL)?$/,
+      resolve: () => new Scalar(null),
+      stringify: ({ source }, ctx) => typeof source === 'string' && nullTag.test.test(source)
+          ? source
+          : ctx.options.nullStr
+  };
+
+  const boolTag = {
+      identify: value => typeof value === 'boolean',
+      default: true,
+      tag: 'tag:yaml.org,2002:bool',
+      test: /^(?:[Tt]rue|TRUE|[Ff]alse|FALSE)$/,
+      resolve: str => new Scalar(str[0] === 't' || str[0] === 'T'),
+      stringify({ source, value }, ctx) {
+          if (source && boolTag.test.test(source)) {
+              const sv = source[0] === 't' || source[0] === 'T';
+              if (value === sv)
+                  return source;
+          }
+          return value ? ctx.options.trueStr : ctx.options.falseStr;
+      }
+  };
+
+  function stringifyNumber({ format, minFractionDigits, tag, value }) {
+      if (typeof value === 'bigint')
+          return String(value);
+      const num = typeof value === 'number' ? value : Number(value);
+      if (!isFinite(num))
+          return isNaN(num) ? '.nan' : num < 0 ? '-.inf' : '.inf';
+      let n = Object.is(value, -0) ? '-0' : JSON.stringify(value);
+      if (!format &&
+          minFractionDigits &&
+          (!tag || tag === 'tag:yaml.org,2002:float') &&
+          /^-?\d/.test(n) &&
+          !n.includes('e')) {
+          let i = n.indexOf('.');
+          if (i < 0) {
+              i = n.length;
+              n += '.';
+          }
+          let d = minFractionDigits - (n.length - i - 1);
+          while (d-- > 0)
+              n += '0';
+      }
+      return n;
+  }
+
+  const floatNaN$1 = {
+      identify: value => typeof value === 'number',
+      default: true,
+      tag: 'tag:yaml.org,2002:float',
+      test: /^(?:[-+]?\.(?:inf|Inf|INF)|\.nan|\.NaN|\.NAN)$/,
+      resolve: str => str.slice(-3).toLowerCase() === 'nan'
+          ? NaN
+          : str[0] === '-'
+              ? Number.NEGATIVE_INFINITY
+              : Number.POSITIVE_INFINITY,
+      stringify: stringifyNumber
+  };
+  const floatExp$1 = {
+      identify: value => typeof value === 'number',
+      default: true,
+      tag: 'tag:yaml.org,2002:float',
+      format: 'EXP',
+      test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
+      resolve: str => parseFloat(str),
+      stringify(node) {
+          const num = Number(node.value);
+          return isFinite(num) ? num.toExponential() : stringifyNumber(node);
+      }
+  };
+  const float$1 = {
+      identify: value => typeof value === 'number',
+      default: true,
+      tag: 'tag:yaml.org,2002:float',
+      test: /^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*)$/,
+      resolve(str) {
+          const node = new Scalar(parseFloat(str));
+          const dot = str.indexOf('.');
+          if (dot !== -1 && str[str.length - 1] === '0')
+              node.minFractionDigits = str.length - dot - 1;
+          return node;
+      },
+      stringify: stringifyNumber
+  };
+
+  const intIdentify$2 = (value) => typeof value === 'bigint' || Number.isInteger(value);
+  const intResolve$1 = (str, offset, radix, { intAsBigInt }) => (intAsBigInt ? BigInt(str) : parseInt(str.substring(offset), radix));
+  function intStringify$1(node, radix, prefix) {
+      const { value } = node;
+      if (intIdentify$2(value) && value >= 0)
+          return prefix + value.toString(radix);
+      return stringifyNumber(node);
+  }
+  const intOct$1 = {
+      identify: value => intIdentify$2(value) && value >= 0,
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      format: 'OCT',
+      test: /^0o[0-7]+$/,
+      resolve: (str, _onError, opt) => intResolve$1(str, 2, 8, opt),
+      stringify: node => intStringify$1(node, 8, '0o')
+  };
+  const int$1 = {
+      identify: intIdentify$2,
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      test: /^[-+]?[0-9]+$/,
+      resolve: (str, _onError, opt) => intResolve$1(str, 0, 10, opt),
+      stringify: stringifyNumber
+  };
+  const intHex$1 = {
+      identify: value => intIdentify$2(value) && value >= 0,
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      format: 'HEX',
+      test: /^0x[0-9a-fA-F]+$/,
+      resolve: (str, _onError, opt) => intResolve$1(str, 2, 16, opt),
+      stringify: node => intStringify$1(node, 16, '0x')
+  };
+
+  const schema$2 = [
+      map,
+      seq,
+      string,
+      nullTag,
+      boolTag,
+      intOct$1,
+      int$1,
+      intHex$1,
+      floatNaN$1,
+      floatExp$1,
+      float$1
+  ];
+
+  function intIdentify$1(value) {
+      return typeof value === 'bigint' || Number.isInteger(value);
+  }
+  const stringifyJSON = ({ value }) => JSON.stringify(value);
+  const jsonScalars = [
+      {
+          identify: value => typeof value === 'string',
+          default: true,
+          tag: 'tag:yaml.org,2002:str',
+          resolve: str => str,
+          stringify: stringifyJSON
+      },
+      {
+          identify: value => value == null,
+          createNode: () => new Scalar(null),
+          default: true,
+          tag: 'tag:yaml.org,2002:null',
+          test: /^null$/,
+          resolve: () => null,
+          stringify: stringifyJSON
+      },
+      {
+          identify: value => typeof value === 'boolean',
+          default: true,
+          tag: 'tag:yaml.org,2002:bool',
+          test: /^true$|^false$/,
+          resolve: str => str === 'true',
+          stringify: stringifyJSON
+      },
+      {
+          identify: intIdentify$1,
+          default: true,
+          tag: 'tag:yaml.org,2002:int',
+          test: /^-?(?:0|[1-9][0-9]*)$/,
+          resolve: (str, _onError, { intAsBigInt }) => intAsBigInt ? BigInt(str) : parseInt(str, 10),
+          stringify: ({ value }) => intIdentify$1(value) ? value.toString() : JSON.stringify(value)
+      },
+      {
+          identify: value => typeof value === 'number',
+          default: true,
+          tag: 'tag:yaml.org,2002:float',
+          test: /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]*)?(?:[eE][-+]?[0-9]+)?$/,
+          resolve: str => parseFloat(str),
+          stringify: stringifyJSON
+      }
+  ];
+  const jsonError = {
+      default: true,
+      tag: '',
+      test: /^/,
+      resolve(str, onError) {
+          onError(`Unresolved plain scalar ${JSON.stringify(str)}`);
+          return str;
+      }
+  };
+  const schema$1 = [map, seq].concat(jsonScalars, jsonError);
+
+  const binary = {
+      identify: value => value instanceof Uint8Array, // Buffer inherits from Uint8Array
+      default: false,
+      tag: 'tag:yaml.org,2002:binary',
+      /**
+       * Returns a Buffer in node and an Uint8Array in browsers
+       *
+       * To use the resulting buffer as an image, you'll want to do something like:
+       *
+       *   const blob = new Blob([buffer], { type: 'image/jpeg' })
+       *   document.querySelector('#photo').src = URL.createObjectURL(blob)
+       */
+      resolve(src, onError) {
+          if (typeof atob === 'function') {
+              // On IE 11, atob() can't handle newlines
+              const str = atob(src.replace(/[\n\r]/g, ''));
+              const buffer = new Uint8Array(str.length);
+              for (let i = 0; i < str.length; ++i)
+                  buffer[i] = str.charCodeAt(i);
+              return buffer;
+          }
+          else {
+              onError('This environment does not support reading binary tags; either Buffer or atob is required');
+              return src;
+          }
+      },
+      stringify({ comment, type, value }, ctx, onComment, onChompKeep) {
+          if (!value)
+              return '';
+          const buf = value; // checked earlier by binary.identify()
+          let str;
+          if (typeof btoa === 'function') {
+              let s = '';
+              for (let i = 0; i < buf.length; ++i)
+                  s += String.fromCharCode(buf[i]);
+              str = btoa(s);
+          }
+          else {
+              throw new Error('This environment does not support writing binary tags; either Buffer or btoa is required');
+          }
+          type ?? (type = Scalar.BLOCK_LITERAL);
+          if (type !== Scalar.QUOTE_DOUBLE) {
+              const lineWidth = Math.max(ctx.options.lineWidth - ctx.indent.length, ctx.options.minContentWidth);
+              const n = Math.ceil(str.length / lineWidth);
+              const lines = new Array(n);
+              for (let i = 0, o = 0; i < n; ++i, o += lineWidth) {
+                  lines[i] = str.substr(o, lineWidth);
+              }
+              str = lines.join(type === Scalar.BLOCK_LITERAL ? '\n' : ' ');
+          }
+          return stringifyString({ comment, type, value: str }, ctx, onComment, onChompKeep);
+      }
+  };
+
+  function resolvePairs(seq, onError) {
+      if (isSeq(seq)) {
+          for (let i = 0; i < seq.items.length; ++i) {
+              let item = seq.items[i];
+              if (isPair(item))
+                  continue;
+              else if (isMap(item)) {
+                  if (item.items.length > 1)
+                      onError('Each pair must have its own sequence indicator');
+                  const pair = item.items[0] || new Pair(new Scalar(null));
+                  if (item.commentBefore)
+                      pair.key.commentBefore = pair.key.commentBefore
+                          ? `${item.commentBefore}\n${pair.key.commentBefore}`
+                          : item.commentBefore;
+                  if (item.comment) {
+                      const cn = pair.value ?? pair.key;
+                      cn.comment = cn.comment
+                          ? `${item.comment}\n${cn.comment}`
+                          : item.comment;
+                  }
+                  item = pair;
+              }
+              seq.items[i] = isPair(item) ? item : new Pair(item);
+          }
+      }
+      else
+          onError('Expected a sequence for this tag');
+      return seq;
+  }
+  function createPairs(schema, iterable, ctx) {
+      const { replacer } = ctx;
+      const pairs = new YAMLSeq(schema);
+      pairs.tag = 'tag:yaml.org,2002:pairs';
+      let i = 0;
+      if (iterable && Symbol.iterator in Object(iterable))
+          for (let it of iterable) {
+              if (typeof replacer === 'function')
+                  it = replacer.call(iterable, String(i++), it);
+              let key, value;
+              if (Array.isArray(it)) {
+                  if (it.length === 2) {
+                      key = it[0];
+                      value = it[1];
+                  }
+                  else
+                      throw new TypeError(`Expected [key, value] tuple: ${it}`);
+              }
+              else if (it && it instanceof Object) {
+                  const keys = Object.keys(it);
+                  if (keys.length === 1) {
+                      key = keys[0];
+                      value = it[key];
+                  }
+                  else {
+                      throw new TypeError(`Expected tuple with one key, not ${keys.length} keys`);
+                  }
+              }
+              else {
+                  key = it;
+              }
+              pairs.items.push(createPair(key, value, ctx));
+          }
+      return pairs;
+  }
+  const pairs = {
+      collection: 'seq',
+      default: false,
+      tag: 'tag:yaml.org,2002:pairs',
+      resolve: resolvePairs,
+      createNode: createPairs
+  };
+
+  class YAMLOMap extends YAMLSeq {
+      constructor() {
+          super();
+          this.add = YAMLMap.prototype.add.bind(this);
+          this.delete = YAMLMap.prototype.delete.bind(this);
+          this.get = YAMLMap.prototype.get.bind(this);
+          this.has = YAMLMap.prototype.has.bind(this);
+          this.set = YAMLMap.prototype.set.bind(this);
+          this.tag = YAMLOMap.tag;
+      }
+      /**
+       * If `ctx` is given, the return type is actually `Map<unknown, unknown>`,
+       * but TypeScript won't allow widening the signature of a child method.
+       */
+      toJSON(_, ctx) {
+          if (!ctx)
+              return super.toJSON(_);
+          const map = new Map();
+          if (ctx?.onCreate)
+              ctx.onCreate(map);
+          for (const pair of this.items) {
+              let key, value;
+              if (isPair(pair)) {
+                  key = toJS(pair.key, '', ctx);
+                  value = toJS(pair.value, key, ctx);
+              }
+              else {
+                  key = toJS(pair, '', ctx);
+              }
+              if (map.has(key))
+                  throw new Error('Ordered maps must not include duplicate keys');
+              map.set(key, value);
+          }
+          return map;
+      }
+      static from(schema, iterable, ctx) {
+          const pairs = createPairs(schema, iterable, ctx);
+          const omap = new this();
+          omap.items = pairs.items;
+          return omap;
+      }
+  }
+  YAMLOMap.tag = 'tag:yaml.org,2002:omap';
+  const omap = {
+      collection: 'seq',
+      identify: value => value instanceof Map,
+      nodeClass: YAMLOMap,
+      default: false,
+      tag: 'tag:yaml.org,2002:omap',
+      resolve(seq, onError) {
+          const pairs = resolvePairs(seq, onError);
+          const seenKeys = [];
+          for (const { key } of pairs.items) {
+              if (isScalar$1(key)) {
+                  if (seenKeys.includes(key.value)) {
+                      onError(`Ordered maps must not include duplicate keys: ${key.value}`);
+                  }
+                  else {
+                      seenKeys.push(key.value);
+                  }
+              }
+          }
+          return Object.assign(new YAMLOMap(), pairs);
+      },
+      createNode: (schema, iterable, ctx) => YAMLOMap.from(schema, iterable, ctx)
+  };
+
+  function boolStringify({ value, source }, ctx) {
+      const boolObj = value ? trueTag : falseTag;
+      if (source && boolObj.test.test(source))
+          return source;
+      return value ? ctx.options.trueStr : ctx.options.falseStr;
+  }
+  const trueTag = {
+      identify: value => value === true,
+      default: true,
+      tag: 'tag:yaml.org,2002:bool',
+      test: /^(?:Y|y|[Yy]es|YES|[Tt]rue|TRUE|[Oo]n|ON)$/,
+      resolve: () => new Scalar(true),
+      stringify: boolStringify
+  };
+  const falseTag = {
+      identify: value => value === false,
+      default: true,
+      tag: 'tag:yaml.org,2002:bool',
+      test: /^(?:N|n|[Nn]o|NO|[Ff]alse|FALSE|[Oo]ff|OFF)$/,
+      resolve: () => new Scalar(false),
+      stringify: boolStringify
+  };
+
+  const floatNaN = {
+      identify: value => typeof value === 'number',
+      default: true,
+      tag: 'tag:yaml.org,2002:float',
+      test: /^(?:[-+]?\.(?:inf|Inf|INF)|\.nan|\.NaN|\.NAN)$/,
+      resolve: (str) => str.slice(-3).toLowerCase() === 'nan'
+          ? NaN
+          : str[0] === '-'
+              ? Number.NEGATIVE_INFINITY
+              : Number.POSITIVE_INFINITY,
+      stringify: stringifyNumber
+  };
+  const floatExp = {
+      identify: value => typeof value === 'number',
+      default: true,
+      tag: 'tag:yaml.org,2002:float',
+      format: 'EXP',
+      test: /^[-+]?(?:[0-9][0-9_]*)?(?:\.[0-9_]*)?[eE][-+]?[0-9]+$/,
+      resolve: (str) => parseFloat(str.replace(/_/g, '')),
+      stringify(node) {
+          const num = Number(node.value);
+          return isFinite(num) ? num.toExponential() : stringifyNumber(node);
+      }
+  };
+  const float = {
+      identify: value => typeof value === 'number',
+      default: true,
+      tag: 'tag:yaml.org,2002:float',
+      test: /^[-+]?(?:[0-9][0-9_]*)?\.[0-9_]*$/,
+      resolve(str) {
+          const node = new Scalar(parseFloat(str.replace(/_/g, '')));
+          const dot = str.indexOf('.');
+          if (dot !== -1) {
+              const f = str.substring(dot + 1).replace(/_/g, '');
+              if (f[f.length - 1] === '0')
+                  node.minFractionDigits = f.length;
+          }
+          return node;
+      },
+      stringify: stringifyNumber
+  };
+
+  const intIdentify = (value) => typeof value === 'bigint' || Number.isInteger(value);
+  function intResolve(str, offset, radix, { intAsBigInt }) {
+      const sign = str[0];
+      if (sign === '-' || sign === '+')
+          offset += 1;
+      str = str.substring(offset).replace(/_/g, '');
+      if (intAsBigInt) {
+          switch (radix) {
+              case 2:
+                  str = `0b${str}`;
+                  break;
+              case 8:
+                  str = `0o${str}`;
+                  break;
+              case 16:
+                  str = `0x${str}`;
+                  break;
+          }
+          const n = BigInt(str);
+          return sign === '-' ? BigInt(-1) * n : n;
+      }
+      const n = parseInt(str, radix);
+      return sign === '-' ? -1 * n : n;
+  }
+  function intStringify(node, radix, prefix) {
+      const { value } = node;
+      if (intIdentify(value)) {
+          const str = value.toString(radix);
+          return value < 0 ? '-' + prefix + str.substr(1) : prefix + str;
+      }
+      return stringifyNumber(node);
+  }
+  const intBin = {
+      identify: intIdentify,
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      format: 'BIN',
+      test: /^[-+]?0b[0-1_]+$/,
+      resolve: (str, _onError, opt) => intResolve(str, 2, 2, opt),
+      stringify: node => intStringify(node, 2, '0b')
+  };
+  const intOct = {
+      identify: intIdentify,
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      format: 'OCT',
+      test: /^[-+]?0[0-7_]+$/,
+      resolve: (str, _onError, opt) => intResolve(str, 1, 8, opt),
+      stringify: node => intStringify(node, 8, '0')
+  };
+  const int = {
+      identify: intIdentify,
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      test: /^[-+]?[0-9][0-9_]*$/,
+      resolve: (str, _onError, opt) => intResolve(str, 0, 10, opt),
+      stringify: stringifyNumber
+  };
+  const intHex = {
+      identify: intIdentify,
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      format: 'HEX',
+      test: /^[-+]?0x[0-9a-fA-F_]+$/,
+      resolve: (str, _onError, opt) => intResolve(str, 2, 16, opt),
+      stringify: node => intStringify(node, 16, '0x')
+  };
+
+  class YAMLSet extends YAMLMap {
+      constructor(schema) {
+          super(schema);
+          this.tag = YAMLSet.tag;
+      }
+      add(key) {
+          let pair;
+          if (isPair(key))
+              pair = key;
+          else if (key &&
+              typeof key === 'object' &&
+              'key' in key &&
+              'value' in key &&
+              key.value === null)
+              pair = new Pair(key.key, null);
+          else
+              pair = new Pair(key, null);
+          const prev = findPair(this.items, pair.key);
+          if (!prev)
+              this.items.push(pair);
+      }
+      /**
+       * If `keepPair` is `true`, returns the Pair matching `key`.
+       * Otherwise, returns the value of that Pair's key.
+       */
+      get(key, keepPair) {
+          const pair = findPair(this.items, key);
+          return !keepPair && isPair(pair)
+              ? isScalar$1(pair.key)
+                  ? pair.key.value
+                  : pair.key
+              : pair;
+      }
+      set(key, value) {
+          if (typeof value !== 'boolean')
+              throw new Error(`Expected boolean value for set(key, value) in a YAML set, not ${typeof value}`);
+          const prev = findPair(this.items, key);
+          if (prev && !value) {
+              this.items.splice(this.items.indexOf(prev), 1);
+          }
+          else if (!prev && value) {
+              this.items.push(new Pair(key));
+          }
+      }
+      toJSON(_, ctx) {
+          return super.toJSON(_, ctx, Set);
+      }
+      toString(ctx, onComment, onChompKeep) {
+          if (!ctx)
+              return JSON.stringify(this);
+          if (this.hasAllNullValues(true))
+              return super.toString(Object.assign({}, ctx, { allNullValues: true }), onComment, onChompKeep);
+          else
+              throw new Error('Set items must all have null values');
+      }
+      static from(schema, iterable, ctx) {
+          const { replacer } = ctx;
+          const set = new this(schema);
+          if (iterable && Symbol.iterator in Object(iterable))
+              for (let value of iterable) {
+                  if (typeof replacer === 'function')
+                      value = replacer.call(iterable, value, value);
+                  set.items.push(createPair(value, null, ctx));
+              }
+          return set;
+      }
+  }
+  YAMLSet.tag = 'tag:yaml.org,2002:set';
+  const set = {
+      collection: 'map',
+      identify: value => value instanceof Set,
+      nodeClass: YAMLSet,
+      default: false,
+      tag: 'tag:yaml.org,2002:set',
+      createNode: (schema, iterable, ctx) => YAMLSet.from(schema, iterable, ctx),
+      resolve(map, onError) {
+          if (isMap(map)) {
+              if (map.hasAllNullValues(true))
+                  return Object.assign(new YAMLSet(), map);
+              else
+                  onError('Set items must all have null values');
+          }
+          else
+              onError('Expected a mapping for this tag');
+          return map;
+      }
+  };
+
+  /** Internal types handle bigint as number, because TS can't figure it out. */
+  function parseSexagesimal(str, asBigInt) {
+      const sign = str[0];
+      const parts = sign === '-' || sign === '+' ? str.substring(1) : str;
+      const num = (n) => asBigInt ? BigInt(n) : Number(n);
+      const res = parts
+          .replace(/_/g, '')
+          .split(':')
+          .reduce((res, p) => res * num(60) + num(p), num(0));
+      return (sign === '-' ? num(-1) * res : res);
+  }
+  /**
+   * hhhh:mm:ss.sss
+   *
+   * Internal types handle bigint as number, because TS can't figure it out.
+   */
+  function stringifySexagesimal(node) {
+      let { value } = node;
+      let num = (n) => n;
+      if (typeof value === 'bigint')
+          num = n => BigInt(n);
+      else if (isNaN(value) || !isFinite(value))
+          return stringifyNumber(node);
+      let sign = '';
+      if (value < 0) {
+          sign = '-';
+          value *= num(-1);
+      }
+      const _60 = num(60);
+      const parts = [value % _60]; // seconds, including ms
+      if (value < 60) {
+          parts.unshift(0); // at least one : is required
+      }
+      else {
+          value = (value - parts[0]) / _60;
+          parts.unshift(value % _60); // minutes
+          if (value >= 60) {
+              value = (value - parts[0]) / _60;
+              parts.unshift(value); // hours
+          }
+      }
+      return (sign +
+          parts
+              .map(n => String(n).padStart(2, '0'))
+              .join(':')
+              .replace(/000000\d*$/, '') // % 60 may introduce error
+      );
+  }
+  const intTime = {
+      identify: value => typeof value === 'bigint' || Number.isInteger(value),
+      default: true,
+      tag: 'tag:yaml.org,2002:int',
+      format: 'TIME',
+      test: /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+$/,
+      resolve: (str, _onError, { intAsBigInt }) => parseSexagesimal(str, intAsBigInt),
+      stringify: stringifySexagesimal
+  };
+  const floatTime = {
+      identify: value => typeof value === 'number',
+      default: true,
+      tag: 'tag:yaml.org,2002:float',
+      format: 'TIME',
+      test: /^[-+]?[0-9][0-9_]*(?::[0-5]?[0-9])+\.[0-9_]*$/,
+      resolve: str => parseSexagesimal(str, false),
+      stringify: stringifySexagesimal
+  };
+  const timestamp = {
+      identify: value => value instanceof Date,
+      default: true,
+      tag: 'tag:yaml.org,2002:timestamp',
+      // If the time zone is omitted, the timestamp is assumed to be specified in UTC. The time part
+      // may be omitted altogether, resulting in a date format. In such a case, the time part is
+      // assumed to be 00:00:00Z (start of day, UTC).
+      test: RegExp('^([0-9]{4})-([0-9]{1,2})-([0-9]{1,2})' + // YYYY-Mm-Dd
+          '(?:' + // time is optional
+          '(?:t|T|[ \\t]+)' + // t | T | whitespace
+          '([0-9]{1,2}):([0-9]{1,2}):([0-9]{1,2}(\\.[0-9]+)?)' + // Hh:Mm:Ss(.ss)?
+          '(?:[ \\t]*(Z|[-+][012]?[0-9](?::[0-9]{2})?))?' + // Z | +5 | -03:30
+          ')?$'),
+      resolve(str) {
+          const match = str.match(timestamp.test);
+          if (!match)
+              throw new Error('!!timestamp expects a date, starting with yyyy-mm-dd');
+          const [, year, month, day, hour, minute, second] = match.map(Number);
+          const millisec = match[7] ? Number((match[7] + '00').substr(1, 3)) : 0;
+          let date = Date.UTC(year, month - 1, day, hour || 0, minute || 0, second || 0, millisec);
+          const tz = match[8];
+          if (tz && tz !== 'Z') {
+              let d = parseSexagesimal(tz, false);
+              if (Math.abs(d) < 30)
+                  d *= 60;
+              date -= 60000 * d;
+          }
+          return new Date(date);
+      },
+      stringify: ({ value }) => value?.toISOString().replace(/(T00:00:00)?\.000Z$/, '') ?? ''
+  };
+
+  const schema = [
+      map,
+      seq,
+      string,
+      nullTag,
+      trueTag,
+      falseTag,
+      intBin,
+      intOct,
+      int,
+      intHex,
+      floatNaN,
+      floatExp,
+      float,
+      binary,
+      merge,
+      omap,
+      pairs,
+      set,
+      intTime,
+      floatTime,
+      timestamp
+  ];
+
+  const schemas = new Map([
+      ['core', schema$2],
+      ['failsafe', [map, seq, string]],
+      ['json', schema$1],
+      ['yaml11', schema],
+      ['yaml-1.1', schema]
+  ]);
+  const tagsByName = {
+      binary,
+      bool: boolTag,
+      float: float$1,
+      floatExp: floatExp$1,
+      floatNaN: floatNaN$1,
+      floatTime,
+      int: int$1,
+      intHex: intHex$1,
+      intOct: intOct$1,
+      intTime,
+      map,
+      merge,
+      null: nullTag,
+      omap,
+      pairs,
+      seq,
+      set,
+      timestamp
+  };
+  const coreKnownTags = {
+      'tag:yaml.org,2002:binary': binary,
+      'tag:yaml.org,2002:merge': merge,
+      'tag:yaml.org,2002:omap': omap,
+      'tag:yaml.org,2002:pairs': pairs,
+      'tag:yaml.org,2002:set': set,
+      'tag:yaml.org,2002:timestamp': timestamp
+  };
+  function getTags(customTags, schemaName, addMergeTag) {
+      const schemaTags = schemas.get(schemaName);
+      if (schemaTags && !customTags) {
+          return addMergeTag && !schemaTags.includes(merge)
+              ? schemaTags.concat(merge)
+              : schemaTags.slice();
+      }
+      let tags = schemaTags;
+      if (!tags) {
+          if (Array.isArray(customTags))
+              tags = [];
+          else {
+              const keys = Array.from(schemas.keys())
+                  .filter(key => key !== 'yaml11')
+                  .map(key => JSON.stringify(key))
+                  .join(', ');
+              throw new Error(`Unknown schema "${schemaName}"; use one of ${keys} or define customTags array`);
+          }
+      }
+      if (Array.isArray(customTags)) {
+          for (const tag of customTags)
+              tags = tags.concat(tag);
+      }
+      else if (typeof customTags === 'function') {
+          tags = customTags(tags.slice());
+      }
+      if (addMergeTag)
+          tags = tags.concat(merge);
+      return tags.reduce((tags, tag) => {
+          const tagObj = typeof tag === 'string' ? tagsByName[tag] : tag;
+          if (!tagObj) {
+              const tagName = JSON.stringify(tag);
+              const keys = Object.keys(tagsByName)
+                  .map(key => JSON.stringify(key))
+                  .join(', ');
+              throw new Error(`Unknown custom tag ${tagName}; use one of ${keys}`);
+          }
+          if (!tags.includes(tagObj))
+              tags.push(tagObj);
+          return tags;
+      }, []);
+  }
+
+  const sortMapEntriesByKey = (a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+  class Schema {
+      constructor({ compat, customTags, merge, resolveKnownTags, schema, sortMapEntries, toStringDefaults }) {
+          this.compat = Array.isArray(compat)
+              ? getTags(compat, 'compat')
+              : compat
+                  ? getTags(null, compat)
+                  : null;
+          this.name = (typeof schema === 'string' && schema) || 'core';
+          this.knownTags = resolveKnownTags ? coreKnownTags : {};
+          this.tags = getTags(customTags, this.name, merge);
+          this.toStringOptions = toStringDefaults ?? null;
+          Object.defineProperty(this, MAP, { value: map });
+          Object.defineProperty(this, SCALAR$1, { value: string });
+          Object.defineProperty(this, SEQ, { value: seq });
+          // Used by createMap()
+          this.sortMapEntries =
+              typeof sortMapEntries === 'function'
+                  ? sortMapEntries
+                  : sortMapEntries === true
+                      ? sortMapEntriesByKey
+                      : null;
+      }
+      clone() {
+          const copy = Object.create(Schema.prototype, Object.getOwnPropertyDescriptors(this));
+          copy.tags = this.tags.slice();
+          return copy;
+      }
+  }
+
+  function stringifyDocument(doc, options) {
+      const lines = [];
+      let hasDirectives = options.directives === true;
+      if (options.directives !== false && doc.directives) {
+          const dir = doc.directives.toString(doc);
+          if (dir) {
+              lines.push(dir);
+              hasDirectives = true;
+          }
+          else if (doc.directives.docStart)
+              hasDirectives = true;
+      }
+      if (hasDirectives)
+          lines.push('---');
+      const ctx = createStringifyContext(doc, options);
+      const { commentString } = ctx.options;
+      if (doc.commentBefore) {
+          if (lines.length !== 1)
+              lines.unshift('');
+          const cs = commentString(doc.commentBefore);
+          lines.unshift(indentComment(cs, ''));
+      }
+      let chompKeep = false;
+      let contentComment = null;
+      if (doc.contents) {
+          if (isNode(doc.contents)) {
+              if (doc.contents.spaceBefore && hasDirectives)
+                  lines.push('');
+              if (doc.contents.commentBefore) {
+                  const cs = commentString(doc.contents.commentBefore);
+                  lines.push(indentComment(cs, ''));
+              }
+              // top-level block scalars need to be indented if followed by a comment
+              ctx.forceBlockIndent = !!doc.comment;
+              contentComment = doc.contents.comment;
+          }
+          const onChompKeep = contentComment ? undefined : () => (chompKeep = true);
+          let body = stringify$2(doc.contents, ctx, () => (contentComment = null), onChompKeep);
+          if (contentComment)
+              body += lineComment(body, '', commentString(contentComment));
+          if ((body[0] === '|' || body[0] === '>') &&
+              lines[lines.length - 1] === '---') {
+              // Top-level block scalars with a preceding doc marker ought to use the
+              // same line for their header.
+              lines[lines.length - 1] = `--- ${body}`;
+          }
+          else
+              lines.push(body);
+      }
+      else {
+          lines.push(stringify$2(doc.contents, ctx));
+      }
+      if (doc.directives?.docEnd) {
+          if (doc.comment) {
+              const cs = commentString(doc.comment);
+              if (cs.includes('\n')) {
+                  lines.push('...');
+                  lines.push(indentComment(cs, ''));
+              }
+              else {
+                  lines.push(`... ${cs}`);
+              }
+          }
+          else {
+              lines.push('...');
+          }
+      }
+      else {
+          let dc = doc.comment;
+          if (dc && chompKeep)
+              dc = dc.replace(/^\n+/, '');
+          if (dc) {
+              if ((!chompKeep || contentComment) && lines[lines.length - 1] !== '')
+                  lines.push('');
+              lines.push(indentComment(commentString(dc), ''));
+          }
+      }
+      return lines.join('\n') + '\n';
+  }
+
+  class Document {
+      constructor(value, replacer, options) {
+          /** A comment before this Document */
+          this.commentBefore = null;
+          /** A comment immediately after this Document */
+          this.comment = null;
+          /** Errors encountered during parsing. */
+          this.errors = [];
+          /** Warnings encountered during parsing. */
+          this.warnings = [];
+          Object.defineProperty(this, NODE_TYPE, { value: DOC });
+          let _replacer = null;
+          if (typeof replacer === 'function' || Array.isArray(replacer)) {
+              _replacer = replacer;
+          }
+          else if (options === undefined && replacer) {
+              options = replacer;
+              replacer = undefined;
+          }
+          const opt = Object.assign({
+              intAsBigInt: false,
+              keepSourceTokens: false,
+              logLevel: 'warn',
+              prettyErrors: true,
+              strict: true,
+              stringKeys: false,
+              uniqueKeys: true,
+              version: '1.2'
+          }, options);
+          this.options = opt;
+          let { version } = opt;
+          if (options?._directives) {
+              this.directives = options._directives.atDocument();
+              if (this.directives.yaml.explicit)
+                  version = this.directives.yaml.version;
+          }
+          else
+              this.directives = new Directives({ version });
+          this.setSchema(version, options);
+          // @ts-expect-error We can't really know that this matches Contents.
+          this.contents =
+              value === undefined ? null : this.createNode(value, _replacer, options);
+      }
+      /**
+       * Create a deep copy of this Document and its contents.
+       *
+       * Custom Node values that inherit from `Object` still refer to their original instances.
+       */
+      clone() {
+          const copy = Object.create(Document.prototype, {
+              [NODE_TYPE]: { value: DOC }
+          });
+          copy.commentBefore = this.commentBefore;
+          copy.comment = this.comment;
+          copy.errors = this.errors.slice();
+          copy.warnings = this.warnings.slice();
+          copy.options = Object.assign({}, this.options);
+          if (this.directives)
+              copy.directives = this.directives.clone();
+          copy.schema = this.schema.clone();
+          // @ts-expect-error We can't really know that this matches Contents.
+          copy.contents = isNode(this.contents)
+              ? this.contents.clone(copy.schema)
+              : this.contents;
+          if (this.range)
+              copy.range = this.range.slice();
+          return copy;
+      }
+      /** Adds a value to the document. */
+      add(value) {
+          if (assertCollection(this.contents))
+              this.contents.add(value);
+      }
+      /** Adds a value to the document. */
+      addIn(path, value) {
+          if (assertCollection(this.contents))
+              this.contents.addIn(path, value);
+      }
+      /**
+       * Create a new `Alias` node, ensuring that the target `node` has the required anchor.
+       *
+       * If `node` already has an anchor, `name` is ignored.
+       * Otherwise, the `node.anchor` value will be set to `name`,
+       * or if an anchor with that name is already present in the document,
+       * `name` will be used as a prefix for a new unique anchor.
+       * If `name` is undefined, the generated anchor will use 'a' as a prefix.
+       */
+      createAlias(node, name) {
+          if (!node.anchor) {
+              const prev = anchorNames(this);
+              node.anchor =
+                  // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+                  !name || prev.has(name) ? findNewAnchor(name || 'a', prev) : name;
+          }
+          return new Alias(node.anchor);
+      }
+      createNode(value, replacer, options) {
+          let _replacer = undefined;
+          if (typeof replacer === 'function') {
+              value = replacer.call({ '': value }, '', value);
+              _replacer = replacer;
+          }
+          else if (Array.isArray(replacer)) {
+              const keyToStr = (v) => typeof v === 'number' || v instanceof String || v instanceof Number;
+              const asStr = replacer.filter(keyToStr).map(String);
+              if (asStr.length > 0)
+                  replacer = replacer.concat(asStr);
+              _replacer = replacer;
+          }
+          else if (options === undefined && replacer) {
+              options = replacer;
+              replacer = undefined;
+          }
+          const { aliasDuplicateObjects, anchorPrefix, flow, keepUndefined, onTagObj, tag } = options ?? {};
+          const { onAnchor, setAnchors, sourceObjects } = createNodeAnchors(this, 
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          anchorPrefix || 'a');
+          const ctx = {
+              aliasDuplicateObjects: aliasDuplicateObjects ?? true,
+              keepUndefined: keepUndefined ?? false,
+              onAnchor,
+              onTagObj,
+              replacer: _replacer,
+              schema: this.schema,
+              sourceObjects
+          };
+          const node = createNode(value, tag, ctx);
+          if (flow && isCollection$1(node))
+              node.flow = true;
+          setAnchors();
+          return node;
+      }
+      /**
+       * Convert a key and a value into a `Pair` using the current schema,
+       * recursively wrapping all values as `Scalar` or `Collection` nodes.
+       */
+      createPair(key, value, options = {}) {
+          const k = this.createNode(key, null, options);
+          const v = this.createNode(value, null, options);
+          return new Pair(k, v);
+      }
+      /**
+       * Removes a value from the document.
+       * @returns `true` if the item was found and removed.
+       */
+      delete(key) {
+          return assertCollection(this.contents) ? this.contents.delete(key) : false;
+      }
+      /**
+       * Removes a value from the document.
+       * @returns `true` if the item was found and removed.
+       */
+      deleteIn(path) {
+          if (isEmptyPath(path)) {
+              if (this.contents == null)
+                  return false;
+              // @ts-expect-error Presumed impossible if Strict extends false
+              this.contents = null;
+              return true;
+          }
+          return assertCollection(this.contents)
+              ? this.contents.deleteIn(path)
+              : false;
+      }
+      /**
+       * Returns item at `key`, or `undefined` if not found. By default unwraps
+       * scalar values from their surrounding node; to disable set `keepScalar` to
+       * `true` (collections are always returned intact).
+       */
+      get(key, keepScalar) {
+          return isCollection$1(this.contents)
+              ? this.contents.get(key, keepScalar)
+              : undefined;
+      }
+      /**
+       * Returns item at `path`, or `undefined` if not found. By default unwraps
+       * scalar values from their surrounding node; to disable set `keepScalar` to
+       * `true` (collections are always returned intact).
+       */
+      getIn(path, keepScalar) {
+          if (isEmptyPath(path))
+              return !keepScalar && isScalar$1(this.contents)
+                  ? this.contents.value
+                  : this.contents;
+          return isCollection$1(this.contents)
+              ? this.contents.getIn(path, keepScalar)
+              : undefined;
+      }
+      /**
+       * Checks if the document includes a value with the key `key`.
+       */
+      has(key) {
+          return isCollection$1(this.contents) ? this.contents.has(key) : false;
+      }
+      /**
+       * Checks if the document includes a value at `path`.
+       */
+      hasIn(path) {
+          if (isEmptyPath(path))
+              return this.contents !== undefined;
+          return isCollection$1(this.contents) ? this.contents.hasIn(path) : false;
+      }
+      /**
+       * Sets a value in this document. For `!!set`, `value` needs to be a
+       * boolean to add/remove the item from the set.
+       */
+      set(key, value) {
+          if (this.contents == null) {
+              // @ts-expect-error We can't really know that this matches Contents.
+              this.contents = collectionFromPath(this.schema, [key], value);
+          }
+          else if (assertCollection(this.contents)) {
+              this.contents.set(key, value);
+          }
+      }
+      /**
+       * Sets a value in this document. For `!!set`, `value` needs to be a
+       * boolean to add/remove the item from the set.
+       */
+      setIn(path, value) {
+          if (isEmptyPath(path)) {
+              // @ts-expect-error We can't really know that this matches Contents.
+              this.contents = value;
+          }
+          else if (this.contents == null) {
+              // @ts-expect-error We can't really know that this matches Contents.
+              this.contents = collectionFromPath(this.schema, Array.from(path), value);
+          }
+          else if (assertCollection(this.contents)) {
+              this.contents.setIn(path, value);
+          }
+      }
+      /**
+       * Change the YAML version and schema used by the document.
+       * A `null` version disables support for directives, explicit tags, anchors, and aliases.
+       * It also requires the `schema` option to be given as a `Schema` instance value.
+       *
+       * Overrides all previously set schema options.
+       */
+      setSchema(version, options = {}) {
+          if (typeof version === 'number')
+              version = String(version);
+          let opt;
+          switch (version) {
+              case '1.1':
+                  if (this.directives)
+                      this.directives.yaml.version = '1.1';
+                  else
+                      this.directives = new Directives({ version: '1.1' });
+                  opt = { resolveKnownTags: false, schema: 'yaml-1.1' };
+                  break;
+              case '1.2':
+              case 'next':
+                  if (this.directives)
+                      this.directives.yaml.version = version;
+                  else
+                      this.directives = new Directives({ version });
+                  opt = { resolveKnownTags: true, schema: 'core' };
+                  break;
+              case null:
+                  if (this.directives)
+                      delete this.directives;
+                  opt = null;
+                  break;
+              default: {
+                  const sv = JSON.stringify(version);
+                  throw new Error(`Expected '1.1', '1.2' or null as first argument, but found: ${sv}`);
+              }
+          }
+          // Not using `instanceof Schema` to allow for duck typing
+          if (options.schema instanceof Object)
+              this.schema = options.schema;
+          else if (opt)
+              this.schema = new Schema(Object.assign(opt, options));
+          else
+              throw new Error(`With a null YAML version, the { schema: Schema } option is required`);
+      }
+      // json & jsonArg are only used from toJSON()
+      toJS({ json, jsonArg, mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
+          const ctx = {
+              anchors: new Map(),
+              doc: this,
+              keep: !json,
+              mapAsMap: mapAsMap === true,
+              mapKeyWarned: false,
+              maxAliasCount: typeof maxAliasCount === 'number' ? maxAliasCount : 100
+          };
+          const res = toJS(this.contents, jsonArg ?? '', ctx);
+          if (typeof onAnchor === 'function')
+              for (const { count, res } of ctx.anchors.values())
+                  onAnchor(res, count);
+          return typeof reviver === 'function'
+              ? applyReviver(reviver, { '': res }, '', res)
+              : res;
+      }
+      /**
+       * A JSON representation of the document `contents`.
+       *
+       * @param jsonArg Used by `JSON.stringify` to indicate the array index or
+       *   property name.
+       */
+      toJSON(jsonArg, onAnchor) {
+          return this.toJS({ json: true, jsonArg, mapAsMap: false, onAnchor });
+      }
+      /** A YAML representation of the document. */
+      toString(options = {}) {
+          if (this.errors.length > 0)
+              throw new Error('Document with errors cannot be stringified');
+          if ('indent' in options &&
+              (!Number.isInteger(options.indent) || Number(options.indent) <= 0)) {
+              const s = JSON.stringify(options.indent);
+              throw new Error(`"indent" option must be a positive integer, not ${s}`);
+          }
+          return stringifyDocument(this, options);
+      }
+  }
+  function assertCollection(contents) {
+      if (isCollection$1(contents))
+          return true;
+      throw new Error('Expected a YAML collection as document contents');
+  }
+
+  class YAMLError extends Error {
+      constructor(name, pos, code, message) {
+          super();
+          this.name = name;
+          this.code = code;
+          this.message = message;
+          this.pos = pos;
+      }
+  }
+  class YAMLParseError extends YAMLError {
+      constructor(pos, code, message) {
+          super('YAMLParseError', pos, code, message);
+      }
+  }
+  class YAMLWarning extends YAMLError {
+      constructor(pos, code, message) {
+          super('YAMLWarning', pos, code, message);
+      }
+  }
+  const prettifyError = (src, lc) => (error) => {
+      if (error.pos[0] === -1)
+          return;
+      error.linePos = error.pos.map(pos => lc.linePos(pos));
+      const { line, col } = error.linePos[0];
+      error.message += ` at line ${line}, column ${col}`;
+      let ci = col - 1;
+      let lineStr = src
+          .substring(lc.lineStarts[line - 1], lc.lineStarts[line])
+          .replace(/[\n\r]+$/, '');
+      // Trim to max 80 chars, keeping col position near the middle
+      if (ci >= 60 && lineStr.length > 80) {
+          const trimStart = Math.min(ci - 39, lineStr.length - 79);
+          lineStr = '…' + lineStr.substring(trimStart);
+          ci -= trimStart - 1;
+      }
+      if (lineStr.length > 80)
+          lineStr = lineStr.substring(0, 79) + '…';
+      // Include previous line in context if pointing at line start
+      if (line > 1 && /^ *$/.test(lineStr.substring(0, ci))) {
+          // Regexp won't match if start is trimmed
+          let prev = src.substring(lc.lineStarts[line - 2], lc.lineStarts[line - 1]);
+          if (prev.length > 80)
+              prev = prev.substring(0, 79) + '…\n';
+          lineStr = prev + lineStr;
+      }
+      if (/[^ ]/.test(lineStr)) {
+          let count = 1;
+          const end = error.linePos[1];
+          if (end?.line === line && end.col > col) {
+              count = Math.max(1, Math.min(end.col - col, 80 - ci));
+          }
+          const pointer = ' '.repeat(ci) + '^'.repeat(count);
+          error.message += `:\n\n${lineStr}\n${pointer}\n`;
+      }
+  };
+
+  function resolveProps(tokens, { flow, indicator, next, offset, onError, parentIndent, startOnNewline }) {
+      let spaceBefore = false;
+      let atNewline = startOnNewline;
+      let hasSpace = startOnNewline;
+      let comment = '';
+      let commentSep = '';
+      let hasNewline = false;
+      let reqSpace = false;
+      let tab = null;
+      let anchor = null;
+      let tag = null;
+      let newlineAfterProp = null;
+      let comma = null;
+      let found = null;
+      let start = null;
+      for (const token of tokens) {
+          if (reqSpace) {
+              if (token.type !== 'space' &&
+                  token.type !== 'newline' &&
+                  token.type !== 'comma')
+                  onError(token.offset, 'MISSING_CHAR', 'Tags and anchors must be separated from the next token by white space');
+              reqSpace = false;
+          }
+          if (tab) {
+              if (atNewline && token.type !== 'comment' && token.type !== 'newline') {
+                  onError(tab, 'TAB_AS_INDENT', 'Tabs are not allowed as indentation');
+              }
+              tab = null;
+          }
+          switch (token.type) {
+              case 'space':
+                  // At the doc level, tabs at line start may be parsed
+                  // as leading white space rather than indentation.
+                  // In a flow collection, only the parser handles indent.
+                  if (!flow &&
+                      (indicator !== 'doc-start' || next?.type !== 'flow-collection') &&
+                      token.source.includes('\t')) {
+                      tab = token;
+                  }
+                  hasSpace = true;
+                  break;
+              case 'comment': {
+                  if (!hasSpace)
+                      onError(token, 'MISSING_CHAR', 'Comments must be separated from other tokens by white space characters');
+                  const cb = token.source.substring(1) || ' ';
+                  if (!comment)
+                      comment = cb;
+                  else
+                      comment += commentSep + cb;
+                  commentSep = '';
+                  atNewline = false;
+                  break;
+              }
+              case 'newline':
+                  if (atNewline) {
+                      if (comment)
+                          comment += token.source;
+                      else if (!found || indicator !== 'seq-item-ind')
+                          spaceBefore = true;
+                  }
+                  else
+                      commentSep += token.source;
+                  atNewline = true;
+                  hasNewline = true;
+                  if (anchor || tag)
+                      newlineAfterProp = token;
+                  hasSpace = true;
+                  break;
+              case 'anchor':
+                  if (anchor)
+                      onError(token, 'MULTIPLE_ANCHORS', 'A node can have at most one anchor');
+                  if (token.source.endsWith(':'))
+                      onError(token.offset + token.source.length - 1, 'BAD_ALIAS', 'Anchor ending in : is ambiguous', true);
+                  anchor = token;
+                  start ?? (start = token.offset);
+                  atNewline = false;
+                  hasSpace = false;
+                  reqSpace = true;
+                  break;
+              case 'tag': {
+                  if (tag)
+                      onError(token, 'MULTIPLE_TAGS', 'A node can have at most one tag');
+                  tag = token;
+                  start ?? (start = token.offset);
+                  atNewline = false;
+                  hasSpace = false;
+                  reqSpace = true;
+                  break;
+              }
+              case indicator:
+                  // Could here handle preceding comments differently
+                  if (anchor || tag)
+                      onError(token, 'BAD_PROP_ORDER', `Anchors and tags must be after the ${token.source} indicator`);
+                  if (found)
+                      onError(token, 'UNEXPECTED_TOKEN', `Unexpected ${token.source} in ${flow ?? 'collection'}`);
+                  found = token;
+                  atNewline =
+                      indicator === 'seq-item-ind' || indicator === 'explicit-key-ind';
+                  hasSpace = false;
+                  break;
+              case 'comma':
+                  if (flow) {
+                      if (comma)
+                          onError(token, 'UNEXPECTED_TOKEN', `Unexpected , in ${flow}`);
+                      comma = token;
+                      atNewline = false;
+                      hasSpace = false;
+                      break;
+                  }
+              // else fallthrough
+              default:
+                  onError(token, 'UNEXPECTED_TOKEN', `Unexpected ${token.type} token`);
+                  atNewline = false;
+                  hasSpace = false;
+          }
+      }
+      const last = tokens[tokens.length - 1];
+      const end = last ? last.offset + last.source.length : offset;
+      if (reqSpace &&
+          next &&
+          next.type !== 'space' &&
+          next.type !== 'newline' &&
+          next.type !== 'comma' &&
+          (next.type !== 'scalar' || next.source !== '')) {
+          onError(next.offset, 'MISSING_CHAR', 'Tags and anchors must be separated from the next token by white space');
+      }
+      if (tab &&
+          ((atNewline && tab.indent <= parentIndent) ||
+              next?.type === 'block-map' ||
+              next?.type === 'block-seq'))
+          onError(tab, 'TAB_AS_INDENT', 'Tabs are not allowed as indentation');
+      return {
+          comma,
+          found,
+          spaceBefore,
+          comment,
+          hasNewline,
+          anchor,
+          tag,
+          newlineAfterProp,
+          end,
+          start: start ?? end
+      };
+  }
+
+  function containsNewline(key) {
+      if (!key)
+          return null;
+      switch (key.type) {
+          case 'alias':
+          case 'scalar':
+          case 'double-quoted-scalar':
+          case 'single-quoted-scalar':
+              if (key.source.includes('\n'))
+                  return true;
+              if (key.end)
+                  for (const st of key.end)
+                      if (st.type === 'newline')
+                          return true;
+              return false;
+          case 'flow-collection':
+              for (const it of key.items) {
+                  for (const st of it.start)
+                      if (st.type === 'newline')
+                          return true;
+                  if (it.sep)
+                      for (const st of it.sep)
+                          if (st.type === 'newline')
+                              return true;
+                  if (containsNewline(it.key) || containsNewline(it.value))
+                      return true;
+              }
+              return false;
+          default:
+              return true;
+      }
+  }
+
+  function flowIndentCheck(indent, fc, onError) {
+      if (fc?.type === 'flow-collection') {
+          const end = fc.end[0];
+          if (end.indent === indent &&
+              (end.source === ']' || end.source === '}') &&
+              containsNewline(fc)) {
+              const msg = 'Flow end indicator should be more indented than parent';
+              onError(end, 'BAD_INDENT', msg, true);
+          }
+      }
+  }
+
+  function mapIncludes(ctx, items, search) {
+      const { uniqueKeys } = ctx.options;
+      if (uniqueKeys === false)
+          return false;
+      const isEqual = typeof uniqueKeys === 'function'
+          ? uniqueKeys
+          : (a, b) => a === b || (isScalar$1(a) && isScalar$1(b) && a.value === b.value);
+      return items.some(pair => isEqual(pair.key, search));
+  }
+
+  const startColMsg = 'All mapping items must start at the same column';
+  function resolveBlockMap({ composeNode, composeEmptyNode }, ctx, bm, onError, tag) {
+      const NodeClass = tag?.nodeClass ?? YAMLMap;
+      const map = new NodeClass(ctx.schema);
+      if (ctx.atRoot)
+          ctx.atRoot = false;
+      let offset = bm.offset;
+      let commentEnd = null;
+      for (const collItem of bm.items) {
+          const { start, key, sep, value } = collItem;
+          // key properties
+          const keyProps = resolveProps(start, {
+              indicator: 'explicit-key-ind',
+              next: key ?? sep?.[0],
+              offset,
+              onError,
+              parentIndent: bm.indent,
+              startOnNewline: true
+          });
+          const implicitKey = !keyProps.found;
+          if (implicitKey) {
+              if (key) {
+                  if (key.type === 'block-seq')
+                      onError(offset, 'BLOCK_AS_IMPLICIT_KEY', 'A block sequence may not be used as an implicit map key');
+                  else if ('indent' in key && key.indent !== bm.indent)
+                      onError(offset, 'BAD_INDENT', startColMsg);
+              }
+              if (!keyProps.anchor && !keyProps.tag && !sep) {
+                  commentEnd = keyProps.end;
+                  if (keyProps.comment) {
+                      if (map.comment)
+                          map.comment += '\n' + keyProps.comment;
+                      else
+                          map.comment = keyProps.comment;
+                  }
+                  continue;
+              }
+              if (keyProps.newlineAfterProp || containsNewline(key)) {
+                  onError(key ?? start[start.length - 1], 'MULTILINE_IMPLICIT_KEY', 'Implicit keys need to be on a single line');
+              }
+          }
+          else if (keyProps.found?.indent !== bm.indent) {
+              onError(offset, 'BAD_INDENT', startColMsg);
+          }
+          // key value
+          ctx.atKey = true;
+          const keyStart = keyProps.end;
+          const keyNode = key
+              ? composeNode(ctx, key, keyProps, onError)
+              : composeEmptyNode(ctx, keyStart, start, null, keyProps, onError);
+          if (ctx.schema.compat)
+              flowIndentCheck(bm.indent, key, onError);
+          ctx.atKey = false;
+          if (mapIncludes(ctx, map.items, keyNode))
+              onError(keyStart, 'DUPLICATE_KEY', 'Map keys must be unique');
+          // value properties
+          const valueProps = resolveProps(sep ?? [], {
+              indicator: 'map-value-ind',
+              next: value,
+              offset: keyNode.range[2],
+              onError,
+              parentIndent: bm.indent,
+              startOnNewline: !key || key.type === 'block-scalar'
+          });
+          offset = valueProps.end;
+          if (valueProps.found) {
+              if (implicitKey) {
+                  if (value?.type === 'block-map' && !valueProps.hasNewline)
+                      onError(offset, 'BLOCK_AS_IMPLICIT_KEY', 'Nested mappings are not allowed in compact mappings');
+                  if (ctx.options.strict &&
+                      keyProps.start < valueProps.found.offset - 1024)
+                      onError(keyNode.range, 'KEY_OVER_1024_CHARS', 'The : indicator must be at most 1024 chars after the start of an implicit block mapping key');
+              }
+              // value value
+              const valueNode = value
+                  ? composeNode(ctx, value, valueProps, onError)
+                  : composeEmptyNode(ctx, offset, sep, null, valueProps, onError);
+              if (ctx.schema.compat)
+                  flowIndentCheck(bm.indent, value, onError);
+              offset = valueNode.range[2];
+              const pair = new Pair(keyNode, valueNode);
+              if (ctx.options.keepSourceTokens)
+                  pair.srcToken = collItem;
+              map.items.push(pair);
+          }
+          else {
+              // key with no value
+              if (implicitKey)
+                  onError(keyNode.range, 'MISSING_CHAR', 'Implicit map keys need to be followed by map values');
+              if (valueProps.comment) {
+                  if (keyNode.comment)
+                      keyNode.comment += '\n' + valueProps.comment;
+                  else
+                      keyNode.comment = valueProps.comment;
+              }
+              const pair = new Pair(keyNode);
+              if (ctx.options.keepSourceTokens)
+                  pair.srcToken = collItem;
+              map.items.push(pair);
+          }
+      }
+      if (commentEnd && commentEnd < offset)
+          onError(commentEnd, 'IMPOSSIBLE', 'Map comment with trailing content');
+      map.range = [bm.offset, offset, commentEnd ?? offset];
+      return map;
+  }
+
+  function resolveBlockSeq({ composeNode, composeEmptyNode }, ctx, bs, onError, tag) {
+      const NodeClass = tag?.nodeClass ?? YAMLSeq;
+      const seq = new NodeClass(ctx.schema);
+      if (ctx.atRoot)
+          ctx.atRoot = false;
+      if (ctx.atKey)
+          ctx.atKey = false;
+      let offset = bs.offset;
+      let commentEnd = null;
+      for (const { start, value } of bs.items) {
+          const props = resolveProps(start, {
+              indicator: 'seq-item-ind',
+              next: value,
+              offset,
+              onError,
+              parentIndent: bs.indent,
+              startOnNewline: true
+          });
+          if (!props.found) {
+              if (props.anchor || props.tag || value) {
+                  if (value?.type === 'block-seq')
+                      onError(props.end, 'BAD_INDENT', 'All sequence items must start at the same column');
+                  else
+                      onError(offset, 'MISSING_CHAR', 'Sequence item without - indicator');
+              }
+              else {
+                  commentEnd = props.end;
+                  if (props.comment)
+                      seq.comment = props.comment;
+                  continue;
+              }
+          }
+          const node = value
+              ? composeNode(ctx, value, props, onError)
+              : composeEmptyNode(ctx, props.end, start, null, props, onError);
+          if (ctx.schema.compat)
+              flowIndentCheck(bs.indent, value, onError);
+          offset = node.range[2];
+          seq.items.push(node);
+      }
+      seq.range = [bs.offset, offset, commentEnd ?? offset];
+      return seq;
+  }
+
+  function resolveEnd(end, offset, reqSpace, onError) {
+      let comment = '';
+      if (end) {
+          let hasSpace = false;
+          let sep = '';
+          for (const token of end) {
+              const { source, type } = token;
+              switch (type) {
+                  case 'space':
+                      hasSpace = true;
+                      break;
+                  case 'comment': {
+                      if (reqSpace && !hasSpace)
+                          onError(token, 'MISSING_CHAR', 'Comments must be separated from other tokens by white space characters');
+                      const cb = source.substring(1) || ' ';
+                      if (!comment)
+                          comment = cb;
+                      else
+                          comment += sep + cb;
+                      sep = '';
+                      break;
+                  }
+                  case 'newline':
+                      if (comment)
+                          sep += source;
+                      hasSpace = true;
+                      break;
+                  default:
+                      onError(token, 'UNEXPECTED_TOKEN', `Unexpected ${type} at node end`);
+              }
+              offset += source.length;
+          }
+      }
+      return { comment, offset };
+  }
+
+  const blockMsg = 'Block collections are not allowed within flow collections';
+  const isBlock = (token) => token && (token.type === 'block-map' || token.type === 'block-seq');
+  function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onError, tag) {
+      const isMap = fc.start.source === '{';
+      const fcName = isMap ? 'flow map' : 'flow sequence';
+      const NodeClass = (tag?.nodeClass ?? (isMap ? YAMLMap : YAMLSeq));
+      const coll = new NodeClass(ctx.schema);
+      coll.flow = true;
+      const atRoot = ctx.atRoot;
+      if (atRoot)
+          ctx.atRoot = false;
+      if (ctx.atKey)
+          ctx.atKey = false;
+      let offset = fc.offset + fc.start.source.length;
+      for (let i = 0; i < fc.items.length; ++i) {
+          const collItem = fc.items[i];
+          const { start, key, sep, value } = collItem;
+          const props = resolveProps(start, {
+              flow: fcName,
+              indicator: 'explicit-key-ind',
+              next: key ?? sep?.[0],
+              offset,
+              onError,
+              parentIndent: fc.indent,
+              startOnNewline: false
+          });
+          if (!props.found) {
+              if (!props.anchor && !props.tag && !sep && !value) {
+                  if (i === 0 && props.comma)
+                      onError(props.comma, 'UNEXPECTED_TOKEN', `Unexpected , in ${fcName}`);
+                  else if (i < fc.items.length - 1)
+                      onError(props.start, 'UNEXPECTED_TOKEN', `Unexpected empty item in ${fcName}`);
+                  if (props.comment) {
+                      if (coll.comment)
+                          coll.comment += '\n' + props.comment;
+                      else
+                          coll.comment = props.comment;
+                  }
+                  offset = props.end;
+                  continue;
+              }
+              if (!isMap && ctx.options.strict && containsNewline(key))
+                  onError(key, // checked by containsNewline()
+                  'MULTILINE_IMPLICIT_KEY', 'Implicit keys of flow sequence pairs need to be on a single line');
+          }
+          if (i === 0) {
+              if (props.comma)
+                  onError(props.comma, 'UNEXPECTED_TOKEN', `Unexpected , in ${fcName}`);
+          }
+          else {
+              if (!props.comma)
+                  onError(props.start, 'MISSING_CHAR', `Missing , between ${fcName} items`);
+              if (props.comment) {
+                  let prevItemComment = '';
+                  loop: for (const st of start) {
+                      switch (st.type) {
+                          case 'comma':
+                          case 'space':
+                              break;
+                          case 'comment':
+                              prevItemComment = st.source.substring(1);
+                              break loop;
+                          default:
+                              break loop;
+                      }
+                  }
+                  if (prevItemComment) {
+                      let prev = coll.items[coll.items.length - 1];
+                      if (isPair(prev))
+                          prev = prev.value ?? prev.key;
+                      if (prev.comment)
+                          prev.comment += '\n' + prevItemComment;
+                      else
+                          prev.comment = prevItemComment;
+                      props.comment = props.comment.substring(prevItemComment.length + 1);
+                  }
+              }
+          }
+          if (!isMap && !sep && !props.found) {
+              // item is a value in a seq
+              // → key & sep are empty, start does not include ? or :
+              const valueNode = value
+                  ? composeNode(ctx, value, props, onError)
+                  : composeEmptyNode(ctx, props.end, sep, null, props, onError);
+              coll.items.push(valueNode);
+              offset = valueNode.range[2];
+              if (isBlock(value))
+                  onError(valueNode.range, 'BLOCK_IN_FLOW', blockMsg);
+          }
+          else {
+              // item is a key+value pair
+              // key value
+              ctx.atKey = true;
+              const keyStart = props.end;
+              const keyNode = key
+                  ? composeNode(ctx, key, props, onError)
+                  : composeEmptyNode(ctx, keyStart, start, null, props, onError);
+              if (isBlock(key))
+                  onError(keyNode.range, 'BLOCK_IN_FLOW', blockMsg);
+              ctx.atKey = false;
+              // value properties
+              const valueProps = resolveProps(sep ?? [], {
+                  flow: fcName,
+                  indicator: 'map-value-ind',
+                  next: value,
+                  offset: keyNode.range[2],
+                  onError,
+                  parentIndent: fc.indent,
+                  startOnNewline: false
+              });
+              if (valueProps.found) {
+                  if (!isMap && !props.found && ctx.options.strict) {
+                      if (sep)
+                          for (const st of sep) {
+                              if (st === valueProps.found)
+                                  break;
+                              if (st.type === 'newline') {
+                                  onError(st, 'MULTILINE_IMPLICIT_KEY', 'Implicit keys of flow sequence pairs need to be on a single line');
+                                  break;
+                              }
+                          }
+                      if (props.start < valueProps.found.offset - 1024)
+                          onError(valueProps.found, 'KEY_OVER_1024_CHARS', 'The : indicator must be at most 1024 chars after the start of an implicit flow sequence key');
+                  }
+              }
+              else if (value) {
+                  if ('source' in value && value.source?.[0] === ':')
+                      onError(value, 'MISSING_CHAR', `Missing space after : in ${fcName}`);
+                  else
+                      onError(valueProps.start, 'MISSING_CHAR', `Missing , or : between ${fcName} items`);
+              }
+              // value value
+              const valueNode = value
+                  ? composeNode(ctx, value, valueProps, onError)
+                  : valueProps.found
+                      ? composeEmptyNode(ctx, valueProps.end, sep, null, valueProps, onError)
+                      : null;
+              if (valueNode) {
+                  if (isBlock(value))
+                      onError(valueNode.range, 'BLOCK_IN_FLOW', blockMsg);
+              }
+              else if (valueProps.comment) {
+                  if (keyNode.comment)
+                      keyNode.comment += '\n' + valueProps.comment;
+                  else
+                      keyNode.comment = valueProps.comment;
+              }
+              const pair = new Pair(keyNode, valueNode);
+              if (ctx.options.keepSourceTokens)
+                  pair.srcToken = collItem;
+              if (isMap) {
+                  const map = coll;
+                  if (mapIncludes(ctx, map.items, keyNode))
+                      onError(keyStart, 'DUPLICATE_KEY', 'Map keys must be unique');
+                  map.items.push(pair);
+              }
+              else {
+                  const map = new YAMLMap(ctx.schema);
+                  map.flow = true;
+                  map.items.push(pair);
+                  const endRange = (valueNode ?? keyNode).range;
+                  map.range = [keyNode.range[0], endRange[1], endRange[2]];
+                  coll.items.push(map);
+              }
+              offset = valueNode ? valueNode.range[2] : valueProps.end;
+          }
+      }
+      const expectedEnd = isMap ? '}' : ']';
+      const [ce, ...ee] = fc.end;
+      let cePos = offset;
+      if (ce?.source === expectedEnd)
+          cePos = ce.offset + ce.source.length;
+      else {
+          const name = fcName[0].toUpperCase() + fcName.substring(1);
+          const msg = atRoot
+              ? `${name} must end with a ${expectedEnd}`
+              : `${name} in block collection must be sufficiently indented and end with a ${expectedEnd}`;
+          onError(offset, atRoot ? 'MISSING_CHAR' : 'BAD_INDENT', msg);
+          if (ce && ce.source.length !== 1)
+              ee.unshift(ce);
+      }
+      if (ee.length > 0) {
+          const end = resolveEnd(ee, cePos, ctx.options.strict, onError);
+          if (end.comment) {
+              if (coll.comment)
+                  coll.comment += '\n' + end.comment;
+              else
+                  coll.comment = end.comment;
+          }
+          coll.range = [fc.offset, cePos, end.offset];
+      }
+      else {
+          coll.range = [fc.offset, cePos, cePos];
+      }
+      return coll;
+  }
+
+  function resolveCollection(CN, ctx, token, onError, tagName, tag) {
+      const coll = token.type === 'block-map'
+          ? resolveBlockMap(CN, ctx, token, onError, tag)
+          : token.type === 'block-seq'
+              ? resolveBlockSeq(CN, ctx, token, onError, tag)
+              : resolveFlowCollection(CN, ctx, token, onError, tag);
+      const Coll = coll.constructor;
+      // If we got a tagName matching the class, or the tag name is '!',
+      // then use the tagName from the node class used to create it.
+      if (tagName === '!' || tagName === Coll.tagName) {
+          coll.tag = Coll.tagName;
+          return coll;
+      }
+      if (tagName)
+          coll.tag = tagName;
+      return coll;
+  }
+  function composeCollection(CN, ctx, token, props, onError) {
+      const tagToken = props.tag;
+      const tagName = !tagToken
+          ? null
+          : ctx.directives.tagName(tagToken.source, msg => onError(tagToken, 'TAG_RESOLVE_FAILED', msg));
+      if (token.type === 'block-seq') {
+          const { anchor, newlineAfterProp: nl } = props;
+          const lastProp = anchor && tagToken
+              ? anchor.offset > tagToken.offset
+                  ? anchor
+                  : tagToken
+              : (anchor ?? tagToken);
+          if (lastProp && (!nl || nl.offset < lastProp.offset)) {
+              const message = 'Missing newline after block sequence props';
+              onError(lastProp, 'MISSING_CHAR', message);
+          }
+      }
+      const expType = token.type === 'block-map'
+          ? 'map'
+          : token.type === 'block-seq'
+              ? 'seq'
+              : token.start.source === '{'
+                  ? 'map'
+                  : 'seq';
+      // shortcut: check if it's a generic YAMLMap or YAMLSeq
+      // before jumping into the custom tag logic.
+      if (!tagToken ||
+          !tagName ||
+          tagName === '!' ||
+          (tagName === YAMLMap.tagName && expType === 'map') ||
+          (tagName === YAMLSeq.tagName && expType === 'seq')) {
+          return resolveCollection(CN, ctx, token, onError, tagName);
+      }
+      let tag = ctx.schema.tags.find(t => t.tag === tagName && t.collection === expType);
+      if (!tag) {
+          const kt = ctx.schema.knownTags[tagName];
+          if (kt?.collection === expType) {
+              ctx.schema.tags.push(Object.assign({}, kt, { default: false }));
+              tag = kt;
+          }
+          else {
+              if (kt) {
+                  onError(tagToken, 'BAD_COLLECTION_TYPE', `${kt.tag} used for ${expType} collection, but expects ${kt.collection ?? 'scalar'}`, true);
+              }
+              else {
+                  onError(tagToken, 'TAG_RESOLVE_FAILED', `Unresolved tag: ${tagName}`, true);
+              }
+              return resolveCollection(CN, ctx, token, onError, tagName);
+          }
+      }
+      const coll = resolveCollection(CN, ctx, token, onError, tagName, tag);
+      const res = tag.resolve?.(coll, msg => onError(tagToken, 'TAG_RESOLVE_FAILED', msg), ctx.options) ?? coll;
+      const node = isNode(res)
+          ? res
+          : new Scalar(res);
+      node.range = coll.range;
+      node.tag = tagName;
+      if (tag?.format)
+          node.format = tag.format;
+      return node;
+  }
+
+  function resolveBlockScalar(ctx, scalar, onError) {
+      const start = scalar.offset;
+      const header = parseBlockScalarHeader(scalar, ctx.options.strict, onError);
+      if (!header)
+          return { value: '', type: null, comment: '', range: [start, start, start] };
+      const type = header.mode === '>' ? Scalar.BLOCK_FOLDED : Scalar.BLOCK_LITERAL;
+      const lines = scalar.source ? splitLines(scalar.source) : [];
+      // determine the end of content & start of chomping
+      let chompStart = lines.length;
+      for (let i = lines.length - 1; i >= 0; --i) {
+          const content = lines[i][1];
+          if (content === '' || content === '\r')
+              chompStart = i;
+          else
+              break;
+      }
+      // shortcut for empty contents
+      if (chompStart === 0) {
+          const value = header.chomp === '+' && lines.length > 0
+              ? '\n'.repeat(Math.max(1, lines.length - 1))
+              : '';
+          let end = start + header.length;
+          if (scalar.source)
+              end += scalar.source.length;
+          return { value, type, comment: header.comment, range: [start, end, end] };
+      }
+      // find the indentation level to trim from start
+      let trimIndent = scalar.indent + header.indent;
+      let offset = scalar.offset + header.length;
+      let contentStart = 0;
+      for (let i = 0; i < chompStart; ++i) {
+          const [indent, content] = lines[i];
+          if (content === '' || content === '\r') {
+              if (header.indent === 0 && indent.length > trimIndent)
+                  trimIndent = indent.length;
+          }
+          else {
+              if (indent.length < trimIndent) {
+                  const message = 'Block scalars with more-indented leading empty lines must use an explicit indentation indicator';
+                  onError(offset + indent.length, 'MISSING_CHAR', message);
+              }
+              if (header.indent === 0)
+                  trimIndent = indent.length;
+              contentStart = i;
+              if (trimIndent === 0 && !ctx.atRoot) {
+                  const message = 'Block scalar values in collections must be indented';
+                  onError(offset, 'BAD_INDENT', message);
+              }
+              break;
+          }
+          offset += indent.length + content.length + 1;
+      }
+      // include trailing more-indented empty lines in content
+      for (let i = lines.length - 1; i >= chompStart; --i) {
+          if (lines[i][0].length > trimIndent)
+              chompStart = i + 1;
+      }
+      let value = '';
+      let sep = '';
+      let prevMoreIndented = false;
+      // leading whitespace is kept intact
+      for (let i = 0; i < contentStart; ++i)
+          value += lines[i][0].slice(trimIndent) + '\n';
+      for (let i = contentStart; i < chompStart; ++i) {
+          let [indent, content] = lines[i];
+          offset += indent.length + content.length + 1;
+          const crlf = content[content.length - 1] === '\r';
+          if (crlf)
+              content = content.slice(0, -1);
+          /* istanbul ignore if already caught in lexer */
+          if (content && indent.length < trimIndent) {
+              const src = header.indent
+                  ? 'explicit indentation indicator'
+                  : 'first line';
+              const message = `Block scalar lines must not be less indented than their ${src}`;
+              onError(offset - content.length - (crlf ? 2 : 1), 'BAD_INDENT', message);
+              indent = '';
+          }
+          if (type === Scalar.BLOCK_LITERAL) {
+              value += sep + indent.slice(trimIndent) + content;
+              sep = '\n';
+          }
+          else if (indent.length > trimIndent || content[0] === '\t') {
+              // more-indented content within a folded block
+              if (sep === ' ')
+                  sep = '\n';
+              else if (!prevMoreIndented && sep === '\n')
+                  sep = '\n\n';
+              value += sep + indent.slice(trimIndent) + content;
+              sep = '\n';
+              prevMoreIndented = true;
+          }
+          else if (content === '') {
+              // empty line
+              if (sep === '\n')
+                  value += '\n';
+              else
+                  sep = '\n';
+          }
+          else {
+              value += sep + content;
+              sep = ' ';
+              prevMoreIndented = false;
+          }
+      }
+      switch (header.chomp) {
+          case '-':
+              break;
+          case '+':
+              for (let i = chompStart; i < lines.length; ++i)
+                  value += '\n' + lines[i][0].slice(trimIndent);
+              if (value[value.length - 1] !== '\n')
+                  value += '\n';
+              break;
+          default:
+              value += '\n';
+      }
+      const end = start + header.length + scalar.source.length;
+      return { value, type, comment: header.comment, range: [start, end, end] };
+  }
+  function parseBlockScalarHeader({ offset, props }, strict, onError) {
+      /* istanbul ignore if should not happen */
+      if (props[0].type !== 'block-scalar-header') {
+          onError(props[0], 'IMPOSSIBLE', 'Block scalar header not found');
+          return null;
+      }
+      const { source } = props[0];
+      const mode = source[0];
+      let indent = 0;
+      let chomp = '';
+      let error = -1;
+      for (let i = 1; i < source.length; ++i) {
+          const ch = source[i];
+          if (!chomp && (ch === '-' || ch === '+'))
+              chomp = ch;
+          else {
+              const n = Number(ch);
+              if (!indent && n)
+                  indent = n;
+              else if (error === -1)
+                  error = offset + i;
+          }
+      }
+      if (error !== -1)
+          onError(error, 'UNEXPECTED_TOKEN', `Block scalar header includes extra characters: ${source}`);
+      let hasSpace = false;
+      let comment = '';
+      let length = source.length;
+      for (let i = 1; i < props.length; ++i) {
+          const token = props[i];
+          switch (token.type) {
+              case 'space':
+                  hasSpace = true;
+              // fallthrough
+              case 'newline':
+                  length += token.source.length;
+                  break;
+              case 'comment':
+                  if (strict && !hasSpace) {
+                      const message = 'Comments must be separated from other tokens by white space characters';
+                      onError(token, 'MISSING_CHAR', message);
+                  }
+                  length += token.source.length;
+                  comment = token.source.substring(1);
+                  break;
+              case 'error':
+                  onError(token, 'UNEXPECTED_TOKEN', token.message);
+                  length += token.source.length;
+                  break;
+              /* istanbul ignore next should not happen */
+              default: {
+                  const message = `Unexpected token in block scalar header: ${token.type}`;
+                  onError(token, 'UNEXPECTED_TOKEN', message);
+                  const ts = token.source;
+                  if (ts && typeof ts === 'string')
+                      length += ts.length;
+              }
+          }
+      }
+      return { mode, indent, chomp, comment, length };
+  }
+  /** @returns Array of lines split up as `[indent, content]` */
+  function splitLines(source) {
+      const split = source.split(/\n( *)/);
+      const first = split[0];
+      const m = first.match(/^( *)/);
+      const line0 = m?.[1]
+          ? [m[1], first.slice(m[1].length)]
+          : ['', first];
+      const lines = [line0];
+      for (let i = 1; i < split.length; i += 2)
+          lines.push([split[i], split[i + 1]]);
+      return lines;
+  }
+
+  function resolveFlowScalar(scalar, strict, onError) {
+      const { offset, type, source, end } = scalar;
+      let _type;
+      let value;
+      const _onError = (rel, code, msg) => onError(offset + rel, code, msg);
+      switch (type) {
+          case 'scalar':
+              _type = Scalar.PLAIN;
+              value = plainValue(source, _onError);
+              break;
+          case 'single-quoted-scalar':
+              _type = Scalar.QUOTE_SINGLE;
+              value = singleQuotedValue(source, _onError);
+              break;
+          case 'double-quoted-scalar':
+              _type = Scalar.QUOTE_DOUBLE;
+              value = doubleQuotedValue(source, _onError);
+              break;
+          /* istanbul ignore next should not happen */
+          default:
+              onError(scalar, 'UNEXPECTED_TOKEN', `Expected a flow scalar value, but found: ${type}`);
+              return {
+                  value: '',
+                  type: null,
+                  comment: '',
+                  range: [offset, offset + source.length, offset + source.length]
+              };
+      }
+      const valueEnd = offset + source.length;
+      const re = resolveEnd(end, valueEnd, strict, onError);
+      return {
+          value,
+          type: _type,
+          comment: re.comment,
+          range: [offset, valueEnd, re.offset]
+      };
+  }
+  function plainValue(source, onError) {
+      let badChar = '';
+      switch (source[0]) {
+          /* istanbul ignore next should not happen */
+          case '\t':
+              badChar = 'a tab character';
+              break;
+          case ',':
+              badChar = 'flow indicator character ,';
+              break;
+          case '%':
+              badChar = 'directive indicator character %';
+              break;
+          case '|':
+          case '>': {
+              badChar = `block scalar indicator ${source[0]}`;
+              break;
+          }
+          case '@':
+          case '`': {
+              badChar = `reserved character ${source[0]}`;
+              break;
+          }
+      }
+      if (badChar)
+          onError(0, 'BAD_SCALAR_START', `Plain value cannot start with ${badChar}`);
+      return unfoldLines(source);
+  }
+  function singleQuotedValue(source, onError) {
+      if (source[source.length - 1] !== "'" || source.length === 1)
+          onError(source.length, 'MISSING_CHAR', "Missing closing 'quote");
+      return unfoldLines(source.slice(1, -1)).replace(/''/g, "'");
+  }
+  function unfoldLines(source) {
+      const line = /(.*?)\r?\n/sy;
+      let match = line.exec(source);
+      if (!match)
+          return source;
+      /**
+       * The negative lookbehinds in these RegExps are to
+       * prevent causing a polynomial search time in certain cases.
+       *
+       * The try-catch is for Safari < 16.4 and other old browsers:
+       * https://caniuse.com/js-regexp-lookbehind
+       */
+      let trimEnd, trimBoth;
+      try {
+          trimEnd = new RegExp('(?<![ \t])[ \t]+$');
+          trimBoth = new RegExp('^[ \t]+|(?<![ \t])[ \t]+$', 'g');
+      }
+      catch {
+          trimEnd = /[ \t]+$/;
+          trimBoth = /^[ \t]+|[ \t]+$/g;
+      }
+      let res = match[1].replace(trimEnd, '');
+      let sep = ' ';
+      let pos = line.lastIndex;
+      while ((match = line.exec(source))) {
+          const lm = match[1].replace(trimBoth, '');
+          if (lm === '') {
+              if (sep === '\n')
+                  res += sep;
+              else
+                  sep = '\n';
+          }
+          else {
+              res += sep + lm;
+              sep = ' ';
+          }
+          pos = line.lastIndex;
+      }
+      const last = /[ \t]*(.*)/sy;
+      last.lastIndex = pos;
+      match = last.exec(source);
+      return res + sep + (match?.[1] ?? '');
+  }
+  function doubleQuotedValue(source, onError) {
+      let res = '';
+      for (let i = 1; i < source.length - 1; ++i) {
+          const ch = source[i];
+          if (ch === '\r' && source[i + 1] === '\n')
+              continue;
+          if (ch === '\n') {
+              const { fold, offset } = foldNewline(source, i);
+              res += fold;
+              i = offset;
+          }
+          else if (ch === '\\') {
+              let next = source[++i];
+              const cc = escapeCodes[next];
+              if (cc)
+                  res += cc;
+              else if (next === '\n') {
+                  // skip escaped newlines, but still trim the following line
+                  next = source[i + 1];
+                  while (next === ' ' || next === '\t')
+                      next = source[++i + 1];
+              }
+              else if (next === '\r' && source[i + 1] === '\n') {
+                  // skip escaped CRLF newlines, but still trim the following line
+                  next = source[++i + 1];
+                  while (next === ' ' || next === '\t')
+                      next = source[++i + 1];
+              }
+              else if (next === 'x' || next === 'u' || next === 'U') {
+                  const length = next === 'x' ? 2 : next === 'u' ? 4 : 8;
+                  res += parseCharCode(source, i + 1, length, onError);
+                  i += length;
+              }
+              else {
+                  const raw = source.substr(i - 1, 2);
+                  onError(i - 1, 'BAD_DQ_ESCAPE', `Invalid escape sequence ${raw}`);
+                  res += raw;
+              }
+          }
+          else if (ch === ' ' || ch === '\t') {
+              // trim trailing whitespace
+              const wsStart = i;
+              let next = source[i + 1];
+              while (next === ' ' || next === '\t')
+                  next = source[++i + 1];
+              if (next !== '\n' && !(next === '\r' && source[i + 2] === '\n'))
+                  res += i > wsStart ? source.slice(wsStart, i + 1) : ch;
+          }
+          else {
+              res += ch;
+          }
+      }
+      if (source[source.length - 1] !== '"' || source.length === 1)
+          onError(source.length, 'MISSING_CHAR', 'Missing closing "quote');
+      return res;
+  }
+  /**
+   * Fold a single newline into a space, multiple newlines to N - 1 newlines.
+   * Presumes `source[offset] === '\n'`
+   */
+  function foldNewline(source, offset) {
+      let fold = '';
+      let ch = source[offset + 1];
+      while (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
+          if (ch === '\r' && source[offset + 2] !== '\n')
+              break;
+          if (ch === '\n')
+              fold += '\n';
+          offset += 1;
+          ch = source[offset + 1];
+      }
+      if (!fold)
+          fold = ' ';
+      return { fold, offset };
+  }
+  const escapeCodes = {
+      '0': '\0', // null character
+      a: '\x07', // bell character
+      b: '\b', // backspace
+      e: '\x1b', // escape character
+      f: '\f', // form feed
+      n: '\n', // line feed
+      r: '\r', // carriage return
+      t: '\t', // horizontal tab
+      v: '\v', // vertical tab
+      N: '\u0085', // Unicode next line
+      _: '\u00a0', // Unicode non-breaking space
+      L: '\u2028', // Unicode line separator
+      P: '\u2029', // Unicode paragraph separator
+      ' ': ' ',
+      '"': '"',
+      '/': '/',
+      '\\': '\\',
+      '\t': '\t'
+  };
+  function parseCharCode(source, offset, length, onError) {
+      const cc = source.substr(offset, length);
+      const ok = cc.length === length && /^[0-9a-fA-F]+$/.test(cc);
+      const code = ok ? parseInt(cc, 16) : NaN;
+      try {
+          return String.fromCodePoint(code);
+      }
+      catch {
+          const raw = source.substr(offset - 2, length + 2);
+          onError(offset - 2, 'BAD_DQ_ESCAPE', `Invalid escape sequence ${raw}`);
+          return raw;
+      }
+  }
+
+  function composeScalar(ctx, token, tagToken, onError) {
+      const { value, type, comment, range } = token.type === 'block-scalar'
+          ? resolveBlockScalar(ctx, token, onError)
+          : resolveFlowScalar(token, ctx.options.strict, onError);
+      const tagName = tagToken
+          ? ctx.directives.tagName(tagToken.source, msg => onError(tagToken, 'TAG_RESOLVE_FAILED', msg))
+          : null;
+      let tag;
+      if (ctx.options.stringKeys && ctx.atKey) {
+          tag = ctx.schema[SCALAR$1];
+      }
+      else if (tagName)
+          tag = findScalarTagByName(ctx.schema, value, tagName, tagToken, onError);
+      else if (token.type === 'scalar')
+          tag = findScalarTagByTest(ctx, value, token, onError);
+      else
+          tag = ctx.schema[SCALAR$1];
+      let scalar;
+      try {
+          const res = tag.resolve(value, msg => onError(tagToken ?? token, 'TAG_RESOLVE_FAILED', msg), ctx.options);
+          scalar = isScalar$1(res) ? res : new Scalar(res);
+      }
+      catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          onError(tagToken ?? token, 'TAG_RESOLVE_FAILED', msg);
+          scalar = new Scalar(value);
+      }
+      scalar.range = range;
+      scalar.source = value;
+      if (type)
+          scalar.type = type;
+      if (tagName)
+          scalar.tag = tagName;
+      if (tag.format)
+          scalar.format = tag.format;
+      if (comment)
+          scalar.comment = comment;
+      return scalar;
+  }
+  function findScalarTagByName(schema, value, tagName, tagToken, onError) {
+      if (tagName === '!')
+          return schema[SCALAR$1]; // non-specific tag
+      const matchWithTest = [];
+      for (const tag of schema.tags) {
+          if (!tag.collection && tag.tag === tagName) {
+              if (tag.default && tag.test)
+                  matchWithTest.push(tag);
+              else
+                  return tag;
+          }
+      }
+      for (const tag of matchWithTest)
+          if (tag.test?.test(value))
+              return tag;
+      const kt = schema.knownTags[tagName];
+      if (kt && !kt.collection) {
+          // Ensure that the known tag is available for stringifying,
+          // but does not get used by default.
+          schema.tags.push(Object.assign({}, kt, { default: false, test: undefined }));
+          return kt;
+      }
+      onError(tagToken, 'TAG_RESOLVE_FAILED', `Unresolved tag: ${tagName}`, tagName !== 'tag:yaml.org,2002:str');
+      return schema[SCALAR$1];
+  }
+  function findScalarTagByTest({ atKey, directives, schema }, value, token, onError) {
+      const tag = schema.tags.find(tag => (tag.default === true || (atKey && tag.default === 'key')) &&
+          tag.test?.test(value)) || schema[SCALAR$1];
+      if (schema.compat) {
+          const compat = schema.compat.find(tag => tag.default && tag.test?.test(value)) ??
+              schema[SCALAR$1];
+          if (tag.tag !== compat.tag) {
+              const ts = directives.tagString(tag.tag);
+              const cs = directives.tagString(compat.tag);
+              const msg = `Value may be parsed as either ${ts} or ${cs}`;
+              onError(token, 'TAG_RESOLVE_FAILED', msg, true);
+          }
+      }
+      return tag;
+  }
+
+  function emptyScalarPosition(offset, before, pos) {
+      if (before) {
+          pos ?? (pos = before.length);
+          for (let i = pos - 1; i >= 0; --i) {
+              let st = before[i];
+              switch (st.type) {
+                  case 'space':
+                  case 'comment':
+                  case 'newline':
+                      offset -= st.source.length;
+                      continue;
+              }
+              // Technically, an empty scalar is immediately after the last non-empty
+              // node, but it's more useful to place it after any whitespace.
+              st = before[++i];
+              while (st?.type === 'space') {
+                  offset += st.source.length;
+                  st = before[++i];
+              }
+              break;
+          }
+      }
+      return offset;
+  }
+
+  const CN = { composeNode, composeEmptyNode };
+  function composeNode(ctx, token, props, onError) {
+      const atKey = ctx.atKey;
+      const { spaceBefore, comment, anchor, tag } = props;
+      let node;
+      let isSrcToken = true;
+      switch (token.type) {
+          case 'alias':
+              node = composeAlias(ctx, token, onError);
+              if (anchor || tag)
+                  onError(token, 'ALIAS_PROPS', 'An alias node must not specify any properties');
+              break;
+          case 'scalar':
+          case 'single-quoted-scalar':
+          case 'double-quoted-scalar':
+          case 'block-scalar':
+              node = composeScalar(ctx, token, tag, onError);
+              if (anchor)
+                  node.anchor = anchor.source.substring(1);
+              break;
+          case 'block-map':
+          case 'block-seq':
+          case 'flow-collection':
+              try {
+                  node = composeCollection(CN, ctx, token, props, onError);
+                  if (anchor)
+                      node.anchor = anchor.source.substring(1);
+              }
+              catch (error) {
+                  // Almost certainly here due to a stack overflow
+                  const message = error instanceof Error ? error.message : String(error);
+                  onError(token, 'RESOURCE_EXHAUSTION', message);
+              }
+              break;
+          default: {
+              const message = token.type === 'error'
+                  ? token.message
+                  : `Unsupported token (type: ${token.type})`;
+              onError(token, 'UNEXPECTED_TOKEN', message);
+              isSrcToken = false;
+          }
+      }
+      node ?? (node = composeEmptyNode(ctx, token.offset, undefined, null, props, onError));
+      if (anchor && node.anchor === '')
+          onError(anchor, 'BAD_ALIAS', 'Anchor cannot be an empty string');
+      if (atKey &&
+          ctx.options.stringKeys &&
+          (!isScalar$1(node) ||
+              typeof node.value !== 'string' ||
+              (node.tag && node.tag !== 'tag:yaml.org,2002:str'))) {
+          const msg = 'With stringKeys, all keys must be strings';
+          onError(tag ?? token, 'NON_STRING_KEY', msg);
+      }
+      if (spaceBefore)
+          node.spaceBefore = true;
+      if (comment) {
+          if (token.type === 'scalar' && token.source === '')
+              node.comment = comment;
+          else
+              node.commentBefore = comment;
+      }
+      // @ts-expect-error Type checking misses meaning of isSrcToken
+      if (ctx.options.keepSourceTokens && isSrcToken)
+          node.srcToken = token;
+      return node;
+  }
+  function composeEmptyNode(ctx, offset, before, pos, { spaceBefore, comment, anchor, tag, end }, onError) {
+      const token = {
+          type: 'scalar',
+          offset: emptyScalarPosition(offset, before, pos),
+          indent: -1,
+          source: ''
+      };
+      const node = composeScalar(ctx, token, tag, onError);
+      if (anchor) {
+          node.anchor = anchor.source.substring(1);
+          if (node.anchor === '')
+              onError(anchor, 'BAD_ALIAS', 'Anchor cannot be an empty string');
+      }
+      if (spaceBefore)
+          node.spaceBefore = true;
+      if (comment) {
+          node.comment = comment;
+          node.range[2] = end;
+      }
+      return node;
+  }
+  function composeAlias({ options }, { offset, source, end }, onError) {
+      const alias = new Alias(source.substring(1));
+      if (alias.source === '')
+          onError(offset, 'BAD_ALIAS', 'Alias cannot be an empty string');
+      if (alias.source.endsWith(':'))
+          onError(offset + source.length - 1, 'BAD_ALIAS', 'Alias ending in : is ambiguous', true);
+      const valueEnd = offset + source.length;
+      const re = resolveEnd(end, valueEnd, options.strict, onError);
+      alias.range = [offset, valueEnd, re.offset];
+      if (re.comment)
+          alias.comment = re.comment;
+      return alias;
+  }
+
+  function composeDoc(options, directives, { offset, start, value, end }, onError) {
+      const opts = Object.assign({ _directives: directives }, options);
+      const doc = new Document(undefined, opts);
+      const ctx = {
+          atKey: false,
+          atRoot: true,
+          directives: doc.directives,
+          options: doc.options,
+          schema: doc.schema
+      };
+      const props = resolveProps(start, {
+          indicator: 'doc-start',
+          next: value ?? end?.[0],
+          offset,
+          onError,
+          parentIndent: 0,
+          startOnNewline: true
+      });
+      if (props.found) {
+          doc.directives.docStart = true;
+          if (value &&
+              (value.type === 'block-map' || value.type === 'block-seq') &&
+              !props.hasNewline)
+              onError(props.end, 'MISSING_CHAR', 'Block collection cannot start on same line with directives-end marker');
+      }
+      // @ts-expect-error If Contents is set, let's trust the user
+      doc.contents = value
+          ? composeNode(ctx, value, props, onError)
+          : composeEmptyNode(ctx, props.end, start, null, props, onError);
+      const contentEnd = doc.contents.range[2];
+      const re = resolveEnd(end, contentEnd, false, onError);
+      if (re.comment)
+          doc.comment = re.comment;
+      doc.range = [offset, contentEnd, re.offset];
+      return doc;
+  }
+
+  function getErrorPos(src) {
+      if (typeof src === 'number')
+          return [src, src + 1];
+      if (Array.isArray(src))
+          return src.length === 2 ? src : [src[0], src[1]];
+      const { offset, source } = src;
+      return [offset, offset + (typeof source === 'string' ? source.length : 1)];
+  }
+  function parsePrelude(prelude) {
+      let comment = '';
+      let atComment = false;
+      let afterEmptyLine = false;
+      for (let i = 0; i < prelude.length; ++i) {
+          const source = prelude[i];
+          switch (source[0]) {
+              case '#':
+                  comment +=
+                      (comment === '' ? '' : afterEmptyLine ? '\n\n' : '\n') +
+                          (source.substring(1) || ' ');
+                  atComment = true;
+                  afterEmptyLine = false;
+                  break;
+              case '%':
+                  if (prelude[i + 1]?.[0] !== '#')
+                      i += 1;
+                  atComment = false;
+                  break;
+              default:
+                  // This may be wrong after doc-end, but in that case it doesn't matter
+                  if (!atComment)
+                      afterEmptyLine = true;
+                  atComment = false;
+          }
+      }
+      return { comment, afterEmptyLine };
+  }
+  /**
+   * Compose a stream of CST nodes into a stream of YAML Documents.
+   *
+   * ```ts
+   * import { Composer, Parser } from 'yaml'
+   *
+   * const src: string = ...
+   * const tokens = new Parser().parse(src)
+   * const docs = new Composer().compose(tokens)
+   * ```
+   */
+  class Composer {
+      constructor(options = {}) {
+          this.doc = null;
+          this.atDirectives = false;
+          this.prelude = [];
+          this.errors = [];
+          this.warnings = [];
+          this.onError = (source, code, message, warning) => {
+              const pos = getErrorPos(source);
+              if (warning)
+                  this.warnings.push(new YAMLWarning(pos, code, message));
+              else
+                  this.errors.push(new YAMLParseError(pos, code, message));
+          };
+          // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
+          this.directives = new Directives({ version: options.version || '1.2' });
+          this.options = options;
+      }
+      decorate(doc, afterDoc) {
+          const { comment, afterEmptyLine } = parsePrelude(this.prelude);
+          //console.log({ dc: doc.comment, prelude, comment })
+          if (comment) {
+              const dc = doc.contents;
+              if (afterDoc) {
+                  doc.comment = doc.comment ? `${doc.comment}\n${comment}` : comment;
+              }
+              else if (afterEmptyLine || doc.directives.docStart || !dc) {
+                  doc.commentBefore = comment;
+              }
+              else if (isCollection$1(dc) && !dc.flow && dc.items.length > 0) {
+                  let it = dc.items[0];
+                  if (isPair(it))
+                      it = it.key;
+                  const cb = it.commentBefore;
+                  it.commentBefore = cb ? `${comment}\n${cb}` : comment;
+              }
+              else {
+                  const cb = dc.commentBefore;
+                  dc.commentBefore = cb ? `${comment}\n${cb}` : comment;
+              }
+          }
+          if (afterDoc) {
+              for (let i = 0; i < this.errors.length; ++i)
+                  doc.errors.push(this.errors[i]);
+              for (let i = 0; i < this.warnings.length; ++i)
+                  doc.warnings.push(this.warnings[i]);
+          }
+          else {
+              doc.errors = this.errors;
+              doc.warnings = this.warnings;
+          }
+          this.prelude = [];
+          this.errors = [];
+          this.warnings = [];
+      }
+      /**
+       * Current stream status information.
+       *
+       * Mostly useful at the end of input for an empty stream.
+       */
+      streamInfo() {
+          return {
+              comment: parsePrelude(this.prelude).comment,
+              directives: this.directives,
+              errors: this.errors,
+              warnings: this.warnings
+          };
+      }
+      /**
+       * Compose tokens into documents.
+       *
+       * @param forceDoc - If the stream contains no document, still emit a final document including any comments and directives that would be applied to a subsequent document.
+       * @param endOffset - Should be set if `forceDoc` is also set, to set the document range end and to indicate errors correctly.
+       */
+      *compose(tokens, forceDoc = false, endOffset = -1) {
+          for (const token of tokens)
+              yield* this.next(token);
+          yield* this.end(forceDoc, endOffset);
+      }
+      /** Advance the composer by one CST token. */
+      *next(token) {
+          switch (token.type) {
+              case 'directive':
+                  this.directives.add(token.source, (offset, message, warning) => {
+                      const pos = getErrorPos(token);
+                      pos[0] += offset;
+                      this.onError(pos, 'BAD_DIRECTIVE', message, warning);
+                  });
+                  this.prelude.push(token.source);
+                  this.atDirectives = true;
+                  break;
+              case 'document': {
+                  const doc = composeDoc(this.options, this.directives, token, this.onError);
+                  if (this.atDirectives && !doc.directives.docStart)
+                      this.onError(token, 'MISSING_CHAR', 'Missing directives-end/doc-start indicator line');
+                  this.decorate(doc, false);
+                  if (this.doc)
+                      yield this.doc;
+                  this.doc = doc;
+                  this.atDirectives = false;
+                  break;
+              }
+              case 'byte-order-mark':
+              case 'space':
+                  break;
+              case 'comment':
+              case 'newline':
+                  this.prelude.push(token.source);
+                  break;
+              case 'error': {
+                  const msg = token.source
+                      ? `${token.message}: ${JSON.stringify(token.source)}`
+                      : token.message;
+                  const error = new YAMLParseError(getErrorPos(token), 'UNEXPECTED_TOKEN', msg);
+                  if (this.atDirectives || !this.doc)
+                      this.errors.push(error);
+                  else
+                      this.doc.errors.push(error);
+                  break;
+              }
+              case 'doc-end': {
+                  if (!this.doc) {
+                      const msg = 'Unexpected doc-end without preceding document';
+                      this.errors.push(new YAMLParseError(getErrorPos(token), 'UNEXPECTED_TOKEN', msg));
+                      break;
+                  }
+                  this.doc.directives.docEnd = true;
+                  const end = resolveEnd(token.end, token.offset + token.source.length, this.doc.options.strict, this.onError);
+                  this.decorate(this.doc, true);
+                  if (end.comment) {
+                      const dc = this.doc.comment;
+                      this.doc.comment = dc ? `${dc}\n${end.comment}` : end.comment;
+                  }
+                  this.doc.range[2] = end.offset;
+                  break;
+              }
+              default:
+                  this.errors.push(new YAMLParseError(getErrorPos(token), 'UNEXPECTED_TOKEN', `Unsupported token ${token.type}`));
+          }
+      }
+      /**
+       * Call at end of input to yield any remaining document.
+       *
+       * @param forceDoc - If the stream contains no document, still emit a final document including any comments and directives that would be applied to a subsequent document.
+       * @param endOffset - Should be set if `forceDoc` is also set, to set the document range end and to indicate errors correctly.
+       */
+      *end(forceDoc = false, endOffset = -1) {
+          if (this.doc) {
+              this.decorate(this.doc, true);
+              yield this.doc;
+              this.doc = null;
+          }
+          else if (forceDoc) {
+              const opts = Object.assign({ _directives: this.directives }, this.options);
+              const doc = new Document(undefined, opts);
+              if (this.atDirectives)
+                  this.onError(endOffset, 'MISSING_CHAR', 'Missing directives-end indicator line');
+              doc.range = [0, endOffset, endOffset];
+              this.decorate(doc, false);
+              yield doc;
+          }
+      }
+  }
+
+  function resolveAsScalar(token, strict = true, onError) {
+      if (token) {
+          const _onError = (pos, code, message) => {
+              const offset = typeof pos === 'number' ? pos : Array.isArray(pos) ? pos[0] : pos.offset;
+              if (onError)
+                  onError(offset, code, message);
+              else
+                  throw new YAMLParseError([offset, offset + 1], code, message);
+          };
+          switch (token.type) {
+              case 'scalar':
+              case 'single-quoted-scalar':
+              case 'double-quoted-scalar':
+                  return resolveFlowScalar(token, strict, _onError);
+              case 'block-scalar':
+                  return resolveBlockScalar({ options: { strict } }, token, _onError);
+          }
+      }
+      return null;
+  }
+  /**
+   * Create a new scalar token with `value`
+   *
+   * Values that represent an actual string but may be parsed as a different type should use a `type` other than `'PLAIN'`,
+   * as this function does not support any schema operations and won't check for such conflicts.
+   *
+   * @param value The string representation of the value, which will have its content properly indented.
+   * @param context.end Comments and whitespace after the end of the value, or after the block scalar header. If undefined, a newline will be added.
+   * @param context.implicitKey Being within an implicit key may affect the resolved type of the token's value.
+   * @param context.indent The indent level of the token.
+   * @param context.inFlow Is this scalar within a flow collection? This may affect the resolved type of the token's value.
+   * @param context.offset The offset position of the token.
+   * @param context.type The preferred type of the scalar token. If undefined, the previous type of the `token` will be used, defaulting to `'PLAIN'`.
+   */
+  function createScalarToken(value, context) {
+      const { implicitKey = false, indent, inFlow = false, offset = -1, type = 'PLAIN' } = context;
+      const source = stringifyString({ type, value }, {
+          implicitKey,
+          indent: indent > 0 ? ' '.repeat(indent) : '',
+          inFlow,
+          options: { blockQuote: true, lineWidth: -1 }
+      });
+      const end = context.end ?? [
+          { type: 'newline', offset: -1, indent, source: '\n' }
+      ];
+      switch (source[0]) {
+          case '|':
+          case '>': {
+              const he = source.indexOf('\n');
+              const head = source.substring(0, he);
+              const body = source.substring(he + 1) + '\n';
+              const props = [
+                  { type: 'block-scalar-header', offset, indent, source: head }
+              ];
+              if (!addEndtoBlockProps(props, end))
+                  props.push({ type: 'newline', offset: -1, indent, source: '\n' });
+              return { type: 'block-scalar', offset, indent, props, source: body };
+          }
+          case '"':
+              return { type: 'double-quoted-scalar', offset, indent, source, end };
+          case "'":
+              return { type: 'single-quoted-scalar', offset, indent, source, end };
+          default:
+              return { type: 'scalar', offset, indent, source, end };
+      }
+  }
+  /**
+   * Set the value of `token` to the given string `value`, overwriting any previous contents and type that it may have.
+   *
+   * Best efforts are made to retain any comments previously associated with the `token`,
+   * though all contents within a collection's `items` will be overwritten.
+   *
+   * Values that represent an actual string but may be parsed as a different type should use a `type` other than `'PLAIN'`,
+   * as this function does not support any schema operations and won't check for such conflicts.
+   *
+   * @param token Any token. If it does not include an `indent` value, the value will be stringified as if it were an implicit key.
+   * @param value The string representation of the value, which will have its content properly indented.
+   * @param context.afterKey In most cases, values after a key should have an additional level of indentation.
+   * @param context.implicitKey Being within an implicit key may affect the resolved type of the token's value.
+   * @param context.inFlow Being within a flow collection may affect the resolved type of the token's value.
+   * @param context.type The preferred type of the scalar token. If undefined, the previous type of the `token` will be used, defaulting to `'PLAIN'`.
+   */
+  function setScalarValue(token, value, context = {}) {
+      let { afterKey = false, implicitKey = false, inFlow = false, type } = context;
+      let indent = 'indent' in token ? token.indent : null;
+      if (afterKey && typeof indent === 'number')
+          indent += 2;
+      if (!type)
+          switch (token.type) {
+              case 'single-quoted-scalar':
+                  type = 'QUOTE_SINGLE';
+                  break;
+              case 'double-quoted-scalar':
+                  type = 'QUOTE_DOUBLE';
+                  break;
+              case 'block-scalar': {
+                  const header = token.props[0];
+                  if (header.type !== 'block-scalar-header')
+                      throw new Error('Invalid block scalar header');
+                  type = header.source[0] === '>' ? 'BLOCK_FOLDED' : 'BLOCK_LITERAL';
+                  break;
+              }
+              default:
+                  type = 'PLAIN';
+          }
+      const source = stringifyString({ type, value }, {
+          implicitKey: implicitKey || indent === null,
+          indent: indent !== null && indent > 0 ? ' '.repeat(indent) : '',
+          inFlow,
+          options: { blockQuote: true, lineWidth: -1 }
+      });
+      switch (source[0]) {
+          case '|':
+          case '>':
+              setBlockScalarValue(token, source);
+              break;
+          case '"':
+              setFlowScalarValue(token, source, 'double-quoted-scalar');
+              break;
+          case "'":
+              setFlowScalarValue(token, source, 'single-quoted-scalar');
+              break;
+          default:
+              setFlowScalarValue(token, source, 'scalar');
+      }
+  }
+  function setBlockScalarValue(token, source) {
+      const he = source.indexOf('\n');
+      const head = source.substring(0, he);
+      const body = source.substring(he + 1) + '\n';
+      if (token.type === 'block-scalar') {
+          const header = token.props[0];
+          if (header.type !== 'block-scalar-header')
+              throw new Error('Invalid block scalar header');
+          header.source = head;
+          token.source = body;
+      }
+      else {
+          const { offset } = token;
+          const indent = 'indent' in token ? token.indent : -1;
+          const props = [
+              { type: 'block-scalar-header', offset, indent, source: head }
+          ];
+          if (!addEndtoBlockProps(props, 'end' in token ? token.end : undefined))
+              props.push({ type: 'newline', offset: -1, indent, source: '\n' });
+          for (const key of Object.keys(token))
+              if (key !== 'type' && key !== 'offset')
+                  delete token[key];
+          Object.assign(token, { type: 'block-scalar', indent, props, source: body });
+      }
+  }
+  /** @returns `true` if last token is a newline */
+  function addEndtoBlockProps(props, end) {
+      if (end)
+          for (const st of end)
+              switch (st.type) {
+                  case 'space':
+                  case 'comment':
+                      props.push(st);
+                      break;
+                  case 'newline':
+                      props.push(st);
+                      return true;
+              }
+      return false;
+  }
+  function setFlowScalarValue(token, source, type) {
+      switch (token.type) {
+          case 'scalar':
+          case 'double-quoted-scalar':
+          case 'single-quoted-scalar':
+              token.type = type;
+              token.source = source;
+              break;
+          case 'block-scalar': {
+              const end = token.props.slice(1);
+              let oa = source.length;
+              if (token.props[0].type === 'block-scalar-header')
+                  oa -= token.props[0].source.length;
+              for (const tok of end)
+                  tok.offset += oa;
+              delete token.props;
+              Object.assign(token, { type, source, end });
+              break;
+          }
+          case 'block-map':
+          case 'block-seq': {
+              const offset = token.offset + source.length;
+              const nl = { type: 'newline', offset, indent: token.indent, source: '\n' };
+              delete token.items;
+              Object.assign(token, { type, source, end: [nl] });
+              break;
+          }
+          default: {
+              const indent = 'indent' in token ? token.indent : -1;
+              const end = 'end' in token && Array.isArray(token.end)
+                  ? token.end.filter(st => st.type === 'space' ||
+                      st.type === 'comment' ||
+                      st.type === 'newline')
+                  : [];
+              for (const key of Object.keys(token))
+                  if (key !== 'type' && key !== 'offset')
+                      delete token[key];
+              Object.assign(token, { type, indent, source, end });
+          }
+      }
+  }
+
+  /**
+   * Stringify a CST document, token, or collection item
+   *
+   * Fair warning: This applies no validation whatsoever, and
+   * simply concatenates the sources in their logical order.
+   */
+  const stringify$1 = (cst) => 'type' in cst ? stringifyToken(cst) : stringifyItem(cst);
+  function stringifyToken(token) {
+      switch (token.type) {
+          case 'block-scalar': {
+              let res = '';
+              for (const tok of token.props)
+                  res += stringifyToken(tok);
+              return res + token.source;
+          }
+          case 'block-map':
+          case 'block-seq': {
+              let res = '';
+              for (const item of token.items)
+                  res += stringifyItem(item);
+              return res;
+          }
+          case 'flow-collection': {
+              let res = token.start.source;
+              for (const item of token.items)
+                  res += stringifyItem(item);
+              for (const st of token.end)
+                  res += st.source;
+              return res;
+          }
+          case 'document': {
+              let res = stringifyItem(token);
+              if (token.end)
+                  for (const st of token.end)
+                      res += st.source;
+              return res;
+          }
+          default: {
+              let res = token.source;
+              if ('end' in token && token.end)
+                  for (const st of token.end)
+                      res += st.source;
+              return res;
+          }
+      }
+  }
+  function stringifyItem({ start, key, sep, value }) {
+      let res = '';
+      for (const st of start)
+          res += st.source;
+      if (key)
+          res += stringifyToken(key);
+      if (sep)
+          for (const st of sep)
+              res += st.source;
+      if (value)
+          res += stringifyToken(value);
+      return res;
+  }
+
+  const BREAK = Symbol('break visit');
+  const SKIP = Symbol('skip children');
+  const REMOVE = Symbol('remove item');
+  /**
+   * Apply a visitor to a CST document or item.
+   *
+   * Walks through the tree (depth-first) starting from the root, calling a
+   * `visitor` function with two arguments when entering each item:
+   *   - `item`: The current item, which included the following members:
+   *     - `start: SourceToken[]` – Source tokens before the key or value,
+   *       possibly including its anchor or tag.
+   *     - `key?: Token | null` – Set for pair values. May then be `null`, if
+   *       the key before the `:` separator is empty.
+   *     - `sep?: SourceToken[]` – Source tokens between the key and the value,
+   *       which should include the `:` map value indicator if `value` is set.
+   *     - `value?: Token` – The value of a sequence item, or of a map pair.
+   *   - `path`: The steps from the root to the current node, as an array of
+   *     `['key' | 'value', number]` tuples.
+   *
+   * The return value of the visitor may be used to control the traversal:
+   *   - `undefined` (default): Do nothing and continue
+   *   - `visit.SKIP`: Do not visit the children of this token, continue with
+   *      next sibling
+   *   - `visit.BREAK`: Terminate traversal completely
+   *   - `visit.REMOVE`: Remove the current item, then continue with the next one
+   *   - `number`: Set the index of the next step. This is useful especially if
+   *     the index of the current token has changed.
+   *   - `function`: Define the next visitor for this item. After the original
+   *     visitor is called on item entry, next visitors are called after handling
+   *     a non-empty `key` and when exiting the item.
+   */
+  function visit(cst, visitor) {
+      if ('type' in cst && cst.type === 'document')
+          cst = { start: cst.start, value: cst.value };
+      _visit(Object.freeze([]), cst, visitor);
+  }
+  // Without the `as symbol` casts, TS declares these in the `visit`
+  // namespace using `var`, but then complains about that because
+  // `unique symbol` must be `const`.
+  /** Terminate visit traversal completely */
+  visit.BREAK = BREAK;
+  /** Do not visit the children of the current item */
+  visit.SKIP = SKIP;
+  /** Remove the current item */
+  visit.REMOVE = REMOVE;
+  /** Find the item at `path` from `cst` as the root */
+  visit.itemAtPath = (cst, path) => {
+      let item = cst;
+      for (const [field, index] of path) {
+          const tok = item?.[field];
+          if (tok && 'items' in tok) {
+              item = tok.items[index];
+          }
+          else
+              return undefined;
+      }
+      return item;
+  };
+  /**
+   * Get the immediate parent collection of the item at `path` from `cst` as the root.
+   *
+   * Throws an error if the collection is not found, which should never happen if the item itself exists.
+   */
+  visit.parentCollection = (cst, path) => {
+      const parent = visit.itemAtPath(cst, path.slice(0, -1));
+      const field = path[path.length - 1][0];
+      const coll = parent?.[field];
+      if (coll && 'items' in coll)
+          return coll;
+      throw new Error('Parent collection not found');
+  };
+  function _visit(path, item, visitor) {
+      let ctrl = visitor(item, path);
+      if (typeof ctrl === 'symbol')
+          return ctrl;
+      for (const field of ['key', 'value']) {
+          const token = item[field];
+          if (token && 'items' in token) {
+              for (let i = 0; i < token.items.length; ++i) {
+                  const ci = _visit(Object.freeze(path.concat([[field, i]])), token.items[i], visitor);
+                  if (typeof ci === 'number')
+                      i = ci - 1;
+                  else if (ci === BREAK)
+                      return BREAK;
+                  else if (ci === REMOVE) {
+                      token.items.splice(i, 1);
+                      i -= 1;
+                  }
+              }
+              if (typeof ctrl === 'function' && field === 'key')
+                  ctrl = ctrl(item, path);
+          }
+      }
+      return typeof ctrl === 'function' ? ctrl(item, path) : ctrl;
+  }
+
+  /** The byte order mark */
+  const BOM = '\u{FEFF}';
+  /** Start of doc-mode */
+  const DOCUMENT = '\x02'; // C0: Start of Text
+  /** Unexpected end of flow-mode */
+  const FLOW_END = '\x18'; // C0: Cancel
+  /** Next token is a scalar value */
+  const SCALAR = '\x1f'; // C0: Unit Separator
+  /** @returns `true` if `token` is a flow or block collection */
+  const isCollection = (token) => !!token && 'items' in token;
+  /** @returns `true` if `token` is a flow or block scalar; not an alias */
+  const isScalar = (token) => !!token &&
+      (token.type === 'scalar' ||
+          token.type === 'single-quoted-scalar' ||
+          token.type === 'double-quoted-scalar' ||
+          token.type === 'block-scalar');
+  /* istanbul ignore next */
+  /** Get a printable representation of a lexer token */
+  function prettyToken(token) {
+      switch (token) {
+          case BOM:
+              return '<BOM>';
+          case DOCUMENT:
+              return '<DOC>';
+          case FLOW_END:
+              return '<FLOW_END>';
+          case SCALAR:
+              return '<SCALAR>';
+          default:
+              return JSON.stringify(token);
+      }
+  }
+  /** Identify the type of a lexer token. May return `null` for unknown tokens. */
+  function tokenType(source) {
+      switch (source) {
+          case BOM:
+              return 'byte-order-mark';
+          case DOCUMENT:
+              return 'doc-mode';
+          case FLOW_END:
+              return 'flow-error-end';
+          case SCALAR:
+              return 'scalar';
+          case '---':
+              return 'doc-start';
+          case '...':
+              return 'doc-end';
+          case '':
+          case '\n':
+          case '\r\n':
+              return 'newline';
+          case '-':
+              return 'seq-item-ind';
+          case '?':
+              return 'explicit-key-ind';
+          case ':':
+              return 'map-value-ind';
+          case '{':
+              return 'flow-map-start';
+          case '}':
+              return 'flow-map-end';
+          case '[':
+              return 'flow-seq-start';
+          case ']':
+              return 'flow-seq-end';
+          case ',':
+              return 'comma';
+      }
+      switch (source[0]) {
+          case ' ':
+          case '\t':
+              return 'space';
+          case '#':
+              return 'comment';
+          case '%':
+              return 'directive-line';
+          case '*':
+              return 'alias';
+          case '&':
+              return 'anchor';
+          case '!':
+              return 'tag';
+          case "'":
+              return 'single-quoted-scalar';
+          case '"':
+              return 'double-quoted-scalar';
+          case '|':
+          case '>':
+              return 'block-scalar-header';
+      }
+      return null;
+  }
+
+  var cst = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    BOM: BOM,
+    DOCUMENT: DOCUMENT,
+    FLOW_END: FLOW_END,
+    SCALAR: SCALAR,
+    createScalarToken: createScalarToken,
+    isCollection: isCollection,
+    isScalar: isScalar,
+    prettyToken: prettyToken,
+    resolveAsScalar: resolveAsScalar,
+    setScalarValue: setScalarValue,
+    stringify: stringify$1,
+    tokenType: tokenType,
+    visit: visit
+  });
+
+  /*
+  START -> stream
+
+  stream
+    directive -> line-end -> stream
+    indent + line-end -> stream
+    [else] -> line-start
+
+  line-end
+    comment -> line-end
+    newline -> .
+    input-end -> END
+
+  line-start
+    doc-start -> doc
+    doc-end -> stream
+    [else] -> indent -> block-start
+
+  block-start
+    seq-item-start -> block-start
+    explicit-key-start -> block-start
+    map-value-start -> block-start
+    [else] -> doc
+
+  doc
+    line-end -> line-start
+    spaces -> doc
+    anchor -> doc
+    tag -> doc
+    flow-start -> flow -> doc
+    flow-end -> error -> doc
+    seq-item-start -> error -> doc
+    explicit-key-start -> error -> doc
+    map-value-start -> doc
+    alias -> doc
+    quote-start -> quoted-scalar -> doc
+    block-scalar-header -> line-end -> block-scalar(min) -> line-start
+    [else] -> plain-scalar(false, min) -> doc
+
+  flow
+    line-end -> flow
+    spaces -> flow
+    anchor -> flow
+    tag -> flow
+    flow-start -> flow -> flow
+    flow-end -> .
+    seq-item-start -> error -> flow
+    explicit-key-start -> flow
+    map-value-start -> flow
+    alias -> flow
+    quote-start -> quoted-scalar -> flow
+    comma -> flow
+    [else] -> plain-scalar(true, 0) -> flow
+
+  quoted-scalar
+    quote-end -> .
+    [else] -> quoted-scalar
+
+  block-scalar(min)
+    newline + peek(indent < min) -> .
+    [else] -> block-scalar(min)
+
+  plain-scalar(is-flow, min)
+    scalar-end(is-flow) -> .
+    peek(newline + (indent < min)) -> .
+    [else] -> plain-scalar(min)
+  */
+  function isEmpty(ch) {
+      switch (ch) {
+          case undefined:
+          case ' ':
+          case '\n':
+          case '\r':
+          case '\t':
+              return true;
+          default:
+              return false;
+      }
+  }
+  const hexDigits = new Set('0123456789ABCDEFabcdef');
+  const tagChars = new Set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-#;/?:@&=+$_.!~*'()");
+  const flowIndicatorChars = new Set(',[]{}');
+  const invalidAnchorChars = new Set(' ,[]{}\n\r\t');
+  const isNotAnchorChar = (ch) => !ch || invalidAnchorChars.has(ch);
+  /**
+   * Splits an input string into lexical tokens, i.e. smaller strings that are
+   * easily identifiable by `tokens.tokenType()`.
+   *
+   * Lexing starts always in a "stream" context. Incomplete input may be buffered
+   * until a complete token can be emitted.
+   *
+   * In addition to slices of the original input, the following control characters
+   * may also be emitted:
+   *
+   * - `\x02` (Start of Text): A document starts with the next token
+   * - `\x18` (Cancel): Unexpected end of flow-mode (indicates an error)
+   * - `\x1f` (Unit Separator): Next token is a scalar value
+   * - `\u{FEFF}` (Byte order mark): Emitted separately outside documents
+   */
+  class Lexer {
+      constructor() {
+          /**
+           * Flag indicating whether the end of the current buffer marks the end of
+           * all input
+           */
+          this.atEnd = false;
+          /**
+           * Explicit indent set in block scalar header, as an offset from the current
+           * minimum indent, so e.g. set to 1 from a header `|2+`. Set to -1 if not
+           * explicitly set.
+           */
+          this.blockScalarIndent = -1;
+          /**
+           * Block scalars that include a + (keep) chomping indicator in their header
+           * include trailing empty lines, which are otherwise excluded from the
+           * scalar's contents.
+           */
+          this.blockScalarKeep = false;
+          /** Current input */
+          this.buffer = '';
+          /**
+           * Flag noting whether the map value indicator : can immediately follow this
+           * node within a flow context.
+           */
+          this.flowKey = false;
+          /** Count of surrounding flow collection levels. */
+          this.flowLevel = 0;
+          /**
+           * Minimum level of indentation required for next lines to be parsed as a
+           * part of the current scalar value.
+           */
+          this.indentNext = 0;
+          /** Indentation level of the current line. */
+          this.indentValue = 0;
+          /** Position of the next \n character. */
+          this.lineEndPos = null;
+          /** Stores the state of the lexer if reaching the end of incpomplete input */
+          this.next = null;
+          /** A pointer to `buffer`; the current position of the lexer. */
+          this.pos = 0;
+      }
+      /**
+       * Generate YAML tokens from the `source` string. If `incomplete`,
+       * a part of the last line may be left as a buffer for the next call.
+       *
+       * @returns A generator of lexical tokens
+       */
+      *lex(source, incomplete = false) {
+          if (source) {
+              if (typeof source !== 'string')
+                  throw TypeError('source is not a string');
+              this.buffer = this.buffer ? this.buffer + source : source;
+              this.lineEndPos = null;
+          }
+          this.atEnd = !incomplete;
+          let next = this.next ?? 'stream';
+          while (next && (incomplete || this.hasChars(1)))
+              next = yield* this.parseNext(next);
+      }
+      atLineEnd() {
+          let i = this.pos;
+          let ch = this.buffer[i];
+          while (ch === ' ' || ch === '\t')
+              ch = this.buffer[++i];
+          if (!ch || ch === '#' || ch === '\n')
+              return true;
+          if (ch === '\r')
+              return this.buffer[i + 1] === '\n';
+          return false;
+      }
+      charAt(n) {
+          return this.buffer[this.pos + n];
+      }
+      continueScalar(offset) {
+          let ch = this.buffer[offset];
+          if (this.indentNext > 0) {
+              let indent = 0;
+              while (ch === ' ')
+                  ch = this.buffer[++indent + offset];
+              if (ch === '\r') {
+                  const next = this.buffer[indent + offset + 1];
+                  if (next === '\n' || (!next && !this.atEnd))
+                      return offset + indent + 1;
+              }
+              return ch === '\n' || indent >= this.indentNext || (!ch && !this.atEnd)
+                  ? offset + indent
+                  : -1;
+          }
+          if (ch === '-' || ch === '.') {
+              const dt = this.buffer.substr(offset, 3);
+              if ((dt === '---' || dt === '...') && isEmpty(this.buffer[offset + 3]))
+                  return -1;
+          }
+          return offset;
+      }
+      getLine() {
+          let end = this.lineEndPos;
+          if (typeof end !== 'number' || (end !== -1 && end < this.pos)) {
+              end = this.buffer.indexOf('\n', this.pos);
+              this.lineEndPos = end;
+          }
+          if (end === -1)
+              return this.atEnd ? this.buffer.substring(this.pos) : null;
+          if (this.buffer[end - 1] === '\r')
+              end -= 1;
+          return this.buffer.substring(this.pos, end);
+      }
+      hasChars(n) {
+          return this.pos + n <= this.buffer.length;
+      }
+      setNext(state) {
+          this.buffer = this.buffer.substring(this.pos);
+          this.pos = 0;
+          this.lineEndPos = null;
+          this.next = state;
+          return null;
+      }
+      peek(n) {
+          return this.buffer.substr(this.pos, n);
+      }
+      *parseNext(next) {
+          switch (next) {
+              case 'stream':
+                  return yield* this.parseStream();
+              case 'line-start':
+                  return yield* this.parseLineStart();
+              case 'block-start':
+                  return yield* this.parseBlockStart();
+              case 'doc':
+                  return yield* this.parseDocument();
+              case 'flow':
+                  return yield* this.parseFlowCollection();
+              case 'quoted-scalar':
+                  return yield* this.parseQuotedScalar();
+              case 'block-scalar':
+                  return yield* this.parseBlockScalar();
+              case 'plain-scalar':
+                  return yield* this.parsePlainScalar();
+          }
+      }
+      *parseStream() {
+          let line = this.getLine();
+          if (line === null)
+              return this.setNext('stream');
+          if (line[0] === BOM) {
+              yield* this.pushCount(1);
+              line = line.substring(1);
+          }
+          if (line[0] === '%') {
+              let dirEnd = line.length;
+              let cs = line.indexOf('#');
+              while (cs !== -1) {
+                  const ch = line[cs - 1];
+                  if (ch === ' ' || ch === '\t') {
+                      dirEnd = cs - 1;
+                      break;
+                  }
+                  else {
+                      cs = line.indexOf('#', cs + 1);
+                  }
+              }
+              while (true) {
+                  const ch = line[dirEnd - 1];
+                  if (ch === ' ' || ch === '\t')
+                      dirEnd -= 1;
+                  else
+                      break;
+              }
+              const n = (yield* this.pushCount(dirEnd)) + (yield* this.pushSpaces(true));
+              yield* this.pushCount(line.length - n); // possible comment
+              this.pushNewline();
+              return 'stream';
+          }
+          if (this.atLineEnd()) {
+              const sp = yield* this.pushSpaces(true);
+              yield* this.pushCount(line.length - sp);
+              yield* this.pushNewline();
+              return 'stream';
+          }
+          yield DOCUMENT;
+          return yield* this.parseLineStart();
+      }
+      *parseLineStart() {
+          const ch = this.charAt(0);
+          if (!ch && !this.atEnd)
+              return this.setNext('line-start');
+          if (ch === '-' || ch === '.') {
+              if (!this.atEnd && !this.hasChars(4))
+                  return this.setNext('line-start');
+              const s = this.peek(3);
+              if ((s === '---' || s === '...') && isEmpty(this.charAt(3))) {
+                  yield* this.pushCount(3);
+                  this.indentValue = 0;
+                  this.indentNext = 0;
+                  return s === '---' ? 'doc' : 'stream';
+              }
+          }
+          this.indentValue = yield* this.pushSpaces(false);
+          if (this.indentNext > this.indentValue && !isEmpty(this.charAt(1)))
+              this.indentNext = this.indentValue;
+          return yield* this.parseBlockStart();
+      }
+      *parseBlockStart() {
+          const [ch0, ch1] = this.peek(2);
+          if (!ch1 && !this.atEnd)
+              return this.setNext('block-start');
+          if ((ch0 === '-' || ch0 === '?' || ch0 === ':') && isEmpty(ch1)) {
+              const n = (yield* this.pushCount(1)) + (yield* this.pushSpaces(true));
+              this.indentNext = this.indentValue + 1;
+              this.indentValue += n;
+              return 'block-start';
+          }
+          return 'doc';
+      }
+      *parseDocument() {
+          yield* this.pushSpaces(true);
+          const line = this.getLine();
+          if (line === null)
+              return this.setNext('doc');
+          let n = yield* this.pushIndicators();
+          switch (line[n]) {
+              case '#':
+                  yield* this.pushCount(line.length - n);
+              // fallthrough
+              case undefined:
+                  yield* this.pushNewline();
+                  return yield* this.parseLineStart();
+              case '{':
+              case '[':
+                  yield* this.pushCount(1);
+                  this.flowKey = false;
+                  this.flowLevel = 1;
+                  return 'flow';
+              case '}':
+              case ']':
+                  // this is an error
+                  yield* this.pushCount(1);
+                  return 'doc';
+              case '*':
+                  yield* this.pushUntil(isNotAnchorChar);
+                  return 'doc';
+              case '"':
+              case "'":
+                  return yield* this.parseQuotedScalar();
+              case '|':
+              case '>':
+                  n += yield* this.parseBlockScalarHeader();
+                  n += yield* this.pushSpaces(true);
+                  yield* this.pushCount(line.length - n);
+                  yield* this.pushNewline();
+                  return yield* this.parseBlockScalar();
+              default:
+                  return yield* this.parsePlainScalar();
+          }
+      }
+      *parseFlowCollection() {
+          let nl, sp;
+          let indent = -1;
+          do {
+              nl = yield* this.pushNewline();
+              if (nl > 0) {
+                  sp = yield* this.pushSpaces(false);
+                  this.indentValue = indent = sp;
+              }
+              else {
+                  sp = 0;
+              }
+              sp += yield* this.pushSpaces(true);
+          } while (nl + sp > 0);
+          const line = this.getLine();
+          if (line === null)
+              return this.setNext('flow');
+          if ((indent !== -1 && indent < this.indentNext && line[0] !== '#') ||
+              (indent === 0 &&
+                  (line.startsWith('---') || line.startsWith('...')) &&
+                  isEmpty(line[3]))) {
+              // Allowing for the terminal ] or } at the same (rather than greater)
+              // indent level as the initial [ or { is technically invalid, but
+              // failing here would be surprising to users.
+              const atFlowEndMarker = indent === this.indentNext - 1 &&
+                  this.flowLevel === 1 &&
+                  (line[0] === ']' || line[0] === '}');
+              if (!atFlowEndMarker) {
+                  // this is an error
+                  this.flowLevel = 0;
+                  yield FLOW_END;
+                  return yield* this.parseLineStart();
+              }
+          }
+          let n = 0;
+          while (line[n] === ',') {
+              n += yield* this.pushCount(1);
+              n += yield* this.pushSpaces(true);
+              this.flowKey = false;
+          }
+          n += yield* this.pushIndicators();
+          switch (line[n]) {
+              case undefined:
+                  return 'flow';
+              case '#':
+                  yield* this.pushCount(line.length - n);
+                  return 'flow';
+              case '{':
+              case '[':
+                  yield* this.pushCount(1);
+                  this.flowKey = false;
+                  this.flowLevel += 1;
+                  return 'flow';
+              case '}':
+              case ']':
+                  yield* this.pushCount(1);
+                  this.flowKey = true;
+                  this.flowLevel -= 1;
+                  return this.flowLevel ? 'flow' : 'doc';
+              case '*':
+                  yield* this.pushUntil(isNotAnchorChar);
+                  return 'flow';
+              case '"':
+              case "'":
+                  this.flowKey = true;
+                  return yield* this.parseQuotedScalar();
+              case ':': {
+                  const next = this.charAt(1);
+                  if (this.flowKey || isEmpty(next) || next === ',') {
+                      this.flowKey = false;
+                      yield* this.pushCount(1);
+                      yield* this.pushSpaces(true);
+                      return 'flow';
+                  }
+              }
+              // fallthrough
+              default:
+                  this.flowKey = false;
+                  return yield* this.parsePlainScalar();
+          }
+      }
+      *parseQuotedScalar() {
+          const quote = this.charAt(0);
+          let end = this.buffer.indexOf(quote, this.pos + 1);
+          if (quote === "'") {
+              while (end !== -1 && this.buffer[end + 1] === "'")
+                  end = this.buffer.indexOf("'", end + 2);
+          }
+          else {
+              // double-quote
+              while (end !== -1) {
+                  let n = 0;
+                  while (this.buffer[end - 1 - n] === '\\')
+                      n += 1;
+                  if (n % 2 === 0)
+                      break;
+                  end = this.buffer.indexOf('"', end + 1);
+              }
+          }
+          // Only looking for newlines within the quotes
+          const qb = this.buffer.substring(0, end);
+          let nl = qb.indexOf('\n', this.pos);
+          if (nl !== -1) {
+              while (nl !== -1) {
+                  const cs = this.continueScalar(nl + 1);
+                  if (cs === -1)
+                      break;
+                  nl = qb.indexOf('\n', cs);
+              }
+              if (nl !== -1) {
+                  // this is an error caused by an unexpected unindent
+                  end = nl - (qb[nl - 1] === '\r' ? 2 : 1);
+              }
+          }
+          if (end === -1) {
+              if (!this.atEnd)
+                  return this.setNext('quoted-scalar');
+              end = this.buffer.length;
+          }
+          yield* this.pushToIndex(end + 1, false);
+          return this.flowLevel ? 'flow' : 'doc';
+      }
+      *parseBlockScalarHeader() {
+          this.blockScalarIndent = -1;
+          this.blockScalarKeep = false;
+          let i = this.pos;
+          while (true) {
+              const ch = this.buffer[++i];
+              if (ch === '+')
+                  this.blockScalarKeep = true;
+              else if (ch > '0' && ch <= '9')
+                  this.blockScalarIndent = Number(ch) - 1;
+              else if (ch !== '-')
+                  break;
+          }
+          return yield* this.pushUntil(ch => isEmpty(ch) || ch === '#');
+      }
+      *parseBlockScalar() {
+          let nl = this.pos - 1; // may be -1 if this.pos === 0
+          let indent = 0;
+          let ch;
+          loop: for (let i = this.pos; (ch = this.buffer[i]); ++i) {
+              switch (ch) {
+                  case ' ':
+                      indent += 1;
+                      break;
+                  case '\n':
+                      nl = i;
+                      indent = 0;
+                      break;
+                  case '\r': {
+                      const next = this.buffer[i + 1];
+                      if (!next && !this.atEnd)
+                          return this.setNext('block-scalar');
+                      if (next === '\n')
+                          break;
+                  } // fallthrough
+                  default:
+                      break loop;
+              }
+          }
+          if (!ch && !this.atEnd)
+              return this.setNext('block-scalar');
+          if (indent >= this.indentNext) {
+              if (this.blockScalarIndent === -1)
+                  this.indentNext = indent;
+              else {
+                  this.indentNext =
+                      this.blockScalarIndent + (this.indentNext === 0 ? 1 : this.indentNext);
+              }
+              do {
+                  const cs = this.continueScalar(nl + 1);
+                  if (cs === -1)
+                      break;
+                  nl = this.buffer.indexOf('\n', cs);
+              } while (nl !== -1);
+              if (nl === -1) {
+                  if (!this.atEnd)
+                      return this.setNext('block-scalar');
+                  nl = this.buffer.length;
+              }
+          }
+          // Trailing insufficiently indented tabs are invalid.
+          // To catch that during parsing, we include them in the block scalar value.
+          let i = nl + 1;
+          ch = this.buffer[i];
+          while (ch === ' ')
+              ch = this.buffer[++i];
+          if (ch === '\t') {
+              while (ch === '\t' || ch === ' ' || ch === '\r' || ch === '\n')
+                  ch = this.buffer[++i];
+              nl = i - 1;
+          }
+          else if (!this.blockScalarKeep) {
+              do {
+                  let i = nl - 1;
+                  let ch = this.buffer[i];
+                  if (ch === '\r')
+                      ch = this.buffer[--i];
+                  const lastChar = i; // Drop the line if last char not more indented
+                  while (ch === ' ')
+                      ch = this.buffer[--i];
+                  if (ch === '\n' && i >= this.pos && i + 1 + indent > lastChar)
+                      nl = i;
+                  else
+                      break;
+              } while (true);
+          }
+          yield SCALAR;
+          yield* this.pushToIndex(nl + 1, true);
+          return yield* this.parseLineStart();
+      }
+      *parsePlainScalar() {
+          const inFlow = this.flowLevel > 0;
+          let end = this.pos - 1;
+          let i = this.pos - 1;
+          let ch;
+          while ((ch = this.buffer[++i])) {
+              if (ch === ':') {
+                  const next = this.buffer[i + 1];
+                  if (isEmpty(next) || (inFlow && flowIndicatorChars.has(next)))
+                      break;
+                  end = i;
+              }
+              else if (isEmpty(ch)) {
+                  let next = this.buffer[i + 1];
+                  if (ch === '\r') {
+                      if (next === '\n') {
+                          i += 1;
+                          ch = '\n';
+                          next = this.buffer[i + 1];
+                      }
+                      else
+                          end = i;
+                  }
+                  if (next === '#' || (inFlow && flowIndicatorChars.has(next)))
+                      break;
+                  if (ch === '\n') {
+                      const cs = this.continueScalar(i + 1);
+                      if (cs === -1)
+                          break;
+                      i = Math.max(i, cs - 2); // to advance, but still account for ' #'
+                  }
+              }
+              else {
+                  if (inFlow && flowIndicatorChars.has(ch))
+                      break;
+                  end = i;
+              }
+          }
+          if (!ch && !this.atEnd)
+              return this.setNext('plain-scalar');
+          yield SCALAR;
+          yield* this.pushToIndex(end + 1, true);
+          return inFlow ? 'flow' : 'doc';
+      }
+      *pushCount(n) {
+          if (n > 0) {
+              yield this.buffer.substr(this.pos, n);
+              this.pos += n;
+              return n;
+          }
+          return 0;
+      }
+      *pushToIndex(i, allowEmpty) {
+          const s = this.buffer.slice(this.pos, i);
+          if (s) {
+              yield s;
+              this.pos += s.length;
+              return s.length;
+          }
+          else if (allowEmpty)
+              yield '';
+          return 0;
+      }
+      *pushIndicators() {
+          let n = 0;
+          loop: while (true) {
+              switch (this.charAt(0)) {
+                  case '!':
+                      n += yield* this.pushTag();
+                      n += yield* this.pushSpaces(true);
+                      continue loop;
+                  case '&':
+                      n += yield* this.pushUntil(isNotAnchorChar);
+                      n += yield* this.pushSpaces(true);
+                      continue loop;
+                  case '-': // this is an error
+                  case '?': // this is an error outside flow collections
+                  case ':': {
+                      const inFlow = this.flowLevel > 0;
+                      const ch1 = this.charAt(1);
+                      if (isEmpty(ch1) || (inFlow && flowIndicatorChars.has(ch1))) {
+                          if (!inFlow)
+                              this.indentNext = this.indentValue + 1;
+                          else if (this.flowKey)
+                              this.flowKey = false;
+                          n += yield* this.pushCount(1);
+                          n += yield* this.pushSpaces(true);
+                          continue loop;
+                      }
+                  }
+              }
+              break loop;
+          }
+          return n;
+      }
+      *pushTag() {
+          if (this.charAt(1) === '<') {
+              let i = this.pos + 2;
+              let ch = this.buffer[i];
+              while (!isEmpty(ch) && ch !== '>')
+                  ch = this.buffer[++i];
+              return yield* this.pushToIndex(ch === '>' ? i + 1 : i, false);
+          }
+          else {
+              let i = this.pos + 1;
+              let ch = this.buffer[i];
+              while (ch) {
+                  if (tagChars.has(ch))
+                      ch = this.buffer[++i];
+                  else if (ch === '%' &&
+                      hexDigits.has(this.buffer[i + 1]) &&
+                      hexDigits.has(this.buffer[i + 2])) {
+                      ch = this.buffer[(i += 3)];
+                  }
+                  else
+                      break;
+              }
+              return yield* this.pushToIndex(i, false);
+          }
+      }
+      *pushNewline() {
+          const ch = this.buffer[this.pos];
+          if (ch === '\n')
+              return yield* this.pushCount(1);
+          else if (ch === '\r' && this.charAt(1) === '\n')
+              return yield* this.pushCount(2);
+          else
+              return 0;
+      }
+      *pushSpaces(allowTabs) {
+          let i = this.pos - 1;
+          let ch;
+          do {
+              ch = this.buffer[++i];
+          } while (ch === ' ' || (allowTabs && ch === '\t'));
+          const n = i - this.pos;
+          if (n > 0) {
+              yield this.buffer.substr(this.pos, n);
+              this.pos = i;
+          }
+          return n;
+      }
+      *pushUntil(test) {
+          let i = this.pos;
+          let ch = this.buffer[i];
+          while (!test(ch))
+              ch = this.buffer[++i];
+          return yield* this.pushToIndex(i, false);
+      }
+  }
+
+  /**
+   * Tracks newlines during parsing in order to provide an efficient API for
+   * determining the one-indexed `{ line, col }` position for any offset
+   * within the input.
+   */
+  class LineCounter {
+      constructor() {
+          this.lineStarts = [];
+          /**
+           * Should be called in ascending order. Otherwise, call
+           * `lineCounter.lineStarts.sort()` before calling `linePos()`.
+           */
+          this.addNewLine = (offset) => this.lineStarts.push(offset);
+          /**
+           * Performs a binary search and returns the 1-indexed { line, col }
+           * position of `offset`. If `line === 0`, `addNewLine` has never been
+           * called or `offset` is before the first known newline.
+           */
+          this.linePos = (offset) => {
+              let low = 0;
+              let high = this.lineStarts.length;
+              while (low < high) {
+                  const mid = (low + high) >> 1; // Math.floor((low + high) / 2)
+                  if (this.lineStarts[mid] < offset)
+                      low = mid + 1;
+                  else
+                      high = mid;
+              }
+              if (this.lineStarts[low] === offset)
+                  return { line: low + 1, col: 1 };
+              if (low === 0)
+                  return { line: 0, col: offset };
+              const start = this.lineStarts[low - 1];
+              return { line: low, col: offset - start + 1 };
+          };
+      }
+  }
+
+  function includesToken(list, type) {
+      for (let i = 0; i < list.length; ++i)
+          if (list[i].type === type)
+              return true;
+      return false;
+  }
+  function findNonEmptyIndex(list) {
+      for (let i = 0; i < list.length; ++i) {
+          switch (list[i].type) {
+              case 'space':
+              case 'comment':
+              case 'newline':
+                  break;
+              default:
+                  return i;
+          }
+      }
+      return -1;
+  }
+  function isFlowToken(token) {
+      switch (token?.type) {
+          case 'alias':
+          case 'scalar':
+          case 'single-quoted-scalar':
+          case 'double-quoted-scalar':
+          case 'flow-collection':
+              return true;
+          default:
+              return false;
+      }
+  }
+  function getPrevProps(parent) {
+      switch (parent.type) {
+          case 'document':
+              return parent.start;
+          case 'block-map': {
+              const it = parent.items[parent.items.length - 1];
+              return it.sep ?? it.start;
+          }
+          case 'block-seq':
+              return parent.items[parent.items.length - 1].start;
+          /* istanbul ignore next should not happen */
+          default:
+              return [];
+      }
+  }
+  /** Note: May modify input array */
+  function getFirstKeyStartProps(prev) {
+      if (prev.length === 0)
+          return [];
+      let i = prev.length;
+      loop: while (--i >= 0) {
+          switch (prev[i].type) {
+              case 'doc-start':
+              case 'explicit-key-ind':
+              case 'map-value-ind':
+              case 'seq-item-ind':
+              case 'newline':
+                  break loop;
+          }
+      }
+      while (prev[++i]?.type === 'space') {
+          /* loop */
+      }
+      return prev.splice(i, prev.length);
+  }
+  function arrayPushArray(target, source) {
+      // May exhaust call stack with large `source` array
+      if (source.length < 1e5)
+          Array.prototype.push.apply(target, source);
+      else
+          for (let i = 0; i < source.length; ++i)
+              target.push(source[i]);
+  }
+  function fixFlowSeqItems(fc) {
+      if (fc.start.type === 'flow-seq-start') {
+          for (const it of fc.items) {
+              if (it.sep &&
+                  !it.value &&
+                  !includesToken(it.start, 'explicit-key-ind') &&
+                  !includesToken(it.sep, 'map-value-ind')) {
+                  if (it.key)
+                      it.value = it.key;
+                  delete it.key;
+                  if (isFlowToken(it.value)) {
+                      if (it.value.end)
+                          arrayPushArray(it.value.end, it.sep);
+                      else
+                          it.value.end = it.sep;
+                  }
+                  else
+                      arrayPushArray(it.start, it.sep);
+                  delete it.sep;
+              }
+          }
+      }
+  }
+  /**
+   * A YAML concrete syntax tree (CST) parser
+   *
+   * ```ts
+   * const src: string = ...
+   * for (const token of new Parser().parse(src)) {
+   *   // token: Token
+   * }
+   * ```
+   *
+   * To use the parser with a user-provided lexer:
+   *
+   * ```ts
+   * function* parse(source: string, lexer: Lexer) {
+   *   const parser = new Parser()
+   *   for (const lexeme of lexer.lex(source))
+   *     yield* parser.next(lexeme)
+   *   yield* parser.end()
+   * }
+   *
+   * const src: string = ...
+   * const lexer = new Lexer()
+   * for (const token of parse(src, lexer)) {
+   *   // token: Token
+   * }
+   * ```
+   */
+  class Parser {
+      /**
+       * @param onNewLine - If defined, called separately with the start position of
+       *   each new line (in `parse()`, including the start of input).
+       */
+      constructor(onNewLine) {
+          /** If true, space and sequence indicators count as indentation */
+          this.atNewLine = true;
+          /** If true, next token is a scalar value */
+          this.atScalar = false;
+          /** Current indentation level */
+          this.indent = 0;
+          /** Current offset since the start of parsing */
+          this.offset = 0;
+          /** On the same line with a block map key */
+          this.onKeyLine = false;
+          /** Top indicates the node that's currently being built */
+          this.stack = [];
+          /** The source of the current token, set in parse() */
+          this.source = '';
+          /** The type of the current token, set in parse() */
+          this.type = '';
+          // Must be defined after `next()`
+          this.lexer = new Lexer();
+          this.onNewLine = onNewLine;
+      }
+      /**
+       * Parse `source` as a YAML stream.
+       * If `incomplete`, a part of the last line may be left as a buffer for the next call.
+       *
+       * Errors are not thrown, but yielded as `{ type: 'error', message }` tokens.
+       *
+       * @returns A generator of tokens representing each directive, document, and other structure.
+       */
+      *parse(source, incomplete = false) {
+          if (this.onNewLine && this.offset === 0)
+              this.onNewLine(0);
+          for (const lexeme of this.lexer.lex(source, incomplete))
+              yield* this.next(lexeme);
+          if (!incomplete)
+              yield* this.end();
+      }
+      /**
+       * Advance the parser by the `source` of one lexical token.
+       */
+      *next(source) {
+          this.source = source;
+          if (this.atScalar) {
+              this.atScalar = false;
+              yield* this.step();
+              this.offset += source.length;
+              return;
+          }
+          const type = tokenType(source);
+          if (!type) {
+              const message = `Not a YAML token: ${source}`;
+              yield* this.pop({ type: 'error', offset: this.offset, message, source });
+              this.offset += source.length;
+          }
+          else if (type === 'scalar') {
+              this.atNewLine = false;
+              this.atScalar = true;
+              this.type = 'scalar';
+          }
+          else {
+              this.type = type;
+              yield* this.step();
+              switch (type) {
+                  case 'newline':
+                      this.atNewLine = true;
+                      this.indent = 0;
+                      if (this.onNewLine)
+                          this.onNewLine(this.offset + source.length);
+                      break;
+                  case 'space':
+                      if (this.atNewLine && source[0] === ' ')
+                          this.indent += source.length;
+                      break;
+                  case 'explicit-key-ind':
+                  case 'map-value-ind':
+                  case 'seq-item-ind':
+                      if (this.atNewLine)
+                          this.indent += source.length;
+                      break;
+                  case 'doc-mode':
+                  case 'flow-error-end':
+                      return;
+                  default:
+                      this.atNewLine = false;
+              }
+              this.offset += source.length;
+          }
+      }
+      /** Call at end of input to push out any remaining constructions */
+      *end() {
+          while (this.stack.length > 0)
+              yield* this.pop();
+      }
+      get sourceToken() {
+          const st = {
+              type: this.type,
+              offset: this.offset,
+              indent: this.indent,
+              source: this.source
+          };
+          return st;
+      }
+      *step() {
+          const top = this.peek(1);
+          if (this.type === 'doc-end' && top?.type !== 'doc-end') {
+              while (this.stack.length > 0)
+                  yield* this.pop();
+              this.stack.push({
+                  type: 'doc-end',
+                  offset: this.offset,
+                  source: this.source
+              });
+              return;
+          }
+          if (!top)
+              return yield* this.stream();
+          switch (top.type) {
+              case 'document':
+                  return yield* this.document(top);
+              case 'alias':
+              case 'scalar':
+              case 'single-quoted-scalar':
+              case 'double-quoted-scalar':
+                  return yield* this.scalar(top);
+              case 'block-scalar':
+                  return yield* this.blockScalar(top);
+              case 'block-map':
+                  return yield* this.blockMap(top);
+              case 'block-seq':
+                  return yield* this.blockSequence(top);
+              case 'flow-collection':
+                  return yield* this.flowCollection(top);
+              case 'doc-end':
+                  return yield* this.documentEnd(top);
+          }
+          /* istanbul ignore next should not happen */
+          yield* this.pop();
+      }
+      peek(n) {
+          return this.stack[this.stack.length - n];
+      }
+      *pop(error) {
+          const token = error ?? this.stack.pop();
+          /* istanbul ignore if should not happen */
+          if (!token) {
+              const message = 'Tried to pop an empty stack';
+              yield { type: 'error', offset: this.offset, source: '', message };
+          }
+          else if (this.stack.length === 0) {
+              yield token;
+          }
+          else {
+              const top = this.peek(1);
+              if (token.type === 'block-scalar') {
+                  // Block scalars use their parent rather than header indent
+                  token.indent = 'indent' in top ? top.indent : 0;
+              }
+              else if (token.type === 'flow-collection' && top.type === 'document') {
+                  // Ignore all indent for top-level flow collections
+                  token.indent = 0;
+              }
+              if (token.type === 'flow-collection')
+                  fixFlowSeqItems(token);
+              switch (top.type) {
+                  case 'document':
+                      top.value = token;
+                      break;
+                  case 'block-scalar':
+                      top.props.push(token); // error
+                      break;
+                  case 'block-map': {
+                      const it = top.items[top.items.length - 1];
+                      if (it.value) {
+                          top.items.push({ start: [], key: token, sep: [] });
+                          this.onKeyLine = true;
+                          return;
+                      }
+                      else if (it.sep) {
+                          it.value = token;
+                      }
+                      else {
+                          Object.assign(it, { key: token, sep: [] });
+                          this.onKeyLine = !it.explicitKey;
+                          return;
+                      }
+                      break;
+                  }
+                  case 'block-seq': {
+                      const it = top.items[top.items.length - 1];
+                      if (it.value)
+                          top.items.push({ start: [], value: token });
+                      else
+                          it.value = token;
+                      break;
+                  }
+                  case 'flow-collection': {
+                      const it = top.items[top.items.length - 1];
+                      if (!it || it.value)
+                          top.items.push({ start: [], key: token, sep: [] });
+                      else if (it.sep)
+                          it.value = token;
+                      else
+                          Object.assign(it, { key: token, sep: [] });
+                      return;
+                  }
+                  /* istanbul ignore next should not happen */
+                  default:
+                      yield* this.pop();
+                      yield* this.pop(token);
+              }
+              if ((top.type === 'document' ||
+                  top.type === 'block-map' ||
+                  top.type === 'block-seq') &&
+                  (token.type === 'block-map' || token.type === 'block-seq')) {
+                  const last = token.items[token.items.length - 1];
+                  if (last &&
+                      !last.sep &&
+                      !last.value &&
+                      last.start.length > 0 &&
+                      findNonEmptyIndex(last.start) === -1 &&
+                      (token.indent === 0 ||
+                          last.start.every(st => st.type !== 'comment' || st.indent < token.indent))) {
+                      if (top.type === 'document')
+                          top.end = last.start;
+                      else
+                          top.items.push({ start: last.start });
+                      token.items.splice(-1, 1);
+                  }
+              }
+          }
+      }
+      *stream() {
+          switch (this.type) {
+              case 'directive-line':
+                  yield { type: 'directive', offset: this.offset, source: this.source };
+                  return;
+              case 'byte-order-mark':
+              case 'space':
+              case 'comment':
+              case 'newline':
+                  yield this.sourceToken;
+                  return;
+              case 'doc-mode':
+              case 'doc-start': {
+                  const doc = {
+                      type: 'document',
+                      offset: this.offset,
+                      start: []
+                  };
+                  if (this.type === 'doc-start')
+                      doc.start.push(this.sourceToken);
+                  this.stack.push(doc);
+                  return;
+              }
+          }
+          yield {
+              type: 'error',
+              offset: this.offset,
+              message: `Unexpected ${this.type} token in YAML stream`,
+              source: this.source
+          };
+      }
+      *document(doc) {
+          if (doc.value)
+              return yield* this.lineEnd(doc);
+          switch (this.type) {
+              case 'doc-start': {
+                  if (findNonEmptyIndex(doc.start) !== -1) {
+                      yield* this.pop();
+                      yield* this.step();
+                  }
+                  else
+                      doc.start.push(this.sourceToken);
+                  return;
+              }
+              case 'anchor':
+              case 'tag':
+              case 'space':
+              case 'comment':
+              case 'newline':
+                  doc.start.push(this.sourceToken);
+                  return;
+          }
+          const bv = this.startBlockValue(doc);
+          if (bv)
+              this.stack.push(bv);
+          else {
+              yield {
+                  type: 'error',
+                  offset: this.offset,
+                  message: `Unexpected ${this.type} token in YAML document`,
+                  source: this.source
+              };
+          }
+      }
+      *scalar(scalar) {
+          if (this.type === 'map-value-ind') {
+              const prev = getPrevProps(this.peek(2));
+              const start = getFirstKeyStartProps(prev);
+              let sep;
+              if (scalar.end) {
+                  sep = scalar.end;
+                  sep.push(this.sourceToken);
+                  delete scalar.end;
+              }
+              else
+                  sep = [this.sourceToken];
+              const map = {
+                  type: 'block-map',
+                  offset: scalar.offset,
+                  indent: scalar.indent,
+                  items: [{ start, key: scalar, sep }]
+              };
+              this.onKeyLine = true;
+              this.stack[this.stack.length - 1] = map;
+          }
+          else
+              yield* this.lineEnd(scalar);
+      }
+      *blockScalar(scalar) {
+          switch (this.type) {
+              case 'space':
+              case 'comment':
+              case 'newline':
+                  scalar.props.push(this.sourceToken);
+                  return;
+              case 'scalar':
+                  scalar.source = this.source;
+                  // block-scalar source includes trailing newline
+                  this.atNewLine = true;
+                  this.indent = 0;
+                  if (this.onNewLine) {
+                      let nl = this.source.indexOf('\n') + 1;
+                      while (nl !== 0) {
+                          this.onNewLine(this.offset + nl);
+                          nl = this.source.indexOf('\n', nl) + 1;
+                      }
+                  }
+                  yield* this.pop();
+                  break;
+              /* istanbul ignore next should not happen */
+              default:
+                  yield* this.pop();
+                  yield* this.step();
+          }
+      }
+      *blockMap(map) {
+          const it = map.items[map.items.length - 1];
+          // it.sep is true-ish if pair already has key or : separator
+          switch (this.type) {
+              case 'newline':
+                  this.onKeyLine = false;
+                  if (it.value) {
+                      const end = 'end' in it.value ? it.value.end : undefined;
+                      const last = Array.isArray(end) ? end[end.length - 1] : undefined;
+                      if (last?.type === 'comment')
+                          end?.push(this.sourceToken);
+                      else
+                          map.items.push({ start: [this.sourceToken] });
+                  }
+                  else if (it.sep) {
+                      it.sep.push(this.sourceToken);
+                  }
+                  else {
+                      it.start.push(this.sourceToken);
+                  }
+                  return;
+              case 'space':
+              case 'comment':
+                  if (it.value) {
+                      map.items.push({ start: [this.sourceToken] });
+                  }
+                  else if (it.sep) {
+                      it.sep.push(this.sourceToken);
+                  }
+                  else {
+                      if (this.atIndentedComment(it.start, map.indent)) {
+                          const prev = map.items[map.items.length - 2];
+                          const end = prev?.value?.end;
+                          if (Array.isArray(end)) {
+                              arrayPushArray(end, it.start);
+                              end.push(this.sourceToken);
+                              map.items.pop();
+                              return;
+                          }
+                      }
+                      it.start.push(this.sourceToken);
+                  }
+                  return;
+          }
+          if (this.indent >= map.indent) {
+              const atMapIndent = !this.onKeyLine && this.indent === map.indent;
+              const atNextItem = atMapIndent &&
+                  (it.sep || it.explicitKey) &&
+                  this.type !== 'seq-item-ind';
+              // For empty nodes, assign newline-separated not indented empty tokens to following node
+              let start = [];
+              if (atNextItem && it.sep && !it.value) {
+                  const nl = [];
+                  for (let i = 0; i < it.sep.length; ++i) {
+                      const st = it.sep[i];
+                      switch (st.type) {
+                          case 'newline':
+                              nl.push(i);
+                              break;
+                          case 'space':
+                              break;
+                          case 'comment':
+                              if (st.indent > map.indent)
+                                  nl.length = 0;
+                              break;
+                          default:
+                              nl.length = 0;
+                      }
+                  }
+                  if (nl.length >= 2)
+                      start = it.sep.splice(nl[1]);
+              }
+              switch (this.type) {
+                  case 'anchor':
+                  case 'tag':
+                      if (atNextItem || it.value) {
+                          start.push(this.sourceToken);
+                          map.items.push({ start });
+                          this.onKeyLine = true;
+                      }
+                      else if (it.sep) {
+                          it.sep.push(this.sourceToken);
+                      }
+                      else {
+                          it.start.push(this.sourceToken);
+                      }
+                      return;
+                  case 'explicit-key-ind':
+                      if (!it.sep && !it.explicitKey) {
+                          it.start.push(this.sourceToken);
+                          it.explicitKey = true;
+                      }
+                      else if (atNextItem || it.value) {
+                          start.push(this.sourceToken);
+                          map.items.push({ start, explicitKey: true });
+                      }
+                      else {
+                          this.stack.push({
+                              type: 'block-map',
+                              offset: this.offset,
+                              indent: this.indent,
+                              items: [{ start: [this.sourceToken], explicitKey: true }]
+                          });
+                      }
+                      this.onKeyLine = true;
+                      return;
+                  case 'map-value-ind':
+                      if (it.explicitKey) {
+                          if (!it.sep) {
+                              if (includesToken(it.start, 'newline')) {
+                                  Object.assign(it, { key: null, sep: [this.sourceToken] });
+                              }
+                              else {
+                                  const start = getFirstKeyStartProps(it.start);
+                                  this.stack.push({
+                                      type: 'block-map',
+                                      offset: this.offset,
+                                      indent: this.indent,
+                                      items: [{ start, key: null, sep: [this.sourceToken] }]
+                                  });
+                              }
+                          }
+                          else if (it.value) {
+                              map.items.push({ start: [], key: null, sep: [this.sourceToken] });
+                          }
+                          else if (includesToken(it.sep, 'map-value-ind')) {
+                              this.stack.push({
+                                  type: 'block-map',
+                                  offset: this.offset,
+                                  indent: this.indent,
+                                  items: [{ start, key: null, sep: [this.sourceToken] }]
+                              });
+                          }
+                          else if (isFlowToken(it.key) &&
+                              !includesToken(it.sep, 'newline')) {
+                              const start = getFirstKeyStartProps(it.start);
+                              const key = it.key;
+                              const sep = it.sep;
+                              sep.push(this.sourceToken);
+                              // @ts-expect-error type guard is wrong here
+                              delete it.key;
+                              // @ts-expect-error type guard is wrong here
+                              delete it.sep;
+                              this.stack.push({
+                                  type: 'block-map',
+                                  offset: this.offset,
+                                  indent: this.indent,
+                                  items: [{ start, key, sep }]
+                              });
+                          }
+                          else if (start.length > 0) {
+                              // Not actually at next item
+                              it.sep = it.sep.concat(start, this.sourceToken);
+                          }
+                          else {
+                              it.sep.push(this.sourceToken);
+                          }
+                      }
+                      else {
+                          if (!it.sep) {
+                              Object.assign(it, { key: null, sep: [this.sourceToken] });
+                          }
+                          else if (it.value || atNextItem) {
+                              map.items.push({ start, key: null, sep: [this.sourceToken] });
+                          }
+                          else if (includesToken(it.sep, 'map-value-ind')) {
+                              this.stack.push({
+                                  type: 'block-map',
+                                  offset: this.offset,
+                                  indent: this.indent,
+                                  items: [{ start: [], key: null, sep: [this.sourceToken] }]
+                              });
+                          }
+                          else {
+                              it.sep.push(this.sourceToken);
+                          }
+                      }
+                      this.onKeyLine = true;
+                      return;
+                  case 'alias':
+                  case 'scalar':
+                  case 'single-quoted-scalar':
+                  case 'double-quoted-scalar': {
+                      const fs = this.flowScalar(this.type);
+                      if (atNextItem || it.value) {
+                          map.items.push({ start, key: fs, sep: [] });
+                          this.onKeyLine = true;
+                      }
+                      else if (it.sep) {
+                          this.stack.push(fs);
+                      }
+                      else {
+                          Object.assign(it, { key: fs, sep: [] });
+                          this.onKeyLine = true;
+                      }
+                      return;
+                  }
+                  default: {
+                      const bv = this.startBlockValue(map);
+                      if (bv) {
+                          if (bv.type === 'block-seq') {
+                              if (!it.explicitKey &&
+                                  it.sep &&
+                                  !includesToken(it.sep, 'newline')) {
+                                  yield* this.pop({
+                                      type: 'error',
+                                      offset: this.offset,
+                                      message: 'Unexpected block-seq-ind on same line with key',
+                                      source: this.source
+                                  });
+                                  return;
+                              }
+                          }
+                          else if (atMapIndent) {
+                              map.items.push({ start });
+                          }
+                          this.stack.push(bv);
+                          return;
+                      }
+                  }
+              }
+          }
+          yield* this.pop();
+          yield* this.step();
+      }
+      *blockSequence(seq) {
+          const it = seq.items[seq.items.length - 1];
+          switch (this.type) {
+              case 'newline':
+                  if (it.value) {
+                      const end = 'end' in it.value ? it.value.end : undefined;
+                      const last = Array.isArray(end) ? end[end.length - 1] : undefined;
+                      if (last?.type === 'comment')
+                          end?.push(this.sourceToken);
+                      else
+                          seq.items.push({ start: [this.sourceToken] });
+                  }
+                  else
+                      it.start.push(this.sourceToken);
+                  return;
+              case 'space':
+              case 'comment':
+                  if (it.value)
+                      seq.items.push({ start: [this.sourceToken] });
+                  else {
+                      if (this.atIndentedComment(it.start, seq.indent)) {
+                          const prev = seq.items[seq.items.length - 2];
+                          const end = prev?.value?.end;
+                          if (Array.isArray(end)) {
+                              arrayPushArray(end, it.start);
+                              end.push(this.sourceToken);
+                              seq.items.pop();
+                              return;
+                          }
+                      }
+                      it.start.push(this.sourceToken);
+                  }
+                  return;
+              case 'anchor':
+              case 'tag':
+                  if (it.value || this.indent <= seq.indent)
+                      break;
+                  it.start.push(this.sourceToken);
+                  return;
+              case 'seq-item-ind':
+                  if (this.indent !== seq.indent)
+                      break;
+                  if (it.value || includesToken(it.start, 'seq-item-ind'))
+                      seq.items.push({ start: [this.sourceToken] });
+                  else
+                      it.start.push(this.sourceToken);
+                  return;
+          }
+          if (this.indent > seq.indent) {
+              const bv = this.startBlockValue(seq);
+              if (bv) {
+                  this.stack.push(bv);
+                  return;
+              }
+          }
+          yield* this.pop();
+          yield* this.step();
+      }
+      *flowCollection(fc) {
+          const it = fc.items[fc.items.length - 1];
+          if (this.type === 'flow-error-end') {
+              let top;
+              do {
+                  yield* this.pop();
+                  top = this.peek(1);
+              } while (top?.type === 'flow-collection');
+          }
+          else if (fc.end.length === 0) {
+              switch (this.type) {
+                  case 'comma':
+                  case 'explicit-key-ind':
+                      if (!it || it.sep)
+                          fc.items.push({ start: [this.sourceToken] });
+                      else
+                          it.start.push(this.sourceToken);
+                      return;
+                  case 'map-value-ind':
+                      if (!it || it.value)
+                          fc.items.push({ start: [], key: null, sep: [this.sourceToken] });
+                      else if (it.sep)
+                          it.sep.push(this.sourceToken);
+                      else
+                          Object.assign(it, { key: null, sep: [this.sourceToken] });
+                      return;
+                  case 'space':
+                  case 'comment':
+                  case 'newline':
+                  case 'anchor':
+                  case 'tag':
+                      if (!it || it.value)
+                          fc.items.push({ start: [this.sourceToken] });
+                      else if (it.sep)
+                          it.sep.push(this.sourceToken);
+                      else
+                          it.start.push(this.sourceToken);
+                      return;
+                  case 'alias':
+                  case 'scalar':
+                  case 'single-quoted-scalar':
+                  case 'double-quoted-scalar': {
+                      const fs = this.flowScalar(this.type);
+                      if (!it || it.value)
+                          fc.items.push({ start: [], key: fs, sep: [] });
+                      else if (it.sep)
+                          this.stack.push(fs);
+                      else
+                          Object.assign(it, { key: fs, sep: [] });
+                      return;
+                  }
+                  case 'flow-map-end':
+                  case 'flow-seq-end':
+                      fc.end.push(this.sourceToken);
+                      return;
+              }
+              const bv = this.startBlockValue(fc);
+              /* istanbul ignore else should not happen */
+              if (bv)
+                  this.stack.push(bv);
+              else {
+                  yield* this.pop();
+                  yield* this.step();
+              }
+          }
+          else {
+              const parent = this.peek(2);
+              if (parent.type === 'block-map' &&
+                  ((this.type === 'map-value-ind' && parent.indent === fc.indent) ||
+                      (this.type === 'newline' &&
+                          !parent.items[parent.items.length - 1].sep))) {
+                  yield* this.pop();
+                  yield* this.step();
+              }
+              else if (this.type === 'map-value-ind' &&
+                  parent.type !== 'flow-collection') {
+                  const prev = getPrevProps(parent);
+                  const start = getFirstKeyStartProps(prev);
+                  fixFlowSeqItems(fc);
+                  const sep = fc.end.splice(1, fc.end.length);
+                  sep.push(this.sourceToken);
+                  const map = {
+                      type: 'block-map',
+                      offset: fc.offset,
+                      indent: fc.indent,
+                      items: [{ start, key: fc, sep }]
+                  };
+                  this.onKeyLine = true;
+                  this.stack[this.stack.length - 1] = map;
+              }
+              else {
+                  yield* this.lineEnd(fc);
+              }
+          }
+      }
+      flowScalar(type) {
+          if (this.onNewLine) {
+              let nl = this.source.indexOf('\n') + 1;
+              while (nl !== 0) {
+                  this.onNewLine(this.offset + nl);
+                  nl = this.source.indexOf('\n', nl) + 1;
+              }
+          }
+          return {
+              type,
+              offset: this.offset,
+              indent: this.indent,
+              source: this.source
+          };
+      }
+      startBlockValue(parent) {
+          switch (this.type) {
+              case 'alias':
+              case 'scalar':
+              case 'single-quoted-scalar':
+              case 'double-quoted-scalar':
+                  return this.flowScalar(this.type);
+              case 'block-scalar-header':
+                  return {
+                      type: 'block-scalar',
+                      offset: this.offset,
+                      indent: this.indent,
+                      props: [this.sourceToken],
+                      source: ''
+                  };
+              case 'flow-map-start':
+              case 'flow-seq-start':
+                  return {
+                      type: 'flow-collection',
+                      offset: this.offset,
+                      indent: this.indent,
+                      start: this.sourceToken,
+                      items: [],
+                      end: []
+                  };
+              case 'seq-item-ind':
+                  return {
+                      type: 'block-seq',
+                      offset: this.offset,
+                      indent: this.indent,
+                      items: [{ start: [this.sourceToken] }]
+                  };
+              case 'explicit-key-ind': {
+                  this.onKeyLine = true;
+                  const prev = getPrevProps(parent);
+                  const start = getFirstKeyStartProps(prev);
+                  start.push(this.sourceToken);
+                  return {
+                      type: 'block-map',
+                      offset: this.offset,
+                      indent: this.indent,
+                      items: [{ start, explicitKey: true }]
+                  };
+              }
+              case 'map-value-ind': {
+                  this.onKeyLine = true;
+                  const prev = getPrevProps(parent);
+                  const start = getFirstKeyStartProps(prev);
+                  return {
+                      type: 'block-map',
+                      offset: this.offset,
+                      indent: this.indent,
+                      items: [{ start, key: null, sep: [this.sourceToken] }]
+                  };
+              }
+          }
+          return null;
+      }
+      atIndentedComment(start, indent) {
+          if (this.type !== 'comment')
+              return false;
+          if (this.indent <= indent)
+              return false;
+          return start.every(st => st.type === 'newline' || st.type === 'space');
+      }
+      *documentEnd(docEnd) {
+          if (this.type !== 'doc-mode') {
+              if (docEnd.end)
+                  docEnd.end.push(this.sourceToken);
+              else
+                  docEnd.end = [this.sourceToken];
+              if (this.type === 'newline')
+                  yield* this.pop();
+          }
+      }
+      *lineEnd(token) {
+          switch (this.type) {
+              case 'comma':
+              case 'doc-start':
+              case 'doc-end':
+              case 'flow-seq-end':
+              case 'flow-map-end':
+              case 'map-value-ind':
+                  yield* this.pop();
+                  yield* this.step();
+                  break;
+              case 'newline':
+                  this.onKeyLine = false;
+              // fallthrough
+              case 'space':
+              case 'comment':
+              default:
+                  // all other values are errors
+                  if (token.end)
+                      token.end.push(this.sourceToken);
+                  else
+                      token.end = [this.sourceToken];
+                  if (this.type === 'newline')
+                      yield* this.pop();
+          }
+      }
+  }
+
+  function parseOptions(options) {
+      const prettyErrors = options.prettyErrors !== false;
+      const lineCounter = options.lineCounter || (prettyErrors && new LineCounter()) || null;
+      return { lineCounter, prettyErrors };
+  }
+  /**
+   * Parse the input as a stream of YAML documents.
+   *
+   * Documents should be separated from each other by `...` or `---` marker lines.
+   *
+   * @returns If an empty `docs` array is returned, it will be of type
+   *   EmptyStream and contain additional stream information. In
+   *   TypeScript, you should use `'empty' in docs` as a type guard for it.
+   */
+  function parseAllDocuments(source, options = {}) {
+      const { lineCounter, prettyErrors } = parseOptions(options);
+      const parser = new Parser(lineCounter?.addNewLine);
+      const composer = new Composer(options);
+      const docs = Array.from(composer.compose(parser.parse(source)));
+      if (prettyErrors && lineCounter)
+          for (const doc of docs) {
+              doc.errors.forEach(prettifyError(source, lineCounter));
+              doc.warnings.forEach(prettifyError(source, lineCounter));
+          }
+      if (docs.length > 0)
+          return docs;
+      return Object.assign([], { empty: true }, composer.streamInfo());
+  }
+  /** Parse an input string into a single YAML.Document */
+  function parseDocument(source, options = {}) {
+      const { lineCounter, prettyErrors } = parseOptions(options);
+      const parser = new Parser(lineCounter?.addNewLine);
+      const composer = new Composer(options);
+      // `doc` is always set by compose.end(true) at the very latest
+      let doc = null;
+      for (const _doc of composer.compose(parser.parse(source), true, source.length)) {
+          if (!doc)
+              doc = _doc;
+          else if (doc.options.logLevel !== 'silent') {
+              doc.errors.push(new YAMLParseError(_doc.range.slice(0, 2), 'MULTIPLE_DOCS', 'Source contains multiple documents; please use YAML.parseAllDocuments()'));
+              break;
+          }
+      }
+      if (prettyErrors && lineCounter) {
+          doc.errors.forEach(prettifyError(source, lineCounter));
+          doc.warnings.forEach(prettifyError(source, lineCounter));
+      }
+      return doc;
+  }
+  function parse(src, reviver, options) {
+      let _reviver = undefined;
+      if (typeof reviver === 'function') {
+          _reviver = reviver;
+      }
+      else if (options === undefined && reviver && typeof reviver === 'object') {
+          options = reviver;
+      }
+      const doc = parseDocument(src, options);
+      if (!doc)
+          return null;
+      doc.warnings.forEach(warning => warn(doc.options.logLevel, warning));
+      if (doc.errors.length > 0) {
+          if (doc.options.logLevel !== 'silent')
+              throw doc.errors[0];
+          else
+              doc.errors = [];
+      }
+      return doc.toJS(Object.assign({ reviver: _reviver }, options));
+  }
+  function stringify(value, replacer, options) {
+      let _replacer = null;
+      if (typeof replacer === 'function' || Array.isArray(replacer)) {
+          _replacer = replacer;
+      }
+      else if (options === undefined && replacer) {
+          options = replacer;
+      }
+      if (typeof options === 'string')
+          options = options.length;
+      if (typeof options === 'number') {
+          const indent = Math.round(options);
+          options = indent < 1 ? undefined : indent > 8 ? { indent: 8 } : { indent };
+      }
+      if (value === undefined) {
+          const { keepUndefined } = options ?? replacer ?? {};
+          if (!keepUndefined)
+              return undefined;
+      }
+      if (isDocument(value) && !_replacer)
+          return value.toString(options);
+      return new Document(value, _replacer, options).toString(options);
+  }
+
+  var YAML = /*#__PURE__*/Object.freeze({
+    __proto__: null,
+    Alias: Alias,
+    CST: cst,
+    Composer: Composer,
+    Document: Document,
+    Lexer: Lexer,
+    LineCounter: LineCounter,
+    Pair: Pair,
+    Parser: Parser,
+    Scalar: Scalar,
+    Schema: Schema,
+    YAMLError: YAMLError,
+    YAMLMap: YAMLMap,
+    YAMLParseError: YAMLParseError,
+    YAMLSeq: YAMLSeq,
+    YAMLWarning: YAMLWarning,
+    isAlias: isAlias,
+    isCollection: isCollection$1,
+    isDocument: isDocument,
+    isMap: isMap,
+    isNode: isNode,
+    isPair: isPair,
+    isScalar: isScalar$1,
+    isSeq: isSeq,
+    parse: parse,
+    parseAllDocuments: parseAllDocuments,
+    parseDocument: parseDocument,
+    stringify: stringify,
+    visit: visit$1,
+    visitAsync: visitAsync
+  });
+
+  class MvuManager {
+      static cachedStatData = null;
+      static cachedWrapper = null;
+      static cachedCurrentFloor = null;
+      static cachedFloors = [];
+      static cachedDataSource = 'fallback';
+      /**
+       * Truy xuất ngữ cảnh toàn cục (hỗ trợ cả iframe và window cha)
+       */
+      static getGlobalContext() {
+          let win = window;
+          try {
+              if (window.parent && window.parent !== window) {
+                  win = window.parent;
+              }
+          }
+          catch { }
+          const th = win.TavernHelper || globalThis.TavernHelper || window.TavernHelper || null;
+          const mvu = win.Mvu || globalThis.Mvu || window.Mvu || null;
+          let stContext = null;
+          try {
+              stContext =
+                  win.SillyTavern?.getContext?.() ||
+                      globalThis.SillyTavern?.getContext?.() ||
+                      window.SillyTavern?.getContext?.() ||
+                      null;
+          }
+          catch { }
+          return { win, th, mvu, stContext };
+      }
+      /**
+       * Lấy SillyTavern Context
+       */
+      static getContext() {
+          return this.getGlobalContext().stContext;
+      }
+      /**
+       * Lấy nhân vật đang hoạt động hiện tại
+       */
+      static getActiveCharacter() {
+          const ctx = this.getContext();
+          return ctx?.characters?.[ctx?.characterId] || null;
+      }
+      /**
+       * Kiểm tra xem nhân vật hiện tại có hệ thống MVU hay không
+       */
+      static hasMvu(char) {
+          if (!char)
+              return false;
+          const scripts = char.data?.extensions?.tavern_helper?.scripts;
+          if (!scripts || typeof scripts !== 'object')
+              return false;
+          for (const [key, script] of Object.entries(scripts)) {
+              const s = script;
+              const content = s?.content || '';
+              const scriptName = s?.name || key;
+              if (scriptName.toLowerCase().includes('mvu') ||
+                  scriptName.toLowerCase().includes('zod') ||
+                  scriptName.includes('Cấu trúc biến') ||
+                  content.includes('registerMvuSchema') ||
+                  content.includes('MagVarUpdate') ||
+                  content.includes('mvu_zod.js')) {
+                  return true;
+              }
+          }
+          return false;
+      }
+      /**
+       * Kích hoạt toggle "Character Script" (Kịch bản nhân vật) trong Tửu quán trợ thủ (TavernHelper / JS-Slash-Runner)
+       * Đảm bảo script của nhân vật chạy ngầm và không bị chặn.
+       */
+      static async enableCharacterScriptsInTavernHelper(liveChar) {
+          if (!liveChar)
+              return;
+          const avatar = liveChar.avatar;
+          if (!avatar)
+              return;
+          const avatarPng = avatar.endsWith('.png') ? avatar : `${avatar}.png`;
+          // 1. Cập nhật SillyTavern extension_settings
+          try {
+              const ctx = this.getContext();
+              const extSettings = window.extension_settings || ctx?.extensionSettings;
+              if (extSettings) {
+                  for (const key of ['tavern_helper', 'TavernHelper']) {
+                      if (!extSettings[key])
+                          extSettings[key] = {};
+                      const th = extSettings[key];
+                      if (!th.script)
+                          th.script = {};
+                      if (!th.script.enabled)
+                          th.script.enabled = {};
+                      if (!Array.isArray(th.script.enabled.characters))
+                          th.script.enabled.characters = [];
+                      if (!th.script.enabled.characters.includes(avatar)) {
+                          th.script.enabled.characters.push(avatar);
+                      }
+                      if (avatarPng !== avatar && !th.script.enabled.characters.includes(avatarPng)) {
+                          th.script.enabled.characters.push(avatarPng);
+                      }
+                      if (!th.script.popuped)
+                          th.script.popuped = {};
+                      if (!Array.isArray(th.script.popuped.characters))
+                          th.script.popuped.characters = [];
+                      if (!th.script.popuped.characters.includes(avatar)) {
+                          th.script.popuped.characters.push(avatar);
+                      }
+                      if (avatarPng !== avatar && !th.script.popuped.characters.includes(avatarPng)) {
+                          th.script.popuped.characters.push(avatarPng);
+                      }
+                  }
+                  if (typeof window.saveSettingsDebounced === 'function') {
+                      window.saveSettingsDebounced();
+                  }
+                  else if (typeof ctx?.saveSettingsDebounced === 'function') {
+                      ctx.saveSettingsDebounced();
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] Lỗi khi cập nhật extension_settings.tavern_helper:', e);
+          }
+          // 2. Cập nhật trực tiếp Vue/Pinia store trong bộ nhớ frontend nếu extension đang nạp
+          try {
+              const el = document.getElementById('tavern_helper');
+              const vueApp = el?.__vue_app__;
+              const provides = vueApp?._context?.provides;
+              if (provides) {
+                  // QUAN TRỌNG: Pinia được lưu dưới private Symbol('pinia'), KHÔNG phải Symbol.for('pinia').
+                  // Object.values() bỏ qua Symbol keys, nên phải dùng Object.getOwnPropertySymbols().
+                  let pinia = null;
+                  const symbols = Object.getOwnPropertySymbols(provides);
+                  for (const sym of symbols) {
+                      const val = provides[sym];
+                      if (val && val._s instanceof Map) {
+                          pinia = val;
+                          break;
+                      }
+                  }
+                  // Fallback: thử key thông thường
+                  if (!pinia) {
+                      pinia = provides[Symbol.for('pinia')] || provides.pinia || null;
+                  }
+                  if (pinia && pinia._s) {
+                      // 2a. Cập nhật global_settings store: thêm avatar vào danh sách enabled + popuped
+                      const globalStore = pinia._s.get('global_settings');
+                      if (globalStore?.settings?.script) {
+                          const scriptSettings = globalStore.settings.script;
+                          if (!scriptSettings.enabled)
+                              scriptSettings.enabled = {};
+                          if (!Array.isArray(scriptSettings.enabled.characters))
+                              scriptSettings.enabled.characters = [];
+                          if (!scriptSettings.popuped)
+                              scriptSettings.popuped = {};
+                          if (!Array.isArray(scriptSettings.popuped.characters))
+                              scriptSettings.popuped.characters = [];
+                          for (const av of [avatar, avatarPng]) {
+                              if (av && !scriptSettings.enabled.characters.includes(av)) {
+                                  scriptSettings.enabled.characters.push(av);
+                              }
+                              if (av && !scriptSettings.popuped.characters.includes(av)) {
+                                  scriptSettings.popuped.characters.push(av);
+                              }
+                          }
+                      }
+                      // 2b. Force reload character_setttings store (LƯU Ý: store ID có 3 chữ 't' - đây là typo gốc từ JS-Slash-Runner)
+                      // Đảm bảo Pinia đồng bộ scripts mới nhất từ characters[] array sau getOneCharacter
+                      const charSettingsStore = pinia._s.get('character_setttings');
+                      if (charSettingsStore && typeof charSettingsStore.forceReload === 'function') {
+                          charSettingsStore.forceReload();
+                      }
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] Lỗi khi cập nhật Pinia store TavernHelper:', e);
+          }
+          // 3. Đồng bộ checkbox trên giao diện DOM nếu panel kịch bản đang mở
+          try {
+              // Toggle ID format trong Container.vue: `${title}-script-enable-toggle`
+              // trong đó title là tên đã dịch (VD: "Character Script", "角色脚本", "Kịch bản nhân vật")
+              const allToggles = document.querySelectorAll('input[type="checkbox"][id$="-script-enable-toggle"]');
+              for (const toggle of allToggles) {
+                  const toggleId = toggle.id || '';
+                  const parentEl = toggle.closest('.flex, [class*="mt-"]') || toggle.parentElement;
+                  const parentText = parentEl?.textContent?.toLowerCase() || '';
+                  // Xác định toggle của "Character Script" (角色脚本 / Kịch bản nhân vật)
+                  const isCharToggle = toggleId.toLowerCase().includes('character') ||
+                      toggleId.includes('角色') ||
+                      toggleId.includes('nhân vật') ||
+                      parentText.includes('character') ||
+                      parentText.includes('角色') ||
+                      parentText.includes('nhân vật') ||
+                      parentText.includes('bind to the current character');
+                  if (isCharToggle && !toggle.checked) {
+                      // Click vào label thay vì input để đảm bảo Vue v-model reactive cập nhật
+                      const escapedId = CSS.escape(toggleId);
+                      const label = document.querySelector(`label[for="${escapedId}"]`);
+                      if (label) {
+                          label.click();
+                      }
+                      else {
+                          toggle.checked = true;
+                          toggle.dispatchEvent(new Event('change', { bubbles: true }));
+                          toggle.dispatchEvent(new Event('input', { bubbles: true }));
+                      }
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] Lỗi khi đồng bộ DOM toggle TavernHelper:', e);
+          }
+      }
+      /**
+       * Tìm script Zod Schema của nhân vật
+       */
+      static getZodScript(char) {
+          if (!char)
+              return null;
+          const scripts = char.data?.extensions?.tavern_helper?.scripts;
+          if (!scripts || typeof scripts !== 'object')
+              return null;
+          for (const [key, script] of Object.entries(scripts)) {
+              const s = script;
+              const content = s?.content || '';
+              const scriptName = s?.name || key;
+              if (content.includes('registerMvuSchema') ||
+                  scriptName.toLowerCase().includes('zod') ||
+                  scriptName.includes('Cấu trúc biến')) {
+                  return {
+                      key,
+                      name: scriptName,
+                      content,
+                      script: s,
+                  };
+              }
+          }
+          return null;
+      }
+      /**
+       * Đọc dữ liệu biến của một lượt tin nhắn (floor/message) cụ thể
+       */
+      static async readFloor(messageId) {
+          const { mvu, th } = this.getGlobalContext();
+          const targetId = typeof messageId === 'number' ? messageId : undefined;
+          const opts = targetId !== undefined ? { type: 'message', message_id: targetId } : undefined;
+          let raw = null;
+          let source = 'mvu';
+          // 1. Thử gọi API MVU chính thống (SillyTavern-MVU plugin)
+          if (mvu && typeof mvu.getMvuData === 'function') {
+              try {
+                  raw = opts ? await mvu.getMvuData(opts) : await mvu.getMvuData();
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Error fetching via Mvu.getMvuData:', e);
+              }
+          }
+          // 2. Fallback sang TavernHelper API (tương thích)
+          if (!raw && th && typeof th.getVariables === 'function') {
+              source = 'helper';
+              try {
+                  raw = opts ? await th.getVariables(opts) : await th.getVariables();
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Error fetching via TavernHelper.getVariables:', e);
+              }
+          }
+          // 3. Fallback sang SillyTavern chat memory trực tiếp
+          if (!raw && typeof targetId === 'number') {
+              const { stContext } = this.getGlobalContext();
+              const msg = stContext?.chat?.[targetId];
+              if (msg) {
+                  if (msg.variables && typeof msg.variables === 'object') {
+                      if (Array.isArray(msg.variables)) {
+                          const swipe = typeof msg.swipe_id === 'number' ? msg.swipe_id : 0;
+                          raw = msg.variables[swipe] || msg.variables[0];
+                      }
+                      else {
+                          raw = msg.variables;
+                      }
+                  }
+                  else if (msg.stat_data && typeof msg.stat_data === 'object') {
+                      raw = msg;
+                  }
+                  if (raw)
+                      source = 'fallback';
+              }
+          }
+          if (!raw || typeof raw !== 'object') {
+              return null;
+          }
+          // 4. Chuẩn hóa bóc tách: Phân tách wrapper và stat_data
+          const hasStatData = Object.prototype.hasOwnProperty.call(raw, 'stat_data') &&
+              raw.stat_data &&
+              typeof raw.stat_data === 'object';
+          const statData = hasStatData ? raw.stat_data : raw;
+          return {
+              wrapper: raw,
+              statData,
+              messageId: targetId,
+              source,
+          };
+      }
+      /**
+       * Quét danh sách các lượt tin nhắn (floor) có dữ liệu stat_data trong cuộc hội thoại hiện tại
+       */
+      static async listValidFloors(maxScan = 100) {
+          const { stContext } = this.getGlobalContext();
+          const chat = Array.isArray(stContext?.chat) ? stContext.chat : [];
+          const floors = [];
+          const scanStart = Math.max(0, chat.length - maxScan);
+          for (let i = chat.length - 1; i >= scanStart; i--) {
+              const msg = chat[i];
+              if (!msg)
+                  continue;
+              const isSystem = !!(msg.is_system || msg.role === 'system' || msg.mes_role === 'system');
+              if (isSystem)
+                  continue;
+              const floorData = await this.readFloor(i);
+              if (floorData &&
+                  floorData.statData &&
+                  typeof floorData.statData === 'object' &&
+                  Object.keys(floorData.statData).length > 0) {
+                  const rawText = String(msg.mes || msg.message || '')
+                      .replace(/\s+/g, ' ')
+                      .trim();
+                  const preview = rawText.length > 70 ? rawText.slice(0, 70) + '…' : rawText;
+                  floors.push({
+                      messageId: i,
+                      displayIndex: i + 1,
+                      role: msg.role ? String(msg.role) : msg.is_user ? 'user' : 'assistant',
+                      name: String(msg.name || msg.ch_name || (msg.is_user ? 'User' : 'Character')),
+                      preview: preview || '(Không có văn bản)',
+                      source: floorData.source,
+                  });
+              }
+          }
+          return floors;
+      }
+      /**
+       * Lấy toàn bộ biến thời gian thực của nhân vật (đã bóc tách sạch khỏi preset prompts)
+       */
+      static getLiveVariables(subPath, messageId) {
+          let data = this.cachedStatData;
+          let wrapper = this.cachedWrapper;
+          // Nếu chưa có cache, lấy nhanh từ context hiện tại
+          if (!data) {
+              const { th, mvu } = this.getGlobalContext();
+              let raw = null;
+              try {
+                  if (mvu && typeof mvu.getMvuData === 'function') {
+                      raw = mvu.getMvuData();
+                      // Guard: nếu API trả về Promise, giải quyết đồng bộ fallback sang cache
+                      if (raw && typeof raw === 'object' && typeof raw.then === 'function') {
+                          raw = null; // Bỏ qua Promise, dùng readFloor async thay thế
+                      }
+                  }
+              }
+              catch { }
+              if (!raw && th && typeof th.getVariables === 'function') {
+                  try {
+                      raw = th.getVariables();
+                      if (raw && typeof raw === 'object' && typeof raw.then === 'function') {
+                          raw = null;
+                      }
+                  }
+                  catch { }
+              }
+              if (raw && typeof raw === 'object') {
+                  wrapper = raw;
+                  data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : raw;
+              }
+          }
+          if (!data)
+              return null;
+          if (subPath) {
+              const cleanPath = subPath.replace(/^stat_data\./, '');
+              const parts = cleanPath.split('.');
+              // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU)
+              let curr = data;
+              let found = true;
+              for (const p of parts) {
+                  if (curr && typeof curr === 'object' && p in curr) {
+                      curr = curr[p];
+                  }
+                  else {
+                      found = false;
+                      break;
+                  }
+              }
+              if (found)
+                  return curr;
+              // Ưu tiên 2: Fallback tìm trong root wrapper (phòng trường hợp biến root)
+              if (wrapper && typeof wrapper === 'object') {
+                  let rootCurr = wrapper;
+                  let rootFound = true;
+                  for (const p of parts) {
+                      if (rootCurr && typeof rootCurr === 'object' && p in rootCurr) {
+                          rootCurr = rootCurr[p];
+                      }
+                      else {
+                          rootFound = false;
+                          break;
+                      }
+                  }
+                  if (rootFound)
+                      return rootCurr;
+              }
+              return undefined;
+          }
+          return data;
+      }
+      /**
+       * Cập nhật trực tiếp biến ở Runtime qua TavernHelper hoặc Mvu API
+       */
+      static async setLiveVariable(path, value, messageId) {
+          const { th, mvu } = this.getGlobalContext();
+          if (!th && !mvu) {
+              throw new Error('Không tìm thấy TavernHelper hoặc Mvu API trong SillyTavern.');
+          }
+          let targetMessageId = messageId;
+          if (targetMessageId === undefined) {
+              if (this.cachedCurrentFloor) {
+                  targetMessageId = this.cachedCurrentFloor.messageId;
+              }
+              else {
+                  const floors = await this.listValidFloors();
+                  if (floors.length > 0) {
+                      targetMessageId = floors[0].messageId;
+                  }
+              }
+          }
+          if (targetMessageId === undefined) {
+              throw new Error('Chưa có tin nhắn nào trong phòng chat để gán biến runtime. Hãy gửi ít nhất một tin nhắn (hoặc bắt đầu cuộc hội thoại) trước khi dùng set_mvu_variable.');
+          }
+          const cleanPath = path.replace(/^stat_data\./, '');
+          const cleanParts = cleanPath.split('.');
+          const oldValue = this.getLiveVariables(cleanPath, targetMessageId);
+          // Tự động ép kiểu thông minh nếu truyền vào dạng chuỗi
+          let parsedValue = value;
+          if (typeof value === 'string') {
+              const trimmed = value.trim();
+              if (trimmed === 'true') {
+                  parsedValue = true;
+              }
+              else if (trimmed === 'false') {
+                  parsedValue = false;
+              }
+              else if (trimmed !== '' && !isNaN(Number(trimmed)) && !trimmed.startsWith('0x')) {
+                  parsedValue = Number(trimmed);
+              }
+              else if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+                  (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                  try {
+                      parsedValue = JSON.parse(trimmed);
+                  }
+                  catch {
+                      parsedValue = value;
+                  }
+              }
+          }
+          const setDeep = (obj, parts, val) => {
+              let curr = obj;
+              for (let i = 0; i < parts.length - 1; i++) {
+                  const p = parts[i];
+                  if (!curr[p] || typeof curr[p] !== 'object') {
+                      curr[p] = {};
+                  }
+                  curr = curr[p];
+              }
+              const lastKey = parts[parts.length - 1];
+              const existing = curr[lastKey];
+              if (Array.isArray(existing) &&
+                  existing.length === 2 &&
+                  typeof existing[1] === 'string' &&
+                  (existing[0] === null || ['string', 'number', 'boolean'].includes(typeof existing[0]))) {
+                  existing[0] = val;
+              }
+              else {
+                  curr[lastKey] = val;
+              }
+          };
+          let updated = false;
+          // Phương thức 1: Mvu.replaceMvuData
+          if (mvu && typeof mvu.replaceMvuData === 'function' && targetMessageId !== undefined) {
+              try {
+                  const floor = await this.readFloor(targetMessageId);
+                  if (floor && floor.wrapper) {
+                      const clone = typeof structuredClone === 'function'
+                          ? structuredClone(floor.wrapper)
+                          : JSON.parse(JSON.stringify(floor.wrapper));
+                      if (clone.stat_data && typeof clone.stat_data === 'object') {
+                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      }
+                      else {
+                          setDeep(clone, cleanParts, parsedValue);
+                      }
+                      await mvu.replaceMvuData(clone, { type: 'message', message_id: targetMessageId });
+                      updated = true;
+                  }
+              }
+              catch (e) {
+                  console.warn('[MvuManager] replaceMvuData failed, falling back to TavernHelper:', e);
+              }
+          }
+          // Phương thức 2: TavernHelper.updateVariablesWith
+          if (!updated && th && typeof th.updateVariablesWith === 'function' && targetMessageId !== undefined) {
+              try {
+                  await th.updateVariablesWith((existing) => {
+                      const clone = typeof structuredClone === 'function'
+                          ? structuredClone(existing || {})
+                          : JSON.parse(JSON.stringify(existing || {}));
+                      if (clone.stat_data && typeof clone.stat_data === 'object') {
+                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      }
+                      else {
+                          setDeep(clone, cleanParts, parsedValue);
+                      }
+                      return clone;
+                  }, { type: 'message', message_id: targetMessageId });
+                  updated = true;
+              }
+              catch (e) {
+                  console.warn('[MvuManager] updateVariablesWith failed, falling back to setVariable:', e);
+              }
+          }
+          // Phương thức 3: TavernHelper.setVariable / updateVariable
+          if (!updated && th && typeof th.setVariable === 'function') {
+              const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
+              const opts = { type: 'message', message_id: targetMessageId };
+              await th.setVariable(fullPath, parsedValue, opts);
+              updated = true;
+          }
+          else if (!updated && th && typeof th.updateVariable === 'function') {
+              const fullPath = path.startsWith('stat_data.') ? path : `stat_data.${cleanPath}`;
+              const opts = { type: 'message', message_id: targetMessageId };
+              await th.updateVariable(fullPath, parsedValue, opts);
+              updated = true;
+          }
+          if (!updated) {
+              throw new Error('Không thể cập nhật biến qua bất kỳ API MVU nào.');
+          }
+          // Làm mới cache sau khi cập nhật
+          const refreshed = await this.readFloor(targetMessageId);
+          if (refreshed) {
+              this.cachedStatData = refreshed.statData;
+              this.cachedWrapper = refreshed.wrapper;
+          }
+          const newValue = this.getLiveVariables(cleanPath, targetMessageId);
+          return { success: true, oldValue, newValue };
+      }
+      /**
+       * Nhận diện entry Format dựa trên cấu trúc giao thức đầu ra (XML tags / JSONPatch template / rule protocol list).
+       * Hoàn toàn độc lập với ngôn ngữ hay cách đặt tên comment của tác giả thẻ.
+       */
+      static isFormatEntryContent(content, comment = '') {
+          if (!content)
+              return false;
+          const lower = content.toLowerCase();
+          const lowerComment = comment.toLowerCase();
+          if (this.isControllerEntryContent(content, comment))
+              return false;
+          if (lowerComment.includes('định dạng') || lowerComment.includes('format')) {
+              return true;
+          }
+          // 1. Chứa closing tags hoặc block giao thức MVU Output đặc thù
+          const hasOutputProtocolTags = lower.includes('</update_variable_rules>') ||
+              lower.includes('</updatevariable>') ||
+              lower.includes('</jsonpatch>') ||
+              lower.includes('<update_variable_rules>') ||
+              (lower.includes('<updatevariable>') && lower.includes('<analysis>')) ||
+              (lower.includes('<updatevariable>') && lower.includes('<jsonpatch>'));
+          // 2. Chứa mảng JSON Patch template: [ { "op": ... } ]
+          const hasJsonPatchTemplate = /\[\s*\{\s*["']op["']\s*:/i.test(content) ||
+              (lower.includes('"op":') && lower.includes('"path":') && (lower.includes('replace') || lower.includes('delta')));
+          // 3. Phân tích cấu trúc YAML: Format entry thường có dạng { [root]: { rule: [...] } }
+          let hasRuleProtocolList = false;
+          try {
+              const parsed = YAML.parse(content);
+              if (parsed && typeof parsed === 'object') {
+                  const firstVal = Object.values(parsed)[0];
+                  if (firstVal && typeof firstVal === 'object') {
+                      if (Array.isArray(firstVal.rule) || Array.isArray(firstVal.rules)) {
+                          hasRuleProtocolList = true;
+                      }
+                  }
+              }
+          }
+          catch { }
+          // Format entry KHÔNG bao giờ chứa các block 'check:' định nghĩa điều kiện cho từng biến
+          const hasVariableCheckBlocks = /^\s{2,}(?:check|\bcheck\b)\s*:\s*(?:$|\n|\s*\[)/m.test(content);
+          if (hasRuleProtocolList && !hasVariableCheckBlocks)
+              return true;
+          if (hasOutputProtocolTags && !hasVariableCheckBlocks)
+              return true;
+          if (hasJsonPatchTemplate && !hasVariableCheckBlocks)
+              return true;
+          // Trường hợp all-in-one như Shirley có format block riêng
+          if (lower.includes('format:') && lower.includes('<updatevariable>'))
+              return true;
+          return false;
+      }
+      /**
+       * Nhận diện entry Rules dựa trên cấu trúc quy tắc cập nhật biến (check blocks / YAML variable mapping).
+       */
+      static isRulesEntryContent(content, comment = '') {
+          if (!content)
+              return false;
+          const lower = content.toLowerCase();
+          const lowerComment = comment.toLowerCase();
+          if (this.isControllerEntryContent(content, comment))
+              return false;
+          if (lowerComment.includes('quy tắc cập nhật') ||
+              lowerComment.includes('quy_tắc_cập_nhật') ||
+              lowerComment.includes('update_rule') ||
+              lowerComment.includes('update rules')) {
+              return true;
+          }
+          // 1. Đặc trưng cốt lõi: Khối YAML 'check:' thụt lề định nghĩa điều kiện cập nhật từng biến
+          const hasVariableCheckBlocks = /^\s{2,}(?:check|\bcheck\b)\s*:\s*(?:$|\n|\s*\[)/m.test(content);
+          if (hasVariableCheckBlocks)
+              return true;
+          // 2. Phân tích AST của YAML: Tìm cấu trúc Root -> Path -> Object có 'check' hoặc 'type' + 'range'
+          try {
+              const parsed = YAML.parse(content);
+              if (parsed && typeof parsed === 'object') {
+                  const values = Object.values(parsed);
+                  for (const val of values) {
+                      if (val && typeof val === 'object') {
+                          const subEntries = Object.values(val);
+                          const matchingSub = subEntries.filter((s) => s &&
+                              typeof s === 'object' &&
+                              ('check' in s || ('type' in s && 'range' in s)));
+                          if (matchingSub.length > 0)
+                              return true;
+                      }
+                  }
+              }
+          }
+          catch { }
+          // 3. Fallback: Định dạng Markdown rule liệt kê điều kiện cập nhật biến (như Shirley, Quỷ Bí, Tiên Kiếm)
+          if (lower.includes('【cập nhật biến】') ||
+              lower.includes('quy tắc cập nhật') ||
+              lower.includes('tsundere_rules') ||
+              (lower.includes('mỗi lượt') && lower.includes('biến') && (lower.includes('tối đa') || lower.includes('thay đổi') || lower.includes('tăng') || lower.includes('giảm')))) {
+              return true;
+          }
+          return false;
+      }
+      /**
+       * Nhận diện entry Status / Variable List dựa trên macro hiển thị biến hoặc thẻ trạng thái
+       */
+      static isVarListEntryContent(content, comment = '') {
+          if (!content)
+              return false;
+          const lower = content.toLowerCase();
+          const lowerComment = comment.toLowerCase();
+          if (lowerComment.includes('danh sách biến') || lowerComment.includes('variable list') || lowerComment.includes('status list')) {
+              return true;
+          }
+          return (content.includes('{{format_message_variable::') ||
+              lower.includes('<status_current_variable>') ||
+              lower.includes('<status_current_variables>') ||
+              lower.includes('<biến_trạng_thái') ||
+              lower.includes('<current_variables>') ||
+              (lower.includes("getvar('stat_data')") && (lower.includes('yaml(') || lower.includes('json.stringify'))));
+      }
+      /**
+       * Nhận diện entry Controller / Preprocessing dựa trên @@preprocessing hoặc EJS code
+       */
+      static isControllerEntryContent(content, comment = '') {
+          if (!content)
+              return false;
+          const lower = content.toLowerCase();
+          const lowerComment = comment.toLowerCase();
+          // Không bao giờ nhận vơ nếu comment chỉ rõ là danh sách biến, quy tắc hoặc định dạng
+          if (lowerComment.includes('danh sách biến') ||
+              lowerComment.includes('quy tắc') ||
+              lowerComment.includes('định dạng') ||
+              lowerComment.includes('format') ||
+              lowerComment.includes('update_rule') ||
+              lowerComment.includes('initvar')) {
+              return false;
+          }
+          // 1. Chỉ dẫn @@preprocessing đặc thù của SillyTavern / TavernHelper
+          if (content.includes('@@preprocessing'))
+              return true;
+          // 2. Chứa EJS điều khiển phân giai đoạn (phase / stage / controller)
+          const isPhaseController = lowerComment.includes('bộ điều khiển') ||
+              lowerComment.includes('giai đoạn') ||
+              lowerComment.includes('controller') ||
+              lower.includes('phân giai đoạn') ||
+              lower.includes('thời kỳ');
+          if (content.includes('<%') && (content.includes('getvar(') || content.includes('setvar(')) && isPhaseController) {
+              return true;
+          }
+          return false;
+      }
+      /**
+       * Phân loại một tập hợp các Lorebook Entry thành cấu trúc MVU dựa trên đặc trưng cấu trúc nội dung (Content DNA).
+       * Hoàn toàn độc lập với thứ tự, ngôn ngữ và tên gọi.
+       */
+      static classifyLorebookEntries(entries) {
+          const result = {};
+          if (!Array.isArray(entries) || entries.length === 0)
+              return result;
+          // Pass 1: Tìm InitVar chuẩn theo MVU Core specification (bắt buộc theo bundle.js @365298)
+          for (const entry of entries) {
+              const comment = (entry?.comment || entry?.name || '').toLowerCase();
+              const content = entry?.content || '';
+              if (comment.includes('[initvar]') ||
+                  comment.includes('initvar') ||
+                  /<initvar>[\s\S]*<\/initvar>/i.test(content)) {
+                  result.initvarEntry = entry;
+                  break;
+              }
+          }
+          // Pass 1.5: Ưu tiên nhận diện các entry có tên gọi chỉ định rõ ràng
+          for (const entry of entries) {
+              if (entry === result.initvarEntry)
+                  continue;
+              const comment = (entry?.comment || entry?.name || '').toLowerCase();
+              if (!result.updateRulesEntry && (comment.includes('quy tắc cập nhật') || comment.includes('quy_tắc_cập_nhật') || comment.includes('update_rule') || comment.includes('update rules'))) {
+                  result.updateRulesEntry = entry;
+              }
+              if (!result.formatEntry && (comment.includes('định dạng') || comment.includes('format'))) {
+                  result.formatEntry = entry;
+              }
+              if (!result.varListEntry && (comment.includes('danh sách biến') || comment.includes('variable list') || comment.includes('status list'))) {
+                  result.varListEntry = entry;
+              }
+          }
+          // Pass 2: Phân loại các entry còn lại theo đặc trưng cấu trúc nội dung
+          for (const entry of entries) {
+              if (entry === result.initvarEntry)
+                  continue;
+              const content = entry?.content || '';
+              const comment = entry?.comment || entry?.name || '';
+              if (!result.ejsControllerEntry && this.isControllerEntryContent(content, comment)) {
+                  result.ejsControllerEntry = entry;
+                  continue;
+              }
+              if (!result.varListEntry && this.isVarListEntryContent(content, comment)) {
+                  result.varListEntry = entry;
+                  const isAllInOne = content.includes('【Cập Nhật Biến】') || (content.includes('format:') && content.includes('<UpdateVariable>'));
+                  if (!isAllInOne)
+                      continue;
+              }
+              if (!result.formatEntry && this.isFormatEntryContent(content, comment)) {
+                  result.formatEntry = entry;
+                  const isAllInOne = content.includes('【Cập Nhật Biến】') || content.includes('tsundere_rules');
+                  if (!isAllInOne)
+                      continue;
+              }
+              if (!result.updateRulesEntry && this.isRulesEntryContent(content, comment)) {
+                  result.updateRulesEntry = entry;
+                  continue;
+              }
+          }
+          // Pass 3: Fallback nếu còn thiếu format hoặc rules do gom chung entry (All-in-one pattern như Shirley)
+          if (!result.formatEntry && result.updateRulesEntry) {
+              const content = result.updateRulesEntry?.content || '';
+              if (this.isFormatEntryContent(content)) {
+                  result.formatEntry = result.updateRulesEntry;
+              }
+          }
+          if (!result.updateRulesEntry && result.formatEntry) {
+              const content = result.formatEntry?.content || '';
+              if (this.isRulesEntryContent(content)) {
+                  result.updateRulesEntry = result.formatEntry;
+              }
+          }
+          if (!result.updateRulesEntry && result.varListEntry) {
+              const content = result.varListEntry?.content || '';
+              if (this.isRulesEntryContent(content)) {
+                  result.updateRulesEntry = result.varListEntry;
+              }
+          }
+          return result;
+      }
+      /**
+       * Tìm các entry Worldbook liên quan đến MVU
+       */
+      static async getLorebookMvuEntries(adapter, char) {
+          // 1. Phân loại trong embedded character_book
+          const embeddedEntries = char?.data?.character_book?.entries || [];
+          for (const e of embeddedEntries) {
+              if (e && typeof e === 'object' && !e._mvuLocation) {
+                  e._mvuLocation = 'Character Book (Sổ tay nhúng)';
+              }
+          }
+          const result = this.classifyLorebookEntries(embeddedEntries);
+          // 2. Nếu nhân vật có linked Worldbook (Sổ tay liên kết ngoài), bổ sung các mục còn thiếu
+          const linkedWorld = char?.data?.extensions?.world || char?.world;
+          if (linkedWorld && (!result.initvarEntry || !result.updateRulesEntry || !result.formatEntry)) {
+              try {
+                  const ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+                  if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function') {
+                      const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
+                      const entries = worldData?.entries
+                          ? Array.isArray(worldData.entries)
+                              ? worldData.entries
+                              : Object.values(worldData.entries)
+                          : [];
+                      for (const e of entries) {
+                          if (e && typeof e === 'object' && !e._mvuLocation) {
+                              e._mvuLocation = `Sổ tay liên kết ngoài (${linkedWorld})`;
+                          }
+                      }
+                      const linkedResult = this.classifyLorebookEntries(entries);
+                      if (!result.initvarEntry && linkedResult.initvarEntry)
+                          result.initvarEntry = linkedResult.initvarEntry;
+                      if (!result.updateRulesEntry && linkedResult.updateRulesEntry)
+                          result.updateRulesEntry = linkedResult.updateRulesEntry;
+                      if (!result.formatEntry && linkedResult.formatEntry)
+                          result.formatEntry = linkedResult.formatEntry;
+                      if (!result.varListEntry && linkedResult.varListEntry)
+                          result.varListEntry = linkedResult.varListEntry;
+                      if (!result.ejsControllerEntry && linkedResult.ejsControllerEntry)
+                          result.ejsControllerEntry = linkedResult.ejsControllerEntry;
+                  }
+              }
+              catch (e) {
+                  // Ignore
+              }
+          }
+          // 3. Nếu vẫn chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
+          if (!result.initvarEntry || !result.updateRulesEntry) {
+              try {
+                  const worldInfo = window.world_info;
+                  const entries = Array.isArray(worldInfo?.entries)
+                      ? worldInfo.entries
+                      : worldInfo?.entries && typeof worldInfo.entries === 'object'
+                          ? Object.values(worldInfo.entries)
+                          : [];
+                  for (const e of entries) {
+                      if (e && typeof e === 'object' && !e._mvuLocation) {
+                          e._mvuLocation = 'Sổ tay chung SillyTavern (Global)';
+                      }
+                  }
+                  const globalResult = this.classifyLorebookEntries(entries);
+                  if (!result.initvarEntry && globalResult.initvarEntry)
+                      result.initvarEntry = globalResult.initvarEntry;
+                  if (!result.updateRulesEntry && globalResult.updateRulesEntry)
+                      result.updateRulesEntry = globalResult.updateRulesEntry;
+                  if (!result.formatEntry && globalResult.formatEntry)
+                      result.formatEntry = globalResult.formatEntry;
+                  if (!result.varListEntry && globalResult.varListEntry)
+                      result.varListEntry = globalResult.varListEntry;
+                  if (!result.ejsControllerEntry && globalResult.ejsControllerEntry)
+                      result.ejsControllerEntry = globalResult.ejsControllerEntry;
+              }
+              catch {
+                  // Ignore lorebook search errors
+              }
+          }
+          return result;
+      }
+      /**
+       * Tạo bảng báo cáo kiểm tra chi tiết hoạt động của các tiêu chí Lorebook MVU.
+       * Chỉ kiểm tra Lorebook: Khởi tạo biến, Quy tắc cập nhật, Định dạng đầu ra, Danh sách biến, Bộ điều khiển EJS.
+       */
+      static generateLorebookActivityReport(lorebookMvu) {
+          const items = [];
+          // 1. Khởi tạo biến (InitVar)
+          const initvar = lorebookMvu.initvarEntry;
+          if (initvar) {
+              const entryName = initvar.comment || initvar.name || '[InitVar]';
+              const location = initvar._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isDisabled = initvar.enabled === false || initvar.disable === true;
+              if (isDisabled) {
+                  items.push({
+                      id: 'initvar',
+                      name: 'Khởi tạo biến ban đầu (InitVar)',
+                      description: 'Thiết lập cây dữ liệu ban đầu. Bắt buộc VÔ HIỆU HÓA để không tốn token prompt.',
+                      entryName,
+                      entryId: initvar.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đã tắt đúng chuẩn)',
+                      details: 'Đã tìm thấy entry khởi tạo biến và đã được vô hiệu hóa đúng chuẩn MVU để tiết kiệm 100% token.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'initvar',
+                      name: 'Khởi tạo biến ban đầu (InitVar)',
+                      description: 'Thiết lập cây dữ liệu ban đầu. Bắt buộc VÔ HIỆU HÓA để không tốn token prompt.',
+                      entryName,
+                      entryId: initvar.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'warning',
+                      statusText: 'Cảnh báo: Đang bật',
+                      details: 'Đã tìm thấy entry nhưng đang BẬT. Nên TẮT (disable) mục này trong Worldbook để tránh tốn prompt token thừa.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'initvar',
+                  name: 'Khởi tạo biến ban đầu (InitVar)',
+                  description: 'Thiết lập cây dữ liệu ban đầu. Bắt buộc VÔ HIỆU HÓA để không tốn token prompt.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry [InitVar] trong Lorebook. Nhân vật sẽ không có điểm bắt đầu cho cây biến số.',
+              });
+          }
+          // 2. Quy tắc cập nhật biến (Update Rules)
+          const rules = lorebookMvu.updateRulesEntry;
+          if (rules) {
+              const entryName = rules.comment || rules.name || '[mvu_update] Quy tắc cập nhật';
+              const location = rules._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isEnabled = rules.enabled !== false && !rules.disable;
+              if (isEnabled) {
+                  items.push({
+                      id: 'rules',
+                      name: 'Quy tắc cập nhật biến (Update Rules)',
+                      description: 'Cung cấp các điều kiện check: hướng dẫn AI khi nào thay đổi biến trong ngữ cảnh.',
+                      entryName,
+                      entryId: rules.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đang Bật)',
+                      details: 'Entry quy tắc đang BẬT (enabled). AI sẽ đọc được đầy đủ các điều kiện cập nhật biến.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'rules',
+                      name: 'Quy tắc cập nhật biến (Update Rules)',
+                      description: 'Cung cấp các điều kiện check: hướng dẫn AI khi nào thay đổi biến trong ngữ cảnh.',
+                      entryName,
+                      entryId: rules.id,
+                      location,
+                      isRequired: true,
+                      isActive: false,
+                      status: 'inactive',
+                      statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
+                      details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhận được quy tắc cập nhật biến.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'rules',
+                  name: 'Quy tắc cập nhật biến (Update Rules)',
+                  description: 'Cung cấp các điều kiện check: hướng dẫn AI khi nào thay đổi biến trong ngữ cảnh.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry quy tắc cập nhật trong Lorebook. AI sẽ không biết khi nào cần thay đổi biến.',
+              });
+          }
+          // 3. Định dạng đầu ra (Output Format)
+          const format = lorebookMvu.formatEntry;
+          if (format) {
+              const entryName = format.comment || format.name || '[mvu_update] Định dạng xuất';
+              const location = format._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isEnabled = format.enabled !== false && !format.disable;
+              if (isEnabled) {
+                  items.push({
+                      id: 'format',
+                      name: 'Định dạng đầu ra (Output Format)',
+                      description: 'Chỉ dẫn AI xuất đúng định dạng JSON Patch / thẻ <UpdateVariable> ở cuối tin nhắn.',
+                      entryName,
+                      entryId: format.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đang Bật)',
+                      details: 'Entry định dạng xuất đang BẬT. AI sẽ được chỉ dẫn xuất đúng khối lệnh cập nhật biến.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'format',
+                      name: 'Định dạng đầu ra (Output Format)',
+                      description: 'Chỉ dẫn AI xuất đúng định dạng JSON Patch / thẻ <UpdateVariable> ở cuối tin nhắn.',
+                      entryName,
+                      entryId: format.id,
+                      location,
+                      isRequired: true,
+                      isActive: false,
+                      status: 'inactive',
+                      statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
+                      details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI có thể không xuất lệnh cập nhật biến.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'format',
+                  name: 'Định dạng đầu ra (Output Format)',
+                  description: 'Chỉ dẫn AI xuất đúng định dạng JSON Patch / thẻ <UpdateVariable> ở cuối tin nhắn.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry định dạng xuất trong Lorebook. AI có thể chỉ trả lời văn xuôi mà không cập nhật biến.',
+              });
+          }
+          // 4. Danh sách biến hiện tại (Variable List)
+          const varList = lorebookMvu.varListEntry;
+          if (varList) {
+              const entryName = varList.comment || varList.name || 'Danh sách biến';
+              const location = varList._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isEnabled = varList.enabled !== false && !varList.disable;
+              if (isEnabled) {
+                  items.push({
+                      id: 'varlist',
+                      name: 'Danh sách biến hiện tại (Variable List)',
+                      description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                      entryName,
+                      entryId: varList.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đang Bật)',
+                      details: 'Entry danh sách biến đang BẬT. AI luôn nắm bắt được trạng thái biến mới nhất trước khi phản hồi.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'varlist',
+                      name: 'Danh sách biến hiện tại (Variable List)',
+                      description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                      entryName,
+                      entryId: varList.id,
+                      location,
+                      isRequired: true,
+                      isActive: false,
+                      status: 'inactive',
+                      statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
+                      details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhìn thấy giá trị biến hiện tại.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'varlist',
+                  name: 'Danh sách biến hiện tại (Variable List)',
+                  description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry danh sách biến chứa macro stat_data trong Lorebook. AI sẽ bị mù dữ liệu biến.',
+              });
+          }
+          // 5. Bộ điều khiển EJS / Preprocessing (Tùy chọn)
+          const ejs = lorebookMvu.ejsControllerEntry;
+          if (ejs) {
+              const entryName = ejs.comment || ejs.name || 'Bộ điều khiển EJS';
+              const location = ejs._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              items.push({
+                  id: 'controller',
+                  name: 'Bộ điều khiển động EJS / Preprocessing (Tùy chọn)',
+                  description: 'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
+                  entryName,
+                  entryId: ejs.id,
+                  location,
+                  isRequired: false,
+                  isActive: true,
+                  status: 'active',
+                  statusText: 'Đã kích hoạt',
+                  details: 'Đã phát hiện bộ điều khiển EJS trong Lorebook, hỗ trợ render bối cảnh và tính cách nhân vật động.',
+              });
+          }
+          else {
+              items.push({
+                  id: 'controller',
+                  name: 'Bộ điều khiển động EJS / Preprocessing (Tùy chọn)',
+                  description: 'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
+                  entryName: 'Không sử dụng',
+                  location: '—',
+                  isRequired: false,
+                  isActive: true,
+                  status: 'optional_none',
+                  statusText: 'Tùy chọn (Không bắt buộc)',
+                  details: 'Thẻ hoạt động theo Zod Schema tiêu chuẩn, không sử dụng template EJS mở rộng.',
+              });
+          }
+          const requiredItems = items.filter((i) => i.isRequired);
+          const inactiveCount = requiredItems.filter((i) => !i.isActive).length;
+          const warningCount = requiredItems.filter((i) => i.status === 'warning').length;
+          const activeCount = requiredItems.filter((i) => i.isActive && i.status !== 'warning').length;
+          return {
+              totalCriteria: items.length,
+              activeCount: activeCount + warningCount,
+              inactiveCount,
+              warningCount,
+              allRequiredActive: inactiveCount === 0,
+              items,
+          };
+      }
+      /**
+       * Bóc tách cây Schema từ code Zod JavaScript (hỗ trợ nested z.object đệ quy)
+       */
+      /**
+       * Tách đối số của một lời gọi hàm (ví dụ: So(100, 0, 100) -> ['100', '0', '100'])
+       */
+      static parseCallArgs(argsStr) {
+          if (!argsStr)
+              return [];
+          const args = [];
+          let i = 0;
+          const len = argsStr.length;
+          let start = 0;
+          let parenDepth = 0;
+          let inStr = null;
+          while (i < len) {
+              const ch = argsStr[i];
+              const prev = i > 0 ? argsStr[i - 1] : '';
+              if (inStr) {
+                  if (ch === inStr && prev !== '\\')
+                      inStr = null;
+              }
+              else if (ch === '"' || ch === "'" || ch === '`') {
+                  inStr = ch;
+              }
+              else if (ch === '(') {
+                  parenDepth++;
+              }
+              else if (ch === ')') {
+                  parenDepth--;
+              }
+              else if (ch === ',' && parenDepth === 0) {
+                  args.push(argsStr.substring(start, i).trim());
+                  start = i + 1;
+              }
+              i++;
+          }
+          if (start < len) {
+              args.push(argsStr.substring(start).trim());
+          }
+          return args;
+      }
+      /**
+       * Bóc tách cây Schema từ code Zod JavaScript (hỗ trợ nested z.object đệ quy, helpers và sub-schemas)
+       */
+      static parseZodCode(code) {
+          if (!code)
+              return [];
+          // 1. Tự động phát hiện mọi hàm helper tạo kiểu Schema Zod trong code
+          const helpers = {};
+          const helperRegex = /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:\([^)]*\)|[A-Za-z0-9_$]+)?\s*=>([\s\S]*?)(?=(?:const|let|var|function|\/\*|export|\n\s*\n[a-zA-Z_$]|$))|function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{([\s\S]*?)\}/g;
+          let hMatch;
+          while ((hMatch = helperRegex.exec(code)) !== null) {
+              const hName = hMatch[1] || hMatch[3];
+              const hBody = hMatch[2] || hMatch[4] || '';
+              if (hBody.includes('z.record')) {
+                  helpers[hName] = { type: 'record' };
+              }
+              else if (hBody.includes('z.object')) {
+                  helpers[hName] = { type: 'object' };
+              }
+              else if (hBody.includes('z.array')) {
+                  helpers[hName] = { type: 'array' };
+              }
+              else if (hBody.includes('z.coerce.number') || hBody.includes('z.number')) {
+                  helpers[hName] = { type: 'number' };
+              }
+              else if (hBody.includes('z.boolean')) {
+                  helpers[hName] = { type: 'boolean' };
+              }
+              else if (hBody.includes('z.string')) {
+                  helpers[hName] = { type: 'string' };
+              }
+          }
+          // 2. Quét các Zod Object con độc lập khai báo trước Schema (TaiSan, NPC, DiChung, VatPham...)
+          const knownSubSchemas = {};
+          const subSchemaRegex = /const\s+([A-Za-z0-9_]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
+          let sMatch;
+          while ((sMatch = subSchemaRegex.exec(code)) !== null) {
+              const sName = sMatch[1];
+              if (sName.toLowerCase() === 'schema')
+                  continue;
+              const braceIdx = sMatch.index + sMatch[0].length - 1;
+              const inner = this.extractMatchingBraceContent(code, braceIdx);
+              if (inner) {
+                  knownSubSchemas[sName] = this.parseZodObjectContent(inner, '', knownSubSchemas, helpers);
+              }
+          }
+          // 3. Tìm Schema chính
+          const match = code.match(/(?:export\s+)?const\s+Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+              code.match(/Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+              code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
+          if (!match || match.index === undefined)
+              return [];
+          const startIdx = match.index + match[0].length - 1; // vị trí ký tự '{'
+          const innerContent = this.extractMatchingBraceContent(code, startIdx);
+          if (!innerContent)
+              return [];
+          return this.parseZodObjectContent(innerContent, '', knownSubSchemas, helpers);
+      }
+      /**
+       * Trích xuất nội dung bên trong cặp ngoặc nhọn { ... } tương ứng
+       */
+      static extractMatchingBraceContent(str, openBraceIdx) {
+          let depth = 0;
+          let start = -1;
+          let inString = null;
+          for (let i = openBraceIdx; i < str.length; i++) {
+              const ch = str[i];
+              const prev = i > 0 ? str[i - 1] : '';
+              if (inString) {
+                  if (ch === inString && prev !== '\\') {
+                      inString = null;
+                  }
+                  continue;
+              }
+              if (ch === '"' || ch === "'" || ch === '`') {
+                  inString = ch;
+                  continue;
+              }
+              if (ch === '{') {
+                  if (depth === 0)
+                      start = i + 1;
+                  depth++;
+              }
+              else if (ch === '}') {
+                  depth--;
+                  if (depth === 0) {
+                      return str.substring(start, i);
+                  }
+              }
+          }
+          return null;
+      }
+      /**
+       * Parse nội dung bên trong z.object({ ... }) thành danh sách descriptor
+       */
+      static parseZodObjectContent(content, parentPath, knownSubSchemas = {}, helpers = {}) {
+          const descriptors = [];
+          let i = 0;
+          const len = content.length;
+          while (i < len) {
+              // Bỏ qua khoảng trắng và comment
+              while (i < len && /\s/.test(content[i]))
+                  i++;
+              if (i >= len)
+                  break;
+              if (content.startsWith('//', i)) {
+                  const nextNl = content.indexOf('\n', i);
+                  i = nextNl === -1 ? len : nextNl + 1;
+                  continue;
+              }
+              if (content.startsWith('/*', i)) {
+                  const nextClose = content.indexOf('*/', i);
+                  i = nextClose === -1 ? len : nextClose + 2;
+                  continue;
+              }
+              // Đọc key
+              let key;
+              if (content[i] === "'" || content[i] === '"') {
+                  const quote = content[i++];
+                  const keyStart = i;
+                  while (i < len && content[i] !== quote) {
+                      if (content[i] === '\\')
+                          i++;
+                      i++;
+                  }
+                  key = content.substring(keyStart, i);
+                  if (i < len && content[i] === quote)
+                      i++;
+              }
+              else {
+                  const keyStart = i;
+                  while (i < len && /[a-zA-Z0-9_$\u00C0-\u024F\u1EA0-\u1EF9\u4E00-\u9FFF]/.test(content[i])) {
+                      i++;
+                  }
+                  key = content.substring(keyStart, i);
+              }
+              if (!key) {
+                  i++;
+                  continue;
+              }
+              // Tìm dấu ':' ngay sau key (không nhảy qua dòng mới hoặc nuốt ký tự không hợp lệ)
+              let foundColon = false;
+              while (i < len) {
+                  const ch = content[i];
+                  if (ch === ':') {
+                      foundColon = true;
+                      i++;
+                      break;
+                  }
+                  if (ch === '\n' || ch === ',' || ch === '}' || ch === ';') {
+                      break;
+                  }
+                  if (!/\s/.test(ch)) {
+                      break;
+                  }
+                  i++;
+              }
+              if (!foundColon) {
+                  continue;
+              }
+              // Bỏ qua khoảng trắng
+              while (i < len && /\s/.test(content[i]))
+                  i++;
+              if (i >= len)
+                  break;
+              // Đọc biểu thức giá trị
+              const exprStart = i;
+              let parenDepth = 0;
+              let braceDepth = 0;
+              let bracketDepth = 0;
+              let inStr = null;
+              while (i < len) {
+                  const c = content[i];
+                  const prev = i > 0 ? content[i - 1] : '';
+                  if (inStr) {
+                      if (c === inStr && prev !== '\\')
+                          inStr = null;
+                  }
+                  else if (c === '"' || c === "'" || c === '`') {
+                      inStr = c;
+                  }
+                  else if (c === '(') {
+                      parenDepth++;
+                  }
+                  else if (c === ')') {
+                      if (parenDepth > 0)
+                          parenDepth--;
+                  }
+                  else if (c === '{') {
+                      braceDepth++;
+                  }
+                  else if (c === '}') {
+                      if (braceDepth === 0)
+                          break;
+                      braceDepth--;
+                  }
+                  else if (c === '[') {
+                      bracketDepth++;
+                  }
+                  else if (c === ']') {
+                      if (bracketDepth > 0)
+                          bracketDepth--;
+                  }
+                  else if (c === ',' && parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
+                      break;
+                  }
+                  i++;
+              }
+              const expr = content.substring(exprStart, i).trim();
+              if (i < len && content[i] === ',')
+                  i++;
+              const currentPath = parentPath ? `${parentPath}.${key}` : key;
+              // Phân tích biểu thức
+              let type = 'unknown';
+              let children;
+              let recordTemplate;
+              let min;
+              let max;
+              let defaultValue;
+              // 1. Kiểm tra outermost z.record hoặc z.object({ ... })
+              const isRecord = /^\s*z(?:\s*\.\s*)record\s*\(/.test(expr);
+              const isObject = /^\s*z(?:\s*\.\s*)object\s*\(/.test(expr);
+              if (isRecord) {
+                  type = 'record';
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                  if (objMatch && objMatch.index !== undefined) {
+                      const openIdx = expr.indexOf('{', objMatch.index);
+                      if (openIdx !== -1) {
+                          const inner = this.extractMatchingBraceContent(expr, openIdx);
+                          if (inner) {
+                              recordTemplate = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                          }
+                      }
+                  }
+              }
+              else if (isObject || /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr)) {
+                  type = 'object';
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                  if (objMatch && objMatch.index !== undefined) {
+                      const openIdx = expr.indexOf('{', objMatch.index);
+                      if (openIdx !== -1) {
+                          const inner = this.extractMatchingBraceContent(expr, openIdx);
+                          if (inner) {
+                              children = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                          }
+                      }
+                  }
+              }
+              // 2. Kiểm tra tham chiếu tới knownSubSchemas (ví dụ: `Tài_sản: TaiSan` hoặc `Bang(NPC)`)
+              if (type === 'unknown' ||
+                  (type === 'record' && !recordTemplate) ||
+                  (type === 'object' && (!children || children.length === 0))) {
+                  for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
+                      const wordRegex = new RegExp(`\\b${subName}\\b`);
+                      if (wordRegex.test(expr)) {
+                          const isRecordHelper = Object.entries(helpers).some(([hName, hInfo]) => hInfo.type === 'record' &&
+                              (expr.includes(`${hName}(${subName})`) ||
+                                  (expr.includes(hName) && expr.includes(subName))));
+                          if (isRecord || isRecordHelper || expr.includes(`z.record`)) {
+                              type = 'record';
+                              recordTemplate = subDescriptors;
+                              children = [];
+                          }
+                          else {
+                              type = 'object';
+                              children = subDescriptors.map((d) => ({
+                                  ...d,
+                                  path: `${currentPath}.${d.name}`,
+                                  children: d.children
+                                      ? d.children.map((c) => ({ ...c, path: `${currentPath}.${d.name}.${c.name}` }))
+                                      : undefined,
+                              }));
+                          }
+                          break;
+                      }
+                  }
+              }
+              // 3. Kiểm tra các hàm helper kiểu dữ liệu (So, Chuoi, Co, Bang...)
+              if (type === 'unknown') {
+                  for (const [hName, hInfo] of Object.entries(helpers)) {
+                      const callRegex = new RegExp(`^${hName}\\s*\\((.*)\\)`, 's');
+                      const callMatch = expr.match(callRegex);
+                      if (callMatch) {
+                          type = hInfo.type;
+                          const args = this.parseCallArgs(callMatch[1].trim());
+                          if (hInfo.type === 'number') {
+                              if (args.length > 0 && args[0] !== '' && !isNaN(Number(args[0]))) {
+                                  defaultValue = Number(args[0]);
+                              }
+                              if (args.length > 1 && !isNaN(Number(args[1])) && args[1] !== '-Infinity') {
+                                  min = Number(args[1]);
+                              }
+                              if (args.length > 2 && !isNaN(Number(args[2])) && args[2] !== 'Infinity') {
+                                  const m = Number(args[2]);
+                                  if (m <= 1e7)
+                                      max = m;
+                              }
+                          }
+                          else if (hInfo.type === 'string') {
+                              if (args.length > 0) {
+                                  defaultValue = args[0].replace(/^['"`]|['"`]$/g, '');
+                              }
+                          }
+                          else if (hInfo.type === 'boolean') {
+                              if (args.length > 0) {
+                                  defaultValue = args[0].trim() === 'true';
+                              }
+                          }
+                          else if (hInfo.type === 'record' || hInfo.type === 'object') {
+                              defaultValue = {};
+                              const innerArg = args[0] || '';
+                              for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
+                                  if (innerArg.includes(subName)) {
+                                      recordTemplate = subDescriptors;
+                                      break;
+                                  }
+                              }
+                          }
+                          else if (hInfo.type === 'array') {
+                              defaultValue = [];
+                          }
+                          break;
+                      }
+                  }
+              }
+              // 4. Kiểm tra các kiểu Zod cơ bản trực tiếp (thứ tự ưu tiên: record, array, coerce.number, boolean, string)
+              if (type === 'unknown') {
+                  if (/\bz(?:\s*\.\s*)record\b/.test(expr)) {
+                      type = 'record';
+                  }
+                  else if (/\bz(?:\s*\.\s*)array\b/.test(expr)) {
+                      type = 'array';
+                  }
+                  else if (/\bz(?:\s*\.\s*)(?:coerce\s*\.\s*)?number\b/.test(expr)) {
+                      type = 'number';
+                  }
+                  else if (/\bz(?:\s*\.\s*)boolean\b/.test(expr)) {
+                      type = 'boolean';
+                  }
+                  else if (/\bz(?:\s*\.\s*)string\b/.test(expr)) {
+                      type = 'string';
+                  }
+              }
+              // 5. Trích xuất min / max / clamp (chỉ áp dụng cho number)
+              if (type === 'number') {
+                  if (min === undefined || max === undefined) {
+                      const clampMatch = expr.match(/clamp\s*\([^,]+,\s*(-?\d+)\s*,\s*(-?\d+)\s*\)/i);
+                      if (clampMatch) {
+                          if (min === undefined)
+                              min = Number(clampMatch[1]);
+                          if (max === undefined)
+                              max = Number(clampMatch[2]);
+                      }
+                  }
+                  if (min === undefined) {
+                      const minMatch = expr.match(/\.min\s*\(\s*(-?\d+)\s*\)/);
+                      if (minMatch)
+                          min = Number(minMatch[1]);
+                  }
+                  if (max === undefined) {
+                      const maxMatch = expr.match(/\.max\s*\(\s*(-?\d+)\s*\)/);
+                      if (maxMatch)
+                          max = Number(maxMatch[1]);
+                  }
+              }
+              if (defaultValue === undefined) {
+                  const prefaultMatch = expr.match(/\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/);
+                  if (prefaultMatch) {
+                      try {
+                          defaultValue = JSON.parse(prefaultMatch[1].replace(/'/g, '"'));
+                      }
+                      catch {
+                          defaultValue = prefaultMatch[1];
+                      }
+                  }
+              }
+              descriptors.push({
+                  path: currentPath,
+                  name: key,
+                  type,
+                  min,
+                  max,
+                  defaultValue,
+                  children,
+                  recordTemplate,
+              });
+          }
+          return descriptors;
+      }
+      /**
+       * Bổ sung kiểu dữ liệu, giới hạn min/max và các instance động dựa trên dữ liệu Runtime thực tế
+       */
+      static enrichWithLiveData(descriptors, liveData) {
+          if (!liveData || typeof liveData !== 'object')
+              return;
+          for (const desc of descriptors) {
+              const parts = desc.path.split('.');
+              let curr = liveData;
+              for (const p of parts) {
+                  if (curr && typeof curr === 'object' && p in curr) {
+                      curr = curr[p];
+                  }
+                  else {
+                      curr = undefined;
+                      break;
+                  }
+              }
+              if (curr !== undefined) {
+                  const isTuple = Array.isArray(curr) &&
+                      curr.length === 2 &&
+                      typeof curr[1] === 'string' &&
+                      (curr[0] === null || ['string', 'number', 'boolean'].includes(typeof curr[0]));
+                  const realVal = isTuple ? curr[0] : curr;
+                  if (desc.type === 'unknown') {
+                      if (typeof realVal === 'number') {
+                          desc.type = 'number';
+                      }
+                      else if (typeof realVal === 'string') {
+                          desc.type = 'string';
+                      }
+                      else if (typeof realVal === 'boolean') {
+                          desc.type = 'boolean';
+                      }
+                      else if (Array.isArray(realVal)) {
+                          desc.type = 'array';
+                      }
+                      else if (typeof realVal === 'object' && realVal !== null) {
+                          desc.type = 'object';
+                      }
+                  }
+                  // Nếu là record có recordTemplate (bộ sưu tập thực thể như Quan_hệ, Nhiệm_vụ, Túi_đồ, Di_chứng):
+                  if (desc.type === 'record' &&
+                      typeof realVal === 'object' &&
+                      realVal !== null &&
+                      !Array.isArray(realVal)) {
+                      if (desc.recordTemplate && desc.recordTemplate.length > 0) {
+                          if (Object.keys(realVal).length > 0) {
+                              desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                                  const subPath = `${desc.path}.${subK}`;
+                                  const instanceChildren = desc.recordTemplate.map((t) => ({
+                                      ...t,
+                                      path: `${subPath}.${t.name}`,
+                                      children: t.children
+                                          ? t.children.map((c) => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
+                                          : undefined,
+                                  }));
+                                  this.enrichWithLiveData(instanceChildren, subV);
+                                  return {
+                                      name: subK,
+                                      path: subPath,
+                                      type: 'object',
+                                      defaultValue: subV,
+                                      children: instanceChildren,
+                                  };
+                              });
+                          }
+                          else {
+                              desc.children = [];
+                          }
+                      }
+                      else {
+                          // Record kiểu nguyên thủy (primitive record dictionary như Kỹ_năng, Manh_mối, Hồ_sơ_chi_tiết, Nghịch_lý):
+                          // Giữ desc đại diện cho toàn bộ dictionary để hiển thị key-value gọn gàng
+                          desc.defaultValue = realVal;
+                          desc.children = undefined;
+                      }
+                  }
+                  else if (desc.type === 'object' &&
+                      (!desc.children || desc.children.length === 0) &&
+                      typeof realVal === 'object' &&
+                      realVal !== null &&
+                      !Array.isArray(realVal)) {
+                      desc.children = Object.entries(realVal).map(([subK, subV]) => {
+                          const subPath = `${desc.path}.${subK}`;
+                          const subType = typeof subV === 'number'
+                              ? 'number'
+                              : typeof subV === 'boolean'
+                                  ? 'boolean'
+                                  : Array.isArray(subV)
+                                      ? 'array'
+                                      : typeof subV === 'object' && subV !== null
+                                          ? 'object'
+                                          : 'string';
+                          return {
+                              name: subK,
+                              path: subPath,
+                              type: subType,
+                              defaultValue: subV,
+                          };
+                      });
+                  }
+              }
+              if (desc.children && desc.children.length > 0) {
+                  this.enrichWithLiveData(desc.children, liveData);
+              }
+          }
+      }
+      /**
+       * Tự động sinh cấu trúc Schema từ dữ liệu Live Variables nếu không có Zod Script
+       */
+      static generateSchemaFromData(data, parentPath = '') {
+          if (!data || typeof data !== 'object')
+              return [];
+          const descriptors = [];
+          for (const [key, val] of Object.entries(data)) {
+              if (key.startsWith('$'))
+                  continue; // Bỏ qua $meta, $__, etc. (nội bộ MVU engine)
+              const currentPath = parentPath ? `${parentPath}.${key}` : key;
+              const isTuple = Array.isArray(val) &&
+                  val.length === 2 &&
+                  typeof val[1] === 'string' &&
+                  (val[0] === null || ['string', 'number', 'boolean'].includes(typeof val[0]));
+              if (isTuple) {
+                  const rawVal = val[0];
+                  const descText = val[1];
+                  const t = typeof rawVal === 'number' ? 'number' : typeof rawVal === 'boolean' ? 'boolean' : 'string';
+                  let min;
+                  let max;
+                  if (t === 'number') {
+                      const rangeMatch = descText.match(/(?:khoảng|trong|từ)?\s*\[\s*(-?\d+)\s*[,~-]\s*(-?\d+)\s*\]/i) ||
+                          descText.match(/(-?\d+)\s*[-~]\s*(-?\d+)/);
+                      if (rangeMatch) {
+                          min = Number(rangeMatch[1]);
+                          max = Number(rangeMatch[2]);
+                      }
+                  }
+                  descriptors.push({
+                      name: key,
+                      path: currentPath,
+                      type: t,
+                      defaultValue: rawVal,
+                      description: descText,
+                      min,
+                      max,
+                  });
+              }
+              else if (typeof val === 'number') {
+                  descriptors.push({ name: key, path: currentPath, type: 'number', defaultValue: val });
+              }
+              else if (typeof val === 'boolean') {
+                  descriptors.push({ name: key, path: currentPath, type: 'boolean', defaultValue: val });
+              }
+              else if (Array.isArray(val)) {
+                  descriptors.push({ name: key, path: currentPath, type: 'array', defaultValue: val });
+              }
+              else if (typeof val === 'object' && val !== null) {
+                  const children = this.generateSchemaFromData(val, currentPath);
+                  descriptors.push({ name: key, path: currentPath, type: 'object', children });
+              }
+              else {
+                  descriptors.push({ name: key, path: currentPath, type: 'string', defaultValue: String(val) });
+              }
+          }
+          return descriptors;
+      }
+      /**
+       * Báo cáo toàn diện hệ thống MVU của nhân vật hiện hành
+       */
+      static async inspectMvu(adapter, filterPath, targetFloorId) {
+          const liveChar = this.getActiveCharacter();
+          const charName = liveChar?.name || 'Unknown Character';
+          if (!liveChar) {
+              return {
+                  hasMvu: false,
+                  characterName: charName,
+                  parsedSchema: [],
+                  liveVariables: null,
+                  rawWrapper: null,
+                  currentFloor: null,
+                  availableFloors: [],
+                  dataSource: 'fallback',
+                  initvarVariables: null,
+                  updateRulesSummary: '',
+                  healthWarnings: ['Không tìm thấy nhân vật nào đang được chọn.'],
+              };
+          }
+          const isMvu = this.hasMvu(liveChar);
+          const zodScript = this.getZodScript(liveChar);
+          // 1. Quét danh sách floor hợp lệ trong chat
+          const floors = await this.listValidFloors();
+          let effectiveFloorId = targetFloorId;
+          if (effectiveFloorId === undefined && floors.length > 0) {
+              effectiveFloorId = floors[0].messageId;
+          }
+          // 2. Đọc dữ liệu floor mục tiêu
+          let floorData = await this.readFloor(effectiveFloorId);
+          if (!floorData && targetFloorId === undefined) {
+              floorData = await this.readFloor(undefined);
+          }
+          if (floorData) {
+              this.cachedStatData = floorData.statData;
+              this.cachedWrapper = floorData.wrapper;
+              this.cachedDataSource = floorData.source;
+              const matchedFloor = floors.find((f) => f.messageId === (floorData.messageId ?? effectiveFloorId));
+              this.cachedCurrentFloor =
+                  matchedFloor ||
+                      (effectiveFloorId !== undefined
+                          ? {
+                              messageId: effectiveFloorId,
+                              displayIndex: effectiveFloorId + 1,
+                              role: 'assistant',
+                              name: charName,
+                              preview: '',
+                              source: floorData.source,
+                          }
+                          : (floors.length > 0 ? floors[0] : null));
+          }
+          else {
+              this.cachedStatData = null;
+              this.cachedWrapper = null;
+              this.cachedCurrentFloor = null;
+              this.cachedDataSource = 'fallback';
+          }
+          this.cachedFloors = floors;
+          const liveVars = filterPath ? this.getLiveVariables(filterPath, effectiveFloorId) : this.cachedStatData;
+          const lorebookMvu = await this.getLorebookMvuEntries(adapter, liveChar);
+          let initvarParsed = null;
+          if (lorebookMvu.initvarEntry?.content) {
+              try {
+                  initvarParsed = YAML.parse(lorebookMvu.initvarEntry.content);
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Failed to parse YAML of initvar:', e);
+              }
+          }
+          const warnings = [];
+          const inconsistencies = [];
+          if (!isMvu) {
+              warnings.push('Nhân vật này chưa kích hoạt hệ thống MVU.');
+          }
+          else {
+              if (!zodScript) {
+                  warnings.push('Có dấu hiệu MVU nhưng không tìm thấy kịch bản Zod Schema trong tavern_helper.scripts.');
+              }
+              if (!lorebookMvu.initvarEntry) {
+                  warnings.push('Thiếu mục [InitVar] trong Worldbook để khởi tạo giá trị ban đầu.');
+              }
+              if (!lorebookMvu.updateRulesEntry) {
+                  warnings.push('Thiếu mục [mvu_update] trong Worldbook để hướng dẫn AI quy tắc cập nhật biến.');
+              }
+              if (!liveVars) {
+                  warnings.push('Chưa tìm thấy dữ liệu stat_data trong bộ nhớ (có thể cuộc hội thoại chưa bắt đầu hoặc chưa gửi tin nhắn).');
+              }
+          }
+          let parsedSchema = zodScript ? this.parseZodCode(zodScript.content) : [];
+          if (parsedSchema.length === 0 && initvarParsed) {
+              parsedSchema = this.generateSchemaFromData(initvarParsed);
+          }
+          if (liveVars) {
+              if (parsedSchema.length === 0) {
+                  parsedSchema = this.generateSchemaFromData(liveVars);
+              }
+              this.enrichWithLiveData(parsedSchema, liveVars);
+              // Bổ sung các biến cấp gốc có trong liveVars nhưng chưa có trong parsedSchema (tự phục hồi toàn diện)
+              if (typeof liveVars === 'object') {
+                  const existingTopKeys = new Set(parsedSchema.map((d) => d.name));
+                  for (const [key, val] of Object.entries(liveVars)) {
+                      if (key.startsWith('$'))
+                          continue;
+                      if (!existingTopKeys.has(key)) {
+                          const extraDesc = this.generateSchemaFromData({ [key]: val });
+                          if (extraDesc.length > 0) {
+                              parsedSchema.push(...extraDesc);
+                              existingTopKeys.add(key);
+                          }
+                      }
+                  }
+              }
+          }
+          // Kiểm tra tính nhất quán giữa Schema và InitVar (theo chuẩn Zod 4 & MVUZOD)
+          if (parsedSchema.length > 0 && initvarParsed) {
+              const checkLeaves = (items) => {
+                  for (const desc of items) {
+                      if (desc.type === 'object' && desc.children && desc.children.length > 0) {
+                          checkLeaves(desc.children);
+                          continue;
+                      }
+                      if (desc.type === 'record') {
+                          // Record là danh sách thực thể động (như Túi_đồ, Quan_hệ), không yêu cầu instance mẫu trong InitVar
+                          continue;
+                      }
+                      // Theo chuẩn Zod 4: Các trường có .prefault() tự động nạp fallback an toàn tại runtime
+                      if (desc.defaultValue !== undefined) {
+                          continue;
+                      }
+                      const parts = desc.path.split('.');
+                      let curr = initvarParsed;
+                      let found = true;
+                      for (const p of parts) {
+                          if (curr && typeof curr === 'object' && p in curr) {
+                              curr = curr[p];
+                          }
+                          else {
+                              found = false;
+                              break;
+                          }
+                      }
+                      if (!found) {
+                          inconsistencies.push(`Biến "${desc.path}" chưa có giá trị khởi tạo trong [InitVar] và không có .prefault().`);
+                      }
+                  }
+              };
+              checkLeaves(parsedSchema);
+          }
+          const hasEjs = Boolean(lorebookMvu.ejsControllerEntry);
+          // 5. Lọc dữ liệu nếu có filterPath
+          let effectiveLiveVars = liveVars;
+          let effectiveInitvar = initvarParsed;
+          let effectiveParsedSchema = parsedSchema;
+          if (filterPath && typeof filterPath === 'string' && filterPath.trim()) {
+              const cleanFilter = filterPath.replace(/^stat_data\./, '').trim();
+              if (cleanFilter) {
+                  const parts = cleanFilter.split('.');
+                  const getDeep = (obj, pathParts) => {
+                      let curr = obj;
+                      for (const p of pathParts) {
+                          if (curr && typeof curr === 'object' && p in curr) {
+                              curr = curr[p];
+                          }
+                          else {
+                              return undefined;
+                          }
+                      }
+                      return curr;
+                  };
+                  if (effectiveLiveVars) {
+                      effectiveLiveVars = getDeep(effectiveLiveVars, parts);
+                  }
+                  if (effectiveInitvar) {
+                      effectiveInitvar = getDeep(effectiveInitvar, parts);
+                  }
+                  if (effectiveParsedSchema && effectiveParsedSchema.length > 0) {
+                      const filterDescriptors = (items) => {
+                          const matched = [];
+                          for (const it of items) {
+                              if (it.path === cleanFilter || it.name === cleanFilter) {
+                                  matched.push(it);
+                              }
+                              else if (it.path.startsWith(cleanFilter + '.')) {
+                                  matched.push(it);
+                              }
+                              else if (cleanFilter.startsWith(it.path + '.')) {
+                                  if (it.children) {
+                                      const childMatches = filterDescriptors(it.children);
+                                      if (childMatches.length > 0) {
+                                          matched.push({
+                                              ...it,
+                                              children: childMatches,
+                                          });
+                                      }
+                                  }
+                              }
+                          }
+                          return matched;
+                      };
+                      effectiveParsedSchema = filterDescriptors(effectiveParsedSchema);
+                  }
+              }
+          }
+          const lorebookActivity = this.generateLorebookActivityReport(lorebookMvu);
+          return {
+              hasMvu: isMvu,
+              characterName: charName,
+              zodScriptName: zodScript?.name,
+              zodSchemaCode: zodScript?.content,
+              parsedSchema: effectiveParsedSchema,
+              liveVariables: effectiveLiveVars,
+              rawWrapper: this.cachedWrapper,
+              currentFloor: this.cachedCurrentFloor,
+              availableFloors: floors,
+              dataSource: this.cachedDataSource,
+              initvarVariables: effectiveInitvar,
+              updateRulesSummary: lorebookMvu.updateRulesEntry?.content || '',
+              hasEjsController: hasEjs,
+              ejsControllerSummary: lorebookMvu.ejsControllerEntry?.comment || '',
+              healthWarnings: warnings,
+              inconsistencies,
+              lorebookActivity,
+          };
+      }
+      /**
+       * Lan truyền thay đổi biến (Change Propagation Matrix)
+       * Đồng bộ sửa: 1. Zod Script -> 2. [InitVar] YAML -> 3. [mvu_update] YAML -> 4. Ghi đè vào ST backend
+       */
+      static async mutateMvuSchema(adapter, options) {
+          const liveChar = this.getActiveCharacter();
+          if (!liveChar)
+              throw new Error('Không có nhân vật nào đang hoạt động.');
+          const zodScriptInfo = this.getZodScript(liveChar);
+          if (!zodScriptInfo)
+              throw new Error('Không tìm thấy kịch bản Zod Schema trong nhân vật.');
+          const lorebookMvu = await this.getLorebookMvuEntries(adapter, liveChar);
+          const modifiedFiles = [];
+          // 1. Cập nhật Zod Script
+          let zodCode = zodScriptInfo.content;
+          const varPath = options.variablePath.replace(/^stat_data\./, '');
+          const parts = varPath.split('.');
+          const leafName = parts[parts.length - 1];
+          const buildZodLine = () => {
+              let zodLine = `z.string()`;
+              if (options.type === 'number' ||
+                  (options.type === undefined && (options.min !== undefined || options.max !== undefined))) {
+                  if (options.min !== undefined && options.max !== undefined) {
+                      zodLine = `z.coerce.number().transform(v => _.clamp(v, ${options.min}, ${options.max}))`;
+                  }
+                  else {
+                      zodLine = `z.coerce.number()`;
+                  }
+              }
+              else if (options.type === 'boolean') {
+                  zodLine = `z.boolean()`;
+              }
+              else if (options.type === 'array') {
+                  zodLine = `z.array(z.string())`;
+              }
+              else if (options.type === 'object') {
+                  zodLine = `z.record(z.string(), z.any())`;
+              }
+              if (options.defaultValue !== undefined) {
+                  zodLine += `.prefault(${JSON.stringify(options.defaultValue)})`;
+              }
+              return zodLine;
+          };
+          /**
+           * Tìm vùng code (start, end) thuộc về z.object({...}) của parentName trong zodCode.
+           * Dùng đếm ngoặc nhọn {} để xác định chính xác phạm vi block.
+           * Trả về { blockStart, blockEnd } hoặc null nếu không tìm thấy.
+           */
+          const findParentObjectBlock = (code, parentName) => {
+              let openBraceIdx = -1;
+              if (parentName) {
+                  const escapedParent = parentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                  const parentPattern = new RegExp(`(?:(['"])?${escapedParent}\\1?\\s*:\\s*z\\.object\\s*\\(\\s*\\{|(?:const|let|var)\\s+${escapedParent}\\s*=\\s*z\\.object\\s*\\(\\s*\\{)`, 'g');
+                  const match = parentPattern.exec(code);
+                  if (match) {
+                      openBraceIdx = code.indexOf('{', match.index + match[0].length - 1);
+                  }
+              }
+              else {
+                  const rootPattern = /(?:export\s+const\s+Schema\s*=\s*z\.object\s*\(\s*\{|z\.object\s*\(\s*\{)/g;
+                  const match = rootPattern.exec(code);
+                  if (match) {
+                      openBraceIdx = code.indexOf('{', match.index + match[0].length - 1);
+                  }
+              }
+              if (openBraceIdx === -1)
+                  return null;
+              // Đếm ngoặc nhọn để tìm dấu } đóng tương ứng
+              let depth = 1;
+              let i = openBraceIdx + 1;
+              while (i < code.length && depth > 0) {
+                  if (code[i] === '{')
+                      depth++;
+                  else if (code[i] === '}')
+                      depth--;
+                  i++;
+              }
+              if (depth !== 0)
+                  return null;
+              return { blockStart: openBraceIdx, blockEnd: i };
+          };
+          /**
+           * Tìm vị trí chính xác của thuộc tính (propName) và biểu thức Zod tương ứng của nó.
+           * Phân tích cú pháp đầy đủ bằng cách theo dõi độ sâu ngoặc đơn (), ngoặc nhọn {}, ngoặc vuông []
+           * và chuỗi văn bản (quotes) để KHÔNG BAO GIỜ bị cắt đứt giữa chừng bởi dấu phẩy bên trong tham số hàm
+           * như _.clamp(v, 0, 100) hay So(100, 0, 100).
+           */
+          const findPropertySpan = (code, propName, searchStart = 0, searchEnd = code.length) => {
+              const escaped = propName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const pattern = new RegExp(`(['"])?${escaped}\\1?\\s*:`, 'g');
+              pattern.lastIndex = searchStart;
+              let match;
+              while ((match = pattern.exec(code)) !== null) {
+                  if (match.index >= searchEnd)
+                      break;
+                  const propStart = match.index;
+                  const colonIdx = match.index + match[0].length - 1;
+                  let i = colonIdx + 1;
+                  while (i < searchEnd && /\s/.test(code[i]))
+                      i++;
+                  const exprStart = i;
+                  let parenDepth = 0;
+                  let braceDepth = 0;
+                  let bracketDepth = 0;
+                  let inStr = null;
+                  while (i < searchEnd) {
+                      const c = code[i];
+                      const prev = i > 0 ? code[i - 1] : '';
+                      if (inStr) {
+                          if (c === inStr && prev !== '\\')
+                              inStr = null;
+                      }
+                      else if (c === '"' || c === "'" || c === '`') {
+                          inStr = c;
+                      }
+                      else if (c === '(') {
+                          parenDepth++;
+                      }
+                      else if (c === ')') {
+                          if (parenDepth === 0)
+                              break;
+                          parenDepth--;
+                      }
+                      else if (c === '{') {
+                          braceDepth++;
+                      }
+                      else if (c === '}') {
+                          if (braceDepth === 0)
+                              break;
+                          braceDepth--;
+                      }
+                      else if (c === '[') {
+                          bracketDepth++;
+                      }
+                      else if (c === ']') {
+                          bracketDepth--;
+                      }
+                      else if (c === ',' && parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
+                          break;
+                      }
+                      i++;
+                  }
+                  const exprEnd = i;
+                  let hasTrailingComma = false;
+                  let endWithComma = exprEnd;
+                  if (i < searchEnd && code[i] === ',') {
+                      hasTrailingComma = true;
+                      endWithComma = i + 1;
+                  }
+                  return {
+                      propStart,
+                      colonIdx,
+                      exprStart,
+                      exprEnd,
+                      endWithComma,
+                      hasTrailingComma,
+                  };
+              }
+              return null;
+          };
+          if (options.action === 'add') {
+              const zodLine = buildZodLine();
+              // Nếu là biến lồng nhau, tìm CHÍNH XÁC block cha bằng brace counting
+              let inserted = false;
+              if (parts.length > 1) {
+                  const parentName = parts[parts.length - 2];
+                  const block = findParentObjectBlock(zodCode, parentName);
+                  if (block) {
+                      // Chèn ngay sau dấu { mở
+                      const insertPos = block.blockStart + 1;
+                      zodCode =
+                          zodCode.substring(0, insertPos) +
+                              `\n    '${leafName}': ${zodLine},` +
+                              zodCode.substring(insertPos);
+                      inserted = true;
+                  }
+              }
+              if (!inserted) {
+                  const rootBlock = findParentObjectBlock(zodCode);
+                  if (rootBlock) {
+                      const insertPos = rootBlock.blockStart + 1;
+                      zodCode =
+                          zodCode.substring(0, insertPos) +
+                              `\n  '${leafName}': ${zodLine},` +
+                              zodCode.substring(insertPos);
+                  }
+                  else {
+                      const insertPattern = /(export\s+const\s+Schema\s*=\s*z\.object\s*\(\s*\{)/i;
+                      if (insertPattern.test(zodCode)) {
+                          zodCode = zodCode.replace(insertPattern, `$1\n  '${leafName}': ${zodLine},`);
+                      }
+                      else {
+                          const objMatch = zodCode.match(/(z\.object\s*\(\s*\{)/);
+                          if (objMatch) {
+                              zodCode = zodCode.replace(objMatch[1], `${objMatch[1]}\n  '${leafName}': ${zodLine},`);
+                          }
+                      }
+                  }
+              }
+              modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+          }
+          else if (options.action === 'modify') {
+              const zodLine = buildZodLine();
+              const parentName = parts.length > 1 ? parts[parts.length - 2] : undefined;
+              const block = findParentObjectBlock(zodCode, parentName);
+              let span = block ? findPropertySpan(zodCode, leafName, block.blockStart + 1, block.blockEnd - 1) : null;
+              if (!span) {
+                  span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
+              }
+              if (span) {
+                  zodCode = zodCode.substring(0, span.propStart) + `'${leafName}': ${zodLine}` + zodCode.substring(span.exprEnd);
+                  modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+              }
+          }
+          else if (options.action === 'rename') {
+              if (!options.newName) {
+                  throw new Error('Cần cung cấp "newName" khi thực hiện đổi tên biến.');
+              }
+              const parentName = parts.length > 1 ? parts[parts.length - 2] : undefined;
+              const block = findParentObjectBlock(zodCode, parentName);
+              let span = block ? findPropertySpan(zodCode, leafName, block.blockStart + 1, block.blockEnd - 1) : null;
+              if (!span) {
+                  span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
+              }
+              if (span) {
+                  zodCode = zodCode.substring(0, span.propStart) + `'${options.newName}':` + zodCode.substring(span.colonIdx + 1);
+                  modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+              }
+          }
+          else if (options.action === 'delete') {
+              const parentName = parts.length > 1 ? parts[parts.length - 2] : undefined;
+              const block = findParentObjectBlock(zodCode, parentName);
+              let span = block ? findPropertySpan(zodCode, leafName, block.blockStart + 1, block.blockEnd - 1) : null;
+              if (!span) {
+                  span = findPropertySpan(zodCode, leafName, 0, zodCode.length);
+              }
+              if (span) {
+                  let delStart = span.propStart;
+                  while (delStart > 0 && (zodCode[delStart - 1] === ' ' || zodCode[delStart - 1] === '\t')) {
+                      delStart--;
+                  }
+                  let delEnd = span.endWithComma;
+                  if (delEnd < zodCode.length && zodCode[delEnd] === '\r')
+                      delEnd++;
+                  if (delEnd < zodCode.length && zodCode[delEnd] === '\n')
+                      delEnd++;
+                  zodCode = zodCode.substring(0, delStart) + zodCode.substring(delEnd);
+                  modifiedFiles.push(`TavernHelper Script: ${zodScriptInfo.name}`);
+              }
+          }
+          // Cập nhật script trong bộ nhớ của nhân vật (Hỗ trợ cả dạng mảng chuẩn TavernHelper và Object)
+          if (zodScriptInfo.script) {
+              zodScriptInfo.script.content = zodCode;
+          }
+          if (Array.isArray(liveChar.data?.extensions?.tavern_helper?.scripts)) {
+              const idx = liveChar.data.extensions.tavern_helper.scripts.findIndex((s) => s && (s.name === zodScriptInfo.name || s.id === zodScriptInfo.key));
+              if (idx !== -1) {
+                  liveChar.data.extensions.tavern_helper.scripts[idx].content = zodCode;
+              }
+          }
+          else if (liveChar.data?.extensions?.tavern_helper?.scripts?.[zodScriptInfo.key]) {
+              liveChar.data.extensions.tavern_helper.scripts[zodScriptInfo.key].content = zodCode;
+          }
+          try {
+              const th = window.TavernHelper;
+              if (th && typeof th.updateScriptTreesWith === 'function') {
+                  await th.updateScriptTreesWith((trees) => {
+                      if (Array.isArray(trees)) {
+                          for (const node of trees) {
+                              if (node && (node.name === zodScriptInfo.name || node.id === zodScriptInfo.key)) {
+                                  node.content = zodCode;
+                              }
+                          }
+                      }
+                      return trees;
+                  }, { type: 'character' });
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] TavernHelper updateScriptTreesWith warning in mutate:', e);
+          }
+          // 2. Cập nhật [InitVar] YAML
+          if (lorebookMvu.initvarEntry?.content) {
+              try {
+                  const yamlData = YAML.parse(lorebookMvu.initvarEntry.content) || {};
+                  if (options.action === 'add' || options.action === 'modify') {
+                      let curr = yamlData;
+                      for (let i = 0; i < parts.length - 1; i++) {
+                          if (!curr[parts[i]])
+                              curr[parts[i]] = {};
+                          curr = curr[parts[i]];
+                      }
+                      curr[leafName] =
+                          options.defaultValue !== undefined ? options.defaultValue : options.type === 'number' ? 0 : '';
+                  }
+                  else if (options.action === 'rename' && options.newName) {
+                      let curr = yamlData;
+                      for (let i = 0; i < parts.length - 1; i++) {
+                          if (curr[parts[i]])
+                              curr = curr[parts[i]];
+                      }
+                      if (leafName in curr) {
+                          curr[options.newName] = curr[leafName];
+                          delete curr[leafName];
+                      }
+                  }
+                  else if (options.action === 'delete') {
+                      let curr = yamlData;
+                      for (let i = 0; i < parts.length - 1; i++) {
+                          if (curr[parts[i]])
+                              curr = curr[parts[i]];
+                      }
+                      delete curr[leafName];
+                  }
+                  lorebookMvu.initvarEntry.content = YAML.stringify(yamlData);
+                  modifiedFiles.push(`Worldbook: ${lorebookMvu.initvarEntry.comment || '[InitVar]'}`);
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Error modifying initvar YAML:', e);
+              }
+          }
+          // 3. Cập nhật [mvu_update] Quy tắc
+          if (lorebookMvu.updateRulesEntry?.content) {
+              try {
+                  const ruleData = YAML.parse(lorebookMvu.updateRulesEntry.content) || {};
+                  const keys = Object.keys(ruleData);
+                  let rootKey = keys.find((k) => /^(quy_tắc_cập_nhật|update_rules?|变量更新规则|cập_nhật_biến)/i.test(k.replace(/[\s_]/g, '_')));
+                  if (!rootKey && keys.length > 0) {
+                      if (typeof ruleData[keys[0]] === 'object' && ruleData[keys[0]] !== null) {
+                          rootKey = keys[0];
+                      }
+                  }
+                  if (!rootKey) {
+                      rootKey = 'Quy_tắc_cập_nhật';
+                      ruleData[rootKey] = {};
+                  }
+                  if (options.action === 'add' || options.action === 'modify') {
+                      if (options.ruleCheck) {
+                          ruleData[rootKey][varPath] = {
+                              type: options.type || 'string',
+                              range: options.min !== undefined && options.max !== undefined
+                                  ? `${options.min}~${options.max}`
+                                  : undefined,
+                              check: [options.ruleCheck],
+                          };
+                          modifiedFiles.push(`Worldbook: ${lorebookMvu.updateRulesEntry.comment || '[mvu_update]'}`);
+                      }
+                  }
+                  else if (options.action === 'rename' && options.newName) {
+                      const newPath = varPath.replace(new RegExp(`${leafName}$`), options.newName);
+                      if (ruleData[rootKey][varPath]) {
+                          ruleData[rootKey][newPath] = ruleData[rootKey][varPath];
+                          delete ruleData[rootKey][varPath];
+                          modifiedFiles.push(`Worldbook: ${lorebookMvu.updateRulesEntry.comment || '[mvu_update]'}`);
+                      }
+                  }
+                  else if (options.action === 'delete') {
+                      if (ruleData[rootKey][varPath]) {
+                          delete ruleData[rootKey][varPath];
+                          modifiedFiles.push(`Worldbook: ${lorebookMvu.updateRulesEntry.comment || '[mvu_update]'}`);
+                      }
+                  }
+                  lorebookMvu.updateRulesEntry.content = YAML.stringify(ruleData);
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Error modifying update rules:', e);
+              }
+          }
+          // Nếu nhân vật có linked Worldbook (Sổ tay liên kết), đồng bộ ghi đè vào file Worldbook ngoài
+          const linkedWorld = liveChar.data?.extensions?.world || liveChar.world;
+          if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
+              try {
+                  const ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+                  if (ST_WorldInfo &&
+                      typeof ST_WorldInfo.loadWorldInfo === 'function' &&
+                      typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                      const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
+                      if (worldData && worldData.entries) {
+                          const rawEntries = Array.isArray(worldData.entries)
+                              ? worldData.entries
+                              : Object.values(worldData.entries);
+                          const classified = this.classifyLorebookEntries(rawEntries);
+                          if (classified.initvarEntry && lorebookMvu.initvarEntry) {
+                              classified.initvarEntry.content = lorebookMvu.initvarEntry.content;
+                          }
+                          if (classified.updateRulesEntry && lorebookMvu.updateRulesEntry) {
+                              classified.updateRulesEntry.content = lorebookMvu.updateRulesEntry.content;
+                          }
+                          await ST_WorldInfo.saveWorldInfo(linkedWorld, worldData, true);
+                          if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                              ST_WorldInfo.reloadEditor(linkedWorld);
+                          }
+                      }
+                  }
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Lỗi khi đồng bộ Worldbook liên kết ngoài trong mutate:', e);
+              }
+          }
+          // 4a. Đồng bộ json_data để tránh TavernHelper watcher ghi đè bằng dữ liệu cũ
+          try {
+              if (liveChar.json_data) {
+                  const jd = JSON.parse(liveChar.json_data);
+                  jd.data = jd.data || {};
+                  jd.data.extensions = liveChar.data.extensions;
+                  jd.data.character_book = liveChar.data.character_book;
+                  liveChar.json_data = JSON.stringify(jd);
+                  const $ = window.$;
+                  if ($ && typeof $ === 'function') {
+                      $('#character_json_data').val(liveChar.json_data);
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] Lỗi khi đồng bộ json_data trong mutate:', e);
+          }
+          // 4b. Lưu lại toàn bộ vào SillyTavern Backend qua merge-attributes
+          const mergePayload = {
+              avatar: liveChar.avatar,
+              avatar_url: liveChar.avatar,
+              ch_name: liveChar.name,
+              data: {
+                  extensions: liveChar.data.extensions,
+                  character_book: liveChar.data.character_book,
+              },
+          };
+          const ctx = this.getContext();
+          const res = await fetch('/api/characters/merge-attributes', {
+              method: 'POST',
+              headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify(mergePayload),
+          });
+          if (!res.ok) {
+              throw new Error(`Lỗi khi lưu vào SillyTavern Backend: HTTP ${res.status}`);
+          }
+          // Tải lại dữ liệu nhân vật mới nhất vào bộ nhớ ST Frontend (TUYỆT ĐỐI KHÔNG GỌI saveCharacterDebounced vì sẽ trigger form submit đè mất extensions)
+          if (typeof window.getOneCharacter === 'function') {
+              await window.getOneCharacter(liveChar.avatar);
+          }
+          else if (typeof ctx.getOneCharacter === 'function') {
+              await ctx.getOneCharacter(liveChar.avatar);
+          }
+          try {
+              const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+              eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: liveChar } });
+          }
+          catch { }
+          // Đảm bảo toggle Character Scripts trong TavernHelper được kích hoạt
+          await this.enableCharacterScriptsInTavernHelper(liveChar);
+          return {
+              success: true,
+              modifiedFiles,
+              details: `Đã thực hiện hành động "${options.action}" trên biến "${varPath}" đồng bộ trên toàn bộ chuỗi mắt xích Zod và Worldbook.`,
+          };
+      }
+      /**
+       * Chuyển đổi mảng biến linh hoạt thành cây phân cấp lồng nhau
+       */
+      static buildVariableTree(variables) {
+          const root = {};
+          for (const v of variables) {
+              const cleanPath = v.path.replace(/^stat_data\./, '').trim();
+              if (!cleanPath)
+                  continue;
+              const parts = cleanPath.split('.');
+              let curr = root;
+              for (let i = 0; i < parts.length - 1; i++) {
+                  const part = parts[i];
+                  if (!curr[part] || typeof curr[part] !== 'object' || curr[part]._isLeaf) {
+                      curr[part] = { _isNode: true, _children: {} };
+                  }
+                  curr = curr[part]._children;
+              }
+              const leafName = parts[parts.length - 1];
+              curr[leafName] = {
+                  _isLeaf: true,
+                  def: v,
+              };
+          }
+          return root;
+      }
+      /**
+       * Sinh mã Zod 4 Schema đệ quy theo cây biến
+       */
+      static renderTreeToZod(tree, indentLevel = 1) {
+          const indent = '  '.repeat(indentLevel);
+          const lines = [];
+          for (const key of Object.keys(tree)) {
+              const item = tree[key];
+              if (item._isLeaf) {
+                  const def = item.def;
+                  let zodTypeStr = 'z.string()';
+                  if (def.type === 'number') {
+                      if (def.min !== undefined && def.max !== undefined) {
+                          zodTypeStr = `z.coerce.number().transform(v => _.clamp(v, ${def.min}, ${def.max}))`;
+                      }
+                      else if (def.min !== undefined) {
+                          zodTypeStr = `z.coerce.number().min(${def.min})`;
+                      }
+                      else if (def.max !== undefined) {
+                          zodTypeStr = `z.coerce.number().max(${def.max})`;
+                      }
+                      else {
+                          zodTypeStr = `z.coerce.number()`;
+                      }
+                  }
+                  else if (def.type === 'boolean') {
+                      zodTypeStr = `z.boolean()`;
+                  }
+                  else if (def.type === 'array') {
+                      zodTypeStr = `z.array(z.string())`;
+                  }
+                  else if (def.type === 'object') {
+                      zodTypeStr = `z.record(z.string(), z.any())`;
+                  }
+                  if (def.defaultValue !== undefined) {
+                      zodTypeStr += `.prefault(${JSON.stringify(def.defaultValue)})`;
+                  }
+                  else {
+                      if (def.type === 'number') {
+                          const fallbackNum = def.min !== undefined ? def.min : 0;
+                          zodTypeStr += `.prefault(${fallbackNum})`;
+                      }
+                      else if (def.type === 'boolean') {
+                          zodTypeStr += `.prefault(false)`;
+                      }
+                      else if (def.type === 'array') {
+                          zodTypeStr += `.prefault([])`;
+                      }
+                      else if (def.type === 'object') {
+                          zodTypeStr += `.prefault({})`;
+                      }
+                      else {
+                          zodTypeStr += `.prefault('')`;
+                      }
+                  }
+                  lines.push(`${indent}'${key}': ${zodTypeStr},`);
+              }
+              else if (item._isNode) {
+                  const inner = this.renderTreeToZod(item._children, indentLevel + 1);
+                  lines.push(`${indent}'${key}': z.object({\n${inner}\n${indent}}),`);
+              }
+          }
+          return lines.join('\n');
+      }
+      /**
+       * Sinh cấu trúc dữ liệu khởi tạo InitVar (JavaScript Object)
+       */
+      static renderTreeToInitvar(tree) {
+          const result = {};
+          for (const key of Object.keys(tree)) {
+              const item = tree[key];
+              if (item._isLeaf) {
+                  const def = item.def;
+                  if (def.defaultValue !== undefined) {
+                      result[key] = def.defaultValue;
+                  }
+                  else if (def.type === 'number') {
+                      result[key] = def.min !== undefined ? def.min : 0;
+                  }
+                  else if (def.type === 'boolean') {
+                      result[key] = false;
+                  }
+                  else if (def.type === 'array') {
+                      result[key] = [];
+                  }
+                  else if (def.type === 'object') {
+                      result[key] = {};
+                  }
+                  else {
+                      result[key] = '';
+                  }
+              }
+              else if (item._isNode) {
+                  result[key] = this.renderTreeToInitvar(item._children);
+              }
+          }
+          return result;
+      }
+      /**
+       * Sinh cấu trúc Quy tắc cập nhật biến ([mvu_update])
+       */
+      static renderRulesFromVariables(variables) {
+          const rules = {};
+          for (const v of variables) {
+              const cleanPath = v.path.replace(/^stat_data\./, '').trim();
+              if (!cleanPath)
+                  continue;
+              const parts = cleanPath.split('.');
+              const leafName = parts[parts.length - 1];
+              if (leafName.startsWith('_') || leafName.startsWith('$'))
+                  continue;
+              const ruleObj = {
+                  type: v.type,
+              };
+              if (v.min !== undefined && v.max !== undefined) {
+                  ruleObj.range = `${v.min}~${v.max}`;
+              }
+              else if (v.min !== undefined) {
+                  ruleObj.range = `>=${v.min}`;
+              }
+              else if (v.max !== undefined) {
+                  ruleObj.range = `<=${v.max}`;
+              }
+              if (v.ruleCheck) {
+                  ruleObj.check = [v.ruleCheck];
+              }
+              else if (v.description) {
+                  ruleObj.check = [v.description];
+              }
+              rules[cleanPath] = ruleObj;
+          }
+          return { Quy_tắc_cập_nhật: rules };
+      }
+      /**
+       * Nạp toàn bộ hạ tầng kỹ thuật MVU (Substrate Platform) vào một Card
+       * Hoàn toàn linh hoạt, không giới hạn, không hardcode bất kỳ template nào.
+       */
+      static async scaffoldMvuCard(adapter, options = {}) {
+          const liveChar = this.getActiveCharacter();
+          if (!liveChar)
+              throw new Error('Không có nhân vật nào đang hoạt động để nạp MVU.');
+          if (this.hasMvu(liveChar) && !options.force) {
+              throw new Error(`Nhân vật "${liveChar.name || liveChar.avatar}" đã có sẵn hệ thống MVU! Để bảo toàn các biến hiện có, hãy sử dụng công cụ "mutate_mvu_schema" để thêm/sửa/xoá biến. Nếu bạn thực sự muốn xoá và dựng lại toàn bộ từ đầu, hãy truyền thêm tham số { "force": true }.`);
+          }
+          if (this.hasMvu(liveChar)) {
+              console.warn('[MvuManager] Cảnh báo: Card đã có hệ thống MVU. Thao tác scaffold sẽ ghi đè lên cấu hình hiện tại (force: true).');
+          }
+          if (!liveChar.data)
+              liveChar.data = {};
+          if (!liveChar.data.extensions)
+              liveChar.data.extensions = {};
+          if (!liveChar.data.extensions.tavern_helper)
+              liveChar.data.extensions.tavern_helper = { scripts: [], variables: {} };
+          if (!Array.isArray(liveChar.data.extensions.tavern_helper.scripts)) {
+              if (liveChar.data.extensions.tavern_helper.scripts &&
+                  typeof liveChar.data.extensions.tavern_helper.scripts === 'object') {
+                  liveChar.data.extensions.tavern_helper.scripts = Object.values(liveChar.data.extensions.tavern_helper.scripts);
+              }
+              else {
+                  liveChar.data.extensions.tavern_helper.scripts = [];
+              }
+          }
+          if (!Array.isArray(liveChar.data.extensions.regex_scripts)) {
+              if (liveChar.data.extensions.regex_scripts && typeof liveChar.data.extensions.regex_scripts === 'object') {
+                  liveChar.data.extensions.regex_scripts = Object.values(liveChar.data.extensions.regex_scripts);
+              }
+              else {
+                  liveChar.data.extensions.regex_scripts = [];
+              }
+          }
+          if (!liveChar.data.character_book) {
+              liveChar.data.character_book = {
+                  name: liveChar.name ? `${liveChar.name}'s Lorebook` : 'Character Book',
+                  description: '',
+                  extensions: {},
+                  entries: [],
+              };
+          }
+          else {
+              if (!liveChar.data.character_book.extensions)
+                  liveChar.data.character_book.extensions = {};
+              if (!Array.isArray(liveChar.data.character_book.entries))
+                  liveChar.data.character_book.entries = [];
+          }
+          let zodCode = '';
+          let initvarData = {};
+          let updateRulesData = { Quy_tắc_cập_nhật: {} };
+          // 1. Phân giải Schema & Dữ liệu
+          if (options.customZodSchema && options.customZodSchema.trim()) {
+              zodCode = options.customZodSchema.trim();
+              if (!zodCode.includes('registerMvuSchema')) {
+                  if (!zodCode.includes('export const Schema')) {
+                      zodCode = `export const Schema = z.object({\n${zodCode}\n});`;
+                  }
+                  zodCode = `import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';\n\n${zodCode}\n\n$(() => {\n  registerMvuSchema(Schema);\n});\n`;
+              }
+          }
+          if (options.customInitvarYaml) {
+              if (typeof options.customInitvarYaml === 'string') {
+                  try {
+                      initvarData = YAML.parse(options.customInitvarYaml);
+                  }
+                  catch {
+                      initvarData = { raw: options.customInitvarYaml };
+                  }
+              }
+              else {
+                  initvarData = options.customInitvarYaml;
+              }
+          }
+          if (options.customRulesYaml) {
+              if (typeof options.customRulesYaml === 'string') {
+                  try {
+                      updateRulesData = YAML.parse(options.customRulesYaml);
+                  }
+                  catch {
+                      updateRulesData = { Quy_tắc_cập_nhật: { raw: options.customRulesYaml } };
+                  }
+              }
+              else {
+                  updateRulesData = options.customRulesYaml;
+              }
+          }
+          // Nếu có danh sách biến cụ thể
+          if (options.variables && options.variables.length > 0) {
+              const tree = this.buildVariableTree(options.variables);
+              if (!zodCode) {
+                  const schemaInner = this.renderTreeToZod(tree, 1);
+                  zodCode = `import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';\n\nexport const Schema = z.object({\n${schemaInner}\n});\n\n$(() => {\n  registerMvuSchema(Schema);\n});\n`;
+              }
+              if (!options.customInitvarYaml) {
+                  initvarData = this.renderTreeToInitvar(tree);
+              }
+              if (!options.customRulesYaml) {
+                  updateRulesData = this.renderRulesFromVariables(options.variables);
+              }
+          }
+          else if (!zodCode) {
+              // Không có biến nào truyền vào và không có custom code: Cung cấp sàn trống linh hoạt sẵn sàng mở rộng
+              zodCode = `import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';\n\nexport const Schema = z.object({\n  'Trạng_thái': z.record(z.string(), z.any()).prefault({}),\n});\n\n$(() => {\n  registerMvuSchema(Schema);\n});\n`;
+              if (!options.customInitvarYaml) {
+                  initvarData = { Trạng_thái: {} };
+              }
+          }
+          // 2. Tiêm Scripts Tửu quán trợ thủ (TavernHelper) dạng MẢNG chuẩn SillyTavern
+          const mvuBundleCode = `import 'https://testingcf.jsdelivr.net/gh/MagicalAstrogy/MagVarUpdate/artifact/bundle.js';`;
+          const mvuScript = {
+              type: 'script',
+              name: 'MVU',
+              content: mvuBundleCode,
+              enabled: true,
+              id: 'mvu-core-' + Date.now(),
+              info: 'MagVarUpdate Core Engine',
+              button: { enabled: true, buttons: [] },
+              data: {},
+              export_with: { data: true, button: true },
+          };
+          const zodScript = {
+              type: 'script',
+              name: 'Cấu trúc biến',
+              content: zodCode,
+              enabled: true,
+              id: 'zod-schema-' + Date.now(),
+              info: 'Zod 4 Schema for MVU',
+              button: { enabled: true, buttons: [] },
+              data: {},
+              export_with: { data: true, button: true },
+          };
+          const upsertTavernScript = (arr, scriptObj) => {
+              const idx = arr.findIndex((s) => s && (s.name === scriptObj.name || (s.id && s.id === scriptObj.id)));
+              if (idx !== -1) {
+                  arr[idx] = { ...arr[idx], ...scriptObj };
+              }
+              else {
+                  arr.push(scriptObj);
+              }
+          };
+          upsertTavernScript(liveChar.data.extensions.tavern_helper.scripts, mvuScript);
+          upsertTavernScript(liveChar.data.extensions.tavern_helper.scripts, zodScript);
+          try {
+              const th = window.TavernHelper;
+              if (th && typeof th.updateScriptTreesWith === 'function') {
+                  await th.updateScriptTreesWith((trees) => {
+                      const arr = Array.isArray(trees) ? trees : [];
+                      upsertTavernScript(arr, mvuScript);
+                      upsertTavernScript(arr, zodScript);
+                      return arr;
+                  }, { type: 'character' });
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] TavernHelper updateScriptTreesWith warning in scaffold:', e);
+          }
+          // (enableCharacterScriptsInTavernHelper đã được di chuyển xuống sau khi lưu backend và reload xong)
+          // 3. Tiêm Regex Scripts chuẩn (Tiếng Việt / English)
+          const regexes = [
+              {
+                  scriptName: '[MVU] Ẩn cập nhật biến khỏi AI',
+                  findRegex: '/<(update(?:variable)?)>(?:(?!.*<\\/\\1>)(?:(?!<\\1>).)*$|(?:(?!<\\1>).)*<\\/\\1?>)/gsi',
+                  replaceString: '',
+                  trimStrings: [],
+                  placement: [1, 2],
+                  promptOnly: true,
+                  markdownOnly: false,
+                  runOnEdit: false,
+                  disabled: false,
+              },
+              {
+                  scriptName: '[MVU] Làm đẹp cập nhật biến',
+                  findRegex: '/<(update(?:variable)?)>\\s*((?:(?!<\\1>).)*)\\s*<\\/\\1>/gsi',
+                  replaceString: '<div style="width:90%;margin:12px auto;"><details style="background:rgba(20,25,35,0.75);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;font-size:12px;color:#cbd5e1;box-shadow:0 4px 12px rgba(0,0,0,0.3);"><summary style="cursor:pointer;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;"><span>📊 [Cập nhật biến] Biến số thế giới đã đồng bộ</span></summary><div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.1);font-family:monospace;font-size:11px;white-space:pre-wrap;max-height:260px;overflow-y:auto;">$2</div></details></div>',
+                  trimStrings: [],
+                  placement: [1, 2],
+                  markdownOnly: true,
+                  promptOnly: false,
+                  runOnEdit: false,
+                  disabled: false,
+              },
+              {
+                  scriptName: '[MVU] Giao diện thanh trạng thái',
+                  findRegex: '<StatusPlaceHolderImpl/>',
+                  replaceString: '<div class="mvu-status-bar" style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:8px;font-size:12px;">{{format_message_variable::stat_data}}</div>',
+                  trimStrings: [],
+                  placement: [2],
+                  markdownOnly: true,
+                  promptOnly: false,
+                  runOnEdit: true,
+                  disabled: false,
+              },
+              {
+                  scriptName: '[MVU] Ẩn thanh trạng thái khỏi AI',
+                  findRegex: '<StatusPlaceHolderImpl/>',
+                  replaceString: '',
+                  trimStrings: [],
+                  placement: [2],
+                  promptOnly: true,
+                  markdownOnly: false,
+                  runOnEdit: true,
+                  disabled: false,
+              },
+          ];
+          const upsertRegexScript = (arr, reg) => {
+              const idx = arr.findIndex((r) => r && (r.scriptName === reg.scriptName || r.id === reg.id));
+              const regData = {
+                  id: idx !== -1 ? arr[idx].id : `regex-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+                  trimStrings: [],
+                  substituteRegex: 0,
+                  minDepth: null,
+                  maxDepth: null,
+                  runOnEdit: false,
+                  markdownOnly: false,
+                  promptOnly: false,
+                  ...reg,
+              };
+              if (idx !== -1) {
+                  arr[idx] = { ...arr[idx], ...regData };
+              }
+              else {
+                  arr.push(regData);
+              }
+          };
+          for (const reg of regexes) {
+              upsertRegexScript(liveChar.data.extensions.regex_scripts, reg);
+          }
+          try {
+              const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
+              if (regexEngine && regexEngine.SCRIPT_TYPES && typeof regexEngine.saveScriptsByType === 'function') {
+                  const { SCRIPT_TYPES, getScriptsByType, saveScriptsByType, allowScopedScripts } = regexEngine;
+                  let scoped = (typeof getScriptsByType === 'function' ? getScriptsByType(SCRIPT_TYPES.SCOPED) : null) || [];
+                  if (!Array.isArray(scoped))
+                      scoped = [];
+                  for (const reg of regexes) {
+                      upsertRegexScript(scoped, reg);
+                  }
+                  await saveScriptsByType(scoped, SCRIPT_TYPES.SCOPED);
+                  if (typeof allowScopedScripts === 'function') {
+                      allowScopedScripts(liveChar);
+                  }
+                  try {
+                      const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+                      eventSource.emit(event_types.PRESET_CHANGED);
+                  }
+                  catch { }
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] Regex Engine sync warning in scaffold:', e);
+          }
+          // 4. Tiêm Worldbook Entries chuẩn
+          const outputFormatContent = `---
+<update_variable_rules>
+rule:
+  - you must output the update analysis and the actual update commands at once in the end of the next reply
+  - the update commands must strictly follow the **JSON Patch (RFC 6902)** standard, but can only use the following operations: replace (replace existing paths), delta (numeric increments), insert (new keys into object or array), remove; that is, the output must be a valid JSON array containing operation objects
+format: |-
+  <UpdateVariable>
+  <Analysis>$(IN ENGLISH, no more than 80 words)
+  - \${calculate time passed: ...}
+  - \${decide whether dramatic updates are allowed as it's in a special case or the time passed is more than usual: yes/no}
+  - \${analyze every variable based on its corresponding \`check\`, according only to current reply instead of previous plots: ...}
+  </Analysis>
+  <JSONPatch>
+  [
+    { "op": "replace", "path": "\${/path/to/variable}", "value": \${new_value} },
+    { "op": "delta", "path": "\${/path/to/number}", "value": \${delta_value} },
+    { "op": "insert", "path": "\${/path/to/object/newKey}", "value": \${content} },
+    { "op": "remove", "path": "\${/path/to/array/0}" }
+  ]
+  </JSONPatch>
+  </UpdateVariable>
+</update_variable_rules>`;
+          const now = Date.now();
+          const newEntries = [
+              {
+                  id: now,
+                  keys: [],
+                  secondary_keys: [],
+                  comment: '[InitVar] Khởi tạo biến cấm bật',
+                  content: YAML.stringify(initvarData),
+                  enabled: false, // Bắt buộc vô hiệu hóa: MVU chỉ đọc các mục initvar bị vô hiệu hóa để không tốn token prompt
+                  constant: false,
+                  selective: false,
+                  position: 'before_char',
+                  insertion_order: 100,
+                  use_regex: false,
+                  extensions: {},
+              },
+              {
+                  id: now + 1,
+                  keys: [],
+                  secondary_keys: [],
+                  comment: '[mvu_update] Quy tắc cập nhật biến',
+                  content: YAML.stringify(updateRulesData),
+                  enabled: true,
+                  constant: true,
+                  selective: false,
+                  position: 'before_char',
+                  insertion_order: 101,
+                  use_regex: false,
+                  extensions: {},
+              },
+              {
+                  id: now + 2,
+                  keys: [],
+                  secondary_keys: [],
+                  comment: '[mvu_update] Định dạng đầu ra của biến',
+                  content: outputFormatContent,
+                  enabled: true,
+                  constant: true,
+                  selective: false,
+                  position: 'before_char',
+                  insertion_order: 102,
+                  use_regex: false,
+                  extensions: {},
+              },
+              {
+                  id: now + 3,
+                  keys: [],
+                  secondary_keys: [],
+                  comment: 'Danh sách biến',
+                  content: `<status_current_variable>\n{{format_message_variable::stat_data}}\n</status_current_variable>`,
+                  enabled: true,
+                  constant: true,
+                  selective: false,
+                  position: 'before_char',
+                  insertion_order: 103,
+                  use_regex: false,
+                  extensions: {},
+              },
+          ];
+          // 4. Tiêm Worldbook Entries chuẩn (tự động tạo và liên kết Worldbook nếu thẻ chưa có)
+          let linkedWorld = liveChar.data?.extensions?.world || liveChar.world;
+          let ST_WorldInfo = null;
+          try {
+              ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
+          }
+          catch { }
+          if (!linkedWorld || typeof linkedWorld !== 'string' || !linkedWorld.trim()) {
+              const rawName = (liveChar.name || '').trim();
+              const avatarBase = liveChar.avatar ? liveChar.avatar.replace(/\.[^/.]+$/, '').trim() : 'Character';
+              const baseName = rawName || avatarBase || 'Character';
+              let candidateName = `${baseName} (MVU)`;
+              if (liveChar.data?.character_book?.name &&
+                  typeof liveChar.data.character_book.name === 'string' &&
+                  liveChar.data.character_book.name.trim()) {
+                  candidateName = liveChar.data.character_book.name.trim();
+              }
+              const existingNames = ST_WorldInfo?.world_names || window.world_names || [];
+              const targetBookName = candidateName;
+              // Nếu chưa tồn tại trong ST, tạo file Worldbook mới trên server
+              if (!existingNames.includes(targetBookName)) {
+                  try {
+                      if (ST_WorldInfo && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                          await ST_WorldInfo.saveWorldInfo(targetBookName, { entries: {} }, true);
+                          if (typeof ST_WorldInfo.updateWorldInfoList === 'function') {
+                              await ST_WorldInfo.updateWorldInfoList();
+                          }
+                      }
+                  }
+                  catch (e) {
+                      console.warn('[MvuManager] Lỗi khi tạo mới Worldbook cho card đơn thuần:', e);
+                  }
+              }
+              // Gán liên kết Worldbook vào nhân vật
+              linkedWorld = targetBookName;
+              liveChar.data.extensions.world = targetBookName;
+              liveChar.world = targetBookName;
+              if (liveChar.data.character_book) {
+                  liveChar.data.character_book.name = targetBookName;
+              }
+              // Đồng bộ giao diện SillyTavern UI
+              try {
+                  const $ = window.$;
+                  if ($) {
+                      $('#character_world').val(targetBookName);
+                      if (ST_WorldInfo && typeof ST_WorldInfo.setWorldInfoButtonClass === 'function') {
+                          ST_WorldInfo.setWorldInfoButtonClass(undefined, true);
+                      }
+                  }
+                  const th = window.TavernHelper;
+                  if (th && typeof th.rebindCharWorldbooks === 'function') {
+                      await th
+                          .rebindCharWorldbooks('current', { primary: targetBookName, additional: [] })
+                          .catch(() => { });
+                  }
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Lỗi khi đồng bộ UI liên kết Worldbook:', e);
+              }
+          }
+          if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
+              try {
+                  if (ST_WorldInfo &&
+                      typeof ST_WorldInfo.loadWorldInfo === 'function' &&
+                      typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                      let worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
+                      if (!worldData)
+                          worldData = { entries: {} };
+                      if (!worldData.entries)
+                          worldData.entries = {};
+                      const entriesMap = worldData.entries;
+                      for (const ne of newEntries) {
+                          let foundKey = null;
+                          for (const [k, v] of Object.entries(entriesMap)) {
+                              if (v?.comment === ne.comment || v?.name === ne.comment) {
+                                  foundKey = k;
+                                  break;
+                              }
+                          }
+                          if (foundKey && entriesMap[foundKey]) {
+                              entriesMap[foundKey].content = ne.content;
+                              entriesMap[foundKey].disable = !ne.enabled;
+                              entriesMap[foundKey].constant = Boolean(ne.constant);
+                          }
+                          else {
+                              if (typeof ST_WorldInfo.createWorldInfoEntry === 'function') {
+                                  const created = ST_WorldInfo.createWorldInfoEntry(linkedWorld, worldData);
+                                  if (created) {
+                                      created.comment = ne.comment;
+                                      created.name = ne.comment;
+                                      created.content = ne.content;
+                                      created.constant = Boolean(ne.constant);
+                                      created.disable = !ne.enabled;
+                                      created.key = ne.keys || [];
+                                      created.keys = ne.keys || [];
+                                      created.position = 0;
+                                  }
+                              }
+                              else {
+                                  const nextUid = Date.now() + Math.floor(Math.random() * 1000);
+                                  entriesMap[nextUid] = {
+                                      uid: nextUid,
+                                      comment: ne.comment,
+                                      name: ne.comment,
+                                      content: ne.content,
+                                      constant: Boolean(ne.constant),
+                                      disable: !ne.enabled,
+                                      key: ne.keys || [],
+                                      keys: ne.keys || [],
+                                      position: 0,
+                                  };
+                              }
+                          }
+                      }
+                      await ST_WorldInfo.saveWorldInfo(linkedWorld, worldData, true);
+                      if (typeof ST_WorldInfo.reloadEditor === 'function') {
+                          ST_WorldInfo.reloadEditor(linkedWorld);
+                      }
+                  }
+              }
+              catch (e) {
+                  console.warn('[MvuManager] Lỗi khi lưu vào linked Worldbook trong scaffold:', e);
+              }
+          }
+          const existingComments = new Set((liveChar.data.character_book.entries || []).map((e) => e.comment));
+          for (const ne of newEntries) {
+              if (!existingComments.has(ne.comment)) {
+                  liveChar.data.character_book.entries.push(ne);
+              }
+              else {
+                  const found = liveChar.data.character_book.entries.find((e) => e.comment === ne.comment);
+                  if (found) {
+                      found.content = ne.content;
+                      found.enabled = ne.enabled;
+                      found.constant = ne.constant;
+                  }
+              }
+          }
+          // 5a. Đồng bộ json_data để tránh TavernHelper watcher ghi đè bằng dữ liệu cũ
+          try {
+              if (liveChar.json_data) {
+                  const jd = JSON.parse(liveChar.json_data);
+                  jd.data = jd.data || {};
+                  jd.data.extensions = liveChar.data.extensions;
+                  jd.data.character_book = liveChar.data.character_book;
+                  liveChar.json_data = JSON.stringify(jd);
+                  const $ = window.$;
+                  if ($ && typeof $ === 'function') {
+                      $('#character_json_data').val(liveChar.json_data);
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[MvuManager] Lỗi khi đồng bộ json_data trong scaffold:', e);
+          }
+          // 5b. Lưu lại vào SillyTavern Backend
+          const ctx = this.getContext();
+          const res = await fetch('/api/characters/merge-attributes', {
+              method: 'POST',
+              headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                  avatar: liveChar.avatar,
+                  avatar_url: liveChar.avatar,
+                  ch_name: liveChar.name,
+                  data: {
+                      extensions: liveChar.data.extensions,
+                      character_book: liveChar.data.character_book,
+                  },
+              }),
+          });
+          if (!res.ok) {
+              throw new Error(`Lưu MVU vào SillyTavern thất bại: HTTP ${res.status}`);
+          }
+          // Tải lại dữ liệu nhân vật mới nhất vào bộ nhớ ST Frontend (TUYỆT ĐỐI KHÔNG GỌI saveCharacterDebounced vì sẽ trigger form submit đè mất extensions/lorebook)
+          if (typeof window.getOneCharacter === 'function') {
+              await window.getOneCharacter(liveChar.avatar);
+          }
+          else if (typeof ctx.getOneCharacter === 'function') {
+              await ctx.getOneCharacter(liveChar.avatar);
+          }
+          try {
+              const { eventSource, event_types } = await new Function('return import("/scripts/events.js")')();
+              eventSource.emit(event_types.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: liveChar } });
+          }
+          catch { }
+          // Đảm bảo toggle Character Scripts trong TavernHelper được kích hoạt SAU KHI đã lưu backend và reload
+          await this.enableCharacterScriptsInTavernHelper(liveChar);
+          return {
+              success: true,
+              linkedWorldbook: linkedWorld,
+              injectedScripts: ['MVU', 'Cấu trúc biến'],
+              injectedRegexes: [
+                  '[MVU] Ẩn cập nhật biến khỏi AI',
+                  '[MVU] Làm đẹp cập nhật biến',
+                  '[MVU] Giao diện thanh trạng thái',
+                  '[MVU] Ẩn thanh trạng thái khỏi AI',
+              ],
+              injectedLorebookEntries: [
+                  '[InitVar] Khởi tạo biến cấm bật',
+                  '[mvu_update] Quy tắc cập nhật biến',
+                  '[mvu_update] Định dạng đầu ra của biến',
+                  'Danh sách biến',
+              ],
+          };
+      }
+  }
+
+  const inspectMvuTool = {
+      schema: {
+          name: 'inspect_mvu',
+          description: 'Khảo sát và bóc tách chuyên sâu hệ thống biến trạng thái MVU (MagVarUpdate) và Zod 4 Schema của nhân vật hiện tại.\n' +
+              'Trả về:\n' +
+              '1. Trạng thái kích hoạt MVU và kịch bản Zod Schema (định nghĩa các kiểu dữ liệu, min, max, prefault).\n' +
+              '2. Toàn bộ giá trị thời gian thực (live stats) hiện tại trong bộ nhớ chat (stat_data).\n' +
+              '3. Giá trị khởi tạo mặc định [InitVar] trong Worldbook.\n' +
+              '4. Các quy tắc cập nhật biến tự nhiên [mvu_update].\n' +
+              '5. Cảnh báo lỗi không đồng bộ giữa Zod Schema và dữ liệu khởi tạo.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  path: {
+                      type: 'string',
+                      description: 'Đường dẫn biến cụ thể cần lọc (VD: "Trạng_thái.Sức_khỏe" hoặc "stat_data.Thuộc_tính"). Nếu để trống sẽ trả về toàn bộ cây biến.',
+                  },
+                  floor: {
+                      type: 'number',
+                      description: 'Tùy chọn: Tầng tin nhắn (Message ID) cụ thể cần khảo sát trạng thái biến. Nếu để trống sẽ lấy tầng tin nhắn hiện tại hoặc mới nhất.',
+                  },
+              },
+          },
+      },
+      execute: async (args, context) => {
+          try {
+              if (!context || !context.adapter) {
+                  return {
+                      isError: true,
+                      content: 'Lỗi: Adapter không được cung cấp trong context.',
+                  };
+              }
+              const filterPath = args.path;
+              const floor = args.floor !== undefined ? Number(args.floor) : undefined;
+              const report = await MvuManager.inspectMvu(context.adapter, filterPath, floor);
+              return {
+                  content: JSON.stringify(report, null, 2),
+              };
+          }
+          catch (error) {
+              return {
+                  isError: true,
+                  content: `Lỗi khi khảo sát hệ thống MVU: ${error?.message || String(error)}`,
+              };
+          }
+      },
+  };
+
+  const setMvuVariableTool = {
+      schema: {
+          name: 'set_mvu_variable',
+          description: 'Trực tiếp sửa đổi giá trị của một biến trạng thái MVU trong thời gian thực (Runtime) thông qua TavernHelper API.\n' +
+              'Không cần phải sửa tin nhắn chat hay chờ AI sinh thẻ <UpdateVariable>. Thao tác có hiệu lực ngay lập tức trong phiên chat và cập nhật thẳng vào giao diện thanh trạng thái (Status Bar) nếu có.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  path: {
+                      type: 'string',
+                      description: 'Đường dẫn biến cần sửa (VD: "stat_data.Thuộc_tính.Sức_khỏe" hoặc "Trạng_thái" hoặc "Nhân_vật.Túi_đồ").',
+                  },
+                  value: {
+                      description: 'Giá trị mới cần gán cho biến (có thể là số, chuỗi, boolean, mảng hoặc object tùy theo Schema).',
+                  },
+                  floor: {
+                      type: 'number',
+                      description: 'Tùy chọn: Tầng tin nhắn (Message ID) cụ thể cần cập nhật biến. Nếu để trống sẽ tự động cập nhật tầng hiện tại hoặc mới nhất.',
+                  },
+                  reason: {
+                      type: 'string',
+                      description: 'Lý do thực hiện thay đổi chỉ số/biến (để ghi nhận ngữ cảnh hoặc thông báo cho người dùng).',
+                  },
+              },
+              required: ['path', 'value'],
+          },
+      },
+      execute: async (args, context) => {
+          try {
+              if (!context || !context.adapter) {
+                  return {
+                      isError: true,
+                      content: 'Lỗi: Adapter không được cung cấp trong context.',
+                  };
+              }
+              const { path, value, reason } = args;
+              const floor = args.floor !== undefined ? Number(args.floor) : undefined;
+              if (!path) {
+                  return {
+                      isError: true,
+                      content: 'Lỗi: Thiếu tham số "path" (đường dẫn biến).',
+                  };
+              }
+              const result = await MvuManager.setLiveVariable(path, value, floor);
+              return {
+                  content: JSON.stringify({
+                      success: true,
+                      path,
+                      oldValue: result.oldValue,
+                      newValue: result.newValue,
+                      reason: reason || 'Thay đổi bởi Agent',
+                      message: `Đã cập nhật biến "${path}" thành công: ${JSON.stringify(result.oldValue)} ➔ ${JSON.stringify(result.newValue)}`,
+                  }, null, 2),
+              };
+          }
+          catch (error) {
+              return {
+                  isError: true,
+                  content: `Lỗi khi cập nhật biến MVU: ${error?.message || String(error)}`,
+              };
+          }
+      },
+  };
+
+  const mutateMvuSchemaTool = {
+      schema: {
+          name: 'mutate_mvu_schema',
+          description: 'Thực hiện modding / biến đổi cấu trúc Schema của hệ thống MVU trên thẻ nhân vật hiện tại.\n' +
+              'Áp dụng Ma trận lan truyền thay đổi (Change Propagation Matrix) chuẩn của MVU Zod:\n' +
+              '- Tự động cập nhật Zod 4 Schema trong script của Tửu quán trợ thủ (tavern_helper.scripts).\n' +
+              '- Tự động cập nhật giá trị khởi tạo trong Worldbook ([InitVar] YAML).\n' +
+              '- Tự động cập nhật quy tắc suy luận của AI trong Worldbook ([mvu_update] YAML).\n' +
+              '- Tự động lưu và đồng bộ về SillyTavern Backend (/api/characters/merge-attributes).\n' +
+              'Dùng khi người dùng yêu cầu: "Thêm cho nhân vật này chỉ số thể lực", "Xóa biến vàng", "Đặt giới hạn máu từ 0 đến 200", v.v.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  action: {
+                      type: 'string',
+                      enum: ['add', 'modify', 'delete', 'rename'],
+                      description: 'Hành động cấu trúc: "add" (thêm biến mới), "modify" (sửa kiểu/giới hạn/giá trị), "delete" (xóa biến), "rename" (đổi tên biến).',
+                  },
+                  variable_path: {
+                      type: 'string',
+                      description: 'Đường dẫn biến (VD: "Thể_lực" hoặc "Người_chơi.Thuộc_tính.Thể_chất").',
+                  },
+                  new_name: {
+                      type: 'string',
+                      description: 'Tên mới của biến khi thực hiện hành động "rename".',
+                  },
+                  type: {
+                      type: 'string',
+                      enum: ['number', 'string', 'boolean', 'array', 'object'],
+                      description: 'Kiểu dữ liệu của biến (mặc định là "number" nếu có min/max, ngược lại là "string").',
+                  },
+                  min: {
+                      type: 'number',
+                      description: 'Giá trị nhỏ nhất (nếu là số, hệ thống sẽ tự động clamp/kẹp trong khoảng này).',
+                  },
+                  max: {
+                      type: 'number',
+                      description: 'Giá trị lớn nhất (nếu là số, hệ thống sẽ tự động clamp/kẹp trong khoảng này).',
+                  },
+                  default_value: {
+                      description: 'Giá trị khởi tạo ban đầu đưa vào [InitVar] (có thể là số, chuỗi, boolean, mảng hoặc object).',
+                  },
+                  rule_check: {
+                      type: 'string',
+                      description: 'Lời hướng dẫn bằng ngôn ngữ tự nhiên để AI biết khi nào và thay đổi biến như thế nào (đưa vào [mvu_update]).',
+                  },
+              },
+              required: ['action', 'variable_path'],
+          },
+      },
+      execute: async (args, context) => {
+          try {
+              if (!context || !context.adapter) {
+                  return {
+                      isError: true,
+                      content: 'Lỗi: Adapter không được cung cấp trong context.',
+                  };
+              }
+              const options = {
+                  action: args.action,
+                  variablePath: args.variable_path,
+                  newName: args.new_name,
+                  type: args.type,
+                  min: args.min,
+                  max: args.max,
+                  defaultValue: args.default_value,
+                  ruleCheck: args.rule_check,
+              };
+              const result = await MvuManager.mutateMvuSchema(context.adapter, options);
+              return {
+                  content: JSON.stringify(result, null, 2),
+              };
+          }
+          catch (error) {
+              return {
+                  isError: true,
+                  content: `Lỗi khi biến đổi cấu trúc MVU Schema: ${error?.message || String(error)}`,
+              };
+          }
+      },
+  };
+
+  const scaffoldMvuCardTool = {
+      schema: {
+          name: 'scaffold_mvu_card',
+          description: 'Nạp hạ tầng kỹ thuật MVU Zod 4 vào một thẻ nhân vật, biến card thành sàn dữ liệu trạng thái động.\n' +
+              'LƯU Ý QUAN TRỌNG VỀ PHẠM VI SỬ DỤNG:\n' +
+              '- Công cụ này dùng để "khai thiên lập địa" MVU từ con số 0 cho card CHƯA CÓ MVU.\n' +
+              '- Nếu thẻ ĐÃ CÓ MVU: hãy ưu tiên sử dụng "mutate_mvu_schema" để thêm/sửa/xoá biến nhằm bảo toàn dữ liệu hiện tại, hoặc truyền "force: true" nếu muốn xoá sạch và dựng lại từ đầu.\n' +
+              'HOÀN TOÀN TỰ ĐỘNG & TOÀN DIỆN:\n' +
+              '1. Script lõi MagVarUpdate (MVU) chạy nền & Script Zod 4 Schema cấu trúc dữ liệu an toàn.\n' +
+              '2. Tự động BẬT TOGGLE "Character Script" trong Tửu quán trợ thủ (TavernHelper) để kịch bản được phép thực thi.\n' +
+              '3. Bộ 4 Regex Scripts chuẩn (ẩn cập nhật, làm đẹp thẻ, thanh trạng thái) và tự động bật Scoped Scripts.\n' +
+              '4. Bộ 4 mục Worldbook chuẩn ([InitVar], [mvu_update] Quy tắc, [mvu_update] Định dạng đầu ra, Danh sách biến). ĐẶC BIỆT: Nếu card ban đầu là card đơn thuần KHÔNG có Worldbook liên kết, hệ thống sẽ tự động tạo mới một Worldbook chuyên dụng trên SillyTavern và liên kết vào thẻ, đảm bảo các entry prompt MVU hoạt động 100% trong phòng chat (không bị rơi vào hư vô).',
+          parameters: {
+              type: 'object',
+              properties: {
+                  variables: {
+                      type: 'array',
+                      description: 'Danh sách các biến trạng thái tùy ý do AI thiết kế phù hợp với nhân vật (hỗ trợ phân cấp bằng dấu chấm, VD: "Nhân_vật.Tâm_trạng", "Chỉ_số.Sinh_mệnh", "Vật_phẩm").',
+                      items: {
+                          type: 'object',
+                          properties: {
+                              path: {
+                                  type: 'string',
+                                  description: 'Đường dẫn biến (VD: "Sức_khỏe", "Thế_giới.Thời_tiết", "Tâm_trạng").',
+                              },
+                              type: {
+                                  type: 'string',
+                                  enum: ['number', 'string', 'boolean', 'array', 'object'],
+                                  description: 'Kiểu dữ liệu của biến.',
+                              },
+                              defaultValue: {
+                                  description: 'Giá trị khởi tạo ban đầu cho biến (đưa vào [InitVar]).',
+                              },
+                              min: {
+                                  type: 'number',
+                                  description: 'Giá trị tối thiểu (nếu là số, hệ thống sẽ tự sinh hàm clamp của Zod).',
+                              },
+                              max: {
+                                  type: 'number',
+                                  description: 'Giá trị tối đa (nếu là số, hệ thống sẽ tự sinh hàm clamp của Zod).',
+                              },
+                              ruleCheck: {
+                                  type: 'string',
+                                  description: 'Lời hướng dẫn ngôn ngữ tự nhiên giải thích khi nào biến thay đổi để AI điều chỉnh chính xác trong phản hồi.',
+                              },
+                              description: {
+                                  type: 'string',
+                                  description: 'Mô tả ngắn gọn ý nghĩa của biến.',
+                              },
+                          },
+                          required: ['path', 'type'],
+                      },
+                  },
+                  custom_zod_schema: {
+                      type: 'string',
+                      description: 'Mã nguồn Zod 4 Schema đầy đủ (nếu AI hoặc người dùng muốn tự viết trực tiếp toàn bộ kịch bản Zod 4).',
+                  },
+                  custom_initvar_yaml: {
+                      type: 'string',
+                      description: 'Nội dung YAML tùy chỉnh cho mục [InitVar] trong Worldbook.',
+                  },
+                  custom_rules_yaml: {
+                      type: 'string',
+                      description: 'Nội dung YAML tùy chỉnh cho mục [mvu_update] Quy tắc cập nhật biến trong Worldbook.',
+                  },
+                  concept_summary: {
+                      type: 'string',
+                      description: 'Mô tả ngắn gọn về hệ thống biến đang khởi tạo (VD: "Hệ thống sinh tồn", "Chỉ số tâm lý").',
+                  },
+                  force: {
+                      type: 'boolean',
+                      description: 'Bắt buộc ghi đè lại toàn bộ hệ thống MVU từ đầu nếu thẻ nhân vật đã có sẵn MVU (mặc định false). Thẻ chưa có MVU thì không cần truyền.',
+                  },
+              },
+          },
+      },
+      execute: async (args, context) => {
+          try {
+              if (!context || !context.adapter) {
+                  return {
+                      isError: true,
+                      content: 'Lỗi: Adapter không được cung cấp trong context.',
+                  };
+              }
+              const options = {
+                  variables: args.variables,
+                  customZodSchema: args.custom_zod_schema,
+                  customInitvarYaml: args.custom_initvar_yaml,
+                  customRulesYaml: args.custom_rules_yaml,
+                  title: args.concept_summary,
+                  force: Boolean(args.force),
+              };
+              const result = await MvuManager.scaffoldMvuCard(context.adapter, options);
+              return {
+                  content: JSON.stringify({
+                      success: true,
+                      concept: args.concept_summary || 'Tùy biến linh hoạt',
+                      variablesCount: args.variables?.length || 0,
+                      linkedWorldbook: result.linkedWorldbook,
+                      message: 'Đã nạp thành công hạ tầng kỹ thuật MVU linh hoạt vào thẻ nhân vật hiện tại.',
+                      characterScriptsEnabled: true,
+                      injectedScripts: result.injectedScripts,
+                      injectedRegexes: result.injectedRegexes,
+                      injectedLorebookEntries: result.injectedLorebookEntries,
+                  }, null, 2),
+              };
+          }
+          catch (error) {
+              return {
+                  isError: true,
+                  content: `Lỗi khi nạp hệ thống MVU vào thẻ nhân vật: ${error?.message || String(error)}`,
+              };
+          }
+      },
+  };
+
+  const mvuInstructTool = {
+      schema: {
+          name: 'mvu_instruct',
+          description: 'Cẩm nang kiến thức chuyên sâu và hướng dẫn kỹ thuật toàn diện về hệ sinh thái MVU (MagVarUpdate) & Zod 4 trong SillyTavern.\n' +
+              'Khai thác trực tiếp từ toàn bộ kho tài liệu kỹ thuật chuẩn của Tavern Cards Forge & Hướng dẫn MVU ZOD.\n' +
+              'DÙNG CÔNG CỤ NÀY KHI: Bạn cần hiểu rõ kiến trúc MVU, cú pháp Zod 4 chuẩn, cách cấu hình Worldbook [InitVar]/[mvu_update], cơ chế JSON Patch RFC 6902, quy tắc Regex, EJS Template Prompt đa giai đoạn, TavernHelper Script API, hoặc khi người dùng yêu cầu thiết kế hệ thống biến cho Card.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  topic: {
+                      type: 'string',
+                      enum: [
+                          'all',
+                          'architecture',
+                          'zod_rules',
+                          'worldbook_structure',
+                          'json_patch',
+                          'regex_scripts',
+                          'variable_naming',
+                          'change_propagation',
+                          'ejs_integration',
+                          'tavern_helper_scripting',
+                          'troubleshooting',
+                          'tools_guide',
+                      ],
+                      description: 'Chủ đề kiến thức cần tra cứu:\n' +
+                          '- "all": Toàn bộ cẩm nang MVU ZOD bách khoa toàn thư.\n' +
+                          '- "architecture": Kiến trúc 3 tầng cốt lõi, nguyên lý sàn linh hoạt (Zero Hardcoding), và cơ chế định tuyến mô hình kép (Dual-AI Routing [mvu_plot]/[mvu_update]).\n' +
+                          '- "zod_rules": Cú pháp Zod 4, clamp, transform, prefault, idempotent rule, clearable objects, intersection, và các hàm bị cấm.\n' +
+                          '- "worldbook_structure": Cấu trúc 4 mục Worldbook chuẩn ([InitVar] vô hiệu hóa, [mvu_update] rules/format, danh sách biến D0/D1), cơ chế nạp biến có chọn lọc và ghi đè tin nhắn mở đầu (Multi-greeting initvar overrides).\n' +
+                          '- "json_patch": Tiêu chuẩn JSON Patch RFC 6902, quy trình suy luận 3 bước CoT <Analysis>, các toán tử replace/delta/insert/remove/move.\n' +
+                          '- "regex_scripts": Nguyên lý ghép cặp Regex (ẩn prompt và làm đẹp giao diện hiển thị HTML <StatusPlaceHolderImpl/>).\n' +
+                          '- "variable_naming": Quy ước đặt tên biến (cấm macro trong key), bảng so sánh cú pháp đường dẫn, tiền tố chỉ đọc "_" và tiền tố ẩn "$".\n' +
+                          '- "change_propagation": Ma trận lan truyền thay đổi 3 tầng khi Thêm/Sửa/Đổi tên/Xóa biến.\n' +
+                          '- "ejs_integration": Tích hợp Template Prompt EJS (ST-Prompt-Template), đọc biến getvar(), phân tầng tính cách/cốt truyện đa giai đoạn.\n' +
+                          '- "tavern_helper_scripting": Script Tửu quán trợ thủ can thiệp biến dưới nền, lắng nghe sự kiện MVU (COMMAND_PARSED, VARIABLE_UPDATE_ENDED), API get/replace/parse.\n' +
+                          '- "troubleshooting": Hướng dẫn xác minh nhật ký, khắc phục lỗi vàng/đỏ thường gặp, và chế độ bật/tắt macro khi biên soạn card.\n' +
+                          '- "tools_guide": Hướng dẫn sử dụng phối hợp bộ 4 công cụ (inspect, scaffold, mutate, set) của Kaiz.',
+                  },
+              },
+          },
+      },
+      execute: async (args) => {
+          const topic = args.topic || 'all';
+          const sections = {
+              architecture: `## 1. KIẾN TRÚC 3 TẦNG CỐT LÕI, NGUYÊN LÝ SÀN LINH HOẠT & ĐỊNH TUYẾN MÔ HÌNH KÉP
+
+### 1.1. Bản chất MVU (MagVarUpdate)
+MVU là framework theo dõi trạng thái nhân vật theo thời gian thực (Live Status Tracking) tiên tiến nhất trong SillyTavern. Toàn bộ hệ sinh thái kết hợp 3 tầng liên hoàn:
+1. **TavernHelper Script (Kịch bản cấu trúc biến)**: Script Zod 4 Schema chạy nền để định nghĩa kiểu dữ liệu, ràng buộc và tự động kiểm tra/sửa chữa giá trị (Validation & Sanitization) sau mỗi lượt cập nhật.
+2. **Worldbook Entries (4 mục chuyên dụng)**: Khởi tạo giá trị ban đầu ([InitVar]), quy định quy tắc cập nhật ([mvu_update]), hướng dẫn định dạng lệnh đầu ra JSON Patch ([mvu_update]), và đưa biến vào ngữ cảnh câu hỏi (Danh sách biến).
+3. **Regex Scripts**: Các bộ lọc chính quy chạy song song để ẩn lệnh cập nhật khỏi AI prompt (tiết kiệm token) và làm đẹp kết quả hiển thị cho người chơi.
+
+### 1.2. Nguyên lý Sàn Linh Hoạt (Zero Hardcoding & Anti-Template)
+- **TUYỆT ĐỐI KHÔNG DÙNG TEMPLATE RẬP KHUÔN**: Không bao giờ ép một card vào các chủ đề mẫu định sẵn (như tu tiên, rpg hay tình cảm). Mỗi nhân vật có Lore, thế giới, tính cách và quy tắc riêng biệt.
+- **Tự do kiến tạo biến**: Phân tích kỹ lưỡng thông tin nhân vật để tạo ra bộ biến tối ưu:
+  - Thế giới Sinh tồn / Hậu tận thế: \`Thể_lực\`, \`Độ_đói\`, \`Cơn_khát\`, \`Nhiễm_xạ\`, \`Độ_bền_trang_bị\`.
+  - Trinh thám / Huyền bí: \`Độ_khả_nghi\`, \`Tâm_lý_bất_an\`, \`Manh_mối_nắm_giữ\`, \`Mức_độ_tỉnh_táo_Sanity\`.
+  - Khoa học viễn tưởng: \`Năng_lượng_lõi\`, \`Nhiệt_độ_hệ_thống\`, \`Tải_trọng_CPU\`, \`Tình_trạng_khiên\`.
+  - Cổ trang / Kiếm hiệp: \`Tu_vi\`, \`Chân_nguyên\`, \`Cảnh_giới\`, \`Thiện_cảm\`, \`Bảo_vật\`.
+
+### 1.3. Định tuyến mô hình kép (Dual-AI Routing)
+MVU hỗ trợ 2 cơ chế vận hành:
+- **Xuất cùng AI (Single AI)**: Một AI vừa viết cốt truyện vừa xuất lệnh cập nhật ở cuối phản hồi.
+- **Phân tích mô hình bổ sung (Dual AI)**: Một AI chuyên viết cốt truyện, một AI khác độc lập phân tích cốt truyện để cập nhật biến.
+
+**Quy tắc tiền tố tên mục Worldbook để điều phối routing:**
+- Tên chứa \`[mvu_plot]\`: Chỉ gửi cho AI phụ trách cốt truyện.
+- Tên chứa \`[mvu_update]\`: Chỉ gửi cho AI phụ trách cập nhật biến (bắt buộc gắn cho Quy tắc cập nhật & Định dạng đầu ra).
+- Tên không chứa cả hai (như \`Danh sách biến\`): Tự động gửi cho CẢ HAI AI.
+Cách đặt tên này giúp card tự động tương thích 100% với cả môi trường Single-AI lẫn Dual-AI.`,
+              zod_rules: `## 2. CÚ PHÁP ZOD 4 SCHEMA CHUẨN MVU (ZOD 4 RULES)
+
+### 2.1. Môi trường thực thi & Import
+- Thư viện \`z\` (Zod 4.x) và \`_\` (Lodash) đã được SillyTavern và TavernHelper nạp toàn cục. **TUYỆT ĐỐI KHÔNG import z hay lodash trong mã Schema**.
+- Kịch bản Zod Schema luôn có định dạng bọc chuẩn:
+\`\`\`javascript
+import { registerMvuSchema } from 'https://testingcf.jsdelivr.net/gh/StageDog/tavern_resource/dist/util/mvu_zod.js';
+
+export const Schema = z.object({
+  // Định nghĩa cấu trúc biến ở đây
+});
+
+$(() => {
+  registerMvuSchema(Schema);
+});
+\`\`\`
+
+### 2.2. Tính Lũy Đẳng (Idempotent Operation)
+Schema được thiết kế để phân tích các bản cập nhật gia tăng của thế giới. Do đó, kết quả đầu ra của \`Schema.parse(input)\` bắt buộc phải là một đầu vào hợp lệ của chính \`Schema.parse\`:
+\`\`\`text
+Schema.parse(Schema.parse(input)) === Schema.parse(input)
+\`\`\`
+Phải hết sức thận trọng khi sử dụng \`z.transform\`, bảo đảm hàm chuyển đổi không làm biến đổi cấu trúc theo cách gây lỗi ở lần parse kế tiếp.
+
+### 2.3. Cú pháp các kiểu dữ liệu
+1. **Kiểu Số (Number)**:
+   - Luôn ưu tiên dùng \`z.coerce.number()\` thay vì \`z.number()\` để tự động ép kiểu chuỗi số từ LLM.
+   - **Kẹp khoảng (Clamp) bằng transform**: Khi có giới hạn Min - Max, luôn dùng Lodash \`_.clamp\` trong \`transform\`:
+     \`z.coerce.number().transform(v => _.clamp(v, 0, 100)).prefault(100)\`
+     *Lý do*: Nếu dùng \`.min(0).max(100)\`, khi AI xuất giá trị 105, toàn bộ cập nhật sẽ bị từ chối/báo lỗi. Dùng \`transform\` giúp tự động nắn giá trị về 100 một cách êm ái.
+2. **Kiểu Chuỗi (String)**:
+   - \`z.string().prefault('Giá trị mặc định')\`
+3. **Kiểu Logic (Boolean)**:
+   - Dùng \`z.boolean().prefault(false)\`. **KHÔNG dùng \`z.coerce.boolean()\`**.
+4. **Kiểu Đối tượng & Mảng (Object/Record vs Array)**:
+   - **ƯU TIÊN DÙNG \`z.record\` THAY VÌ \`z.array\`**: Chỉ số mảng (index 0, 1, 2) rất khó duy trì và dễ lệch khi AI thực hiện JSON Patch chèn/xóa. Do đó:
+     - Khóa cố định bắt buộc + cùng loại: \`z.record(z.enum(['Khóa1', 'Khóa2']), type)\`
+     - Khóa cố định tùy chọn + cùng loại: \`z.partialRecord(z.enum(['Khóa1', 'Khóa2']), type)\`
+     - Khóa động tùy chọn + cùng loại (Túi đồ, Nhiệm vụ): \`z.record(z.string().describe('Tên_vật_phẩm'), z.object({ Mô_tả: z.string(), Số_lượng: z.coerce.number().prefault(1) }))\`
+     - Khóa cố định + khác loại: \`z.object({ Khóa1: type1, Khóa2: type2 })\`
+     - Khóa động nhưng có một số khóa bắt buộc: \`z.intersection(z.object({ Bắt_buộc: type1 }), z.record(z.string(), type2))\`
+5. **Đối tượng có thể xóa sạch (Clearable Objects)**:
+   - Nếu một đối tượng có thể bị xóa bằng JSON Patch \`{ "op": "remove", "path": "/path/to/object" }\`, hãy dùng \`z.object({ ... }).prefault({})\` thay vì \`z.object({ ... }).optional()\` để tương thích tốt nhất với cập nhật gia tăng.
+6. **Giá trị mặc định (.prefault)**:
+   - Trong Zod 4, **luôn ưu tiên \`.prefault(...)\` thay vì \`.default(...)\`**.
+   - Nếu một đối tượng phức hợp có \`.prefault({})\`, **TẤT CẢ các trường con bên trong nó cũng phải có \`.prefault(...)\`**.
+7. **Quy tắc về hàm**:
+   - \`z.transform\`: Hàm chỉ nhận duy nhất 1 tham số \`(value) => NewOutput\`. **TUYỆT ĐỐI KHÔNG dùng \`(value, context) => ...\`**.
+   - \`z.extend\`: Chỉ dùng được trên \`z.object\`. Không thể gọi \`.extend()\` sau khi đã gắn \`.prefault({})\`.
+   - **Cấm kỵ**: KHÔNG dùng \`z.passthrough()\` hay \`z.strict()\` (không tồn tại trong Zod 4).
+8. **Duy trì thứ tự khóa chèn vào**:
+   - Nếu cần thao tác với thời gian chèn của khóa (như giới hạn 10 danh hiệu mới nhất), dùng \`_(data).entries().takeRight(10).fromPairs().value()\`.`,
+              worldbook_structure: `## 3. CẤU TRÚC 4 MỤC WORLDBOOK CHUẨN MVU & KHỞI TẠO ĐA BỐI CẢNH
+
+Bốn mục Worldbook tạo nên chuỗi mắt xích cung cấp dữ liệu cho LLM:
+
+### 3.1. Mục 1: \`[InitVar] Khởi tạo biến cấm bật\`
+- **Nội dung**: Định dạng YAML của toàn bộ trạng thái khởi tạo ban đầu, khớp cấu trúc 1-1 với Zod Schema.
+- **Trạng thái**: **BẮT BUỘC VÔ HIỆU HÓA (\`enabled: false\`)**!
+  > *Nguyên lý sống còn*: MVU engine của TavernHelper chỉ quét và nạp các mục InitVar bị tắt (\`enabled: false\`). Việc vô hiệu hóa mục này ngăn không cho toàn bộ YAML khởi tạo bị gửi thô vào prompt của AI ở mọi tin nhắn, tiết kiệm hàng trăm token mỗi lượt chat.
+- **Vị trí**: \`position: 'before_char'\`, \`insertion_order: 100\`.
+
+### 3.2. Mục 2: \`[mvu_update] Quy tắc cập nhật biến\`
+- **Nội dung**: YAML hướng dẫn AI khi nào và cách thức biến thay đổi:
+\`\`\`yaml
+---
+Quy_tắc_cập_nhật_biến:
+  Thế_giới:
+    Thời_gian_hiện_tại:
+      format: YYYY/MM/DD HH:MM
+      check:
+        - Cập nhật sau mỗi biến cố, nghỉ ngơi hoặc di chuyển
+  Nhân_vật:
+    Độ_hảo_cảm:
+      type: number
+      range: 0~100
+      category:
+        0~30: Lạnh lùng, đề phòng
+        31~70: Thân thiện, tin cậy
+        71~100: Gắn bó sâu sắc
+      check:
+        - Điều chỉnh ±(1~5) dựa trên hành động và lời nói của <user>
+    Trang_phục.\${Áo|Quần|Giày}:
+      check:
+        - Cập nhật khi thay đổi y phục hoặc rách hỏng
+\`\`\`
+- **Nguyên tắc viết tối ưu**:
+  - Bỏ qua các biến tự minh (biến đã rõ nghĩa như \`Địa_điểm_hiện_tại\` không cần viết \`check\`).
+  - Gộp các biến cùng loại bằng cú pháp \`\${Khóa1|Khóa2|...}\`.
+  - Không viết quy tắc cho biến chỉ đọc (tiền tố \`_\`) và biến ẩn (tiền tố \`$\`).
+- **Trạng thái**: \`enabled: true\`, \`constant: true\`, \`position: 'before_char'\`, \`insertion_order: 101\`.
+
+### 3.3. Mục 3: \`[mvu_update] Định dạng đầu ra của biến\`
+- **Nội dung**: Hướng dẫn chuẩn JSON Patch RFC 6902 kèm chuỗi suy nghĩ (CoT Analysis) để AI xuất lệnh cập nhật ở cuối phản hồi.
+- **Trạng thái**: \`enabled: true\`, \`constant: true\`, \`position: 'before_char'\`, \`insertion_order: 102\`.
+
+### 3.4. Mục 4: \`Danh sách biến\`
+- **Nội dung**:
+\`\`\`yaml
+---
+<status_current_variable>
+{{format_message_variable::stat_data}}
+</status_current_variable>
+\`\`\`
+- **Vị trí**: Đặt tại **Độ sâu 0 hoặc 1 (Depth 0 hoặc 1)** để AI đọc được trạng thái biến mới nhất ngay cạnh phản hồi gần nhất.
+- **Lưu ý**: Tuyệt đối **KHÔNG** thêm tiền tố \`[mvu_update]\` vào mục này để cả AI viết truyện lẫn AI cập nhật biến đều đọc được.
+
+---
+
+### 3.5. Khởi tạo biến cho nhiều bối cảnh mở đầu (Multi-greeting Initvar Overrides)
+Mỗi card nhân vật thường có nhiều tin nhắn mở đầu (Alternate Greetings) ứng với các cốt truyện khác nhau. MVU cung cấp 2 phương án xử lý:
+
+1. **Phương án toàn bộ (Khối \`<initvar>\`)**:
+   - Trong tin nhắn mở đầu, bọc toàn bộ giá trị YAML khởi tạo bằng \`<UpdateVariable><initvar>...</initvar></UpdateVariable>\`.
+   - **Quy tắc**: Khi tin nhắn mở đầu chứa khối \`<initvar>\`, hệ thống sẽ **BỎ QUA HOÀN TOÀN** mục \`[InitVar]\` trong Worldbook và dùng trực tiếp dữ liệu này.
+2. **Phương án tăng giảm (Khối \`<JSONPatch>\`)**:
+   - Nếu các bối cảnh mở đầu chỉ khác nhau 1-2 biến, dùng \`<UpdateVariable><JSONPatch>[{ "op": "replace", "path": "/...", "value": ... }]</JSONPatch></UpdateVariable>\` trong tin nhắn mở đầu.
+   - Hệ thống sẽ nạp \`[InitVar]\` trước, sau đó áp bản patch đè lên ở Tầng 0.`,
+              json_patch: `## 4. TIÊU CHUẨN JSON PATCH (RFC 6902) & OUTPUT FORMAT
+
+### 4.1. Cấu trúc phản hồi AI
+Khi có thay đổi trạng thái, AI xuất khối \`<UpdateVariable>\` ở cuối câu trả lời:
+\`\`\`text
+Phần dẫn truyện và lời thoại...
+
+<UpdateVariable>
+<Analysis>
+- Thời gian trôi qua: Khoảng 15 phút.
+- Tình huống đặc biệt: Giao tranh bất ngờ, cho phép biến động mạnh.
+- Phân tích từng biến theo rule check:
+  + Nhân_vật.HP: Bị trúng kiếm chém, trừ 25 HP.
+  + Nhân_vật.Tâm_trạng: Đổi thành 'Cảnh giác cao độ'.
+  + Túi_đồ: Đã dùng 1 Bình thuốc hồi phục, giảm số lượng về 0 (xóa).
+</Analysis>
+<JSONPatch>
+[
+  { "op": "delta", "path": "/Nhân_vật/HP", "value": -25 },
+  { "op": "replace", "path": "/Nhân_vật/Tâm_trạng", "value": "Cảnh giác cao độ" },
+  { "op": "remove", "path": "/Nhân_vật/Túi_đồ/Bình_thuốc_hồi_phục" }
+]
+</JSONPatch>
+</UpdateVariable>
+\`\`\`
+
+### 4.2. Tác dụng cốt tử của thẻ \`<Analysis>\` (Chain-of-Thought)
+Thẻ \`<Analysis>\` là chuỗi suy nghĩ chuyên dụng buộc AI phải tự vấn trước khi thao tác số liệu:
+1. **Tính toán thời gian trôi qua**: Ngăn chặn tình trạng nhảy cóc thời gian phi logic.
+2. **Phán đoán biến động kịch tính**: Kiểm tra xem tình tiết có đủ đột biến để cho phép số liệu thay đổi mạnh hay không.
+3. **Gọi lại quy tắc \`check\`**: Phân tích từng biến dựa trên hành động cụ thể ở tin nhắn hiện tại, tránh cập nhật theo cảm tính.
+
+### 4.3. Bảng tra cứu toán tử JSON Patch
+| Toán tử | Mô tả hành động | Ví dụ đường dẫn |
+| :--- | :--- | :--- |
+| \`replace\` | Thay thế giá trị của đường dẫn đã tồn tại | \`/Nhân_vật/Tâm_trạng\` |
+| \`delta\` | Tăng/giảm biến số học (Số dương là tăng, số âm là giảm) | \`/Nhân_vật/HP\` với value: \`-15\` |
+| \`insert\` | Thêm khóa mới vào Object, hoặc thêm vào cuối Mảng (\`-\`) | \`/Nhân_vật/Túi_đồ/Bảo_kiếm\` hoặc \`/Nhật_ký/-\` |
+| \`remove\` | Xóa hoàn toàn một khóa khỏi Object hoặc phần tử khỏi Mảng | \`/Nhân_vật/Túi_đồ/Vật_phẩm_cũ\` |
+| \`move\` | Di chuyển/đổi vị trí từ đường dẫn nguồn sang đích | \`from: "/a", to: "/b"\` |
+
+*Quy tắc đường dẫn*: Phân tách bằng dấu gạch chéo \`/\`, bắt đầu từ gốc của biến (**TUYỆT ĐỐI KHÔNG có tiền tố \`stat_data\`**).`,
+              regex_scripts: `## 5. NGUYÊN LÝ GHÉP CẶP REGEX SCRIPTS & HIỂN THỊ GIAO DIỆN
+
+### 5.1. Nguyên tắc Ghép Cặp (Paired Scripts)
+Mỗi phần tử hiển thị/xử lý trong SillyTavern cần 2 Regex hoạt động phối hợp:
+1. **Script Ẩn (\`promptOnly: true, markdownOnly: false\`)**: Chạy trước khi gửi prompt cho AI, biến đoạn thẻ thành rỗng để AI không thấy -> Tiết kiệm token, tránh AI bị phân tâm.
+2. **Script Hiển thị (\`promptOnly: false, markdownOnly: true\`)**: Chạy khi render tin nhắn trên trình duyệt của người chơi -> Thay thế placeholder thành giao diện HTML đẹp mắt.
+
+### 5.2. Bộ 4 Regex Scripts Chuẩn của Hệ Thống MVU
+1. **\`[MVU] Ẩn cập nhật biến khỏi AI\` (Hide Variable Update from AI)**:
+   - \`findRegex\`: \`/<(update(?:variable)?)>(?:(?!.*<\\/\\1>)(?:(?!<\\1>).)*$|(?:(?!<\\1>).)*<\\/\\1?>)/gsi\`
+   - \`replaceString\`: \`""\`
+   - \`promptOnly\`: \`true\`, \`markdownOnly\`: \`false\`, \`placement\`: \`[1, 2]\` (áp dụng cả tin nhắn user và AI).
+2. **\`[MVU] Làm đẹp cập nhật biến\` (Beautify Variable Update)**:
+   - \`findRegex\`: \`/<(update(?:variable)?)>\\s*((?:(?!<\\1>).)*)\\s*<\\/\\1>/gsi\`
+   - \`replaceString\`: HTML collapsible/card đẹp mắt hiển thị trạng thái cập nhật cho người dùng.
+   - \`promptOnly\`: \`false\`, \`markdownOnly\`: \`true\`, \`placement\`: \`[1, 2]\`.
+3. **\`[MVU] Giao diện thanh trạng thái\` (Status Bar UI)**:
+   - \`findRegex\`: \`<StatusPlaceHolderImpl/>\`
+   - \`replaceString\`: Mã HTML/CSS giao diện trạng thái hiển thị qua \`{{format_message_variable::stat_data}}\`.
+   - \`promptOnly\`: \`false\`, \`markdownOnly\`: \`true\`, \`placement\`: \`[2]\`, \`runOnEdit\`: \`true\`.
+4. **\`[MVU] Ẩn thanh trạng thái khỏi AI\` (Hide Status Bar from AI)**:
+   - \`findRegex\`: \`<StatusPlaceHolderImpl/>\`
+   - \`replaceString\`: \`""\`
+   - \`promptOnly\`: \`true\`, \`markdownOnly\`: \`false\`, \`placement\`: \`[2]\`.
+
+*Mẹo nâng cao*: Nếu AI hay bị quên và cập nhật lặp lại nội dung cũ, có thể đặt \`minDepth: 4\` cho regex ẩn cập nhật biến, để AI vẫn thấy khối cập nhật của 1-2 tin nhắn gần nhất.`,
+              variable_naming: `## 6. QUY ƯỚC ĐẶT TÊN BIẾN & SO SÁNH CÚ PHÁP ĐƯỜNG DẪN
+
+### 6.1. Quy tắc đặt tên biến
+- **CẤM DÙNG MACRO SILLYTAVERN TRONG TÊN BIẾN**: Tuyệt đối không dùng \`{{user}}\` hay \`{{char}}\` làm khóa biến JSON/YAML (ví dụ \`{{user}}.HP\` là SAI). Khi người chơi đổi tên persona, cấu trúc biến sẽ bị vỡ. Hãy dùng tên định danh cố định như \`Nhân_vật_chính\`, \`Người_chơi\`, hoặc tên riêng của nhân vật.
+- **Dùng danh từ rõ nghĩa, chuẩn UTF-8**: Khuyến khích đặt tên có dấu hoặc không dấu nhất quán (ví dụ: \`Độ_hảo_cảm\`, \`HP\`, \`Túi_đồ\`).
+
+### 6.2. Tiền tố đặc biệt
+| Tiền tố | AI nhìn thấy? | AI được cập nhật qua JSONPatch? | Mục đích & Công dụng |
+| :--- | :---: | :---: | :--- |
+| **Không tiền tố** | Có | Có | Biến thông thường (HP, Mana, Tâm trạng, Túi đồ, Nhiệm vụ...). |
+| **\`_\` (Gạch dưới)** | Có | **KHÔNG** | **Biến chỉ đọc (Readonly)**. AI nhìn thấy để nhập vai nhưng bị cấm sửa đổi (Ví dụ: \`_Giới_hạn_HP\`, \`_Đặc_tính_cố_định\`, \`_Thân_phận\`). |
+| **\`$\` (Dollar)** | **KHÔNG** | **KHÔNG** | **Biến ẩn nội bộ (Hidden)**. AI hoàn toàn không thấy trong prompt, chỉ dùng cho EJS/TavernHelper script tính toán (Ví dụ: \`$timestamp\`, \`$retry_count\`, \`$debug_flag\`). |
+
+### 6.3. Bảng so sánh định dạng đường dẫn qua các tầng
+| Ngữ cảnh thao tác | Cú pháp đường dẫn | Ví dụ cụ thể |
+| :--- | :--- | :--- |
+| **EJS / Thanh trạng thái / Script** | Dấu chấm phân cấp, bắt đầu bằng \`stat_data\` | \`stat_data.Bạch_Á.Độ_hảo_cảm\` |
+| **AI xuất JSON Patch** | Phân tách \`/\`, không có \`stat_data\` | \`/Bạch_Á/Độ_hảo_cảm\` |
+| **YAML InitVar / Worldbook** | Thụt lề lồng nhau phân cấp | \`Bạch_Á:\` thụt lề \`Độ_hảo_cảm: 35\` |`,
+              change_propagation: `## 7. MA TRẬN LAN TRUYỀN THAY ĐỔI (CHANGE PROPAGATION MATRIX)
+
+Khi thêm mới, đổi tên, sửa kiểu dữ liệu hoặc xóa một biến trong hệ thống MVU, bắt buộc phải cập nhật đồng bộ toàn bộ 3 tầng để tránh lỗi lệch pha:
+
+| Thao tác | 1. Zod Script (TavernHelper) | 2. [InitVar] YAML | 3. [mvu_update] Rules YAML |
+| :--- | :--- | :--- | :--- |
+| **Thêm biến (Add)** | Chèn định nghĩa \`z.coerce...\` vào Schema | Thêm giá trị khởi tạo tương ứng | Thêm rule \`check\` và \`range\` |
+| **Sửa biến (Modify)** | Cập nhật hàm clamp/prefault/type | Cập nhật giá trị khởi tạo mới | Cập nhật \`range\` hoặc \`check\` |
+| **Đổi tên (Rename)** | Đổi tên thuộc tính trong object | Đổi key trong YAML | Đổi đường dẫn target trong rule |
+| **Xóa biến (Delete)** | Xóa dòng khai báo Zod | Xóa khóa khỏi YAML | Xóa quy tắc kiểm tra |
+
+*Lưu ý*: Công cụ \`mutate_mvu_schema\` của Kaiz đã tự động hóa 100% quy trình đồng bộ 3 tầng này trong một bước duy nhất.`,
+              ejs_integration: `## 8. TÍCH HỢP TEMPLATE PROMPT EJS (ST-PROMPT-TEMPLATE) & THIẾT LẬP ĐA GIAI ĐOẠN
+
+### 8.1. Nguyên lý phân tầng prompt động (Dynamic Prompt Staging)
+Trong thẻ truyền thống, AI đọc toàn bộ thiết lập ở mọi thời điểm, dẫn đến việc phân bổ chú ý hỗn loạn và nhầm lẫn trạng thái (ví dụ: bối cảnh ban đầu là thù địch nhưng AI lại cư xử như lúc đã thân mật).
+**Giải pháp EJS**: Dùng biến MVU làm điều kiện để chỉ gửi prompt của giai đoạn hiện tại vào context của LLM.
+
+### 8.2. Cú pháp đọc biến chuẩn trong EJS
+\`\`\`javascript
+<%_
+if (typeof gw === 'undefined') var gw = getvar('stat_data.Nhân_vật.Độ_hảo_cảm', { defaults: 0 });
+if (typeof rel === 'undefined') var rel = getvar('stat_data.Nhân_vật.Mối_quan_hệ', { defaults: 'Người_lạ' });
+_%>
+\`\`\`
+**Quy tắc an toàn EJS**:
+- Luôn kiểm tra \`typeof ... === 'undefined'\` để tránh lỗi khai báo đè khi chạy qua nhiều mục.
+- Bắt buộc dùng \`var\` (không dùng \`const\`/\`let\` vì phạm vi block scope trong EJS).
+- Đường dẫn đọc biến luôn bắt đầu bằng \`stat_data.\`.
+
+### 8.3. Thực chiến hệ thống thiết lập đa giai đoạn
+\`\`\`text
+<%_ if (gw < 30) { _%>
+[Thái độ hiện tại]: Nhân vật giữ khoảng cách thận trọng, lời lẽ lạnh nhạt, cảnh giác trước mọi đề nghị.
+<%_ } else if (gw < 70) { _%>
+[Thái độ hiện tại]: Nhân vật cởi mở, xem bạn là đồng đội đáng tin cậy, sẵn sàng hỗ trợ khi cần.
+<%_ } else { _%>
+[Thái độ hiện tại]: Nhân vật tuyệt đối tin tưởng, sẵn sàng hy sinh và bộc lộ những tâm sự sâu kín nhất.
+<%_ } _%>
+\`\`\`
+AI chỉ nhìn thấy duy nhất 1 đoạn miêu tả tương ứng với mức hảo cảm hiện tại, tiết kiệm token tối đa và triệt tiêu hoàn toàn mâu thuẫn tính cách.`,
+              tavern_helper_scripting: `## 9. SCRIPT TỬU QUÁN TRỢ THỦ: ĐIỀU KHIỂN BIẾN DƯỚI NỀN
+
+Khi cần can thiệp logic phức tạp vượt ngoài khả năng của Zod validation (như so sánh giá trị cũ - mới, kích hoạt sự kiện âm thanh/thông báo, ràng buộc chéo nhiều nhân vật), sử dụng Script Tửu quán trợ thủ (TavernHelper Script).
+
+### 9.1. Khởi tạo bắt buộc
+Phần đầu script luôn phải chờ MVU sẵn sàng:
+\`\`\`javascript
+await waitGlobalInitialized('Mvu');
+\`\`\`
+
+### 9.2. Lắng nghe sự kiện MVU
+1. **Lắng nghe \`Mvu.events.COMMAND_PARSED\`**:
+   Sửa chữa lệnh cập nhật trước khi áp dụng:
+\`\`\`javascript
+await waitGlobalInitialized('Mvu');
+eventOn(Mvu.events.COMMAND_PARSED, commands => {
+  commands.forEach(cmd => {
+    // Sửa lỗi model chèn ký tự lạ vào đường dẫn
+    if (cmd.path) cmd.path = cmd.path.replace(/\\s+/g, '_');
+  });
+});
+\`\`\`
+
+2. **Lắng nghe \`Mvu.events.VARIABLE_UPDATE_ENDED\`**:
+   Lấy giá trị biến trước và sau khi cập nhật để kích hoạt phản hồi:
+\`\`\`javascript
+await waitGlobalInitialized('Mvu');
+eventOn(Mvu.events.VARIABLE_UPDATE_ENDED, (newVars, oldVars) => {
+  const oldVal = _.get(oldVars, 'stat_data.Nhân_vật.HP');
+  const newVal = _.get(newVars, 'stat_data.Nhân_vật.HP');
+  if (oldVal > 0 && newVal <= 0) {
+    toastr.error('Nhân vật đã gục ngã trong giao tranh!');
+  }
+});
+\`\`\`
+
+### 9.3. Đọc và ghi biến bằng mã JavaScript
+\`\`\`javascript
+await waitGlobalInitialized('Mvu');
+
+// Lấy dữ liệu biến của tin nhắn mới nhất
+const currentData = Mvu.getMvuData({ type: 'message', message_id: -1 });
+
+// Sửa đổi biến qua Lodash
+_.update(currentData, 'stat_data.Nhân_vật.Thể_lực', val => _.clamp(val - 10, 0, 100));
+
+// Ghi đè trở lại tin nhắn
+await Mvu.replaceMvuData(currentData, { type: 'message', message_id: -1 });
+\`\`\``,
+              troubleshooting: `## 10. HƯỚNG DẪN KIỂM TRA, XÁC MINH & KHẮC PHỤC SỰ CỐ THƯỜNG GẶP
+
+### 10.1. Kiểm tra xác minh biến đã hoạt động chưa
+1. Đảm bảo API kết nối đang chọn chế độ **Chat Completion**.
+2. Thẻ nhân vật bắt buộc phải có **Tin nhắn mở đầu (First Mesage)**.
+3. Mở một phiên chat mới. Nhấp vào **Biểu tượng Cây đũa thần bên trái khung chat -> Trình xem nhật ký (Log Viewer)**:
+   - Nếu thấy dòng: \`[Script|Cấu trúc biến]: Cấu trúc biến đã đăng ký thành công\` -> Schema Zod hợp lệ 100%.
+   - Nhấp vào **Cây đũa thần -> Trình quản lý biến -> Tầng tin nhắn** để xem cây thư mục biến thực tế.
+
+### 10.2. Chẩn đoán và sửa lỗi màu thông báo
+- **Không có log đăng ký hoặc xuất hiện thông báo màu vàng \`[Script|MVU] Đã xảy ra lỗi cập nhật biến\`**:
+  -> Lỗi cú pháp trong kịch bản Zod Schema (như import sai, dùng hàm cấm \`passthrough\`, hoặc thiếu dấu đóng ngoặc).
+- **Xuất hiện thông báo màu đỏ \`[Script|Cấu trúc biến] Khởi tạo biến thất bại\`**:
+  -> Lỗi định dạng YAML trong mục Worldbook \`[InitVar]\` hoặc cấu trúc YAML không khớp với Schema Zod.
+
+### 10.3. Nút công tắc Macro khi biên soạn thẻ
+Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt template prompt và macro**:
+- **Khi tạo / chỉnh sửa Card**: TẮT -> Để AI nhìn thấy mã nguồn thô (raw macros/EJS) phục vụ biên soạn.
+- **Khi test / trò chuyện**: BẬT -> Để các macro và biến render thành dữ liệu thực tế.`,
+              tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 5 CÔNG CỤ MVU CỦA KAIZ
+
+1. **Khi cần kiểm tra/đánh giá hiện trạng Card**:
+   - Gọi \`inspect_mvu\` -> Trả về tình trạng Zod Schema, cây biến thực tế trong chat, nội dung Worldbook, và cảnh báo sai lệch.
+2. **Khi cần khởi tạo hệ thống MVU cho Card mới/Card thường**:
+   - Phân tích bối cảnh, lore của nhân vật để đề xuất bộ biến phù hợp.
+   - Gọi \`scaffold_mvu_card\` với danh sách \`variables\` tùy biến (hoặc schema Zod/YAML riêng). **Tuyệt đối không dùng template cứng!**
+   - Nếu card đã có MVU từ trước, hệ thống sẽ cảnh báo về việc ghi đè.
+3. **Khi cần thêm/sửa/đổi tên/xóa biến**:
+   - Gọi \`mutate_mvu_schema\` với các hành động (\`add\`, \`modify\`, \`rename\`, \`delete\`). Công cụ này tự động đồng bộ hóa toàn bộ 3 tầng (Zod Script, [InitVar] YAML, [mvu_update] Rules YAML).
+4. **Khi cần điều chỉnh nhanh giá trị biến trong phiên chat**:
+   - Gọi \`set_mvu_variable\` với đường dẫn \`path\` và giá trị \`value\` mới.
+5. **Khi cần tra cứu kiến trúc và cú pháp chuẩn**:
+   - Gọi \`mvu_instruct\` với các chủ đề cần tìm hiểu.
+
+**Nguyên tắc an toàn**: Trước khi thực hiện scaffold, mutate đa biến, hoặc bất kỳ chỉnh sửa sâu nào đối với Card, hãy luôn nhắc người dùng chủ động sử dụng tính năng **Export** của SillyTavern để lưu lại thẻ gốc về máy tính. Điều này bảo đảm an toàn dữ liệu 100% và người dùng luôn có đường lui vững chắc.`,
+          };
+          if (topic === 'all') {
+              const allContent = Object.values(sections).join('\n\n---\n\n');
+              return {
+                  content: allContent,
+              };
+          }
+          const selectedSection = sections[topic];
+          if (!selectedSection) {
+              return {
+                  isError: true,
+                  content: `Chủ đề "${topic}" không hợp lệ. Các chủ đề khả dụng: ${Object.keys(sections).join(', ')}`,
+              };
+          }
+          return {
+              content: selectedSection,
+          };
+      },
+  };
+
   /**
    * Đăng ký tất cả các tools mặc định vào Registry
    */
@@ -8904,13 +20213,18 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       registry.registerTool(getPresetInfoTool);
       registry.registerTool(getPromptBlockTool);
       registry.registerTool(managePresetPromptTool);
+      registry.registerTool(inspectMvuTool);
+      registry.registerTool(setMvuVariableTool);
+      registry.registerTool(mutateMvuSchemaTool);
+      registry.registerTool(scaffoldMvuCardTool);
+      registry.registerTool(mvuInstructTool);
   }
 
   /**
    * SillyTavern Adapter
    * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
    */
-  const escapeHtml$4 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$5 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SillyTavernAdapter {
       constructor() { }
       /**
@@ -9081,7 +20395,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                 <div style="height:calc(100% - 55px); padding:15px; overflow-y:auto; background:#1e1e1e; box-sizing:border-box;">`;
           for (let i = 0; i < chat.length; i++) {
               const msg = chat[i];
-              const name = escapeHtml$4(msg.name || 'System');
+              const name = escapeHtml$5(msg.name || 'System');
               // Lấy safe_preview
               let preview = msg.mes || '';
               if (preview.length > 50)
@@ -9737,14 +21051,139 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const ctx = SillyTavern.getContext();
           try {
               if (type === 'character') {
+                  if (typeof ctx.unshallowCharacter === 'function' && ctx.characterId !== undefined) {
+                      try {
+                          await ctx.unshallowCharacter(ctx.characterId);
+                      }
+                      catch (unshallowErr) {
+                          console.warn('[KaizAgent] unshallowCharacter failed, proceeding with current in-memory state:', unshallowErr);
+                      }
+                  }
                   const char = ctx.characters?.[ctx.characterId];
                   if (!char)
                       throw new Error('No active character found');
                   const charName = char.name || 'Unknown_Character';
-                  const charData = char.data || char;
+                  const rawData = char.data || {};
+                  // 1. Đồng bộ các trường V2 Spec cốt lõi (ưu tiên char.data, fallback về root char)
+                  const name = rawData.name ?? char.name ?? 'Unknown';
+                  const description = rawData.description ?? char.description ?? '';
+                  const personality = rawData.personality ?? char.personality ?? '';
+                  const scenario = rawData.scenario ?? char.scenario ?? '';
+                  const first_mes = rawData.first_mes ?? char.first_mes ?? '';
+                  const mes_example = rawData.mes_example ?? char.mes_example ?? '';
+                  const creator_notes = rawData.creator_notes ?? char.creatorcomment ?? '';
+                  const system_prompt = rawData.system_prompt ?? char.system_prompt ?? '';
+                  const post_history_instructions = rawData.post_history_instructions ?? char.post_history_instructions ?? '';
+                  const alternate_greetings = Array.isArray(rawData.alternate_greetings)
+                      ? rawData.alternate_greetings
+                      : Array.isArray(char.alternate_greetings)
+                          ? char.alternate_greetings
+                          : [];
+                  const creator = rawData.creator ?? char.creator ?? '';
+                  const character_version = rawData.character_version ?? char.character_version ?? '';
+                  // 2. Thu thập Tags đầy đủ
+                  let tags = Array.isArray(rawData.tags) && rawData.tags.length > 0
+                      ? [...rawData.tags]
+                      : Array.isArray(char.tags) && char.tags.length > 0
+                          ? [...char.tags]
+                          : [];
+                  if (tags.length === 0 && ctx.tagMap && ctx.tags && char.avatar) {
+                      const currentTagIds = ctx.tagMap[char.avatar] || [];
+                      tags = currentTagIds
+                          .map((id) => ctx.tags.find((t) => t.id === id)?.name)
+                          .filter(Boolean);
+                  }
+                  // 3. Đóng gói Extensions (bảo toàn tavern_helper, regex_scripts, talkativeness, fav, world, v.v.)
+                  const extensions = {
+                      ...(rawData.extensions || {}),
+                  };
+                  if (char.talkativeness !== undefined && extensions.talkativeness === undefined) {
+                      extensions.talkativeness = char.talkativeness;
+                  }
+                  if (char.fav !== undefined && extensions.fav === undefined) {
+                      extensions.fav = char.fav;
+                  }
+                  const linkedWorldName = extensions.world || char.world || null;
+                  if (linkedWorldName && !extensions.world) {
+                      extensions.world = linkedWorldName;
+                  }
+                  // 4. Thu thập Lorebook (Embedded hoặc đóng gói từ Linked Worldbook)
+                  let characterBook = rawData.character_book ? JSON.parse(JSON.stringify(rawData.character_book)) : null;
+                  if ((!characterBook || !characterBook.entries || characterBook.entries.length === 0) &&
+                      linkedWorldName) {
+                      try {
+                          let worldData = null;
+                          if (typeof ctx.loadWorldInfo === 'function') {
+                              worldData = await ctx.loadWorldInfo(linkedWorldName);
+                          }
+                          else {
+                              const res = await fetch('/api/worldinfo/get', {
+                                  method: 'POST',
+                                  headers: {
+                                      ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                                      'Content-Type': 'application/json',
+                                  },
+                                  body: JSON.stringify({ name: linkedWorldName }),
+                              });
+                              if (res.ok)
+                                  worldData = await res.json();
+                          }
+                          if (worldData && worldData.entries) {
+                              const entriesArray = Array.isArray(worldData.entries)
+                                  ? worldData.entries
+                                  : Object.values(worldData.entries);
+                              characterBook = {
+                                  name: linkedWorldName,
+                                  description: `Tự động đóng gói từ Worldbook liên kết [${linkedWorldName}] vào bản sao lưu thẻ.`,
+                                  extensions: worldData.extensions ?? {},
+                                  entries: entriesArray,
+                              };
+                              if (worldData.scan_depth !== undefined && worldData.scan_depth !== null) {
+                                  characterBook.scan_depth = worldData.scan_depth;
+                              }
+                              if (worldData.token_budget !== undefined && worldData.token_budget !== null) {
+                                  characterBook.token_budget = worldData.token_budget;
+                              }
+                              if (worldData.recursive_scanning !== undefined && worldData.recursive_scanning !== null) {
+                                  characterBook.recursive_scanning = worldData.recursive_scanning;
+                              }
+                          }
+                      }
+                      catch (wbErr) {
+                          console.warn('[KaizAgent] Không thể nhúng linked worldbook vào bản sao lưu thẻ:', wbErr);
+                      }
+                  }
+                  const fullCharData = {
+                      name,
+                      description,
+                      personality,
+                      scenario,
+                      first_mes,
+                      mes_example,
+                      creator_notes,
+                      system_prompt,
+                      post_history_instructions,
+                      alternate_greetings,
+                      character_book: characterBook,
+                      tags,
+                      creator,
+                      character_version,
+                      extensions,
+                  };
+                  const cardPayload = {
+                      spec: 'chara_card_v2',
+                      spec_version: '2.0',
+                      data: fullCharData,
+                      metadata: {
+                          avatar: char.avatar || '',
+                          exportDate: new Date().toISOString(),
+                          source: 'KaizAgent_FullCardBackup',
+                          linkedWorld: linkedWorldName,
+                      },
+                  };
                   return {
                       name: charName,
-                      data: JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: charData }, null, 2),
+                      data: JSON.stringify(cardPayload, null, 2),
                   };
               }
               if (type === 'chat') {
@@ -10665,7 +22104,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       }
   }
 
-  const escapeHtml$3 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$4 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SettingsUI {
       static async init(extPath, EXT_NAME, registry) {
           const $ = jQuery;
@@ -10742,6 +22181,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           $('#kaiz-core-behavior').val(settings.coreBehavior || DEFAULT_CORE_BEHAVIOR);
           $('#kaiz-core-prefill').val(settings.corePrefill || DEFAULT_CORE_PREFILL);
           $('#kaiz-core-cot-prompt').val(settings.coreCotPrompt || DEFAULT_CORE_COT_PROMPT);
+          $('#kaiz-prefill-as-system').prop('checked', !!settings.prefillAsSystem);
+          $('#kaiz-prefill-as-system').on('change', function () {
+              settings.prefillAsSystem = this.checked;
+              ctx.saveSettingsDebounced();
+          });
           $('#kaiz-core-identity, #kaiz-core-behavior, #kaiz-core-prefill, #kaiz-core-cot-prompt').on('input', function () {
               const id = this.id;
               if (id === 'kaiz-core-identity')
@@ -10760,10 +22204,12 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   $('#kaiz-core-behavior').val(DEFAULT_CORE_BEHAVIOR);
                   $('#kaiz-core-prefill').val(DEFAULT_CORE_PREFILL);
                   $('#kaiz-core-cot-prompt').val(DEFAULT_CORE_COT_PROMPT);
+                  $('#kaiz-prefill-as-system').prop('checked', false);
                   settings.coreIdentity = DEFAULT_CORE_IDENTITY;
                   settings.coreBehavior = DEFAULT_CORE_BEHAVIOR;
                   settings.corePrefill = DEFAULT_CORE_PREFILL;
                   settings.coreCotPrompt = DEFAULT_CORE_COT_PROMPT;
+                  settings.prefillAsSystem = false;
                   ctx.saveSettingsDebounced();
                   toastr.success('Đã khôi phục Core Prompts');
               }
@@ -10862,8 +22308,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               $safeToolsList.empty();
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
-                  const name = escapeHtml$3(tool.schema.name);
-                  const desc = escapeHtml$3(tool.schema.description);
+                  const name = escapeHtml$4(tool.schema.name);
+                  const desc = escapeHtml$4(tool.schema.description);
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
                       !desc.toLowerCase().includes(lowerFilter)) {
@@ -11028,7 +22474,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                             <button class="kaiz-qp-icon-btn interactable" data-index="${index}" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$3(qp.name || '')}" placeholder="Name (e.g. Analyze)">
+                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml$4(qp.name || '')}" placeholder="Name (e.g. Analyze)">
                             <div class="kaiz-qp-actions">
                                 <button class="kaiz-qp-act-btn interactable kaiz-qp-up" data-index="${index}" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
                                 <button class="kaiz-qp-act-btn interactable kaiz-qp-down" data-index="${index}" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
@@ -11036,7 +22482,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$3(qp.prompt || '')}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml$4(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -11319,8 +22765,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               $toolsList.empty();
               const lowerFilter = filterText.toLowerCase();
               tools.forEach((tool) => {
-                  const name = escapeHtml$3(tool.schema.name);
-                  const desc = escapeHtml$3(tool.schema.description);
+                  const name = escapeHtml$4(tool.schema.name);
+                  const desc = escapeHtml$4(tool.schema.description);
                   if (lowerFilter &&
                       !name.toLowerCase().includes(lowerFilter) &&
                       !desc.toLowerCase().includes(lowerFilter)) {
@@ -11914,7 +23360,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
-  const escapeHtml$2 = (s) => s
+  const escapeHtml$3 = (s) => s
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -12088,12 +23534,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const item = $('<div class="kaiz-attachment-item"></div>');
                   if (att.type === 'image') {
                       item.addClass('is-image');
-                      item.append(`<img src="${att.data}" title="${escapeHtml$2(att.name)}" />`);
+                      item.append(`<img src="${att.data}" title="${escapeHtml$3(att.name)}" />`);
                   }
                   else {
                       item.addClass('is-file');
                       item.append(`<i class="fa-solid fa-file-lines"></i>`);
-                      item.append(`<span>${escapeHtml$2(att.name)}</span>`);
+                      item.append(`<span>${escapeHtml$3(att.name)}</span>`);
                   }
                   const removeBtn = $('<div class="kaiz-attachment-remove"><i class="fa-solid fa-xmark"></i></div>');
                   removeBtn.on('click', () => {
@@ -12201,6 +23647,569 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   continueBtn.hide();
               }
           };
+          // ==========================================
+          // --- REFINED MILESTONE SCROLLBAR RAIL LOGIC (PC/MOBILE) ---
+          // ==========================================
+          const milestoneRail = $('#kaiz-milestone-rail');
+          const milestoneTrack = $('#kaiz-milestone-track');
+          const milestoneTooltip = $('#kaiz-milestone-tooltip');
+          const milestoneBtnTop = $('#kaiz-milestone-btn-top');
+          const milestoneBtnBottom = $('#kaiz-milestone-btn-bottom');
+          const milestoneActiveThumb = $('#kaiz-milestone-active-thumb');
+          let currentMilestones = [];
+          let currentMarkerEls = [];
+          let milestoneDebounceTimer = null;
+          let isScrubbingMilestones = false;
+          let activeMilestoneIndex = -1;
+          let scrollTrackerRafId = null;
+          let hudHideTimeout = null;
+          let cachedTrackRect = null;
+          let cachedRailRect = null;
+          // Quick Jump buttons
+          milestoneBtnTop.on('click', (e) => {
+              e.stopPropagation();
+              history[0]?.scrollTo({ top: 0, behavior: 'smooth' });
+          });
+          milestoneBtnBottom.on('click', (e) => {
+              e.stopPropagation();
+              const hEl = history[0];
+              if (hEl) {
+                  hEl.scrollTo({ top: hEl.scrollHeight, behavior: 'smooth' });
+              }
+          });
+          // Hàm hiển thị HUD Preview
+          const showMilestoneHUD = (item, clientY) => {
+              clearTimeout(hudHideTimeout);
+              const total = currentMilestones.length;
+              milestoneTooltip.html(`
+                <div class="kaiz-milestone-tt-header">
+                    <span class="kaiz-milestone-tt-badge"><i class="fa-solid fa-user"></i> LƯỢT #${item.index + 1} / ${total}</span>
+                    <span class="kaiz-milestone-tt-percent">${Math.round(item.posPercent)}%</span>
+                </div>
+                <div class="kaiz-milestone-tt-body">${escapeHtml$3(item.excerpt)}</div>
+                <div class="kaiz-milestone-tt-hint"><i class="fa-solid fa-arrows-up-down"></i> Kéo để duyệt các lượt chat</div>
+            `);
+              const trackRect = cachedTrackRect || milestoneTrack[0]?.getBoundingClientRect();
+              const railRect = cachedRailRect || milestoneRail[0]?.getBoundingClientRect();
+              if (!trackRect || !railRect)
+                  return;
+              let targetY;
+              if (clientY !== undefined) {
+                  targetY = clientY - railRect.top;
+              }
+              else {
+                  targetY = trackRect.top - railRect.top + trackRect.height * (item.posPercent / 100);
+              }
+              const clampedY = Math.max(25, Math.min(railRect.height - 25, targetY));
+              milestoneTooltip.css({
+                  top: `${clampedY}px`,
+                  display: 'block',
+              });
+          };
+          const hideMilestoneHUD = (delay = 0) => {
+              clearTimeout(hudHideTimeout);
+              if (delay > 0) {
+                  hudHideTimeout = setTimeout(() => {
+                      milestoneTooltip.hide();
+                  }, delay);
+              }
+              else {
+                  milestoneTooltip.hide();
+              }
+          };
+          // Hàm cuộn tới tin nhắn của milestone (sử dụng offsetTop được cache sẵn, KHÔNG layout thrash)
+          const scrollToMilestone = (item, smooth = true) => {
+              const hEl = history[0];
+              if (!hEl)
+                  return;
+              const targetTop = item.relativeTop - 16;
+              hEl.scrollTo({
+                  top: Math.max(0, targetTop),
+                  behavior: smooth ? 'smooth' : 'instant',
+              });
+          };
+          // Hàm cập nhật trạng thái milestone đang hiển thị trong viewport
+          const updateActiveMilestone = () => {
+              if (isScrubbingMilestones || currentMilestones.length === 0)
+                  return;
+              const hEl = history[0];
+              if (!hEl)
+                  return;
+              const currentScroll = hEl.scrollTop;
+              const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
+              let bestIndex = 0;
+              if (currentScroll >= maxScroll - 30) {
+                  bestIndex = currentMilestones.length - 1;
+              }
+              else if (currentScroll <= 30) {
+                  bestIndex = 0;
+              }
+              else {
+                  const thresholdY = currentScroll + hEl.clientHeight * 0.25;
+                  for (let i = 0; i < currentMilestones.length; i++) {
+                      if (currentMilestones[i].relativeTop <= thresholdY) {
+                          bestIndex = i;
+                      }
+                      else {
+                          break;
+                      }
+                  }
+              }
+              if (bestIndex !== activeMilestoneIndex) {
+                  if (activeMilestoneIndex >= 0 && currentMarkerEls[activeMilestoneIndex]) {
+                      currentMarkerEls[activeMilestoneIndex].classList.remove('is-active');
+                  }
+                  if (currentMarkerEls[bestIndex]) {
+                      currentMarkerEls[bestIndex].classList.add('is-active');
+                  }
+                  activeMilestoneIndex = bestIndex;
+                  const activeItem = currentMilestones[bestIndex];
+                  if (activeItem) {
+                      milestoneActiveThumb.css({
+                          top: `${activeItem.posPercent.toFixed(2)}%`,
+                          display: 'block',
+                      });
+                  }
+              }
+          };
+          const requestUpdateActiveMilestone = () => {
+              if (scrollTrackerRafId !== null)
+                  return;
+              scrollTrackerRafId = requestAnimationFrame(() => {
+                  scrollTrackerRafId = null;
+                  updateActiveMilestone();
+              });
+          };
+          // Lắng nghe scroll trên history để cập nhật indicator
+          history.off('scroll.kaiz_milestones').on('scroll.kaiz_milestones', requestUpdateActiveMilestone);
+          const updateMilestones = () => {
+              if (!history[0] || !milestoneTrack[0])
+                  return;
+              const userMsgs = history
+                  .find('.kaiz-msg-user')
+                  .filter((_, el) => {
+                  const $el = $(el);
+                  if ($el.find('.kaiz-system-result-block').length > 0)
+                      return false;
+                  const text = $el.find('.kaiz-msg-content').text().trim();
+                  return !text.startsWith('[Tool Result');
+              })
+                  .toArray();
+              if (userMsgs.length === 0) {
+                  currentMilestones = [];
+                  currentMarkerEls = [];
+                  activeMilestoneIndex = -1;
+                  milestoneTrack.find('.kaiz-milestone-marker').remove();
+                  milestoneActiveThumb.hide();
+                  milestoneRail.css('opacity', '0.2');
+                  hideMilestoneHUD();
+                  return;
+              }
+              milestoneRail.css('opacity', '1');
+              const historyEl = history[0];
+              const scrollHeight = Math.max(historyEl.scrollHeight, 1);
+              currentMilestones = userMsgs.map((msgEl, index) => {
+                  const relativeTop = msgEl.offsetTop;
+                  const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
+                  const userContentEl = $(msgEl).find('.kaiz-user-content-text');
+                  const rawText = (userContentEl.length ? userContentEl.text() : $(msgEl).find('.kaiz-msg-content').text()).trim();
+                  const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
+                  return {
+                      index,
+                      msgEl,
+                      relativeTop,
+                      posPercent,
+                      excerpt,
+                  };
+              });
+              // Giữ lại activeThumb, xóa các markers cũ
+              milestoneTrack.find('.kaiz-milestone-marker').remove();
+              currentMarkerEls = [];
+              const frag = document.createDocumentFragment();
+              for (let i = 0; i < currentMilestones.length; i++) {
+                  const item = currentMilestones[i];
+                  const marker = document.createElement('div');
+                  marker.className = 'kaiz-milestone-marker';
+                  marker.style.top = `${item.posPercent.toFixed(2)}%`;
+                  marker.setAttribute('data-index', String(item.index));
+                  frag.appendChild(marker);
+                  currentMarkerEls.push(marker);
+              }
+              milestoneTrack[0]?.appendChild(frag);
+              updateActiveMilestone();
+          };
+          const requestUpdateMilestones = () => {
+              const chatWinEl = win[0];
+              if (!chatWinEl || !chatWinEl.open)
+                  return;
+              clearTimeout(milestoneDebounceTimer);
+              milestoneDebounceTimer = setTimeout(updateMilestones, 120);
+          };
+          // --- HÀM TÌM MILESTONE GẦN NHẤT VỚI TỌA ĐỘ Y ---
+          const getClosestMilestoneByY = (clientY) => {
+              if (currentMilestones.length === 0)
+                  return null;
+              const trackRect = cachedTrackRect || milestoneTrack[0]?.getBoundingClientRect();
+              if (!trackRect)
+                  return null;
+              const clickY = clientY - trackRect.top;
+              const percent = Math.max(0, Math.min(100, (clickY / Math.max(trackRect.height, 1)) * 100));
+              let closest = currentMilestones[0];
+              let minDist = Math.abs(currentMilestones[0].posPercent - percent);
+              for (let i = 1; i < currentMilestones.length; i++) {
+                  const dist = Math.abs(currentMilestones[i].posPercent - percent);
+                  if (dist < minDist) {
+                      minDist = dist;
+                      closest = currentMilestones[i];
+                  }
+              }
+              return closest;
+          };
+          // --- CƠ CHẾ SCRUBBING (KÉO TRƯỢT TRÊN PC VÀ VUỐT NGÓN TAY TRÊN MOBILE) ---
+          const handleScrubMove = (clientY) => {
+              const target = getClosestMilestoneByY(clientY);
+              if (!target)
+                  return;
+              // Di chuyển active thumb và hiển thị HUD theo ngón tay/chuột
+              milestoneActiveThumb.css({
+                  top: `${target.posPercent.toFixed(2)}%`,
+                  display: 'block',
+              });
+              for (let i = 0; i < currentMarkerEls.length; i++) {
+                  const el = currentMarkerEls[i];
+                  if (!el)
+                      continue;
+                  if (i === target.index) {
+                      el.classList.add('is-hovered');
+                      el.classList.remove('is-proximity');
+                  }
+                  else if (Math.abs(i - target.index) <= 1) {
+                      el.classList.add('is-proximity');
+                      el.classList.remove('is-hovered');
+                  }
+                  else {
+                      el.classList.remove('is-hovered', 'is-proximity');
+                  }
+              }
+              showMilestoneHUD(target, clientY);
+              // Live scroll tức thì khi đang kéo mà không layout thrash
+              scrollToMilestone(target, false);
+          };
+          const handleScrubEnd = (clientY) => {
+              isScrubbingMilestones = false;
+              cachedTrackRect = null;
+              cachedRailRect = null;
+              milestoneRail.removeClass('is-scrubbing');
+              $(document).off('.kaiz_milestone_scrub');
+              for (let i = 0; i < currentMarkerEls.length; i++) {
+                  currentMarkerEls[i]?.classList.remove('is-hovered', 'is-proximity');
+              }
+              const target = getClosestMilestoneByY(clientY);
+              if (target) {
+                  scrollToMilestone(target, true);
+                  $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
+                  void target.msgEl.offsetWidth;
+                  $(target.msgEl).addClass('kaiz-msg-highlight-pulse');
+                  setTimeout(() => {
+                      $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
+                  }, 1500);
+              }
+              hideMilestoneHUD(500);
+              requestUpdateActiveMilestone();
+          };
+          const startScrubbing = (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (currentMilestones.length === 0)
+                  return;
+              isScrubbingMilestones = true;
+              milestoneRail.addClass('is-scrubbing');
+              cachedTrackRect = milestoneTrack[0]?.getBoundingClientRect() || null;
+              cachedRailRect = milestoneRail[0]?.getBoundingClientRect() || null;
+              const clientY = e.type.startsWith('touch') ? e.originalEvent.touches[0].clientY : e.clientY;
+              handleScrubMove(clientY);
+              $(document)
+                  .off('.kaiz_milestone_scrub')
+                  .on('mousemove.kaiz_milestone_scrub', (moveEv) => {
+                  if (!isScrubbingMilestones)
+                      return;
+                  handleScrubMove(moveEv.clientY);
+              })
+                  .on('touchmove.kaiz_milestone_scrub', (moveEv) => {
+                  if (!isScrubbingMilestones || !moveEv.originalEvent.touches[0])
+                      return;
+                  handleScrubMove(moveEv.originalEvent.touches[0].clientY);
+              })
+                  .on('mouseup.kaiz_milestone_scrub', (upEv) => {
+                  handleScrubEnd(upEv.clientY);
+              })
+                  .on('touchend.kaiz_milestone_scrub touchcancel.kaiz_milestone_scrub', (upEv) => {
+                  const endY = upEv.originalEvent.changedTouches?.[0]?.clientY || clientY;
+                  handleScrubEnd(endY);
+              });
+          };
+          // Gắn sự kiện mousedown và touchstart lên toàn bộ milestoneTrack
+          milestoneTrack.on('mousedown', (e) => {
+              startScrubbing(e);
+          });
+          milestoneTrack.on('touchstart', (e) => {
+              startScrubbing(e);
+          });
+          // Event delegation trên milestoneTrack cho hover hiển thị HUD
+          milestoneTrack
+              .on('mouseenter', '.kaiz-milestone-marker', function () {
+              if (isScrubbingMilestones)
+                  return;
+              const idx = parseInt(this.getAttribute('data-index') || '-1', 10);
+              const item = currentMilestones[idx];
+              if (item)
+                  showMilestoneHUD(item);
+          })
+              .on('mouseleave', '.kaiz-milestone-marker', function () {
+              if (isScrubbingMilestones)
+                  return;
+              hideMilestoneHUD();
+          });
+          // ==========================================
+          // --- IN-CHAT SEARCH BAR LOGIC ---
+          // ==========================================
+          const searchToggleBtn = $('#kaiz-chat-search-toggle-btn');
+          const searchBar = $('#kaiz-chat-search-bar');
+          const searchInput = $('#kaiz-search-input');
+          const searchCounter = $('#kaiz-search-counter');
+          const searchPrevBtn = $('#kaiz-search-prev-btn');
+          const searchNextBtn = $('#kaiz-search-next-btn');
+          const searchCloseBtn = $('#kaiz-search-close-btn');
+          let currentSearchMatches = [];
+          let activeMatchIndex = -1;
+          let searchDebounceTimer = null;
+          const clearSearchHighlights = () => {
+              if (currentSearchMatches.length === 0)
+                  return;
+              const parentsToNormalize = new Set();
+              for (const mark of currentSearchMatches) {
+                  const parent = mark.parentNode;
+                  if (parent) {
+                      parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+                      parentsToNormalize.add(parent);
+                  }
+              }
+              for (const p of parentsToNormalize) {
+                  p.normalize();
+              }
+              currentSearchMatches = [];
+              activeMatchIndex = -1;
+          };
+          const highlightCurrentMatch = (hitCap = false) => {
+              currentSearchMatches.forEach((m) => m.classList.remove('kaiz-search-mark-active'));
+              if (activeMatchIndex >= 0 && activeMatchIndex < currentSearchMatches.length) {
+                  const currentEl = currentSearchMatches[activeMatchIndex];
+                  currentEl.classList.add('kaiz-search-mark-active');
+                  // Nếu match nằm trong một user message đang bị thu gọn, tự động mở rộng nó ra
+                  const collapsed = currentEl.closest('.kaiz-user-collapsible.is-collapsed');
+                  if (collapsed) {
+                      $(collapsed).removeClass('is-collapsed').addClass('is-expanded');
+                      $(collapsed).find('.kaiz-user-toggle-text').text('Thu gọn');
+                      $(collapsed).find('.kaiz-user-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                      $(collapsed).find('.kaiz-user-msg-dots').hide();
+                  }
+                  const suffix = hitCap ? '+' : '';
+                  searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}${suffix}`);
+                  const historyEl = history[0];
+                  if (historyEl) {
+                      const targetRect = currentEl.getBoundingClientRect();
+                      const historyRect = historyEl.getBoundingClientRect();
+                      const targetTop = targetRect.top -
+                          historyRect.top +
+                          historyEl.scrollTop -
+                          historyRect.height / 2 +
+                          targetRect.height / 2;
+                      historyEl.scrollTo({
+                          top: Math.max(0, targetTop),
+                          behavior: 'smooth',
+                      });
+                  }
+              }
+          };
+          const performSearch = (query) => {
+              clearSearchHighlights();
+              const cleanQuery = query.trim();
+              if (!cleanQuery) {
+                  searchCounter.text('0/0');
+                  searchPrevBtn.prop('disabled', true);
+                  searchNextBtn.prop('disabled', true);
+                  return;
+              }
+              const matches = [];
+              const queryLower = cleanQuery.toLowerCase();
+              // Capped highlights để giữ DOM luôn nhẹ, tránh giật lag khi query ngắn
+              const MAX_MATCHES = cleanQuery.length < 2 ? 100 : 250;
+              let hitCap = false;
+              const historyEl = history[0];
+              if (!historyEl)
+                  return;
+              // Dùng getElementsByClassName nguyên bản nhanh hơn nhiều so với jQuery find
+              const msgContents = historyEl.getElementsByClassName('kaiz-msg-content');
+              for (let i = 0; i < msgContents.length; i++) {
+                  const contentEl = msgContents[i];
+                  const textContent = contentEl.textContent || '';
+                  // SPEED BOOSTER: Nếu tin nhắn không chứa từ khóa, bỏ qua ngay lập tức!
+                  if (!textContent.toLowerCase().includes(queryLower)) {
+                      continue;
+                  }
+                  const walker = document.createTreeWalker(contentEl, 4 /* NodeFilter.SHOW_TEXT */, {
+                      acceptNode: (node) => {
+                          if (node.parentElement?.tagName === 'MARK')
+                              return 2; /* NodeFilter.FILTER_REJECT */
+                          return 1; /* NodeFilter.FILTER_ACCEPT */
+                      },
+                  });
+                  const textNodes = [];
+                  let currentNode = walker.nextNode();
+                  while (currentNode) {
+                      textNodes.push(currentNode);
+                      currentNode = walker.nextNode();
+                  }
+                  for (const textNode of textNodes) {
+                      const text = textNode.nodeValue || '';
+                      const textLower = text.toLowerCase();
+                      let matchIndex = textLower.indexOf(queryLower);
+                      if (matchIndex === -1)
+                          continue;
+                      const frag = document.createDocumentFragment();
+                      let lastIdx = 0;
+                      while (matchIndex !== -1) {
+                          if (matchIndex > lastIdx) {
+                              frag.appendChild(document.createTextNode(text.substring(lastIdx, matchIndex)));
+                          }
+                          const mark = document.createElement('mark');
+                          mark.className = 'kaiz-search-mark';
+                          mark.textContent = text.substring(matchIndex, matchIndex + cleanQuery.length);
+                          frag.appendChild(mark);
+                          matches.push(mark);
+                          if (matches.length >= MAX_MATCHES) {
+                              hitCap = true;
+                              break;
+                          }
+                          lastIdx = matchIndex + cleanQuery.length;
+                          matchIndex = textLower.indexOf(queryLower, lastIdx);
+                      }
+                      if (lastIdx < text.length) {
+                          frag.appendChild(document.createTextNode(text.substring(lastIdx)));
+                      }
+                      textNode.parentNode?.replaceChild(frag, textNode);
+                      if (hitCap)
+                          break;
+                  }
+                  if (hitCap)
+                      break;
+              }
+              currentSearchMatches = matches;
+              if (matches.length > 0) {
+                  activeMatchIndex = 0;
+                  highlightCurrentMatch(hitCap);
+                  searchPrevBtn.prop('disabled', false);
+                  searchNextBtn.prop('disabled', false);
+              }
+              else {
+                  activeMatchIndex = -1;
+                  searchCounter.text('0/0');
+                  searchPrevBtn.prop('disabled', true);
+                  searchNextBtn.prop('disabled', true);
+              }
+          };
+          const openSearch = () => {
+              searchBar.slideDown(150, () => {
+                  searchInput.focus().select();
+              });
+              searchToggleBtn.addClass('active');
+              const q = String(searchInput.val() || '');
+              if (q)
+                  performSearch(q);
+          };
+          const closeSearch = () => {
+              searchBar.slideUp(150);
+              searchToggleBtn.removeClass('active');
+              clearSearchHighlights();
+              searchCounter.text('0/0');
+              searchPrevBtn.prop('disabled', true);
+              searchNextBtn.prop('disabled', true);
+          };
+          searchToggleBtn.on('click', (e) => {
+              e.stopPropagation();
+              if (searchBar.is(':visible')) {
+                  closeSearch();
+              }
+              else {
+                  openSearch();
+              }
+          });
+          searchCloseBtn.on('click', () => {
+              closeSearch();
+          });
+          searchInput.on('input', function () {
+              clearTimeout(searchDebounceTimer);
+              const val = this.value;
+              // Debounce 220ms: Độ trễ tối ưu cho phản hồi gõ bàn phím mượt mà
+              searchDebounceTimer = setTimeout(() => {
+                  performSearch(val);
+              }, 220);
+          });
+          const nextSearchMatch = () => {
+              if (currentSearchMatches.length === 0)
+                  return;
+              activeMatchIndex = (activeMatchIndex + 1) % currentSearchMatches.length;
+              highlightCurrentMatch();
+          };
+          const prevSearchMatch = () => {
+              if (currentSearchMatches.length === 0)
+                  return;
+              activeMatchIndex = (activeMatchIndex - 1 + currentSearchMatches.length) % currentSearchMatches.length;
+              highlightCurrentMatch();
+          };
+          searchNextBtn.on('click', nextSearchMatch);
+          searchPrevBtn.on('click', prevSearchMatch);
+          searchInput.on('keydown', (e) => {
+              if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (searchDebounceTimer) {
+                      clearTimeout(searchDebounceTimer);
+                      searchDebounceTimer = null;
+                      performSearch(String(searchInput.val() || ''));
+                  }
+                  else if (e.shiftKey) {
+                      prevSearchMatch();
+                  }
+                  else {
+                      nextSearchMatch();
+                  }
+              }
+              else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  closeSearch();
+              }
+          });
+          // Phím tắt Ctrl+F / Cmd+F: CHỈ kích hoạt khi con trỏ hoặc focus đang ở trong Kaiz chat window
+          $(document).on('keydown.kaiz_search_shortcut', (e) => {
+              if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+                  const chatWinEl = win[0];
+                  if (!chatWinEl || !chatWinEl.open)
+                      return;
+                  // Tuyệt đối không cướp Ctrl+F của SillyTavern nếu người dùng không tương tác trong Kaiz
+                  const isInsideKaiz = $(e.target).closest('#kaiz-chat-window').length > 0;
+                  if (!isInsideKaiz)
+                      return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!searchBar.is(':visible')) {
+                      openSearch();
+                  }
+                  else {
+                      searchInput.focus().select();
+                  }
+              }
+          });
+          $(window).on('resize.kaiz_milestones', requestUpdateMilestones);
           // --- Drag Logic ---
           const ensureInBounds = (el) => {
               if (el[0].tagName === 'DIALOG' && !el[0].open)
@@ -12379,7 +24388,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               wsSelect.empty();
               wsSelect.append('<option value="default">Default</option>');
               for (const ws of workspaces) {
-                  wsSelect.append(`<option value="${ws.id}">${escapeHtml$2(ws.name)}</option>`);
+                  wsSelect.append(`<option value="${ws.id}">${escapeHtml$3(ws.name)}</option>`);
               }
               if (stateManager.currentWorkspaceId) {
                   wsSelect.val(stateManager.currentWorkspaceId.toString());
@@ -12461,13 +24470,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   enabled.forEach((schema) => {
                       const chip = $(`
-                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$2(schema.name)}" style="
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml$3(schema.name)}" style="
                             display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
                             background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
                             border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
                         ">
-                            ${escapeHtml$2(schema.name)}
-                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$2(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                            ${escapeHtml$3(schema.name)}
+                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml$3(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
                         </span>
                     `);
                       chipsContainer.append(chip);
@@ -12487,12 +24496,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   matches.forEach((schema) => {
                       const item = $(`
-                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$2(schema.name)}" style="
+                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml$3(schema.name)}" style="
                             padding:6px 10px; cursor:pointer; font-size:13px; color:#ddd;
                             border-bottom:1px solid rgba(255,255,255,0.04);
                         ">
-                            <span style="color:#fff; font-weight:500;">${escapeHtml$2(schema.name)}</span>
-                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$2(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
+                            <span style="color:#fff; font-weight:500;">${escapeHtml$3(schema.name)}</span>
+                            ${schema.description ? `<span style="color:#777; font-size:11px; margin-left:6px;">${escapeHtml$3(schema.description.substring(0, 70))}${schema.description.length > 70 ? '...' : ''}</span>` : ''}
                         </div>
                     `);
                       item.on('mouseenter', function () {
@@ -12600,11 +24609,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   // Refresh list khi mở
                   stateManager.loadChatList().then(renderChatList);
+                  setTimeout(requestUpdateMilestones, 150);
               }
               else {
                   dialogEl.close();
                   toolsMenu.hide();
                   toolsBtn.removeClass('active');
+                  closeSearch();
                   if (isSidebarOpen)
                       toggleSidebar();
               }
@@ -12614,6 +24625,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               dialogEl.close();
               toolsMenu.hide();
               toolsBtn.removeClass('active');
+              closeSearch();
               if (isSidebarOpen)
                   toggleSidebar(); // Đóng luôn sidebar
           });
@@ -12660,6 +24672,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
               stateManager.currentChatId = null;
               addWelcomeMessage();
+              closeSearch();
+              requestUpdateMilestones();
               // Xóa background selected ở chat list
               $('.kaiz-chat-item').css('background', 'transparent');
               toggleSidebar();
@@ -12715,7 +24729,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const bg = isSelected ? 'rgba(0, 201, 255, 0.2)' : 'transparent';
                   htmlBuffer += `
                     <div class="kaiz-chat-item interactable" data-id="${chat.id}" style="padding:8px; border-radius:5px; background:${bg}; display:flex; justify-content:space-between; align-items:center; cursor:pointer;">
-                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml$2(chat.name)}</span>
+                        <span style="font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;">${escapeHtml$3(chat.name)}</span>
                         <div>
                             <i class="fa-solid fa-pen kaiz-chat-edit" style="color:#f39c12; font-size:12px; margin-right:8px;" data-id="${chat.id}" data-name="${chat.name.replace(/"/g, '&quot;')}"></i>
                             <i class="fa-solid fa-trash kaiz-chat-delete" style="color:#e74c3c; font-size:12px;" data-id="${chat.id}"></i>
@@ -12730,7 +24744,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const toolCalls = [];
               let result = contentToParse.replace(/<tool_call name="([^"]+)">([\s\S]*?)<\/tool_call>/g, (match, name, content) => {
                   const cleanContent = content.trim().replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                  const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${escapeHtml$2(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
+                  const toolHtml = `<details class="kaiz-tool-call-block"><summary class="kaiz-tool-summary"><i class="fa-solid fa-bolt"></i> Tool Call: ${escapeHtml$3(name)}</summary><div class="kaiz-tool-content">${cleanContent}</div></details>`;
                   toolCalls.push(toolHtml);
                   return `__TOOL_CALL_${toolCalls.length - 1}__`;
               });
@@ -12847,7 +24861,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // Hàm tiện ích format tin nhắn user (đặc biệt là Tool Result)
           const formatUserMessage = (text, attachments) => {
               const safeText = text || '';
-              const escapedText = escapeHtml$2(safeText).replace(/\n/g, '<br>');
+              const escapedText = escapeHtml$3(safeText).replace(/\n/g, '<br>');
               let finalHtml = escapedText;
               if (safeText.startsWith('[Tool Result')) {
                   // ... logic Tool Result ...
@@ -12867,14 +24881,33 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
 <div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
               }
+              else {
+                  // Kiểm tra nếu tin nhắn user siêu dài (ví dụ: > 280 ký tự hoặc từ 5 dòng trở lên)
+                  const lineCount = (safeText.match(/\n/g) || []).length + 1;
+                  const isSuperLong = safeText.length > 280 || lineCount >= 5;
+                  if (isSuperLong) {
+                      finalHtml = `
+                        <div class="kaiz-user-collapsible is-collapsed">
+                            <div class="kaiz-user-content-text">${escapedText}</div>
+                            <div class="kaiz-user-collapsible-toggle" title="Bấm để mở rộng hoặc thu gọn nội dung">
+                                <span class="kaiz-user-msg-dots">...</span>
+                                <span class="kaiz-user-toggle-btn">
+                                    <span class="kaiz-user-toggle-text">Xem thêm</span>
+                                    <i class="fa-solid fa-chevron-down kaiz-user-toggle-icon"></i>
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                  }
+              }
               if (attachments && attachments.length > 0) {
                   let attachmentsHtml = '<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">';
                   for (const att of attachments) {
                       if (att.type === 'image') {
-                          attachmentsHtml += `<img src="${att.data}" class="kaiz-msg-attachment-img" title="${escapeHtml$2(att.name)}" />`;
+                          attachmentsHtml += `<img src="${att.data}" class="kaiz-msg-attachment-img" title="${escapeHtml$3(att.name)}" />`;
                       }
                       else if (att.type === 'text') {
-                          attachmentsHtml += `<div class="kaiz-msg-attachment-text"><i class="fa-solid fa-file-lines"></i> <b>${escapeHtml$2(att.name)}</b></div>`;
+                          attachmentsHtml += `<div class="kaiz-msg-attachment-text"><i class="fa-solid fa-file-lines"></i> <b>${escapeHtml$3(att.name)}</b></div>`;
                       }
                   }
                   attachmentsHtml += '</div>';
@@ -12972,6 +25005,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }
               updateContinueBtnVisibility();
               refreshTokens();
+              requestUpdateMilestones();
+              if (searchBar.is(':visible')) {
+                  const q = String(searchInput.val() || '');
+                  if (q)
+                      performSearch(q);
+              }
           };
           const addWelcomeMessage = () => {
               const welcomeHtml = `
@@ -12981,6 +25020,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             </div>`;
               history.append(welcomeHtml);
               updateContinueBtnVisibility();
+              requestUpdateMilestones();
           };
           // Hàm tiện ích thêm tin nhắn DOM (không save DB)
           const addMessageToDOM = (role, htmlContent, animate = true, dbMessageId) => {
@@ -13013,6 +25053,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   history.scrollTop(history[0].scrollHeight);
               }
               updateContinueBtnVisibility();
+              requestUpdateMilestones();
+              if (searchBar.is(':visible')) {
+                  const q = String(searchInput.val() || '');
+                  if (q)
+                      performSearch(q);
+              }
               return msgId;
           };
           // Lắng nghe sự kiện xóa tin nhắn
@@ -13037,8 +25083,44 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   if (history.children('.kaiz-msg').length === 0) {
                       addWelcomeMessage();
                   }
+                  requestUpdateMilestones();
+                  if (searchBar.is(':visible')) {
+                      const q = String(searchInput.val() || '');
+                      if (q)
+                          performSearch(q);
+                  }
               });
               toastr.info('Đã xóa tin nhắn', 'Kaiz Agent');
+          });
+          // Lắng nghe sự kiện mở rộng / thu gọn tin nhắn User siêu dài
+          history.on('click', '.kaiz-user-collapsible', function (e) {
+              const $target = $(e.target);
+              const collapsible = $(this);
+              const isCollapsed = collapsible.hasClass('is-collapsed');
+              const isToggleBar = $target.closest('.kaiz-user-collapsible-toggle').length > 0;
+              // Nếu đang mở rộng (expanded): CHỈ thu gọn khi click vào thanh toggle / nút "Thu gọn",
+              // tránh việc người dùng click vào nội dung để đọc hoặc bôi đen copy mà bị đóng đột ngột.
+              if (!isCollapsed && !isToggleBar) {
+                  return;
+              }
+              // Nếu người dùng vừa bôi đen chọn chữ thì không toggle
+              const selection = window.getSelection()?.toString();
+              if (selection && selection.length > 0)
+                  return;
+              e.stopPropagation();
+              if (isCollapsed) {
+                  collapsible.removeClass('is-collapsed').addClass('is-expanded');
+                  collapsible.find('.kaiz-user-toggle-text').text('Thu gọn');
+                  collapsible.find('.kaiz-user-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                  collapsible.find('.kaiz-user-msg-dots').hide();
+              }
+              else {
+                  collapsible.removeClass('is-expanded').addClass('is-collapsed');
+                  collapsible.find('.kaiz-user-toggle-text').text('Xem thêm');
+                  collapsible.find('.kaiz-user-toggle-icon').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+                  collapsible.find('.kaiz-user-msg-dots').show();
+              }
+              requestUpdateMilestones();
           });
           const startAgent = async (continueMode = false) => {
               sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
@@ -13135,6 +25217,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       }
                       refreshTokens();
                       agentContentBox = null;
+                      requestUpdateMilestones();
                   }
                   else if (event.type === 'tool_result') {
                       const toolMsgId = await stateManager.addMessage('user', event.text || '');
@@ -13151,7 +25234,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const html = `
                         <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
                             <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
-                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml$2(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
+                            <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml$3(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
                             <div style="display: flex; gap: 10px; margin-top: 10px;">
                                 <button id="kaiz-allow-${confirmId}" style="background: #2ecc71; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-check"></i> Allow</button>
                                 <button id="kaiz-deny-${confirmId}" style="background: #e74c3c; color: #fff; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;"><i class="fa-solid fa-xmark"></i> Deny</button>
@@ -13163,7 +25246,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           if (!loop.isRunning)
                               return;
                           $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                          $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml$2(call.name)}</div>`);
+                          $(`#${domId}`).html(`<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml$3(call.name)}</div>`);
                           btnIcon.addClass('kaiz-icon-spin');
                           btnFloat.removeClass('kaiz-btn-blink');
                           resolveFn(true);
@@ -13172,7 +25255,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           if (!loop.isRunning)
                               return;
                           $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                          $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml$2(call.name)}</div>`);
+                          $(`#${domId}`).html(`<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml$3(call.name)}</div>`);
                           btnIcon.removeClass('kaiz-icon-spin');
                           btnFloat.removeClass('kaiz-btn-blink');
                           resolveFn(false);
@@ -13182,10 +25265,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       lastStreamEvent = null;
                       streamUpdatePending = false;
                       if (agentContentBox) {
-                          agentContentBox.append(`<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$2(event.text || '')}</div>`);
+                          agentContentBox.append(`<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$3(event.text || '')}</div>`);
                       }
                       else {
-                          agentMsgId = addMessageToDOM('agent', `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$2(event.text || '')}</div>`);
+                          agentMsgId = addMessageToDOM('agent', `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml$3(event.text || '')}</div>`);
                           agentContentBox = $(`#${agentMsgId}`);
                       }
                   }
@@ -13194,11 +25277,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       streamUpdatePending = false;
                       let errDomId = null;
                       if (agentContentBox) {
-                          agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$2(event.text || '')}</div>`);
+                          agentContentBox.append(`<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$3(event.text || '')}</div>`);
                           agentContentBox = null;
                       }
                       else {
-                          errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$2(event.text || '')}</div>`);
+                          errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$3(event.text || '')}</div>`);
                       }
                       const errMsgId = await stateManager.addMessage('agent', `[Error] ${event.text}`);
                       if (errDomId) {
@@ -13231,6 +25314,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               sendBtn.prop('disabled', false);
               input.focus();
               updateContinueBtnVisibility();
+              requestUpdateMilestones();
           };
           // --- XỬ LÝ KÉO THẢ CO GIÃN CHIỀU CAO THANH INPUT ---
           const inputResizer = $('#kaiz-input-resizer');
@@ -13269,6 +25353,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (currentH && currentH >= DEFAULT_INPUT_HEIGHT) {
                   localStorage.setItem('kaiz_chat_input_height', Math.round(currentH).toString());
               }
+              requestUpdateMilestones();
           };
           inputResizer.on('mousedown', (e) => {
               if (chatBodyWrapper.hasClass('kaiz-input-fullscreen'))
@@ -13498,7 +25583,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
-  const escapeHtml$1 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const escapeHtml$2 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class ToolCheckerUI {
       static init(registry, adapter) {
           const $ = jQuery;
@@ -13541,7 +25626,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const tools = registry.getAllTools();
               list.empty();
               for (const t of tools) {
-                  const name = escapeHtml$1(t.schema.name);
+                  const name = escapeHtml$2(t.schema.name);
                   list.append(`
                     <div id="checker-tool-${name}" style="display:flex; justify-content:space-between; align-items:center; background:rgba(0,0,0,0.2); padding:8px 12px; border-radius:5px;">
                         <span><i class="fa-solid fa-wrench" style="margin-right:8px; opacity:0.7"></i>${name}</span>
@@ -14964,19 +27049,31 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (modal)
                   modal.close();
           });
-          // Tìm kiếm prompt thời gian thực
+          // Click ra ngoài backdrop để đóng Gallery Modal
+          $('#kaiz-gallery-modal')
+              .off('click.backdrop')
+              .on('click.backdrop', (e) => {
+              if (e.target && e.target.id === 'kaiz-gallery-modal') {
+                  e.target.close();
+              }
+          });
+          // Tìm kiếm prompt thời gian thực có debounce chống giật lag
+          let gallerySearchDebounce = null;
           $('#kaiz-gallery-search')
               .off('input')
               .on('input', (e) => {
+              clearTimeout(gallerySearchDebounce);
               const query = (e.target.value || '').trim().toLowerCase();
-              if (!query) {
-                  this.filteredImages = [...this.images];
-              }
-              else {
-                  this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
-              }
-              this.currentLimit = this.displayLimit;
-              this.renderGrid();
+              gallerySearchDebounce = setTimeout(() => {
+                  if (!query) {
+                      this.filteredImages = [...this.images];
+                  }
+                  else {
+                      this.filteredImages = this.images.filter((img) => (img.prompt || '').toLowerCase().includes(query));
+                  }
+                  this.currentLimit = this.displayLimit;
+                  this.renderGrid();
+              }, 180);
           });
           // Chọn tất cả / Bỏ chọn tất cả
           $('#kaiz-gallery-select-all-btn')
@@ -15036,6 +27133,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const previewModal = $('#kaiz-gallery-preview-modal')[0];
               if (previewModal)
                   previewModal.close();
+          });
+          // Click ra ngoài backdrop để đóng Preview Modal
+          $('#kaiz-gallery-preview-modal')
+              .off('click.backdrop')
+              .on('click.backdrop', (e) => {
+              if (e.target && e.target.id === 'kaiz-gallery-preview-modal') {
+                  e.target.close();
+              }
           });
           // Sao chép Prompt trong Preview Modal
           $('#kaiz-preview-copy-prompt-btn')
@@ -15130,6 +27235,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           emptyState.hide();
           const itemsToShow = this.filteredImages.slice(0, this.currentLimit);
+          const cardsToAppend = [];
           itemsToShow.forEach((img) => {
               const isSelected = img.id !== undefined && this.selectedIds.has(img.id);
               const dateStr = this.formatDate(img.timestamp);
@@ -15216,8 +27322,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       await this.loadAndRender();
                   }
               });
-              grid.append(card);
+              cardsToAppend.push(card);
           });
+          if (cardsToAppend.length > 0) {
+              grid.append(cardsToAppend);
+          }
           // Nếu còn ảnh chưa hiển thị -> Hiện nút "Xem thêm ảnh"
           if (this.filteredImages.length > this.currentLimit) {
               const remaining = this.filteredImages.length - this.currentLimit;
@@ -15289,7 +27398,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       }
   }
 
-  const escapeHtml = (str) => (str || '')
+  const escapeHtml$1 = (str) => (str || '')
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
@@ -15422,8 +27531,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               .off('click')
               .on('click', () => {
               const diffModal = $('#kaiz-preset-diff-modal')[0];
-              if (diffModal)
+              if (diffModal) {
                   diffModal.close();
+                  diffModal.style.display = 'none';
+              }
           });
           // 13. Tự động đồng bộ khi quay lại cửa sổ hoặc SillyTavern cập nhật preset
           window.addEventListener('focus', async () => {
@@ -15583,8 +27694,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   list.append(`
                     <div style="font-size: 11px; display: flex; align-items: center; gap: 6px; background: rgba(0,0,0,0.2); padding: 4px 8px; border-radius: 4px; border-left: 3px solid ${badgeColor}">
                         <i class="fa-solid ${icon}" style="color: ${badgeColor}; font-size: 10px"></i>
-                        <span style="font-weight: 500">${escapeHtml(item.name || item.identifier || item.type)}:</span>
-                        <span style="opacity: 0.8">${escapeHtml(item.summary)}</span>
+                        <span style="font-weight: 500">${escapeHtml$1(item.name || item.identifier || item.type)}:</span>
+                        <span style="opacity: 0.8">${escapeHtml$1(item.summary)}</span>
                     </div>
                 `);
               }
@@ -15675,7 +27786,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   ? `<span style="background: rgba(56, 189, 248, 0.12); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.25); padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-user"></i> Bạn lưu</span>`
                   : `<span style="background: rgba(167, 139, 250, 0.12); color: #c4b5fd; border: 1px solid rgba(167, 139, 250, 0.25); padding: 1px 6px; border-radius: 4px; font-size: 10px"><i class="fa-solid fa-robot"></i> Agent</span>`;
               const tagBadge = commit.tag
-                  ? `<span style="background: rgba(251, 191, 36, 0.12); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 500"><i class="fa-solid fa-tag"></i> ${escapeHtml(commit.tag)}</span>`
+                  ? `<span style="background: rgba(251, 191, 36, 0.12); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 500"><i class="fa-solid fa-tag"></i> ${escapeHtml$1(commit.tag)}</span>`
                   : '';
               const headPill = isHead
                   ? `<span style="background: rgba(16, 185, 129, 0.18); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.35); padding: 1px 7px; border-radius: 4px; font-size: 10px; font-weight: 600"><i class="fa-solid fa-check"></i> Đang dùng</span>`
@@ -15733,8 +27844,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                     <div class="kaiz-pg-commit-card ${isHead ? 'is-head' : ''}" data-hash="${commit.hash}">
                         <!-- Row 1: Message & Relative Time -->
                         <div class="kaiz-pg-commit-row1">
-                            <div class="kaiz-pg-commit-title" title="${escapeHtml(commit.message)}">
-                                ${escapeHtml(commit.message)}
+                            <div class="kaiz-pg-commit-title" title="${escapeHtml$1(commit.message)}">
+                                ${escapeHtml$1(commit.message)}
                             </div>
                             <div class="kaiz-pg-commit-time" title="${fullDateStr}">
                                 <i class="fa-regular fa-clock" style="margin-right: 3px"></i>${dateStr}
@@ -15749,8 +27860,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                             ${headPill}
                             ${authorBadge}
                             ${tagBadge}
-                            <span class="kaiz-pg-diff-summary" title="${escapeHtml(diffSummary)}">
-                                <i class="fa-solid fa-layer-group" style="font-size: 10px; margin-right: 3px"></i>${escapeHtml(diffSummary)}
+                            <span class="kaiz-pg-diff-summary" title="${escapeHtml$1(diffSummary)}">
+                                <i class="fa-solid fa-layer-group" style="font-size: 10px; margin-right: 3px"></i>${escapeHtml$1(diffSummary)}
                             </span>
                         </div>
 
@@ -15841,8 +27952,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         ${fullPrompts
                     .map((p, i) => `
                             <div style="margin-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px">
-                                <div style="color: #34d399; font-weight: 500; font-size: 12px">#${i + 1} [${p.identifier}] ${escapeHtml(p.name)} <span style="opacity: 0.6; font-size: 11px">(${p.role || 'system'})</span></div>
-                                <div style="color: #cbd5e1; font-size: 11px; white-space: pre-wrap; overflow-y: auto; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px">${escapeHtml(p.content || '')}</div>
+                                <div style="color: #34d399; font-weight: 500; font-size: 12px">#${i + 1} [${p.identifier}] ${escapeHtml$1(p.name)} <span style="opacity: 0.6; font-size: 11px">(${p.role || 'system'})</span></div>
+                                <div style="color: #cbd5e1; font-size: 11px; white-space: pre-wrap; overflow-y: auto; margin-top: 4px; background: rgba(0,0,0,0.2); padding: 6px 8px; border-radius: 4px">${escapeHtml$1(p.content || '')}</div>
                             </div>
                         `)
                     .join('')}
@@ -15932,9 +28043,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       // Metadata pills
                       const metaPills = [];
                       if ((oldBlock.name || '') !== (newBlock.name || ''))
-                          metaPills.push(`📝 Name: <span class="kaiz-diff-old">${escapeHtml(oldBlock.name || '')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.name || '')}</span>`);
+                          metaPills.push(`📝 Name: <span class="kaiz-diff-old">${escapeHtml$1(oldBlock.name || '')}</span> → <span class="kaiz-diff-new">${escapeHtml$1(newBlock.name || '')}</span>`);
                       if ((oldBlock.role || 'system') !== (newBlock.role || 'system'))
-                          metaPills.push(`🎭 Role: <span class="kaiz-diff-old">${escapeHtml(oldBlock.role || 'system')}</span> → <span class="kaiz-diff-new">${escapeHtml(newBlock.role || 'system')}</span>`);
+                          metaPills.push(`🎭 Role: <span class="kaiz-diff-old">${escapeHtml$1(oldBlock.role || 'system')}</span> → <span class="kaiz-diff-new">${escapeHtml$1(newBlock.role || 'system')}</span>`);
                       if ((oldBlock.enabled !== false) !== (newBlock.enabled !== false))
                           metaPills.push(`👁 Enabled: <span class="kaiz-diff-old">${oldBlock.enabled !== false}</span> → <span class="kaiz-diff-new">${newBlock.enabled !== false}</span>`);
                       if ((oldBlock.injection_depth ?? 4) !== (newBlock.injection_depth ?? 4))
@@ -15978,9 +28089,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       if (oldStr || newStr) {
                           contentHtml += `<div class="kaiz-diff-simple">`;
                           if (oldStr)
-                              contentHtml += `<div class="kaiz-diff-simple-old">- ${escapeHtml(oldStr)}</div>`;
+                              contentHtml += `<div class="kaiz-diff-simple-old">- ${escapeHtml$1(oldStr)}</div>`;
                           if (newStr)
-                              contentHtml += `<div class="kaiz-diff-simple-new">+ ${escapeHtml(newStr)}</div>`;
+                              contentHtml += `<div class="kaiz-diff-simple-new">+ ${escapeHtml$1(newStr)}</div>`;
                           contentHtml += `</div>`;
                       }
                   }
@@ -15993,7 +28104,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                                     <span class="kaiz-diff-badge" style="background: ${badgeColor}18; color: ${badgeColor}; border-color: ${badgeColor}35">
                                         #${index + 1} ${typeLabel}
                                     </span>
-                                    <span class="kaiz-diff-identifier">[${escapeHtml(item.identifier || item.name || '')}]</span>
+                                    <span class="kaiz-diff-identifier">[${escapeHtml$1(item.identifier || item.name || '')}]</span>
                                 </div>
                                 ${hasContent
                     ? `
@@ -16004,7 +28115,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                                 `
                     : ''}
                             </div>
-                            <div class="kaiz-diff-summary">${escapeHtml(item.summary || '')}</div>
+                            <div class="kaiz-diff-summary">${escapeHtml$1(item.summary || '')}</div>
                         </div>
                         ${hasContent
                     ? `
@@ -16195,7 +28306,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // Show the 1–2 prefix lines as context (with absolute line numbers)
           for (let p = 0; p < prefixLen; p++) {
               const ln = String(p + 1).padStart(3, ' ');
-              html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(ln)} ${escapeHtml(ln)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[p])}</span></div>`;
+              html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml$1(ln)} ${escapeHtml$1(ln)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml$1(oldLines[p])}</span></div>`;
           }
       }
       let i = 0;
@@ -16204,15 +28315,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const dl = diffLines[i];
               const lineNumOld = dl.lineOld !== undefined ? String(dl.lineOld).padStart(3, ' ') : '   ';
               const lineNumNew = dl.lineNew !== undefined ? String(dl.lineNew).padStart(3, ' ') : '   ';
-              const lineNums = `<span class="kaiz-diff-ln">${escapeHtml(lineNumOld)} ${escapeHtml(lineNumNew)}</span>`;
+              const lineNums = `<span class="kaiz-diff-ln">${escapeHtml$1(lineNumOld)} ${escapeHtml$1(lineNumNew)}</span>`;
               if (dl.type === 'del') {
-                  html += `<div class="kaiz-diff-line kaiz-diff-del">${lineNums}<span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+                  html += `<div class="kaiz-diff-line kaiz-diff-del">${lineNums}<span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml$1(dl.text)}</span></div>`;
               }
               else if (dl.type === 'add') {
-                  html += `<div class="kaiz-diff-line kaiz-diff-add">${lineNums}<span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+                  html += `<div class="kaiz-diff-line kaiz-diff-add">${lineNums}<span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml$1(dl.text)}</span></div>`;
               }
               else {
-                  html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+                  html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml$1(dl.text)}</span></div>`;
               }
               i++;
           }
@@ -16231,8 +28342,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const dl = diffLines[i];
                       const lineNumOld = dl.lineOld !== undefined ? String(dl.lineOld).padStart(3, ' ') : '   ';
                       const lineNumNew = dl.lineNew !== undefined ? String(dl.lineNew).padStart(3, ' ') : '   ';
-                      const lineNums = `<span class="kaiz-diff-ln">${escapeHtml(lineNumOld)} ${escapeHtml(lineNumNew)}</span>`;
-                      html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(dl.text)}</span></div>`;
+                      const lineNums = `<span class="kaiz-diff-ln">${escapeHtml$1(lineNumOld)} ${escapeHtml$1(lineNumNew)}</span>`;
+                      html += `<div class="kaiz-diff-line kaiz-diff-ctx">${lineNums}<span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml$1(dl.text)}</span></div>`;
                       i++;
                   }
               }
@@ -16248,7 +28359,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           for (let s = 0; s < suffixLen; s++) {
               const lnOld = String(startOld + s + 1).padStart(3, ' ');
               const lnNew = String(startNew + s + 1).padStart(3, ' ');
-              html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml(lnOld)} ${escapeHtml(lnNew)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml(oldLines[startOld + s])}</span></div>`;
+              html += `<div class="kaiz-diff-line kaiz-diff-ctx"><span class="kaiz-diff-ln">${escapeHtml$1(lnOld)} ${escapeHtml$1(lnNew)}</span><span class="kaiz-diff-sign"> </span><span class="kaiz-diff-text">${escapeHtml$1(oldLines[startOld + s])}</span></div>`;
           }
       }
       html += '</div>';
@@ -16259,7 +28370,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       const lines = content.split('\n');
       let html = '<div class="kaiz-diff-unified">';
       lines.forEach((line, i) => {
-          html += `<div class="kaiz-diff-line kaiz-diff-add"><span class="kaiz-diff-ln">   ${String(i + 1).padStart(3, ' ')}</span><span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
+          html += `<div class="kaiz-diff-line kaiz-diff-add"><span class="kaiz-diff-ln">   ${String(i + 1).padStart(3, ' ')}</span><span class="kaiz-diff-sign">+</span><span class="kaiz-diff-text">${escapeHtml$1(line)}</span></div>`;
       });
       html += '</div>';
       return html;
@@ -16269,7 +28380,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       const lines = content.split('\n');
       let html = '<div class="kaiz-diff-unified">';
       lines.forEach((line, i) => {
-          html += `<div class="kaiz-diff-line kaiz-diff-del"><span class="kaiz-diff-ln">${String(i + 1).padStart(3, ' ')}   </span><span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml(line)}</span></div>`;
+          html += `<div class="kaiz-diff-line kaiz-diff-del"><span class="kaiz-diff-ln">${String(i + 1).padStart(3, ' ')}   </span><span class="kaiz-diff-sign">-</span><span class="kaiz-diff-text">${escapeHtml$1(line)}</span></div>`;
       });
       html += '</div>';
       return html;
@@ -16346,17 +28457,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               badgeHtml = `<span class="kaiz-diff-reorder-badge same" title="Vị trí không đổi"><i class="fa-solid fa-check"></i> Không đổi</span>`;
           }
           return `
-                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml(block.identifier)}">
+                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml$1(block.identifier)}">
                     <div class="kaiz-diff-reorder-block-main">
                         <span class="kaiz-diff-reorder-idx">#${oldPos}</span>
                         <div class="kaiz-diff-reorder-info">
                             <div class="kaiz-diff-reorder-name-row">
-                                <span class="kaiz-diff-reorder-name" title="${escapeHtml(block.name)}">${escapeHtml(block.name)}</span>
+                                <span class="kaiz-diff-reorder-name" title="${escapeHtml$1(block.name)}">${escapeHtml$1(block.name)}</span>
                                 ${!block.enabled ? '<span class="kaiz-diff-reorder-disabled-pill" title="Block đang tắt">Tắt</span>' : ''}
                             </div>
                             <div class="kaiz-diff-reorder-meta-row">
-                                <span class="kaiz-diff-reorder-id">[${escapeHtml(block.identifier)}]</span>
-                                <span class="kaiz-diff-reorder-role">${escapeHtml(block.role)}</span>
+                                <span class="kaiz-diff-reorder-id">[${escapeHtml$1(block.identifier)}]</span>
+                                <span class="kaiz-diff-reorder-role">${escapeHtml$1(block.role)}</span>
                             </div>
                         </div>
                     </div>
@@ -16387,17 +28498,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               badgeHtml = `<span class="kaiz-diff-reorder-badge same" title="Vị trí không đổi"><i class="fa-solid fa-check"></i> Không đổi</span>`;
           }
           return `
-                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml(block.identifier)}">
+                <div class="kaiz-diff-reorder-block status-${status}" data-block-id="${escapeHtml$1(block.identifier)}">
                     <div class="kaiz-diff-reorder-block-main">
                         <span class="kaiz-diff-reorder-idx">#${newPos}</span>
                         <div class="kaiz-diff-reorder-info">
                             <div class="kaiz-diff-reorder-name-row">
-                                <span class="kaiz-diff-reorder-name" title="${escapeHtml(block.name)}">${escapeHtml(block.name)}</span>
+                                <span class="kaiz-diff-reorder-name" title="${escapeHtml$1(block.name)}">${escapeHtml$1(block.name)}</span>
                                 ${!block.enabled ? '<span class="kaiz-diff-reorder-disabled-pill" title="Block đang tắt">Tắt</span>' : ''}
                             </div>
                             <div class="kaiz-diff-reorder-meta-row">
-                                <span class="kaiz-diff-reorder-id">[${escapeHtml(block.identifier)}]</span>
-                                <span class="kaiz-diff-reorder-role">${escapeHtml(block.role)}</span>
+                                <span class="kaiz-diff-reorder-id">[${escapeHtml$1(block.identifier)}]</span>
+                                <span class="kaiz-diff-reorder-role">${escapeHtml$1(block.role)}</span>
                             </div>
                         </div>
                     </div>
@@ -16444,6 +28555,1189 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
             </div>
         </div>
     `;
+  }
+
+  const escapeHtml = (str) => {
+      if (str === null || str === undefined)
+          return '';
+      const s = typeof str === 'object' ? JSON.stringify(str) : String(str);
+      return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+  };
+  class MvuDashboardModal {
+      adapter;
+      currentReport = null;
+      activeTab = 'stats';
+      builderVariables = [];
+      selectedFloorId;
+      debounceTimer = null;
+      attachedEvents = false;
+      constructor(adapter) {
+          this.adapter = adapter;
+          this.bindEvents();
+          this.setupLiveEventListeners();
+      }
+      getModalElement() {
+          const el = document.getElementById('kaiz-mvu-dashboard-modal');
+          return el;
+      }
+      async open() {
+          const modal = this.getModalElement();
+          if (!modal)
+              return;
+          if (!modal.open) {
+              modal.showModal();
+          }
+          if (!this.attachedEvents) {
+              this.setupLiveEventListeners();
+          }
+          await this.refresh();
+      }
+      close() {
+          const modal = this.getModalElement();
+          if (modal && modal.open) {
+              modal.close();
+          }
+          // Đặt lại chế độ tự động theo lượt mới nhất cho lần mở tiếp theo
+          this.selectedFloorId = undefined;
+      }
+      async refresh(floorId) {
+          const $ = jQuery;
+          $('#kaiz-mvu-status-badge')
+              .text('Đang đồng bộ...')
+              .removeClass('badge-success badge-warning badge-danger')
+              .addClass('badge-neutral');
+          if (floorId !== undefined) {
+              this.selectedFloorId = floorId;
+          }
+          try {
+              this.currentReport = await MvuManager.inspectMvu(this.adapter, undefined, this.selectedFloorId);
+              this.render();
+          }
+          catch (error) {
+              console.error('[MvuDashboardModal] Error inspecting MVU:', error);
+              if (typeof toastr !== 'undefined') {
+                  toastr.error('Lỗi khi tải thông tin MVU: ' + (error?.message || String(error)));
+              }
+          }
+      }
+      setupLiveEventListeners() {
+          if (this.attachedEvents)
+              return;
+          const attach = () => {
+              const ctx = typeof window.SillyTavern !== 'undefined'
+                  ? window.SillyTavern.getContext()
+                  : null;
+              const es = ctx?.eventSource || window.eventSource;
+              const et = ctx?.event_types ||
+                  ctx?.eventTypes ||
+                  window.event_types ||
+                  window.eventTypes;
+              if (!es) {
+                  setTimeout(attach, 1000);
+                  return;
+              }
+              this.attachedEvents = true;
+              const handleAutoUpdate = () => {
+                  const modal = this.getModalElement();
+                  // Chỉ tự động refresh nếu modal đang mở và đang ở chế độ Tự động
+                  if (!modal || (!modal.open && !jQuery(modal).is(':visible')))
+                      return;
+                  if (this.selectedFloorId !== undefined)
+                      return;
+                  if (this.debounceTimer)
+                      clearTimeout(this.debounceTimer);
+                  this.debounceTimer = setTimeout(async () => {
+                      await this.refresh();
+                  }, 300);
+              };
+              const handleChatChanged = () => {
+                  // Đổi chat hoặc đổi character -> đưa về chế độ Tự động (Mới nhất)
+                  this.selectedFloorId = undefined;
+                  const modal = this.getModalElement();
+                  if (modal && (modal.open || jQuery(modal).is(':visible'))) {
+                      if (this.debounceTimer)
+                          clearTimeout(this.debounceTimer);
+                      this.debounceTimer = setTimeout(async () => {
+                          await this.refresh();
+                      }, 200);
+                  }
+              };
+              const onEvt = (evtName, handler) => {
+                  if (!evtName || !handler)
+                      return;
+                  try {
+                      if (typeof es.on === 'function') {
+                          es.on(evtName, handler);
+                      }
+                      else if (typeof es.addEventListener === 'function') {
+                          es.addEventListener(evtName, handler);
+                      }
+                  }
+                  catch (e) {
+                      console.warn('[MvuDashboardModal] Error listening to event:', evtName, e);
+                  }
+              };
+              const charRendered = et?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+              const userRendered = et?.USER_MESSAGE_RENDERED || 'user_message_rendered';
+              const msgUpdated = et?.MESSAGE_UPDATED || 'message_updated';
+              const msgSwiped = et?.MESSAGE_SWIPED || 'message_swiped';
+              const msgDeleted = et?.MESSAGE_DELETED || 'message_deleted';
+              const msgReceived = et?.MESSAGE_RECEIVED || 'message_received';
+              const genEnded = et?.GENERATION_ENDED || 'generation_ended';
+              const chatChanged = et?.CHAT_CHANGED || 'chat_changed';
+              const chatIdChanged = et?.CHAT_ID_CHANGED || 'chat_id_changed';
+              onEvt(charRendered, handleAutoUpdate);
+              onEvt(userRendered, handleAutoUpdate);
+              onEvt(msgUpdated, handleAutoUpdate);
+              onEvt(msgSwiped, handleAutoUpdate);
+              onEvt(msgDeleted, handleAutoUpdate);
+              onEvt(msgReceived, handleAutoUpdate);
+              onEvt(genEnded, handleAutoUpdate);
+              onEvt(chatChanged, handleChatChanged);
+              onEvt(chatIdChanged, handleChatChanged);
+              // Bắt thêm các sự kiện cập nhật biến phổ biến từ MVU plugin / TavernHelper
+              onEvt('mvu:variables_updated', handleAutoUpdate);
+              onEvt('mvu_updated', handleAutoUpdate);
+              onEvt('tavern_helper:variables_updated', handleAutoUpdate);
+          };
+          attach();
+      }
+      bindEvents() {
+          const $ = jQuery;
+          // 1. Mở Modal từ Header Tools Menu
+          $('#kaiz-mvu-dashboard-btn')
+              .off('click')
+              .on('click', async () => {
+              $('#kaiz-chat-tools-menu').hide();
+              await this.open();
+          });
+          // 2. Đóng Modal
+          $('#kaiz-mvu-close-btn')
+              .off('click')
+              .on('click', () => {
+              this.close();
+          });
+          // 3. Nút Làm Mới (Refresh)
+          $('#kaiz-mvu-refresh-btn')
+              .off('click')
+              .on('click', async () => {
+              await this.refresh();
+              if (typeof toastr !== 'undefined') {
+                  toastr.info(this.selectedFloorId === undefined
+                      ? 'Đã đồng bộ lại chỉ số MVU theo lượt mới nhất.'
+                      : `Đã đồng bộ lại chỉ số MVU theo lượt #${(this.currentReport?.currentFloor?.displayIndex ?? '')}.`);
+              }
+          });
+          // 3.1 Bộ chọn Lượt Chat (Floor Selector)
+          $('#kaiz-mvu-floor-select')
+              .off('change')
+              .on('change', async (e) => {
+              const val = $(e.target).val();
+              this.selectedFloorId = val === '' ? undefined : Number(val);
+              await this.refresh();
+              if (typeof toastr !== 'undefined') {
+                  toastr.info(this.selectedFloorId !== undefined
+                      ? `Đã chuyển sang xem lượt chat #${(this.currentReport?.currentFloor?.displayIndex ?? this.selectedFloorId + 1)}`
+                      : 'Đã chuyển sang chế độ tự động theo lượt mới nhất.');
+              }
+          });
+          // 4. Chuyển Tab
+          $('.kaiz-mvu-tab')
+              .off('click')
+              .on('click', (e) => {
+              const tab = $(e.currentTarget).data('tab');
+              this.switchTab(tab);
+          });
+          // 4.1 Bấm vào Ribbon Pills nhảy sang Tab Bảng hoạt động
+          $('#kaiz-mvu-initvar-pill, #kaiz-mvu-rules-pill, #kaiz-mvu-format-pill, #kaiz-mvu-varlist-pill, #kaiz-mvu-ejs-pill')
+              .off('click')
+              .on('click', () => {
+              this.switchTab('activity');
+          });
+          // 5. Chuyển Chế Độ Khởi Tạo MVU (khi nhân vật chưa có MVU)
+          $('.kaiz-mvu-scaffold-tab')
+              .off('click')
+              .on('click', (e) => {
+              const mode = $(e.currentTarget).data('mode');
+              $('.kaiz-mvu-scaffold-tab').removeClass('active');
+              $(e.currentTarget).addClass('active');
+              $('.kaiz-mvu-scaffold-pane').hide();
+              $(`#kaiz-scaffold-pane-${mode}`).fadeIn(150);
+          });
+          // 5.1 Mode 1: AI Tự Phân Tích & Thiết Kế
+          $('#kaiz-mvu-ai-scaffold-btn')
+              .off('click')
+              .on('click', () => {
+              const userPrompt = ($('#kaiz-mvu-ai-prompt').val() || '').trim();
+              const requestText = userPrompt
+                  ? `Hãy phân tích nhân vật hiện tại và khởi tạo sàn MVU Zod 4 linh hoạt bằng công cụ scaffold_mvu_card theo yêu cầu sau: "${userPrompt}". Hãy tự thiết kế các biến, kiểu dữ liệu (type), giới hạn (min/max), giá trị mặc định và quy tắc check phù hợp nhất mà không dùng bất kỳ template có sẵn nào.`
+                  : `Hãy phân tích persona, lore và thế giới của nhân vật hiện tại, sau đó sử dụng công cụ scaffold_mvu_card để tự thiết kế và khởi tạo một sàn hệ thống biến MVU Zod 4 tối ưu, phù hợp nhất cho nhân vật này.`;
+              this.close();
+              const chatInput = $('#kaiz-chat-input');
+              chatInput.val(requestText);
+              $('#kaiz-send-btn').trigger('click');
+          });
+          // 5.2 Mode 2: Quick Builder - Thay đổi kiểu dữ liệu
+          $('#kaiz-builder-type')
+              .off('change')
+              .on('change', (e) => {
+              if ($(e.target).val() === 'number') {
+                  $('.kaiz-builder-num-row').show();
+              }
+              else {
+                  $('.kaiz-builder-num-row').hide();
+              }
+          });
+          // 5.2 Mode 2: Quick Builder - Thêm dòng biến vào danh sách
+          $('#kaiz-builder-add-row-btn')
+              .off('click')
+              .on('click', () => {
+              const path = ($('#kaiz-builder-path').val() || '').trim();
+              const type = $('#kaiz-builder-type').val();
+              const minStr = ($('#kaiz-builder-min').val() || '').trim();
+              const maxStr = ($('#kaiz-builder-max').val() || '').trim();
+              const defaultStr = ($('#kaiz-builder-default').val() || '').trim();
+              const rule = ($('#kaiz-builder-rule').val() || '').trim();
+              if (!path) {
+                  if (typeof toastr !== 'undefined')
+                      toastr.warning('Vui lòng nhập đường dẫn biến.');
+                  return;
+              }
+              let defaultValue = defaultStr;
+              if (type === 'number') {
+                  defaultValue = defaultStr ? Number(defaultStr) : minStr ? Number(minStr) : 0;
+              }
+              else if (type === 'boolean') {
+                  defaultValue = defaultStr === 'true';
+              }
+              this.builderVariables.push({
+                  path,
+                  type,
+                  min: minStr ? Number(minStr) : undefined,
+                  max: maxStr ? Number(maxStr) : undefined,
+                  defaultValue,
+                  ruleCheck: rule || undefined,
+              });
+              $('#kaiz-builder-path').val('');
+              $('#kaiz-builder-min').val('');
+              $('#kaiz-builder-max').val('');
+              $('#kaiz-builder-default').val('');
+              $('#kaiz-builder-rule').val('');
+              this.renderBuilderList();
+          });
+          // 5.2 Mode 2: Quick Builder - Nạp các biến đã chọn
+          $('#kaiz-mvu-builder-submit-btn')
+              .off('click')
+              .on('click', async () => {
+              if (this.builderVariables.length === 0) {
+                  if (typeof toastr !== 'undefined')
+                      toastr.warning('Danh sách biến trống. Hãy thêm ít nhất 1 biến.');
+                  return;
+              }
+              try {
+                  const res = await MvuManager.scaffoldMvuCard(this.adapter, {
+                      variables: this.builderVariables,
+                  });
+                  if (res.success) {
+                      if (typeof toastr !== 'undefined') {
+                          toastr.success(`Đã khởi tạo thành công hệ thống MVU với ${this.builderVariables.length} biến!`);
+                      }
+                      this.builderVariables = [];
+                      await this.refresh();
+                  }
+              }
+              catch (err) {
+                  console.error('[MvuDashboardModal] Builder scaffold error:', err);
+                  if (typeof toastr !== 'undefined') {
+                      toastr.error('Lỗi khi nạp hệ thống MVU: ' + (err?.message || String(err)));
+                  }
+              }
+          });
+          // 5.3 Mode 3: Nạp Zod Schema / YAML Trực Tiếp
+          $('#kaiz-mvu-raw-submit-btn')
+              .off('click')
+              .on('click', async () => {
+              const customZodSchema = ($('#kaiz-raw-zod-input').val() || '').trim();
+              const customInitvarYaml = ($('#kaiz-raw-initvar-input').val() || '').trim();
+              if (!customZodSchema && !customInitvarYaml) {
+                  if (typeof toastr !== 'undefined')
+                      toastr.warning('Vui lòng nhập mã Zod Schema hoặc YAML.');
+                  return;
+              }
+              try {
+                  const res = await MvuManager.scaffoldMvuCard(this.adapter, {
+                      customZodSchema: customZodSchema || undefined,
+                      customInitvarYaml: customInitvarYaml || undefined,
+                  });
+                  if (res.success) {
+                      if (typeof toastr !== 'undefined') {
+                          toastr.success('Đã nạp thành công mã Zod Schema tùy chỉnh vào Card!');
+                      }
+                      await this.refresh();
+                  }
+              }
+              catch (err) {
+                  console.error('[MvuDashboardModal] Raw scaffold error:', err);
+                  if (typeof toastr !== 'undefined') {
+                      toastr.error('Lỗi khi nạp Schema: ' + (err?.message || String(err)));
+                  }
+              }
+          });
+          // 6. Ẩn / Hiện Panel Thêm Biến
+          $('#kaiz-mvu-toggle-add-btn')
+              .off('click')
+              .on('click', () => {
+              $('#kaiz-mvu-add-panel').slideToggle(200);
+          });
+          $('#kaiz-mvu-close-add-panel')
+              .off('click')
+              .on('click', () => {
+              $('#kaiz-mvu-add-panel').slideUp(200);
+          });
+          // 7. Thay đổi Kiểu Dữ Liệu trong Add Panel (ẩn hiện min/max)
+          $('#kaiz-mvu-select-type')
+              .off('change')
+              .on('change', (e) => {
+              const val = $(e.target).val();
+              if (val === 'number') {
+                  $('.kaiz-mvu-num-field').show();
+              }
+              else {
+                  $('.kaiz-mvu-num-field').hide();
+              }
+          });
+          // 8. Submit Thêm Biến Mới
+          $('#kaiz-mvu-submit-add-btn')
+              .off('click')
+              .on('click', async () => {
+              await this.handleAddVariable();
+          });
+          // Đóng modal khi click ra ngoài backdrop
+          const modal = this.getModalElement();
+          if (modal) {
+              modal.addEventListener('click', (e) => {
+                  if (e.target === modal) {
+                      this.close();
+                  }
+              });
+          }
+      }
+      switchTab(tab) {
+          const $ = jQuery;
+          this.activeTab = tab;
+          $('.kaiz-mvu-tab').removeClass('active');
+          $(`.kaiz-mvu-tab[data-tab="${tab}"]`).addClass('active');
+          $('.kaiz-mvu-tab-content').removeClass('active');
+          $(`#kaiz-mvu-tab-${tab}`).addClass('active');
+      }
+      async handleAddVariable() {
+          const $ = jQuery;
+          const path = ($('#kaiz-mvu-input-path').val() || '').trim();
+          const type = $('#kaiz-mvu-select-type').val();
+          const minStr = ($('#kaiz-mvu-input-min').val() || '').trim();
+          const maxStr = ($('#kaiz-mvu-input-max').val() || '').trim();
+          const defaultStr = ($('#kaiz-mvu-input-default').val() || '').trim();
+          const ruleCheck = ($('#kaiz-mvu-input-rule').val() || '').trim();
+          if (!path) {
+              if (typeof toastr !== 'undefined')
+                  toastr.warning('Vui lòng nhập đường dẫn hoặc tên biến.');
+              return;
+          }
+          const min = minStr !== '' ? Number(minStr) : undefined;
+          const max = maxStr !== '' ? Number(maxStr) : undefined;
+          let defaultValue = defaultStr;
+          if (type === 'number') {
+              defaultValue = defaultStr !== '' ? Number(defaultStr) : (min ?? 0);
+          }
+          else if (type === 'boolean') {
+              defaultValue = defaultStr.toLowerCase() === 'true';
+          }
+          else if (type === 'array') {
+              defaultValue = [];
+          }
+          try {
+              const res = await MvuManager.mutateMvuSchema(this.adapter, {
+                  action: 'add',
+                  variablePath: path,
+                  type,
+                  min,
+                  max,
+                  defaultValue,
+                  ruleCheck: ruleCheck || undefined,
+              });
+              if (res.success) {
+                  if (typeof toastr !== 'undefined') {
+                      toastr.success(`Đã thêm thành công biến "${path}" vào Card!`);
+                  }
+                  // Reset form
+                  $('#kaiz-mvu-input-path').val('');
+                  $('#kaiz-mvu-input-min').val('');
+                  $('#kaiz-mvu-input-max').val('');
+                  $('#kaiz-mvu-input-default').val('');
+                  $('#kaiz-mvu-input-rule').val('');
+                  $('#kaiz-mvu-add-panel').slideUp(200);
+                  await this.refresh();
+              }
+          }
+          catch (err) {
+              console.error('[MvuDashboardModal] Error adding variable:', err);
+              if (typeof toastr !== 'undefined') {
+                  toastr.error('Lỗi khi thêm biến: ' + (err?.message || String(err)));
+              }
+          }
+      }
+      render() {
+          const $ = jQuery;
+          const report = this.currentReport;
+          if (!report)
+              return;
+          // Cập nhật Tiêu đề, Tên nhân vật, Lượt chat & Nguồn dữ liệu
+          let subtitle = `Nhân vật: ${escapeHtml(report.characterName)} ${report.hasMvu ? '• ' + escapeHtml(report.zodScriptName || 'Hệ thống MVU') : ''}`;
+          if (report.currentFloor) {
+              const modeText = this.selectedFloorId === undefined ? ' [Tự động]' : ' [Cố định]';
+              subtitle += ` • Lượt #${report.currentFloor.displayIndex} (${escapeHtml(report.currentFloor.name)})${modeText}`;
+          }
+          if (report.dataSource) {
+              const src = report.dataSource === 'mvu' ? 'MVU API' : report.dataSource === 'helper' ? 'TavernHelper' : 'Bộ nhớ ST';
+              subtitle += ` • Nguồn: ${src}`;
+          }
+          $('#kaiz-mvu-subtitle').html(subtitle);
+          if (!report.hasMvu) {
+              // Không có MVU
+              $('#kaiz-mvu-status-badge')
+                  .text('Chưa có MVU')
+                  .removeClass('badge-success badge-neutral')
+                  .addClass('badge-warning');
+              $('#kaiz-mvu-empty-container').show();
+              $('#kaiz-mvu-active-container').hide();
+              return;
+          }
+          // Có MVU
+          $('#kaiz-mvu-status-badge')
+              .html('<i class="fa-solid fa-bolt"></i> Live Active')
+              .removeClass('badge-warning badge-neutral')
+              .addClass('badge-success');
+          $('#kaiz-mvu-empty-container').hide();
+          $('#kaiz-mvu-active-container').show();
+          // 1. Cập nhật Ribbon & Floor Selector
+          const floorSelect = $('#kaiz-mvu-floor-select');
+          if (floorSelect.length) {
+              floorSelect.empty();
+              const isAuto = this.selectedFloorId === undefined;
+              floorSelect.append(`<option value="" ${isAuto ? 'selected' : ''}>Lượt mới nhất (Tự động)</option>`);
+              if (report.availableFloors && report.availableFloors.length > 0) {
+                  for (const fl of report.availableFloors) {
+                      const isSel = this.selectedFloorId === fl.messageId ? 'selected' : '';
+                      const previewSnippet = fl.preview
+                          ? `— ${fl.preview.length > 45 ? fl.preview.slice(0, 45) + '...' : fl.preview}`
+                          : '';
+                      const optText = `Lượt #${fl.displayIndex} · ${fl.name} ${previewSnippet}`;
+                      floorSelect.append(`<option value="${fl.messageId}" ${isSel}>${escapeHtml(optText)}</option>`);
+                  }
+              }
+              // Đồng bộ trực tiếp giá trị của DOM select để tránh lệch trạng thái hiển thị
+              floorSelect.val(this.selectedFloorId !== undefined ? String(this.selectedFloorId) : '');
+          }
+          const allDescriptors = this.flattenDescriptorsForSchema(report.parsedSchema);
+          $('#kaiz-mvu-stat-count').text(allDescriptors.length);
+          $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'MagVarUpdate / MVU');
+          if (report.lorebookActivity) {
+              const act = report.lorebookActivity;
+              const initItem = act.items.find((i) => i.id === 'initvar');
+              const rulesItem = act.items.find((i) => i.id === 'rules');
+              const formatItem = act.items.find((i) => i.id === 'format');
+              const varlistItem = act.items.find((i) => i.id === 'varlist');
+              const ejsItem = act.items.find((i) => i.id === 'controller');
+              const updatePill = (id, item, defaultLabel) => {
+                  const el = $(`#${id}`);
+                  if (!el.length)
+                      return;
+                  if (!item) {
+                      el.text(`${defaultLabel}: ?`)
+                          .removeClass('badge-success badge-danger badge-warning')
+                          .addClass('badge-neutral');
+                      return;
+                  }
+                  el.removeClass('badge-success badge-danger badge-warning badge-neutral');
+                  if (item.status === 'active') {
+                      el.text(`${defaultLabel}: OK`).addClass('badge-success');
+                  }
+                  else if (item.status === 'warning') {
+                      el.text(`${defaultLabel}: Bật`).addClass('badge-warning');
+                  }
+                  else if (item.status === 'inactive') {
+                      el.text(`${defaultLabel}: Thiếu`).addClass('badge-danger');
+                  }
+                  else {
+                      el.text(`${defaultLabel}: —`).addClass('badge-neutral');
+                  }
+                  el.attr('title', `Nhấn để mở Bảng hoạt động · Entry: "${item.entryName}" (${item.statusText})`);
+              };
+              updatePill('kaiz-mvu-initvar-pill', initItem, 'InitVar');
+              updatePill('kaiz-mvu-rules-pill', rulesItem, 'Quy tắc');
+              updatePill('kaiz-mvu-format-pill', formatItem, 'Định dạng');
+              updatePill('kaiz-mvu-varlist-pill', varlistItem, 'Danh sách');
+              const ejsPill = $('#kaiz-mvu-ejs-pill');
+              if (ejsItem && ejsItem.status === 'active') {
+                  updatePill('kaiz-mvu-ejs-pill', ejsItem, 'EJS');
+                  ejsPill.show();
+              }
+              else {
+                  ejsPill.hide();
+              }
+          }
+          else {
+              if (report.initvarVariables) {
+                  $('#kaiz-mvu-initvar-pill')
+                      .text('InitVar: OK')
+                      .removeClass('badge-neutral badge-danger')
+                      .addClass('badge-success');
+              }
+              else {
+                  $('#kaiz-mvu-initvar-pill')
+                      .text('InitVar: Thiếu')
+                      .removeClass('badge-neutral badge-success')
+                      .addClass('badge-danger');
+              }
+              if (report.updateRulesSummary) {
+                  $('#kaiz-mvu-rules-pill')
+                      .text('Quy tắc: OK')
+                      .removeClass('badge-neutral badge-danger')
+                      .addClass('badge-success');
+              }
+              else {
+                  $('#kaiz-mvu-rules-pill')
+                      .text('Quy tắc: Thiếu')
+                      .removeClass('badge-neutral badge-success')
+                      .addClass('badge-danger');
+              }
+              const ejsPill = $('#kaiz-mvu-ejs-pill');
+              if (ejsPill.length) {
+                  if (report.hasEjsController) {
+                      ejsPill
+                          .text('EJS: OK')
+                          .attr('title', report.ejsControllerSummary
+                          ? `Bộ điều khiển: ${report.ejsControllerSummary}`
+                          : 'Có bộ điều khiển EJS Preprocessing động')
+                          .removeClass('badge-neutral badge-danger')
+                          .addClass('badge-success')
+                          .show();
+                  }
+                  else {
+                      ejsPill.hide();
+                  }
+              }
+          }
+          // 2. Cảnh báo Inconsistencies / Warnings
+          const warnings = [...(report.healthWarnings || []), ...(report.inconsistencies || [])];
+          const warnContainer = $('#kaiz-mvu-warnings-container');
+          if (warnings.length > 0) {
+              let warnHtml = `<div class="kaiz-mvu-warning-box"><div class="kaiz-mvu-warning-header"><i class="fa-solid fa-triangle-exclamation"></i> Chú ý tính toàn vẹn dữ liệu:</div><ul>`;
+              for (const w of warnings) {
+                  warnHtml += `<li>${escapeHtml(w)}</li>`;
+              }
+              warnHtml += `</ul></div>`;
+              warnContainer.html(warnHtml).show();
+          }
+          else {
+              warnContainer.hide().empty();
+          }
+          // 3. Render Tab 1: Stats Grid
+          this.renderStatsTab(report);
+          // 4. Render Tab 2: Activity / Lorebook MVU Table
+          this.renderActivityTab(report);
+          // 5. Render Tab 3: Schema Table
+          this.renderSchemaTab(allDescriptors, report);
+          // 6. Render Tab 4: Raw / YAML Panes
+          this.renderRawTab(report);
+      }
+      flattenDescriptorsForSchema(descriptors) {
+          const flat = [];
+          for (const d of descriptors) {
+              if (d.type === 'object' && d.children && d.children.length > 0) {
+                  flat.push(...this.flattenDescriptorsForSchema(d.children));
+              }
+              else if (d.type === 'record' && d.recordTemplate && d.recordTemplate.length > 0) {
+                  for (const t of d.recordTemplate) {
+                      flat.push({
+                          ...t,
+                          path: `${d.path}.${t.name}`,
+                      });
+                  }
+              }
+              else {
+                  flat.push(d);
+              }
+          }
+          return flat;
+      }
+      /**
+       * Thu thập danh sách descriptor cần hiển thị dưới dạng card.
+       * Hoàn toàn cấu trúc dữ liệu thuần túy (100% Data-Driven - không hardcode bất kỳ tên card hay biến cụ thể nào):
+       * 1. Nếu là z.object có children: tiếp tục đệ quy xuống các thuộc tính bên trong.
+       * 2. Nếu là z.record: các item thực tế bên trong record (ví dụ từng NPC, vật phẩm, nhiệm vụ) hiển thị thành từng card riêng. Nếu record rỗng ({}) thì hiển thị chính record đó.
+       * 3. Nếu là biến lá nguyên thủy (number, string, boolean, array): hiển thị thành card.
+       */
+      collectDisplayDescriptors(descriptors) {
+          const result = [];
+          const traverse = (items) => {
+              for (const d of items) {
+                  if (d.type === 'object' && d.children && d.children.length > 0) {
+                      traverse(d.children);
+                  }
+                  else if (d.type === 'record') {
+                      if (d.children && d.children.length > 0) {
+                          for (const child of d.children) {
+                              result.push(child);
+                          }
+                      }
+                      else {
+                          result.push(d);
+                      }
+                  }
+                  else {
+                      result.push(d);
+                  }
+              }
+          };
+          traverse(descriptors);
+          return result;
+      }
+      /**
+       * Suy diễn danh mục hoàn toàn tự động theo cấu trúc cây Schema (100% Generic):
+       * - Tên danh mục tự động lấy theo đường dẫn nhánh cha: "Nhánh_1 ➔ Nhánh_2"
+       * - Các trường hệ thống bắt đầu bằng "_" tự động gom lên đầu.
+       * - Không chứa bất kỳ từ khóa hay logic riêng biệt của card nào.
+       */
+      getCategoryForDescriptor(desc) {
+          const parts = desc.path.split('.');
+          const parentParts = parts.length > 1 ? parts.slice(0, parts.length - 1) : [desc.name];
+          const categoryName = parentParts.join(' ➔ ');
+          let icon = 'fa-solid fa-folder-open';
+          let order = 50;
+          // Ưu tiên các trường cấu hình/hệ thống có tiền tố "_"
+          if (categoryName.startsWith('_')) {
+              icon = 'fa-solid fa-gear';
+              order = 10;
+          }
+          else if (parentParts.length === 1) {
+              order = 20;
+          }
+          else {
+              order = 30;
+          }
+          return { name: categoryName, icon, order };
+      }
+      renderStatsTab(report) {
+          const $ = jQuery;
+          const container = $('#kaiz-mvu-stats-grid');
+          container.empty();
+          let displayDescriptors = this.collectDisplayDescriptors(report.parsedSchema);
+          // Fallback nếu parsedSchema trống nhưng có liveVariables
+          if (displayDescriptors.length === 0 && report.liveVariables) {
+              const fallbackSchema = MvuManager.generateSchemaFromData(report.liveVariables);
+              MvuManager.enrichWithLiveData(fallbackSchema, report.liveVariables);
+              displayDescriptors = this.collectDisplayDescriptors(fallbackSchema);
+          }
+          if (displayDescriptors.length === 0) {
+              container.html('<div class="kaiz-mvu-empty-text">Chưa phát hiện biến nào trong Schema hoặc Live Variables. Hãy bấm "+ Thêm Biến".</div>');
+              return;
+          }
+          // Gom nhóm theo domain category
+          const groups = {};
+          for (const desc of displayDescriptors) {
+              const cat = this.getCategoryForDescriptor(desc);
+              if (!groups[cat.name]) {
+                  groups[cat.name] = { info: cat, items: [] };
+              }
+              groups[cat.name].items.push(desc);
+          }
+          // Sắp xếp các danh mục theo thứ tự logic nghiệp vụ
+          const sortedCats = Object.values(groups).sort((a, b) => a.info.order - b.info.order);
+          for (const group of sortedCats) {
+              const groupInfo = group.info;
+              const descriptors = group.items;
+              let catHtml = `
+                <div class="kaiz-mvu-category-section">
+                    <div class="kaiz-mvu-cat-header">
+                        <span class="kaiz-mvu-cat-title"><i class="${groupInfo.icon}"></i> ${escapeHtml(groupInfo.name)}</span>
+                        <span class="kaiz-mvu-cat-count">${descriptors.length} chỉ số</span>
+                    </div>
+                    <div class="kaiz-mvu-cards-grid">
+            `;
+              for (const desc of descriptors) {
+                  const liveVal = MvuManager.getLiveVariables(desc.path, this.selectedFloorId);
+                  let currentVal = liveVal !== undefined ? liveVal : desc.defaultValue !== undefined ? desc.defaultValue : '—';
+                  let dynamicDesc = desc.description || '';
+                  if (Array.isArray(currentVal) &&
+                      currentVal.length === 2 &&
+                      typeof currentVal[1] === 'string' &&
+                      (currentVal[0] === null || ['string', 'number', 'boolean'].includes(typeof currentVal[0]))) {
+                      if (!dynamicDesc)
+                          dynamicDesc = currentVal[1];
+                      currentVal = currentVal[0];
+                  }
+                  const isNumeric = desc.type === 'number' || (typeof currentVal === 'number' && Number.isFinite(currentVal));
+                  const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
+                  catHtml += `
+                    <div class="kaiz-mvu-stat-card" data-path="${escapeHtml(desc.path)}">
+                        <div class="kaiz-mvu-card-top">
+                            <div class="kaiz-mvu-card-name" title="${escapeHtml(dynamicDesc ? `${desc.path} (${dynamicDesc})` : desc.path)}">
+                                ${escapeHtml(desc.name)}
+                                ${dynamicDesc ? `<span style="font-size: 10.5px; color: #94a3b8; font-weight: normal; margin-left: 4px;">· ${escapeHtml(dynamicDesc)}</span>` : ''}
+                                ${desc.name.startsWith('_') ? `<span class="kaiz-status-pill badge-neutral" style="font-size: 9.5px; padding: 1px 5px; margin-left: 5px; font-weight: normal;" title="Biến chỉ đọc của hệ thống (Readonly)"><i class="fa-solid fa-lock"></i> Chỉ đọc</span>` : ''}
+                            </div>
+                            <div class="kaiz-mvu-card-actions">
+                                <button type="button" class="kaiz-mvu-inline-edit-btn interactable" title="Chỉnh sửa giá trị" data-path="${escapeHtml(desc.path)}">
+                                    <i class="fa-solid fa-pen"></i>
+                                </button>
+                            </div>
+                        </div>
+                `;
+                  if (isNumeric) {
+                      const numVal = Number(currentVal) || 0;
+                      const hasBounds = desc.min !== undefined &&
+                          desc.max !== undefined &&
+                          Math.abs(desc.max) < 1e6 &&
+                          Math.abs(desc.min) < 1e6;
+                      catHtml += `
+                        <div class="kaiz-mvu-card-numeric">
+                            <span class="kaiz-mvu-val-main">${numVal}</span>
+                            ${hasBounds ? `<span class="kaiz-mvu-val-bounds">(${desc.min} ➔ ${desc.max})</span>` : ''}
+                        </div>
+                    `;
+                  }
+                  else if (desc.type === 'boolean' || typeof currentVal === 'boolean') {
+                      const isTrue = currentVal === true || currentVal === 'true';
+                      catHtml += `
+                        <div class="kaiz-mvu-card-value">
+                            <span class="kaiz-status-pill ${isTrue ? 'badge-success' : 'badge-neutral'}">
+                                ${isTrue ? 'True (Bật)' : 'False (Tắt)'}
+                            </span>
+                        </div>
+                    `;
+                  }
+                  else if (desc.type === 'array' || Array.isArray(currentVal)) {
+                      const arr = Array.isArray(currentVal) ? currentVal : [];
+                      catHtml += `
+                        <div class="kaiz-mvu-card-value">
+                            ${arr.length > 0 ? arr.map((item) => `<span class="kaiz-mvu-tag">${escapeHtml(item)}</span>`).join('') : '<span class="kaiz-mvu-empty-badge">Trống ([])</span>'}
+                        </div>
+                    `;
+                  }
+                  else if (isObject) {
+                      const entries = Object.entries(currentVal);
+                      if (entries.length === 0) {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-empty-badge">Trống ({})</span>
+                            </div>
+                        `;
+                      }
+                      else {
+                          catHtml += `<div class="kaiz-mvu-card-value"><div class="kaiz-mvu-object-badge">`;
+                          for (const [subK, subV] of entries) {
+                              let valStr = '';
+                              if (typeof subV === 'object' && subV !== null) {
+                                  try {
+                                      valStr = JSON.stringify(subV);
+                                  }
+                                  catch {
+                                      valStr = String(subV);
+                                  }
+                              }
+                              else {
+                                  valStr = String(subV);
+                              }
+                              catHtml += `
+                                <div class="kaiz-mvu-obj-row">
+                                    <span class="kaiz-mvu-obj-k">${escapeHtml(subK)}:</span>
+                                    <span class="kaiz-mvu-obj-v" title="${escapeHtml(valStr)}">${escapeHtml(valStr || '—')}</span>
+                                </div>
+                            `;
+                          }
+                          catHtml += `</div></div>`;
+                      }
+                  }
+                  else {
+                      const strVal = String(currentVal ?? '');
+                      if (strVal === '') {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-empty-badge">Trống ("")</span>
+                            </div>
+                        `;
+                      }
+                      else if (strVal.length > 70 || strVal.includes('\n')) {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <div class="kaiz-mvu-text-block" title="${escapeHtml(strVal)}">${escapeHtml(strVal)}</div>
+                            </div>
+                        `;
+                      }
+                      else {
+                          catHtml += `
+                            <div class="kaiz-mvu-card-value">
+                                <span class="kaiz-mvu-text-badge">${escapeHtml(strVal)}</span>
+                            </div>
+                        `;
+                      }
+                  }
+                  // Inline Edit Form (Hidden by default)
+                  if (isObject) {
+                      const formattedJson = JSON.stringify(currentVal, null, 2);
+                      catHtml += `
+                        <div class="kaiz-mvu-inline-editor is-textarea" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
+                            <textarea class="text_pole kaiz-mvu-inline-textarea" rows="4">${escapeHtml(formattedJson)}</textarea>
+                            <div class="kaiz-mvu-editor-btns">
+                                <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" data-is-json="true" title="Lưu JSON">
+                                    <i class="fa-solid fa-check"></i> Lưu JSON
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                  }
+                  else {
+                      catHtml += `
+                        <div class="kaiz-mvu-inline-editor" id="editor-${escapeHtml(desc.path).replace(/\./g, '_')}" style="display: none;">
+                            <input type="text" class="text_pole kaiz-mvu-inline-input" value="${escapeHtml(currentVal)}">
+                            <button type="button" class="menu_button kaiz-mvu-inline-save-btn" data-path="${escapeHtml(desc.path)}" title="Lưu">
+                                <i class="fa-solid fa-check"></i>
+                            </button>
+                        </div>
+                    `;
+                  }
+                  catHtml += `</div>`; // Close stat-card
+              }
+              catHtml += `</div></div>`; // Close category-section
+              container.append(catHtml);
+          }
+          // Gắn sự kiện click inline edit
+          container.find('.kaiz-mvu-inline-edit-btn').on('click', (e) => {
+              const path = $(e.currentTarget).data('path');
+              const editorId = `#editor-${path.replace(/\./g, '_')}`;
+              $(editorId).slideToggle(150);
+          });
+          container.find('.kaiz-mvu-inline-save-btn').on('click', async (e) => {
+              const path = $(e.currentTarget).data('path');
+              const isJson = $(e.currentTarget).data('is-json') === true;
+              const editorId = `#editor-${path.replace(/\./g, '_')}`;
+              const inputVal = isJson
+                  ? $(editorId).find('.kaiz-mvu-inline-textarea').val()
+                  : $(editorId).find('.kaiz-mvu-inline-input').val();
+              let finalVal = inputVal;
+              if (isJson) {
+                  try {
+                      finalVal = JSON.parse(inputVal);
+                  }
+                  catch {
+                      if (typeof toastr !== 'undefined') {
+                          toastr.error('Định dạng JSON không hợp lệ. Vui lòng kiểm tra lại cú pháp.');
+                      }
+                      return;
+                  }
+              }
+              try {
+                  const res = await MvuManager.setLiveVariable(path, finalVal, this.selectedFloorId);
+                  if (res.success) {
+                      if (typeof toastr !== 'undefined') {
+                          toastr.success(`Đã cập nhật ${path}`);
+                      }
+                      await this.refresh(this.selectedFloorId);
+                  }
+              }
+              catch (err) {
+                  console.error('[MvuDashboardModal] Error setting live variable:', err);
+                  if (typeof toastr !== 'undefined') {
+                      toastr.error('Lỗi khi cập nhật biến: ' + (err?.message || String(err)));
+                  }
+              }
+          });
+      }
+      renderSchemaTab(allDescriptors, _report) {
+          const $ = jQuery;
+          const container = $('#kaiz-mvu-schema-table-container');
+          container.empty();
+          if (allDescriptors.length === 0) {
+              container.html('<div class="kaiz-mvu-empty-text">Chưa có khai báo biến nào trong Zod Schema.</div>');
+              return;
+          }
+          let tableHtml = `
+            <div class="kaiz-mvu-table-responsive">
+                <table class="kaiz-mvu-table">
+                    <thead>
+                        <tr>
+                            <th>Đường dẫn biến</th>
+                            <th>Kiểu</th>
+                            <th>Khoảng (Min - Max)</th>
+                            <th>Khởi tạo (Init)</th>
+                            <th>Thao tác</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+          for (const desc of allDescriptors) {
+              const hasBounds = desc.min !== undefined && desc.max !== undefined && desc.max <= 1e6 && desc.min >= -1e6;
+              const boundsText = hasBounds
+                  ? `${desc.min} ➔ ${desc.max}`
+                  : desc.min !== undefined && desc.min >= -1e6
+                      ? `Min: ${desc.min}`
+                      : desc.max !== undefined && desc.max <= 1e6
+                          ? `Max: ${desc.max}`
+                          : '—';
+              let defaultText = '—';
+              if (desc.defaultValue !== undefined) {
+                  if (typeof desc.defaultValue === 'object' && desc.defaultValue !== null) {
+                      try {
+                          defaultText = JSON.stringify(desc.defaultValue);
+                      }
+                      catch {
+                          defaultText = String(desc.defaultValue);
+                      }
+                  }
+                  else {
+                      defaultText = String(desc.defaultValue);
+                  }
+              }
+              tableHtml += `
+                <tr>
+                    <td class="kaiz-mvu-td-path"><code>${escapeHtml(desc.path)}</code></td>
+                    <td><span class="kaiz-mvu-type-badge type-${desc.type}">${desc.type}</span></td>
+                    <td>${boundsText}</td>
+                    <td>${defaultText}</td>
+                    <td class="kaiz-mvu-td-actions">
+                        <button type="button" class="menu_button kaiz-mvu-del-btn interactable" data-path="${escapeHtml(desc.path)}" title="Xóa biến khỏi Card">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+          }
+          tableHtml += `</tbody></table></div>`;
+          container.html(tableHtml);
+          // Gắn sự kiện Xóa biến
+          container.find('.kaiz-mvu-del-btn').on('click', async (e) => {
+              const path = $(e.currentTarget).data('path');
+              if (!confirm(`Bạn có chắc muốn XÓA biến "${path}" khỏi toàn bộ kịch bản Zod và Worldbook không? Thao tác sẽ được đồng bộ ngay lập tức.`)) {
+                  return;
+              }
+              try {
+                  const res = await MvuManager.mutateMvuSchema(this.adapter, {
+                      action: 'delete',
+                      variablePath: path,
+                  });
+                  if (res.success) {
+                      if (typeof toastr !== 'undefined') {
+                          toastr.success(`Đã xóa biến "${path}" thành công!`);
+                      }
+                      await this.refresh();
+                  }
+              }
+              catch (err) {
+                  console.error('[MvuDashboardModal] Error deleting variable:', err);
+                  if (typeof toastr !== 'undefined') {
+                      toastr.error('Lỗi khi xóa biến: ' + (err?.message || String(err)));
+                  }
+              }
+          });
+      }
+      renderRawTab(report) {
+          const $ = jQuery;
+          $('#kaiz-mvu-raw-live').text(report.liveVariables
+              ? JSON.stringify(report.liveVariables, null, 2)
+              : 'Không có dữ liệu stat_data trong bộ nhớ.');
+          $('#kaiz-mvu-raw-wrapper').text(report.rawWrapper
+              ? JSON.stringify(report.rawWrapper, null, 2)
+              : 'Không có dữ liệu wrapper tin nhắn trong bộ nhớ.');
+          $('#kaiz-mvu-raw-zod').text(report.zodSchemaCode || 'Không tìm thấy Zod Schema script.');
+          $('#kaiz-mvu-raw-initvar').text(report.initvarVariables ? YAML.stringify(report.initvarVariables) : 'Chưa có Worldbook [InitVar].');
+          $('#kaiz-mvu-raw-rules').text(report.updateRulesSummary || 'Chưa có Worldbook [mvu_update].');
+      }
+      renderActivityTab(report) {
+          const $ = jQuery;
+          const container = $('#kaiz-mvu-activity-container');
+          if (!container.length)
+              return;
+          const act = report.lorebookActivity;
+          if (!act) {
+              container.html(`
+                <div class="kaiz-mvu-empty-badge" style="padding: 24px; text-align: center;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: #f59e0b; margin-bottom: 8px; display: block;"></i>
+                    Chưa có dữ liệu kiểm tra Lorebook MVU. Vui lòng bấm nút làm mới ở góc phải.
+                </div>
+            `);
+              return;
+          }
+          const isAllOk = act.allRequiredActive;
+          const statusBannerClass = isAllOk ? 'banner-success' : 'banner-danger';
+          const bannerIcon = isAllOk ? 'fa-circle-check' : 'fa-triangle-exclamation';
+          const bannerTitle = isAllOk
+              ? 'Hệ thống Lorebook MVU đạt chuẩn hoạt động'
+              : `Phát hiện ${act.inactiveCount} tiêu chí Lorebook MVU chưa hoạt động!`;
+          const bannerSubtitle = isAllOk
+              ? 'Tất cả các tiêu chí cốt lõi (Khởi tạo biến, Quy tắc cập nhật, Định dạng xuất, Danh sách biến) đã được cấu hình chuẩn xác trong Worldbook.'
+              : 'Các tiêu chí hiển thị màu đỏ bên dưới đang bị thiếu hoặc bị tắt trong Worldbook. AI sẽ không thể đọc hiểu hoặc cập nhật biến.';
+          let rowsHtml = '';
+          for (const item of act.items) {
+              let rowStatusClass = '';
+              let statusBadgeClass = '';
+              let iconHtml = '';
+              if (item.status === 'active') {
+                  rowStatusClass = 'row-active';
+                  statusBadgeClass = 'status-active';
+                  iconHtml = '<i class="fa-solid fa-circle-check"></i>';
+              }
+              else if (item.status === 'warning') {
+                  rowStatusClass = 'row-warning';
+                  statusBadgeClass = 'status-warning';
+                  iconHtml = '<i class="fa-solid fa-triangle-exclamation"></i>';
+              }
+              else if (item.status === 'inactive') {
+                  // ĐỎ RỰC RỠ: Tiêu chí không hoạt động
+                  rowStatusClass = 'row-inactive';
+                  statusBadgeClass = 'status-inactive';
+                  iconHtml = '<i class="fa-solid fa-circle-xmark"></i>';
+              }
+              else {
+                  rowStatusClass = 'row-optional';
+                  statusBadgeClass = 'status-optional';
+                  iconHtml = '<i class="fa-solid fa-circle-minus"></i>';
+              }
+              const isMissing = item.entryName === 'Không tìm thấy' || item.entryName === 'Không sử dụng';
+              const entryDisplay = !isMissing
+                  ? `<div class="kaiz-mvu-entry-badge" title="Entry ID: ${escapeHtml(item.entryId ?? 'N/A')}">
+                    <i class="fa-solid fa-bookmark"></i>
+                    <span class="kaiz-mvu-entry-name">${escapeHtml(item.entryName)}</span>
+                   </div>`
+                  : `<span class="kaiz-mvu-entry-missing"><i class="fa-solid fa-ban"></i> ${escapeHtml(item.entryName)}</span>`;
+              const locationBadge = item.location && item.location !== '—'
+                  ? `<div class="kaiz-mvu-location-tag"><i class="fa-solid fa-book-atlas"></i> <span>${escapeHtml(item.location)}</span></div>`
+                  : `<div class="kaiz-mvu-location-tag empty"><span>—</span></div>`;
+              const reqBadge = item.isRequired
+                  ? '<span class="kaiz-mvu-req-tag required">Bắt buộc</span>'
+                  : '<span class="kaiz-mvu-req-tag optional">Tùy chọn</span>';
+              rowsHtml += `
+                <tr class="kaiz-mvu-activity-row ${rowStatusClass}">
+                    <td class="col-criterion">
+                        <div class="kaiz-mvu-criterion-header">
+                            <span class="kaiz-mvu-criterion-name">${escapeHtml(item.name)}</span>
+                            ${reqBadge}
+                        </div>
+                        <div class="kaiz-mvu-criterion-desc">${escapeHtml(item.description)}</div>
+                    </td>
+                    <td class="col-entry">
+                        ${entryDisplay}
+                        ${locationBadge}
+                    </td>
+                    <td class="col-status">
+                        <span class="kaiz-mvu-status-badge ${statusBadgeClass}">
+                            ${iconHtml} <span>${escapeHtml(item.statusText)}</span>
+                        </span>
+                    </td>
+                    <td class="col-details">
+                        <div class="kaiz-mvu-criterion-details">${escapeHtml(item.details)}</div>
+                    </td>
+                </tr>
+            `;
+          }
+          const html = `
+            <div class="kaiz-mvu-activity-wrapper">
+                <!-- Summary Banner -->
+                <div class="kaiz-mvu-activity-banner ${statusBannerClass}">
+                    <div class="kaiz-mvu-banner-icon"><i class="fa-solid ${bannerIcon}"></i></div>
+                    <div class="kaiz-mvu-banner-content">
+                        <h4 class="kaiz-mvu-banner-title">${bannerTitle}</h4>
+                        <p class="kaiz-mvu-banner-desc">${bannerSubtitle}</p>
+                    </div>
+                    <div class="kaiz-mvu-banner-stats">
+                        <div class="kaiz-mvu-banner-metric ${act.inactiveCount > 0 ? 'metric-danger' : 'metric-success'}">
+                            <span class="metric-num">${act.activeCount}/${act.totalCriteria}</span>
+                            <span class="metric-lbl">Tiêu chí đạt</span>
+                        </div>
+                        ${act.inactiveCount > 0 ? `
+                        <div class="kaiz-mvu-banner-metric metric-danger">
+                            <span class="metric-num">${act.inactiveCount}</span>
+                            <span class="metric-lbl">Không hoạt động</span>
+                        </div>` : ''}
+                    </div>
+                </div>
+
+                <!-- Lorebook Activity Table -->
+                <div class="kaiz-mvu-activity-table-card">
+                    <div class="kaiz-mvu-activity-table-header">
+                        <div class="kaiz-mvu-activity-table-title">
+                            <i class="fa-solid fa-list-check" style="color: #38bdf8;"></i>
+                            <span>Bảng Đối Chiếu Hoạt Động & Chỉ Điểm Entry Worldbook</span>
+                        </div>
+                        <div class="kaiz-mvu-activity-legend">
+                            <span class="legend-item"><span class="legend-dot dot-active"></span> Hoạt động</span>
+                            <span class="legend-item"><span class="legend-dot dot-inactive"></span> Không hoạt động</span>
+                            <span class="legend-item"><span class="legend-dot dot-warning"></span> Cảnh báo</span>
+                        </div>
+                    </div>
+                    <div class="kaiz-mvu-table-responsive">
+                        <table class="kaiz-mvu-activity-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 28%;">Tiêu chí MVU</th>
+                                    <th style="width: 25%;">Entry chỉ điểm (Worldbook)</th>
+                                    <th style="width: 20%;">Trạng thái hoạt động</th>
+                                    <th style="width: 27%;">Đánh giá & Chi tiết kỹ thuật</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="kaiz-mvu-activity-footer-hint">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>
+                        <strong>Ghi chú:</strong> Hệ thống tự động phân tích cấu trúc nội dung (Content DNA) của tất cả sổ tay liên kết và sổ tay nhúng của nhân vật. Các mục hiển thị <strong>màu đỏ</strong> sẽ khiến AI không thể đọc được quy tắc hoặc xuất lệnh cập nhật biến.
+                    </span>
+                </div>
+            </div>
+        `;
+          container.html(html);
+      }
+      renderBuilderList() {
+          const $ = jQuery;
+          const listEl = $('#kaiz-builder-items-list');
+          listEl.empty();
+          if (this.builderVariables.length === 0) {
+              listEl.html('<div class="kaiz-mvu-empty-badge" id="kaiz-builder-list-empty">Chưa có biến nào trong danh sách. Hãy điền thông tin bên trên và bấm "Thêm Vào Danh Sách".</div>');
+              return;
+          }
+          for (let i = 0; i < this.builderVariables.length; i++) {
+              const v = this.builderVariables[i];
+              const bounds = v.min !== undefined && v.max !== undefined ? ` [${v.min} ~ ${v.max}]` : '';
+              const itemHtml = $(`
+                <div class="kaiz-mvu-builder-item">
+                    <div class="kaiz-mvu-builder-item-info">
+                        <strong><code>${escapeHtml(v.path)}</code></strong>
+                        <span class="kaiz-mvu-type-badge type-${v.type}">${v.type}${bounds}</span>
+                        <span style="color:#94a3b8; font-size:11px;">Khởi tạo: ${escapeHtml(v.defaultValue ?? '—')}</span>
+                    </div>
+                    <button type="button" class="menu_button kaiz-builder-del-item" data-index="${i}" title="Xóa dòng này" style="padding: 2px 8px; font-size: 11px;">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+            `);
+              listEl.append(itemHtml);
+          }
+          listEl.find('.kaiz-builder-del-item').on('click', (e) => {
+              const idx = Number($(e.currentTarget).data('index'));
+              this.builderVariables.splice(idx, 1);
+              this.renderBuilderList();
+          });
+      }
   }
 
   const EXT_NAME = 'kaiz_agent';
@@ -16507,9 +29801,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               viewContextDepth: 5,
               viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
               cotDisplayMode: 'collapse_streaming',
+              prefillAsSystem: false,
           };
       }
       else {
+          if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
+              ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
+          }
           if (ctx.extensionSettings[EXT_NAME].cotDisplayMode === undefined) {
               ctx.extensionSettings[EXT_NAME].cotDisplayMode = 'collapse_streaming';
           }
@@ -16635,7 +29933,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               new UICustomizationModal(stateManager.db, uiEngine);
               new ImageGalleryModal(stateManager.db);
               new PresetGitModal(stateManager.db);
-              console.log('[KaizAgent] UI Customization Engine, Image Gallery & Preset Git initialized.');
+              new MvuDashboardModal(adapter);
+              console.log('[KaizAgent] UI Customization Engine, Image Gallery, Preset Git & MVU Dashboard initialized.');
               // Bắt đầu Auto Tasks sau khi DB đã init
               const allTasks = await stateManager.db.getAllAutoTasks();
               await autoTaskScheduler.start(allTasks);

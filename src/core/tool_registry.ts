@@ -5,10 +5,17 @@
  */
 
 interface ToolParameterProperty {
-    type: string;
+    type?: string;
     description: string;
     enum?: string[];
-    items?: { type: string };
+    items?:
+        | {
+              type: string;
+              properties?: Record<string, ToolParameterProperty>;
+              required?: string[];
+          }
+        | any;
+    properties?: Record<string, ToolParameterProperty>;
 }
 
 interface ToolParameters {

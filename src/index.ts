@@ -18,6 +18,7 @@ import { UICustomizationModal } from './ui/ui_customization_modal';
 import { WebImageBridge } from './core/web_image_bridge';
 import { ImageGalleryModal } from './ui/image_gallery_modal';
 import { PresetGitModal } from './ui/preset_git_modal';
+import { MvuDashboardModal } from './ui/mvu_dashboard_modal';
 import { DEFAULT_VIEW_SYSTEM_PROMPT } from './core/defaults';
 
 const EXT_NAME = 'kaiz_agent';
@@ -89,8 +90,12 @@ jQuery(async () => {
             viewContextDepth: 5,
             viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
             cotDisplayMode: 'collapse_streaming',
+            prefillAsSystem: false,
         };
     } else {
+        if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
+            ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
+        }
         if (ctx.extensionSettings[EXT_NAME].cotDisplayMode === undefined) {
             ctx.extensionSettings[EXT_NAME].cotDisplayMode = 'collapse_streaming';
         }
@@ -227,7 +232,8 @@ jQuery(async () => {
             new UICustomizationModal(stateManager.db, uiEngine);
             new ImageGalleryModal(stateManager.db);
             new PresetGitModal(stateManager.db);
-            console.log('[KaizAgent] UI Customization Engine, Image Gallery & Preset Git initialized.');
+            new MvuDashboardModal(adapter);
+            console.log('[KaizAgent] UI Customization Engine, Image Gallery, Preset Git & MVU Dashboard initialized.');
 
             // Bắt đầu Auto Tasks sau khi DB đã init
             const allTasks = await stateManager.db.getAllAutoTasks();

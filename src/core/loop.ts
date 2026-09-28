@@ -393,7 +393,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
 
         if (!(continueMode && step === 1)) {
             const prefill = settings.corePrefill || DEFAULT_CORE_PREFILL;
-            msgs.push({ role: 'assistant', content: prefill });
+            const prefillRole = settings.prefillAsSystem ? 'system' : 'assistant';
+            msgs.push({ role: prefillRole, content: prefill });
         } else {
             let isCutOffInsideCot = false;
             if (internalHistory.length > 0) {

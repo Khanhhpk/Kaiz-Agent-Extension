@@ -159,7 +159,10 @@ export class PresetGitModal {
             .off('click')
             .on('click', () => {
                 const diffModal = $('#kaiz-preset-diff-modal')[0] as HTMLDialogElement;
-                if (diffModal) diffModal.close();
+                if (diffModal) {
+                    diffModal.close();
+                    diffModal.style.display = 'none';
+                }
             });
 
         // 13. Tự động đồng bộ khi quay lại cửa sổ hoặc SillyTavern cập nhật preset
