@@ -5132,6 +5132,8 @@
     display: flex;
     flex-direction: column;
     gap: 8px;
+    contain: paint layout;
+    will-change: transform;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -5623,6 +5625,7 @@
     border-radius: 10px;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    contain: paint;
 }
 
 .kaiz-mvu-activity-table-header {
@@ -5919,6 +5922,8 @@
         border-right: none !important;
         border-bottom: none !important;
         box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+        backdrop-filter: blur(14px) !important;
+        -webkit-backdrop-filter: blur(14px) !important;
     }
 
     .kaiz-mvu-header {
