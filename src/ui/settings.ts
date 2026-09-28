@@ -725,6 +725,28 @@ export class SettingsUI {
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
 
+        function updateToolsCount() {
+            const total = tools.length;
+            const active = tools.filter((t) => !settings.disabledTools[t.schema.name]).length;
+            $('#kaiz-tools-count-text').text(`${active}/${total}`);
+            if (active === 0) {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#ef4444',
+                    boxShadow: '0 0 6px rgba(239, 68, 68, 0.6)',
+                });
+            } else if (active < total) {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#f59e0b',
+                    boxShadow: '0 0 6px rgba(245, 158, 11, 0.6)',
+                });
+            } else {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#10b981',
+                    boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                });
+            }
+        }
+
         function renderTools(filterText = '') {
             $toolsList.empty();
             const lowerFilter = filterText.toLowerCase();
@@ -773,7 +795,10 @@ export class SettingsUI {
                     settings.disabledTools[toolName] = true;
                 }
                 ctx.saveSettingsDebounced();
+                updateToolsCount();
             });
+
+            updateToolsCount();
         }
 
         // Render lần đầu
