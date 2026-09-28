@@ -1217,6 +1217,21 @@
     border-top: 1px solid rgba(255, 255, 255, 0.05);
 }
 
+/* Quick Menus (Quick Prompts & Quick Tools) Popovers */
+.kaiz-quick-prompt-menu,
+.kaiz-quick-tool-menu {
+    position: absolute;
+    bottom: 58px !important;
+    left: 14px !important;
+    z-index: 10005 !important;
+}
+
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-quick-prompt-menu,
+#kaiz-chat-body-wrapper.kaiz-input-fullscreen .kaiz-quick-tool-menu {
+    bottom: 60px !important;
+    left: 16px !important;
+}
+
 /* Modern Unified Input Box Card */
 .kaiz-chat-input-box {
     display: flex;
