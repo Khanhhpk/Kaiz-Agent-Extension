@@ -573,7 +573,6 @@
     touch-action: none;
     z-index: 15;
     transition:
-        width 0.2s cubic-bezier(0.16, 1, 0.3, 1),
         background 0.2s ease,
         border-color 0.2s ease,
         opacity 0.2s ease;
@@ -593,7 +592,6 @@
 
 .kaiz-milestone-rail:hover,
 .kaiz-milestone-rail.is-scrubbing {
-    width: 22px;
     background: rgba(10, 16, 26, 0.85);
     border-left-color: rgba(0, 201, 255, 0.25);
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.35);
@@ -966,6 +964,90 @@
     background: rgba(255, 255, 255, 0.15);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-bottom-right-radius: 4px;
+}
+
+/* Super Long User Input Collapsible */
+.kaiz-user-collapsible {
+    position: relative;
+    width: 100%;
+}
+
+.kaiz-user-collapsible.is-collapsed {
+    cursor: pointer;
+}
+
+.kaiz-user-collapsible.is-collapsed .kaiz-user-content-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    word-break: break-word;
+    position: relative;
+    mask-image: linear-gradient(180deg, #000 65%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 65%, transparent 100%);
+}
+
+.kaiz-user-collapsible.is-expanded .kaiz-user-content-text {
+    display: block;
+    overflow: visible;
+    word-break: break-word;
+}
+
+.kaiz-user-collapsible-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    font-size: 11.5px;
+    color: #38bdf8;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: color 0.15s ease;
+}
+
+.kaiz-user-collapsible.is-expanded .kaiz-user-collapsible-toggle {
+    justify-content: flex-end;
+}
+
+.kaiz-user-collapsible-toggle:hover {
+    color: #7dd3fc;
+}
+
+.kaiz-user-msg-dots {
+    font-weight: bold;
+    letter-spacing: 2px;
+    color: rgba(255, 255, 255, 0.55);
+    font-size: 14px;
+    line-height: 1;
+}
+
+.kaiz-user-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    font-size: 11px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+}
+
+.kaiz-user-collapsible-toggle:hover .kaiz-user-toggle-btn,
+.kaiz-user-collapsible.is-collapsed:hover .kaiz-user-toggle-btn {
+    background: rgba(56, 189, 248, 0.25);
+    border-color: rgba(56, 189, 248, 0.5);
+    transform: translateY(-1px);
+}
+
+.kaiz-user-toggle-icon {
+    font-size: 10px;
+    transition: transform 0.2s ease;
 }
 
 .kaiz-msg-agent .kaiz-msg-content {

@@ -23811,7 +23811,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               currentMilestones = userMsgs.map((msgEl, index) => {
                   const relativeTop = msgEl.offsetTop;
                   const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
-                  const rawText = $(msgEl).find('.kaiz-msg-content').text().trim();
+                  const userContentEl = $(msgEl).find('.kaiz-user-content-text');
+                  const rawText = (userContentEl.length ? userContentEl.text() : $(msgEl).find('.kaiz-msg-content').text()).trim();
                   const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
                   return {
                       index,
@@ -24004,6 +24005,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (activeMatchIndex >= 0 && activeMatchIndex < currentSearchMatches.length) {
                   const currentEl = currentSearchMatches[activeMatchIndex];
                   currentEl.classList.add('kaiz-search-mark-active');
+                  // Nếu match nằm trong một user message đang bị thu gọn, tự động mở rộng nó ra
+                  const collapsed = currentEl.closest('.kaiz-user-collapsible.is-collapsed');
+                  if (collapsed) {
+                      $(collapsed).removeClass('is-collapsed').addClass('is-expanded');
+                      $(collapsed).find('.kaiz-user-toggle-text').text('Thu gọn');
+                      $(collapsed).find('.kaiz-user-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                      $(collapsed).find('.kaiz-user-msg-dots').hide();
+                  }
                   const suffix = hitCap ? '+' : '';
                   searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}${suffix}`);
                   const historyEl = history[0];
@@ -24872,6 +24881,25 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
 <div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
               }
+              else {
+                  // Kiểm tra nếu tin nhắn user siêu dài (ví dụ: > 280 ký tự hoặc từ 5 dòng trở lên)
+                  const lineCount = (safeText.match(/\n/g) || []).length + 1;
+                  const isSuperLong = safeText.length > 280 || lineCount >= 5;
+                  if (isSuperLong) {
+                      finalHtml = `
+                        <div class="kaiz-user-collapsible is-collapsed">
+                            <div class="kaiz-user-content-text">${escapedText}</div>
+                            <div class="kaiz-user-collapsible-toggle" title="Bấm để mở rộng hoặc thu gọn nội dung">
+                                <span class="kaiz-user-msg-dots">...</span>
+                                <span class="kaiz-user-toggle-btn">
+                                    <span class="kaiz-user-toggle-text">Xem thêm</span>
+                                    <i class="fa-solid fa-chevron-down kaiz-user-toggle-icon"></i>
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                  }
+              }
               if (attachments && attachments.length > 0) {
                   let attachmentsHtml = '<div style="margin-top: 8px; display: flex; flex-direction: column; gap: 8px;">';
                   for (const att of attachments) {
@@ -25063,6 +25091,36 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               });
               toastr.info('Đã xóa tin nhắn', 'Kaiz Agent');
+          });
+          // Lắng nghe sự kiện mở rộng / thu gọn tin nhắn User siêu dài
+          history.on('click', '.kaiz-user-collapsible', function (e) {
+              const $target = $(e.target);
+              const collapsible = $(this);
+              const isCollapsed = collapsible.hasClass('is-collapsed');
+              const isToggleBar = $target.closest('.kaiz-user-collapsible-toggle').length > 0;
+              // Nếu đang mở rộng (expanded): CHỈ thu gọn khi click vào thanh toggle / nút "Thu gọn",
+              // tránh việc người dùng click vào nội dung để đọc hoặc bôi đen copy mà bị đóng đột ngột.
+              if (!isCollapsed && !isToggleBar) {
+                  return;
+              }
+              // Nếu người dùng vừa bôi đen chọn chữ thì không toggle
+              const selection = window.getSelection()?.toString();
+              if (selection && selection.length > 0)
+                  return;
+              e.stopPropagation();
+              if (isCollapsed) {
+                  collapsible.removeClass('is-collapsed').addClass('is-expanded');
+                  collapsible.find('.kaiz-user-toggle-text').text('Thu gọn');
+                  collapsible.find('.kaiz-user-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                  collapsible.find('.kaiz-user-msg-dots').hide();
+              }
+              else {
+                  collapsible.removeClass('is-expanded').addClass('is-collapsed');
+                  collapsible.find('.kaiz-user-toggle-text').text('Xem thêm');
+                  collapsible.find('.kaiz-user-toggle-icon').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+                  collapsible.find('.kaiz-user-msg-dots').show();
+              }
+              requestUpdateMilestones();
           });
           const startAgent = async (continueMode = false) => {
               sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
