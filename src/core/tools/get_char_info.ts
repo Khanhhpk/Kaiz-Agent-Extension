@@ -6,6 +6,7 @@ export const getCharInfoTool: ITool = {
         name: 'get_char_info',
         description:
             'Lấy thông tin chi tiết về thẻ nhân vật hiện tại đang chat (tên, tính cách, bối cảnh, v.v.). Dùng khi cần hiểu rõ về nhân vật bạn đang đóng vai hoặc nói chuyện cùng.',
+        userDescription: 'Lấy thông tin chi tiết về nhân vật đang trò chuyện.',
         parameters: {
             type: 'object',
             properties: {}, // Không yêu cầu tham số

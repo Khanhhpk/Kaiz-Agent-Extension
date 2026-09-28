@@ -6,6 +6,7 @@ export const getTavernHelperScriptInfoTool: ITool = {
         name: 'get_tavern_helper_script_info',
         description:
             'Đọc chi tiết (full info) của một Tavern Helper Script dựa vào ID. Trả về cấu trúc JSON đầy đủ gồm cả code content.',
+        userDescription: 'Xem chi tiết cấu hình và mã nguồn của một Tavern Helper Script.',
         parameters: {
             type: 'object',
             properties: {

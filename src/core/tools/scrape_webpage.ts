@@ -5,6 +5,7 @@ export const scrapeWebpageTool: ITool = {
         name: 'scrape_webpage',
         description:
             "CÔNG CỤ CÀO DỮ LIỆU TỪ INTERNET. Sử dụng công cụ này để bóc tách toàn bộ nội dung văn bản (text) thô và các đường link từ một địa chỉ URL bất kỳ (ví dụ: Wikipedia, Fandom, trang báo). Công cụ này được trang bị hệ thống vượt tường lửa (Cloudflare bypass) nên có thể đọc được các trang khó tính. Dùng nó khi bạn cần 'đọc' nội dung chi tiết của một trang web.",
+        userDescription: 'Cào nội dung văn bản và liên kết từ một địa chỉ trang web bất kỳ.',
         parameters: {
             type: 'object',
             properties: {

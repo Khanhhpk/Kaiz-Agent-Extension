@@ -45,6 +45,7 @@ export const stThemeManagerTool: ITool = {
         name: 'st_theme_manager',
         description:
             'Quản lý theme và CSS variables của SillyTavern. Sử dụng để đọc/đổi màu sắc, font chữ, blur, shadow và các cài đặt giao diện. Mỗi thay đổi đều được snapshot vào IndexedDB để rollback. Dùng action "get_reference_themes" để xem các theme mẫu và học cấu trúc.',
+        userDescription: 'Quản lý và áp dụng các chủ đề màu sắc (Theme), font chữ và hiệu ứng giao diện SillyTavern.',
         parameters: {
             type: 'object',
             properties: {

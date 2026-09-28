@@ -5037,7 +5037,9 @@
     white-space: nowrap;
     overflow: hidden;
     box-sizing: border-box;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
 }
 
 .kaiz-mvu-floor-select:hover {
@@ -5223,7 +5225,9 @@
     transform: translateY(-2px);
     border-color: rgba(56, 189, 248, 0.35);
     background: rgba(30, 41, 59, 0.65);
-    box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.4), 0 0 15px rgba(56, 189, 248, 0.1);
+    box-shadow:
+        0 8px 20px -4px rgba(0, 0, 0, 0.4),
+        0 0 15px rgba(56, 189, 248, 0.1);
 }
 
 .kaiz-mvu-card-top {
@@ -5994,7 +5998,9 @@
         border-left: none !important;
         border-right: none !important;
         border-bottom: none !important;
-        box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+        box-shadow:
+            0 -10px 40px rgba(0, 0, 0, 0.7),
+            inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
         backdrop-filter: blur(14px) !important;
         -webkit-backdrop-filter: blur(14px) !important;
     }

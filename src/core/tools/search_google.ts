@@ -5,6 +5,7 @@ export const searchGoogleTool: ITool = {
         name: 'search_google',
         description:
             'CÔNG CỤ TÌM KIẾM WEB. Hoạt động giống như việc bạn tìm kiếm Internet. Nó sẽ trả về danh sách các kết quả (gồm Tiêu đề, Tóm tắt ngắn, và URL). LUÔN DÙNG TOOL NÀY ĐẦU TIÊN khi bạn cần tra cứu kiến thức mới hoặc tìm link.',
+        userDescription: 'Tìm kiếm thông tin trên Internet thông qua Google.',
         parameters: {
             type: 'object',
             properties: {

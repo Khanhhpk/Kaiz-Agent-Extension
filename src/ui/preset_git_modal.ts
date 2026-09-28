@@ -440,7 +440,7 @@ export class PresetGitModal {
                         ${this.searchQuery ? 'Không tìm thấy phiên bản phù hợp' : 'Chưa có mốc lịch sử nào cho preset này'}
                     </div>
                     <div style="font-size: 11.5px; max-width: 380px; line-height: 1.5; opacity: 0.75">
-                        ${this.searchQuery ? 'Thử tìm với từ khóa khác như mã hash, tag hoặc tên thay đổi.' : 'Mọi thay đổi qua Kaiz Agent hoặc nút "Lưu phiên bản" phía trên sẽ tự động xuất hiện tại đây.'}
+                        ${this.searchQuery ? 'Thử tìm với từ khóa khác như mã hash, tag hoặc tên thay đổi.' : 'Mọi thay đổi qua Agent hoặc nút "Lưu phiên bản" phía trên sẽ tự động xuất hiện tại đây.'}
                     </div>
                 </div>
             `);
@@ -454,7 +454,7 @@ export class PresetGitModal {
 
             const dateStr = formatRelativeTime(commit.timestamp);
             const fullDateStr = new Date(commit.timestamp).toLocaleString();
-            const author = commit.author || 'Kaiz Agent';
+            const author = commit.author || 'Agent';
             const isManual = author.toLowerCase().includes('manual') || author.toLowerCase().includes('user');
 
             const authorBadge = isManual
@@ -482,7 +482,7 @@ export class PresetGitModal {
             } else if (isManual) {
                 dotHtml = `<div class="kaiz-pg-timeline-dot is-manual" title="Mốc lưu thủ công"><i class="fa-solid fa-user"></i></div>`;
             } else {
-                dotHtml = `<div class="kaiz-pg-timeline-dot is-agent" title="Kaiz Agent lưu"><i class="fa-solid fa-robot"></i></div>`;
+                dotHtml = `<div class="kaiz-pg-timeline-dot is-agent" title="Agent lưu"><i class="fa-solid fa-robot"></i></div>`;
             }
 
             // Navigation Main Button

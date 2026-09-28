@@ -6,6 +6,7 @@ export const getUserPersonaTool: ITool = {
         name: 'get_user_persona',
         description:
             'Lấy thông tin hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+        userDescription: 'Xem thông tin Persona (tên và mô tả) của người dùng hiện tại.',
         parameters: {
             type: 'object',
             properties: {},

@@ -12,6 +12,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
 4. Dùng action='click' (cần elementId) để bấm nút hoặc link.
 5. Dùng action='navigate' (cần url) để truy cập thẳng một địa chỉ web mới.
 6. Sau khi trang chuyển hướng (do click, navigate, go_back, hoặc press_key), trang web thay đổi nên các ID cũ sẽ mất hiệu lực. BẠN PHẢI GỌI LẠI action='read' để lấy danh sách ID mới trước khi thao tác tiếp.`,
+        userDescription: 'Điều khiển trình duyệt web ảo tích hợp để đọc trang, nhấn nút, nhập liệu và điều hướng.',
         parameters: {
             type: 'object',
             properties: {

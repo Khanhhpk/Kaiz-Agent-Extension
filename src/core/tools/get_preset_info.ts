@@ -9,6 +9,7 @@ export const getPresetInfoTool: ITool = {
             'Bao gồm: Tên Preset, commit HEAD hiện tại (Git control version), trạng thái nháp trong Sandbox (is_dirty), ' +
             'danh sách tóm tắt các prompt blocks (ID, tên, vai trò, trạng thái bật/tắt, thứ tự liên kết, độ sâu injection), ' +
             'và danh sách các biến macro {{setvar}} nếu yêu cầu.',
+        userDescription: 'Xem thông tin tổng quan, danh sách prompt blocks và biến macro trong AI Preset hiện tại.',
         parameters: {
             type: 'object',
             properties: {

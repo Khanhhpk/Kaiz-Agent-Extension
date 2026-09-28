@@ -12,6 +12,7 @@ export const stInjectElementTool: ITool = {
         name: 'st_inject_element',
         description:
             'Chèn, gỡ bỏ và quản lý các phần tử HTML tuỳ chỉnh trong giao diện SillyTavern. HTML KHÔNG bị sanitize — hỗ trợ đầy đủ mọi tag, attribute, inline style, img src, iframe... Hỗ trợ rollback (undo) mọi thay đổi giao diện (CSS, element, theme). LƯU Ý: Dùng tool này cho các action undo/rollback_all/remove_all để hoàn tác mọi loại thay đổi.',
+        userDescription: 'Chèn hoặc gỡ bỏ các phần tử HTML/DOM tùy biến vào giao diện SillyTavern.',
         parameters: {
             type: 'object',
             properties: {

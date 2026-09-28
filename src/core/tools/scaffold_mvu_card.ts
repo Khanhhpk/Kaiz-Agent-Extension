@@ -15,6 +15,7 @@ export const scaffoldMvuCardTool: ITool = {
             '2. Tự động BẬT TOGGLE "Character Script" trong Tửu quán trợ thủ (TavernHelper) để kịch bản được phép thực thi.\n' +
             '3. Bộ 4 Regex Scripts chuẩn (ẩn cập nhật, làm đẹp thẻ, thanh trạng thái) và tự động bật Scoped Scripts.\n' +
             '4. Bộ 4 mục Worldbook chuẩn ([InitVar], [mvu_update] Quy tắc, [mvu_update] Định dạng đầu ra, Danh sách biến). ĐẶC BIỆT: Nếu card ban đầu là card đơn thuần KHÔNG có Worldbook liên kết, hệ thống sẽ tự động tạo mới một Worldbook chuyên dụng trên SillyTavern và liên kết vào thẻ, đảm bảo các entry prompt MVU hoạt động 100% trong phòng chat (không bị rơi vào hư vô).',
+        userDescription: 'Tự động thiết lập hạ tầng biến trạng thái MVU & Zod 4 hoàn chỉnh cho thẻ nhân vật.',
         parameters: {
             type: 'object',
             properties: {

@@ -6,6 +6,7 @@ export const editCharacterCardTool: ITool = {
         name: 'edit_character_card',
         description:
             'Chỉnh sửa thông tin của thẻ nhân vật hiện tại (description, personality, scenario, first_mes, mes_example, system_prompt, v.v.). Cập nhật trực tiếp vào thẻ nhân vật.',
+        userDescription: 'Chỉnh sửa thông tin thẻ nhân vật hiện tại (mô tả, tính cách, kịch bản, lời chào...).',
         parameters: {
             type: 'object',
             properties: {

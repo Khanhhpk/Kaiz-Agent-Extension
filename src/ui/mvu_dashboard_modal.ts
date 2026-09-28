@@ -83,15 +83,9 @@ export class MvuDashboardModal {
 
         const attach = () => {
             const ctx =
-                typeof (window as any).SillyTavern !== 'undefined'
-                    ? (window as any).SillyTavern.getContext()
-                    : null;
+                typeof (window as any).SillyTavern !== 'undefined' ? (window as any).SillyTavern.getContext() : null;
             const es = ctx?.eventSource || (window as any).eventSource;
-            const et =
-                ctx?.event_types ||
-                ctx?.eventTypes ||
-                (window as any).event_types ||
-                (window as any).eventTypes;
+            const et = ctx?.event_types || ctx?.eventTypes || (window as any).event_types || (window as any).eventTypes;
 
             if (!es) {
                 setTimeout(attach, 1000);
@@ -193,7 +187,7 @@ export class MvuDashboardModal {
                     toastr.info(
                         this.selectedFloorId === undefined
                             ? 'Đã đồng bộ lại chỉ số MVU theo lượt mới nhất.'
-                            : `Đã đồng bộ lại chỉ số MVU theo lượt #${(this.currentReport?.currentFloor?.displayIndex ?? '')}.`,
+                            : `Đã đồng bộ lại chỉ số MVU theo lượt #${this.currentReport?.currentFloor?.displayIndex ?? ''}.`,
                     );
                 }
             });
@@ -208,7 +202,7 @@ export class MvuDashboardModal {
                 if (typeof toastr !== 'undefined') {
                     toastr.info(
                         this.selectedFloorId !== undefined
-                            ? `Đã chuyển sang xem lượt chat #${(this.currentReport?.currentFloor?.displayIndex ?? this.selectedFloorId + 1)}`
+                            ? `Đã chuyển sang xem lượt chat #${this.currentReport?.currentFloor?.displayIndex ?? this.selectedFloorId + 1}`
                             : 'Đã chuyển sang chế độ tự động theo lượt mới nhất.',
                     );
                 }
@@ -223,7 +217,9 @@ export class MvuDashboardModal {
             });
 
         // 4.1 Bấm vào Ribbon Pills nhảy sang Tab Bảng hoạt động
-        $('#kaiz-mvu-initvar-pill, #kaiz-mvu-rules-pill, #kaiz-mvu-format-pill, #kaiz-mvu-varlist-pill, #kaiz-mvu-ejs-pill')
+        $(
+            '#kaiz-mvu-initvar-pill, #kaiz-mvu-rules-pill, #kaiz-mvu-format-pill, #kaiz-mvu-varlist-pill, #kaiz-mvu-ejs-pill',
+        )
             .off('click')
             .on('click', () => {
                 this.switchTab('activity');
@@ -1150,9 +1146,10 @@ export class MvuDashboardModal {
                    </div>`
                 : `<span class="kaiz-mvu-entry-missing"><i class="fa-solid fa-ban"></i> ${escapeHtml(item.entryName)}</span>`;
 
-            const locationBadge = item.location && item.location !== '—'
-                ? `<div class="kaiz-mvu-location-tag"><i class="fa-solid fa-book-atlas"></i> <span>${escapeHtml(item.location)}</span></div>`
-                : `<div class="kaiz-mvu-location-tag empty"><span>—</span></div>`;
+            const locationBadge =
+                item.location && item.location !== '—'
+                    ? `<div class="kaiz-mvu-location-tag"><i class="fa-solid fa-book-atlas"></i> <span>${escapeHtml(item.location)}</span></div>`
+                    : `<div class="kaiz-mvu-location-tag empty"><span>—</span></div>`;
 
             const reqBadge = item.isRequired
                 ? '<span class="kaiz-mvu-req-tag required">Bắt buộc</span>'
@@ -1197,11 +1194,15 @@ export class MvuDashboardModal {
                             <span class="metric-num">${act.activeCount}/${act.totalCriteria}</span>
                             <span class="metric-lbl">Tiêu chí đạt</span>
                         </div>
-                        ${act.inactiveCount > 0 ? `
+                        ${
+                            act.inactiveCount > 0
+                                ? `
                         <div class="kaiz-mvu-banner-metric metric-danger">
                             <span class="metric-num">${act.inactiveCount}</span>
                             <span class="metric-lbl">Không hoạt động</span>
-                        </div>` : ''}
+                        </div>`
+                                : ''
+                        }
                     </div>
                 </div>
 

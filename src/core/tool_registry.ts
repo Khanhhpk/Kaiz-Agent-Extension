@@ -27,6 +27,7 @@ interface ToolParameters {
 export interface ToolSchema {
     name: string;
     description: string;
+    userDescription?: string;
     parameters: ToolParameters;
 }
 

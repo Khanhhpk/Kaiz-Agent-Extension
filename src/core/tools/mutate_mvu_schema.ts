@@ -13,6 +13,7 @@ export const mutateMvuSchemaTool: ITool = {
             '- Tự động cập nhật quy tắc suy luận của AI trong Worldbook ([mvu_update] YAML).\n' +
             '- Tự động lưu và đồng bộ về SillyTavern Backend (/api/characters/merge-attributes).\n' +
             'Dùng khi người dùng yêu cầu: "Thêm cho nhân vật này chỉ số thể lực", "Xóa biến vàng", "Đặt giới hạn máu từ 0 đến 200", v.v.',
+        userDescription: 'Thêm mới, sửa đổi kiểu/giới hạn, đổi tên hoặc xóa các biến trạng thái nhân vật MVU.',
         parameters: {
             type: 'object',
             properties: {

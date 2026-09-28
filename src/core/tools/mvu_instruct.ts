@@ -7,6 +7,7 @@ export const mvuInstructTool: ITool = {
             'Cẩm nang kiến thức chuyên sâu và hướng dẫn kỹ thuật toàn diện về hệ sinh thái MVU (MagVarUpdate) & Zod 4 trong SillyTavern.\n' +
             'Khai thác trực tiếp từ toàn bộ kho tài liệu kỹ thuật chuẩn của Tavern Cards Forge & Hướng dẫn MVU ZOD.\n' +
             'DÙNG CÔNG CỤ NÀY KHI: Bạn cần hiểu rõ kiến trúc MVU, cú pháp Zod 4 chuẩn, cách cấu hình Worldbook [InitVar]/[mvu_update], cơ chế JSON Patch RFC 6902, quy tắc Regex, EJS Template Prompt đa giai đoạn, TavernHelper Script API, hoặc khi người dùng yêu cầu thiết kế hệ thống biến cho Card.',
+        userDescription: 'Tra cứu cẩm nang kỹ thuật toàn diện và chuẩn mực kiến trúc biến MVU Zod 4.',
         parameters: {
             type: 'object',
             properties: {
@@ -39,7 +40,7 @@ export const mvuInstructTool: ITool = {
                         '- "ejs_integration": Tích hợp Template Prompt EJS (ST-Prompt-Template), đọc biến getvar(), phân tầng tính cách/cốt truyện đa giai đoạn.\n' +
                         '- "tavern_helper_scripting": Script Tửu quán trợ thủ can thiệp biến dưới nền, lắng nghe sự kiện MVU (COMMAND_PARSED, VARIABLE_UPDATE_ENDED), API get/replace/parse.\n' +
                         '- "troubleshooting": Hướng dẫn xác minh nhật ký, khắc phục lỗi vàng/đỏ thường gặp, và chế độ bật/tắt macro khi biên soạn card.\n' +
-                        '- "tools_guide": Hướng dẫn sử dụng phối hợp bộ 4 công cụ (inspect, scaffold, mutate, set) của Kaiz.',
+                        '- "tools_guide": Hướng dẫn sử dụng phối hợp bộ 4 công cụ (inspect, scaffold, mutate, set) của Agent.',
                 },
             },
         },
@@ -296,7 +297,7 @@ Khi thêm mới, đổi tên, sửa kiểu dữ liệu hoặc xóa một biến 
 | **Đổi tên (Rename)** | Đổi tên thuộc tính trong object | Đổi key trong YAML | Đổi đường dẫn target trong rule |
 | **Xóa biến (Delete)** | Xóa dòng khai báo Zod | Xóa khóa khỏi YAML | Xóa quy tắc kiểm tra |
 
-*Lưu ý*: Công cụ \`mutate_mvu_schema\` của Kaiz đã tự động hóa 100% quy trình đồng bộ 3 tầng này trong một bước duy nhất.`,
+*Lưu ý*: Công cụ \`mutate_mvu_schema\` của Agent đã tự động hóa 100% quy trình đồng bộ 3 tầng này trong một bước duy nhất.`,
 
             ejs_integration: `## 8. TÍCH HỢP TEMPLATE PROMPT EJS (ST-PROMPT-TEMPLATE) & THIẾT LẬP ĐA GIAI ĐOẠN
 
@@ -398,7 +399,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
 - **Khi tạo / chỉnh sửa Card**: TẮT -> Để AI nhìn thấy mã nguồn thô (raw macros/EJS) phục vụ biên soạn.
 - **Khi test / trò chuyện**: BẬT -> Để các macro và biến render thành dữ liệu thực tế.`,
 
-            tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 5 CÔNG CỤ MVU CỦA KAIZ
+            tools_guide: `## 11. HƯỚNG DẪN PHỐI HỢP BỘ 5 CÔNG CỤ MVU CỦA AGENT
 
 1. **Khi cần kiểm tra/đánh giá hiện trạng Card**:
    - Gọi \`inspect_mvu\` -> Trả về tình trạng Zod Schema, cây biến thực tế trong chat, nội dung Worldbook, và cảnh báo sai lệch.

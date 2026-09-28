@@ -13,6 +13,7 @@ export const inspectMvuTool: ITool = {
             '3. Giá trị khởi tạo mặc định [InitVar] trong Worldbook.\n' +
             '4. Các quy tắc cập nhật biến tự nhiên [mvu_update].\n' +
             '5. Cảnh báo lỗi không đồng bộ giữa Zod Schema và dữ liệu khởi tạo.',
+        userDescription: 'Soi chiếu cấu trúc biến trạng thái MVU, Zod 4 Schema và giá trị live stats của nhân vật.',
         parameters: {
             type: 'object',
             properties: {

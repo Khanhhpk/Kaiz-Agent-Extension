@@ -6,6 +6,7 @@ export const getTavernHelperScriptsTool: ITool = {
         name: 'get_tavern_helper_scripts',
         description:
             'Lấy danh sách các script của JS-Slash-Runner (Tavern Helper) đang có (Global, Preset). Bao gồm ID, tên, mô tả, và trạng thái kích hoạt (enabled). Cần thiết để kiểm tra script trước khi sửa/xoá.',
+        userDescription: 'Liệt kê danh sách các kịch bản Tavern Helper (JS-Slash-Runner) hiện có.',
         parameters: {
             type: 'object',
             properties: {},

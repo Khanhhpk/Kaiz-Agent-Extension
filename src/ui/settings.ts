@@ -34,7 +34,7 @@ export class SettingsUI {
                 }
             } catch (e) {
                 console.error('[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:', e);
-                toastr.error('Kaiz Agent: Failed to load UI settings.');
+                toastr.error('Agent: Failed to load UI settings.');
                 return;
             }
         } else {
@@ -229,12 +229,13 @@ export class SettingsUI {
 
             tools.forEach((tool) => {
                 const name = escapeHtml(tool.schema.name);
-                const desc = escapeHtml(tool.schema.description);
+                const desc = escapeHtml(tool.schema.userDescription || tool.schema.description);
+                const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
 
                 if (
                     lowerFilter &&
                     !name.toLowerCase().includes(lowerFilter) &&
-                    !desc.toLowerCase().includes(lowerFilter)
+                    !rawDesc.toLowerCase().includes(lowerFilter)
                 ) {
                     return;
                 }
@@ -730,12 +731,13 @@ export class SettingsUI {
 
             tools.forEach((tool) => {
                 const name = escapeHtml(tool.schema.name);
-                const desc = escapeHtml(tool.schema.description);
+                const desc = escapeHtml(tool.schema.userDescription || tool.schema.description);
+                const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
 
                 if (
                     lowerFilter &&
                     !name.toLowerCase().includes(lowerFilter) &&
-                    !desc.toLowerCase().includes(lowerFilter)
+                    !rawDesc.toLowerCase().includes(lowerFilter)
                 ) {
                     return; // Bỏ qua nếu không khớp filter
                 }
@@ -996,7 +998,7 @@ export class SettingsUI {
             const key = String($('#kaiz-custom-key').val()).trim();
 
             if (!url) {
-                toastr.error('Please enter an API URL first.', 'Kaiz Agent');
+                toastr.error('Please enter an API URL first.', 'Agent');
                 return;
             }
 
@@ -1022,13 +1024,13 @@ export class SettingsUI {
                         const id = m.id || m.name || m;
                         select.append(`<option value="${id}">${id}</option>`);
                     });
-                    toastr.success(`Found ${models.length} models.`, 'Kaiz Agent');
+                    toastr.success(`Found ${models.length} models.`, 'Agent');
                 } else {
                     throw new Error('Invalid models response format.');
                 }
             } catch (e: any) {
                 console.error('[KaizAgent] Fetch models error:', e);
-                toastr.error('Failed to fetch models: ' + e.message, 'Kaiz Agent');
+                toastr.error('Failed to fetch models: ' + e.message, 'Agent');
             } finally {
                 $('#kaiz-fetch-models').find('i').removeClass('fa-spin');
             }

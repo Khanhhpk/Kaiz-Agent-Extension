@@ -8,6 +8,7 @@ export const setMvuVariableTool: ITool = {
         description:
             'Trực tiếp sửa đổi giá trị của một biến trạng thái MVU trong thời gian thực (Runtime) thông qua TavernHelper API.\n' +
             'Không cần phải sửa tin nhắn chat hay chờ AI sinh thẻ <UpdateVariable>. Thao tác có hiệu lực ngay lập tức trong phiên chat và cập nhật thẳng vào giao diện thanh trạng thái (Status Bar) nếu có.',
+        userDescription: 'Cập nhật trực tiếp giá trị của một biến trạng thái MVU trong thời gian thực.',
         parameters: {
             type: 'object',
             properties: {

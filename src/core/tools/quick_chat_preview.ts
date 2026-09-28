@@ -6,6 +6,7 @@ export const quickChatPreviewTool: ITool = {
         name: 'quick_chat_preview',
         description:
             'Mở bảng modal Quick Chat Preview trên giao diện người dùng. Bảng này liệt kê toàn bộ tin nhắn hiện tại ở dạng thu gọn để người dùng có thể xem nhanh tổng thể độ dài chat và vị trí các tin nhắn. LƯU Ý: Tool này KHÔNG trả về dữ liệu chat cho bạn, nó chỉ dùng để trigger giao diện cho người dùng xem.',
+        userDescription: 'Mở cửa sổ xem nhanh toàn bộ tin nhắn trong phòng chat dưới dạng thu gọn.',
         parameters: {
             type: 'object',
             properties: {},

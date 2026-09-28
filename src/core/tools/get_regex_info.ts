@@ -5,6 +5,7 @@ export const getRegexInfoTool: ITool = {
     schema: {
         name: 'get_regex_info',
         description: 'Lấy thông tin chi tiết đầy đủ của một Regex Script cụ thể bằng ID (uuid).',
+        userDescription: 'Xem thông tin chi tiết và quy tắc lọc của một Regex Script theo ID.',
         parameters: {
             type: 'object',
             properties: {

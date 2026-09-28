@@ -70,6 +70,7 @@ export const stCSSManagerTool: ITool = {
         name: 'st_css_manager',
         description:
             'Quản lý các stylesheet CSS tuỳ chỉnh. Cho phép inject, sửa, xoá các block CSS vào giao diện SillyTavern. Mỗi style có ID riêng biệt để quản lý. Dùng để thay đổi layout, animation, color scheme, font... của bất kỳ thành phần nào. Mỗi thay đổi đều được snapshot để rollback. Dùng action "get_selectors_guide" để xem bản đồ CSS selectors của SillyTavern.',
+        userDescription: 'Quản lý, thêm, sửa, xóa các đoạn mã CSS tùy biến cho giao diện SillyTavern.',
         parameters: {
             type: 'object',
             properties: {
