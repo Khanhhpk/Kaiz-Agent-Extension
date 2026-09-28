@@ -18079,24 +18079,27 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               effectiveFloorId = floors[0].messageId;
           }
           // 2. Đọc dữ liệu floor mục tiêu
-          const floorData = await this.readFloor(effectiveFloorId);
+          let floorData = await this.readFloor(effectiveFloorId);
+          if (!floorData && targetFloorId === undefined) {
+              floorData = await this.readFloor(undefined);
+          }
           if (floorData) {
               this.cachedStatData = floorData.statData;
               this.cachedWrapper = floorData.wrapper;
               this.cachedDataSource = floorData.source;
-              const matchedFloor = floors.find((f) => f.messageId === floorData.messageId);
+              const matchedFloor = floors.find((f) => f.messageId === (floorData.messageId ?? effectiveFloorId));
               this.cachedCurrentFloor =
                   matchedFloor ||
-                      (floorData.messageId !== undefined
+                      (effectiveFloorId !== undefined
                           ? {
-                              messageId: floorData.messageId,
-                              displayIndex: floorData.messageId + 1,
+                              messageId: effectiveFloorId,
+                              displayIndex: effectiveFloorId + 1,
                               role: 'assistant',
                               name: charName,
                               preview: '',
                               source: floorData.source,
                           }
-                          : null);
+                          : (floors.length > 0 ? floors[0] : null));
           }
           else {
               this.cachedStatData = null;
@@ -28513,9 +28516,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       activeTab = 'stats';
       builderVariables = [];
       selectedFloorId;
+      debounceTimer = null;
+      attachedEvents = false;
       constructor(adapter) {
           this.adapter = adapter;
           this.bindEvents();
+          this.setupLiveEventListeners();
       }
       getModalElement() {
           const el = document.getElementById('kaiz-mvu-dashboard-modal');
@@ -28528,6 +28534,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (!modal.open) {
               modal.showModal();
           }
+          if (!this.attachedEvents) {
+              this.setupLiveEventListeners();
+          }
           await this.refresh();
       }
       close() {
@@ -28535,6 +28544,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (modal && modal.open) {
               modal.close();
           }
+          // Đặt lại chế độ tự động theo lượt mới nhất cho lần mở tiếp theo
+          this.selectedFloorId = undefined;
       }
       async refresh(floorId) {
           const $ = jQuery;
@@ -28547,9 +28558,6 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           try {
               this.currentReport = await MvuManager.inspectMvu(this.adapter, undefined, this.selectedFloorId);
-              if (this.currentReport.currentFloor) {
-                  this.selectedFloorId = this.currentReport.currentFloor.messageId;
-              }
               this.render();
           }
           catch (error) {
@@ -28558,6 +28566,88 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   toastr.error('Lỗi khi tải thông tin MVU: ' + (error?.message || String(error)));
               }
           }
+      }
+      setupLiveEventListeners() {
+          if (this.attachedEvents)
+              return;
+          const attach = () => {
+              const ctx = typeof window.SillyTavern !== 'undefined'
+                  ? window.SillyTavern.getContext()
+                  : null;
+              const es = ctx?.eventSource || window.eventSource;
+              const et = ctx?.event_types ||
+                  ctx?.eventTypes ||
+                  window.event_types ||
+                  window.eventTypes;
+              if (!es) {
+                  setTimeout(attach, 1000);
+                  return;
+              }
+              this.attachedEvents = true;
+              const handleAutoUpdate = () => {
+                  const modal = this.getModalElement();
+                  // Chỉ tự động refresh nếu modal đang mở và đang ở chế độ Tự động
+                  if (!modal || (!modal.open && !jQuery(modal).is(':visible')))
+                      return;
+                  if (this.selectedFloorId !== undefined)
+                      return;
+                  if (this.debounceTimer)
+                      clearTimeout(this.debounceTimer);
+                  this.debounceTimer = setTimeout(async () => {
+                      await this.refresh();
+                  }, 300);
+              };
+              const handleChatChanged = () => {
+                  // Đổi chat hoặc đổi character -> đưa về chế độ Tự động (Mới nhất)
+                  this.selectedFloorId = undefined;
+                  const modal = this.getModalElement();
+                  if (modal && (modal.open || jQuery(modal).is(':visible'))) {
+                      if (this.debounceTimer)
+                          clearTimeout(this.debounceTimer);
+                      this.debounceTimer = setTimeout(async () => {
+                          await this.refresh();
+                      }, 200);
+                  }
+              };
+              const onEvt = (evtName, handler) => {
+                  if (!evtName || !handler)
+                      return;
+                  try {
+                      if (typeof es.on === 'function') {
+                          es.on(evtName, handler);
+                      }
+                      else if (typeof es.addEventListener === 'function') {
+                          es.addEventListener(evtName, handler);
+                      }
+                  }
+                  catch (e) {
+                      console.warn('[MvuDashboardModal] Error listening to event:', evtName, e);
+                  }
+              };
+              const charRendered = et?.CHARACTER_MESSAGE_RENDERED || 'character_message_rendered';
+              const userRendered = et?.USER_MESSAGE_RENDERED || 'user_message_rendered';
+              const msgUpdated = et?.MESSAGE_UPDATED || 'message_updated';
+              const msgSwiped = et?.MESSAGE_SWIPED || 'message_swiped';
+              const msgDeleted = et?.MESSAGE_DELETED || 'message_deleted';
+              const msgReceived = et?.MESSAGE_RECEIVED || 'message_received';
+              const genEnded = et?.GENERATION_ENDED || 'generation_ended';
+              const chatChanged = et?.CHAT_CHANGED || 'chat_changed';
+              const chatIdChanged = et?.CHAT_ID_CHANGED || 'chat_id_changed';
+              onEvt(charRendered, handleAutoUpdate);
+              onEvt(userRendered, handleAutoUpdate);
+              onEvt(msgUpdated, handleAutoUpdate);
+              onEvt(msgSwiped, handleAutoUpdate);
+              onEvt(msgDeleted, handleAutoUpdate);
+              onEvt(msgReceived, handleAutoUpdate);
+              onEvt(genEnded, handleAutoUpdate);
+              onEvt(chatChanged, handleChatChanged);
+              onEvt(chatIdChanged, handleChatChanged);
+              // Bắt thêm các sự kiện cập nhật biến phổ biến từ MVU plugin / TavernHelper
+              onEvt('mvu:variables_updated', handleAutoUpdate);
+              onEvt('mvu_updated', handleAutoUpdate);
+              onEvt('tavern_helper:variables_updated', handleAutoUpdate);
+          };
+          attach();
       }
       bindEvents() {
           const $ = jQuery;
@@ -28578,9 +28668,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           $('#kaiz-mvu-refresh-btn')
               .off('click')
               .on('click', async () => {
-              await this.refresh(this.selectedFloorId);
+              await this.refresh();
               if (typeof toastr !== 'undefined') {
-                  toastr.info('Đã đồng bộ lại chỉ số MVU.');
+                  toastr.info(this.selectedFloorId === undefined
+                      ? 'Đã đồng bộ lại chỉ số MVU theo lượt mới nhất.'
+                      : `Đã đồng bộ lại chỉ số MVU theo lượt #${(this.currentReport?.currentFloor?.displayIndex ?? '')}.`);
               }
           });
           // 3.1 Bộ chọn Lượt Chat (Floor Selector)
@@ -28588,12 +28680,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               .off('change')
               .on('change', async (e) => {
               const val = $(e.target).val();
-              const floorId = val === '' ? undefined : Number(val);
-              this.selectedFloorId = floorId;
-              await this.refresh(floorId);
+              this.selectedFloorId = val === '' ? undefined : Number(val);
+              await this.refresh();
               if (typeof toastr !== 'undefined') {
-                  toastr.info(floorId !== undefined
-                      ? `Đã chuyển sang lượt chat #${floorId + 1}`
+                  toastr.info(this.selectedFloorId !== undefined
+                      ? `Đã chuyển sang xem lượt chat #${(this.currentReport?.currentFloor?.displayIndex ?? this.selectedFloorId + 1)}`
                       : 'Đã chuyển sang chế độ tự động theo lượt mới nhất.');
               }
           });
@@ -28850,7 +28941,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // Cập nhật Tiêu đề, Tên nhân vật, Lượt chat & Nguồn dữ liệu
           let subtitle = `Nhân vật: ${escapeHtml(report.characterName)} ${report.hasMvu ? '• ' + escapeHtml(report.zodScriptName || 'Hệ thống MVU') : ''}`;
           if (report.currentFloor) {
-              subtitle += ` • Lượt #${report.currentFloor.displayIndex} (${escapeHtml(report.currentFloor.name)})`;
+              const modeText = this.selectedFloorId === undefined ? ' [Tự động]' : ' [Cố định]';
+              subtitle += ` • Lượt #${report.currentFloor.displayIndex} (${escapeHtml(report.currentFloor.name)})${modeText}`;
           }
           if (report.dataSource) {
               const src = report.dataSource === 'mvu' ? 'MVU API' : report.dataSource === 'helper' ? 'TavernHelper' : 'Bộ nhớ ST';
@@ -28878,7 +28970,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const floorSelect = $('#kaiz-mvu-floor-select');
           if (floorSelect.length) {
               floorSelect.empty();
-              floorSelect.append('<option value="">Lượt mới nhất (Tự động)</option>');
+              const isAuto = this.selectedFloorId === undefined;
+              floorSelect.append(`<option value="" ${isAuto ? 'selected' : ''}>Lượt mới nhất (Tự động)</option>`);
               if (report.availableFloors && report.availableFloors.length > 0) {
                   for (const fl of report.availableFloors) {
                       const isSel = this.selectedFloorId === fl.messageId ? 'selected' : '';
@@ -28886,6 +28979,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       floorSelect.append(`<option value="${fl.messageId}" ${isSel}>${optText}</option>`);
                   }
               }
+              // Đồng bộ trực tiếp giá trị của DOM select để tránh lệch trạng thái hiển thị
+              floorSelect.val(this.selectedFloorId !== undefined ? String(this.selectedFloorId) : '');
           }
           const allDescriptors = this.flattenDescriptorsForSchema(report.parsedSchema);
           $('#kaiz-mvu-stat-count').text(allDescriptors.length);

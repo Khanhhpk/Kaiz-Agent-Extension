@@ -1931,24 +1931,28 @@ export class MvuManager {
         }
 
         // 2. Đọc dữ liệu floor mục tiêu
-        const floorData = await this.readFloor(effectiveFloorId);
+        let floorData = await this.readFloor(effectiveFloorId);
+        if (!floorData && targetFloorId === undefined) {
+            floorData = await this.readFloor(undefined);
+        }
+
         if (floorData) {
             this.cachedStatData = floorData.statData;
             this.cachedWrapper = floorData.wrapper;
             this.cachedDataSource = floorData.source;
-            const matchedFloor = floors.find((f) => f.messageId === floorData.messageId);
+            const matchedFloor = floors.find((f) => f.messageId === (floorData.messageId ?? effectiveFloorId));
             this.cachedCurrentFloor =
                 matchedFloor ||
-                (floorData.messageId !== undefined
+                (effectiveFloorId !== undefined
                     ? {
-                          messageId: floorData.messageId,
-                          displayIndex: floorData.messageId + 1,
+                          messageId: effectiveFloorId,
+                          displayIndex: effectiveFloorId + 1,
                           role: 'assistant',
                           name: charName,
                           preview: '',
                           source: floorData.source,
                       }
-                    : null);
+                    : (floors.length > 0 ? floors[0] : null));
         } else {
             this.cachedStatData = null;
             this.cachedWrapper = null;
