@@ -920,7 +920,10 @@ export class SillyTavernAdapter {
                     try {
                         await (ctx as any).unshallowCharacter(ctx.characterId);
                     } catch (unshallowErr) {
-                        console.warn('[KaizAgent] unshallowCharacter failed, proceeding with current in-memory state:', unshallowErr);
+                        console.warn(
+                            '[KaizAgent] unshallowCharacter failed, proceeding with current in-memory state:',
+                            unshallowErr,
+                        );
                     }
                 }
 
@@ -938,7 +941,8 @@ export class SillyTavernAdapter {
                 const mes_example = rawData.mes_example ?? char.mes_example ?? '';
                 const creator_notes = rawData.creator_notes ?? char.creatorcomment ?? '';
                 const system_prompt = rawData.system_prompt ?? char.system_prompt ?? '';
-                const post_history_instructions = rawData.post_history_instructions ?? char.post_history_instructions ?? '';
+                const post_history_instructions =
+                    rawData.post_history_instructions ?? char.post_history_instructions ?? '';
                 const alternate_greetings = Array.isArray(rawData.alternate_greetings)
                     ? rawData.alternate_greetings
                     : Array.isArray(char.alternate_greetings)
@@ -948,11 +952,12 @@ export class SillyTavernAdapter {
                 const character_version = rawData.character_version ?? char.character_version ?? '';
 
                 // 2. Thu thập Tags đầy đủ
-                let tags = Array.isArray(rawData.tags) && rawData.tags.length > 0
-                    ? [...rawData.tags]
-                    : Array.isArray(char.tags) && char.tags.length > 0
-                      ? [...char.tags]
-                      : [];
+                let tags =
+                    Array.isArray(rawData.tags) && rawData.tags.length > 0
+                        ? [...rawData.tags]
+                        : Array.isArray(char.tags) && char.tags.length > 0
+                          ? [...char.tags]
+                          : [];
                 if (tags.length === 0 && ctx.tagMap && ctx.tags && char.avatar) {
                     const currentTagIds = ctx.tagMap[char.avatar] || [];
                     tags = currentTagIds
@@ -977,7 +982,10 @@ export class SillyTavernAdapter {
 
                 // 4. Thu thập Lorebook (Embedded hoặc đóng gói từ Linked Worldbook)
                 let characterBook = rawData.character_book ? JSON.parse(JSON.stringify(rawData.character_book)) : null;
-                if ((!characterBook || !characterBook.entries || characterBook.entries.length === 0) && linkedWorldName) {
+                if (
+                    (!characterBook || !characterBook.entries || characterBook.entries.length === 0) &&
+                    linkedWorldName
+                ) {
                     try {
                         let worldData: any = null;
                         if (typeof ctx.loadWorldInfo === 'function') {

@@ -410,7 +410,9 @@ export class MvuManager {
                 typeof floorData.statData === 'object' &&
                 Object.keys(floorData.statData).length > 0
             ) {
-                const rawText = String(msg.mes || msg.message || '').replace(/\s+/g, ' ').trim();
+                const rawText = String(msg.mes || msg.message || '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
                 const preview = rawText.length > 70 ? rawText.slice(0, 70) + '…' : rawText;
                 floors.push({
                     messageId: i,
@@ -455,10 +457,7 @@ export class MvuManager {
             }
             if (raw && typeof raw === 'object') {
                 wrapper = raw;
-                data =
-                    raw.stat_data && typeof raw.stat_data === 'object'
-                        ? raw.stat_data
-                        : raw;
+                data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : raw;
             }
         }
 
@@ -528,7 +527,9 @@ export class MvuManager {
         }
 
         if (targetMessageId === undefined) {
-            throw new Error('Chưa có tin nhắn nào trong phòng chat để gán biến runtime. Hãy gửi ít nhất một tin nhắn (hoặc bắt đầu cuộc hội thoại) trước khi dùng set_mvu_variable.');
+            throw new Error(
+                'Chưa có tin nhắn nào trong phòng chat để gán biến runtime. Hãy gửi ít nhất một tin nhắn (hoặc bắt đầu cuộc hội thoại) trước khi dùng set_mvu_variable.',
+            );
         }
 
         const cleanPath = path.replace(/^stat_data\./, '');
@@ -716,12 +717,19 @@ export class MvuManager {
                 if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function') {
                     const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
                     const entries = worldData?.entries
-                        ? (Array.isArray(worldData.entries) ? worldData.entries : Object.values(worldData.entries))
+                        ? Array.isArray(worldData.entries)
+                            ? worldData.entries
+                            : Object.values(worldData.entries)
                         : [];
                     for (const entry of entries as any[]) {
                         const comment = (entry?.comment || entry?.name || '').toLowerCase();
                         const content = (entry?.content || '').toLowerCase();
-                        if (!result.initvarEntry && (comment.includes('initvar') || comment.includes('khởi tạo biến') || comment.includes('[initvar]'))) {
+                        if (
+                            !result.initvarEntry &&
+                            (comment.includes('initvar') ||
+                                comment.includes('khởi tạo biến') ||
+                                comment.includes('[initvar]'))
+                        ) {
                             result.initvarEntry = entry;
                         }
                         if (
@@ -820,10 +828,7 @@ export class MvuManager {
         if (!code) return [];
 
         // 1. Tự động phát hiện mọi hàm helper tạo kiểu Schema Zod trong code
-        const helpers: Record<
-            string,
-            { type: 'string' | 'number' | 'boolean' | 'record' | 'array' | 'object' }
-        > = {};
+        const helpers: Record<string, { type: 'string' | 'number' | 'boolean' | 'record' | 'array' | 'object' }> = {};
 
         const helperRegex =
             /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*(?:\([^)]*\)|[A-Za-z0-9_$]+)?\s*=>([\s\S]*?)(?=(?:const|let|var|function|\/\*|export|\n\s*\n[a-zA-Z_$]|$))|function\s+([A-Za-z0-9_$]+)\s*\([^)]*\)\s*\{([\s\S]*?)\}/g;
@@ -1051,14 +1056,19 @@ export class MvuManager {
             }
 
             // 2. Kiểm tra tham chiếu tới knownSubSchemas (ví dụ: `Tài_sản: TaiSan` hoặc `Bang(NPC)`)
-            if (type === 'unknown' || (type === 'record' && !recordTemplate) || (type === 'object' && (!children || children.length === 0))) {
+            if (
+                type === 'unknown' ||
+                (type === 'record' && !recordTemplate) ||
+                (type === 'object' && (!children || children.length === 0))
+            ) {
                 for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
                     const wordRegex = new RegExp(`\\b${subName}\\b`);
                     if (wordRegex.test(expr)) {
                         const isRecordHelper = Object.entries(helpers).some(
                             ([hName, hInfo]) =>
                                 hInfo.type === 'record' &&
-                                (expr.includes(`${hName}(${subName})`) || (expr.includes(hName) && expr.includes(subName))),
+                                (expr.includes(`${hName}(${subName})`) ||
+                                    (expr.includes(hName) && expr.includes(subName))),
                         );
                         if (isRecord || isRecordHelper || expr.includes(`z.record`)) {
                             type = 'record';
@@ -1066,11 +1076,11 @@ export class MvuManager {
                             children = [];
                         } else {
                             type = 'object';
-                            children = subDescriptors.map(d => ({
+                            children = subDescriptors.map((d) => ({
                                 ...d,
                                 path: `${currentPath}.${d.name}`,
                                 children: d.children
-                                    ? d.children.map(c => ({ ...c, path: `${currentPath}.${d.name}.${c.name}` }))
+                                    ? d.children.map((c) => ({ ...c, path: `${currentPath}.${d.name}.${c.name}` }))
                                     : undefined,
                             }));
                         }
@@ -1237,11 +1247,11 @@ export class MvuManager {
                         if (Object.keys(realVal).length > 0) {
                             desc.children = Object.entries(realVal).map(([subK, subV]) => {
                                 const subPath = `${desc.path}.${subK}`;
-                                const instanceChildren: MvuVariableDescriptor[] = desc.recordTemplate!.map(t => ({
+                                const instanceChildren: MvuVariableDescriptor[] = desc.recordTemplate!.map((t) => ({
                                     ...t,
                                     path: `${subPath}.${t.name}`,
                                     children: t.children
-                                        ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
+                                        ? t.children.map((c) => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
                                         : undefined,
                                 }));
                                 this.enrichWithLiveData(instanceChildren, subV);
@@ -1397,7 +1407,7 @@ export class MvuManager {
             this.cachedStatData = floorData.statData;
             this.cachedWrapper = floorData.wrapper;
             this.cachedDataSource = floorData.source;
-            const matchedFloor = floors.find(f => f.messageId === floorData.messageId);
+            const matchedFloor = floors.find((f) => f.messageId === floorData.messageId);
             this.cachedCurrentFloor =
                 matchedFloor ||
                 (floorData.messageId !== undefined
@@ -1418,9 +1428,7 @@ export class MvuManager {
         }
         this.cachedFloors = floors;
 
-        const liveVars = filterPath
-            ? this.getLiveVariables(filterPath, effectiveFloorId)
-            : this.cachedStatData;
+        const liveVars = filterPath ? this.getLiveVariables(filterPath, effectiveFloorId) : this.cachedStatData;
 
         const lorebookMvu = await this.getLorebookMvuEntries(adapter, liveChar);
 
@@ -1448,7 +1456,9 @@ export class MvuManager {
                 warnings.push('Thiếu mục [mvu_update] trong Worldbook để hướng dẫn AI quy tắc cập nhật biến.');
             }
             if (!liveVars) {
-                warnings.push('Chưa tìm thấy dữ liệu stat_data trong bộ nhớ (có thể cuộc hội thoại chưa bắt đầu hoặc chưa gửi tin nhắn).');
+                warnings.push(
+                    'Chưa tìm thấy dữ liệu stat_data trong bộ nhớ (có thể cuộc hội thoại chưa bắt đầu hoặc chưa gửi tin nhắn).',
+                );
             }
         }
 
@@ -1633,7 +1643,10 @@ export class MvuManager {
          * Dùng đếm ngoặc nhọn {} để xác định chính xác phạm vi block.
          * Trả về { blockStart, blockEnd } hoặc null nếu không tìm thấy.
          */
-        const findParentObjectBlock = (code: string, parentName: string): { blockStart: number; blockEnd: number } | null => {
+        const findParentObjectBlock = (
+            code: string,
+            parentName: string,
+        ): { blockStart: number; blockEnd: number } | null => {
             const escapedParent = parentName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
             const parentPattern = new RegExp(`(['"])?${escapedParent}\\1?\\s*:\\s*z\\.object\\s*\\(\\s*\\{`, 'g');
             const match = parentPattern.exec(code);
@@ -1704,7 +1717,8 @@ export class MvuManager {
                 if (block) {
                     // Chèn ngay sau dấu { mở
                     const insertPos = block.blockStart + 1;
-                    zodCode = zodCode.substring(0, insertPos) +
+                    zodCode =
+                        zodCode.substring(0, insertPos) +
                         `\n    '${leafName}': ${zodLine},` +
                         zodCode.substring(insertPos);
                     inserted = true;
@@ -1882,7 +1896,11 @@ export class MvuManager {
         if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
             try {
                 const ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
-                if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function' && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                if (
+                    ST_WorldInfo &&
+                    typeof ST_WorldInfo.loadWorldInfo === 'function' &&
+                    typeof ST_WorldInfo.saveWorldInfo === 'function'
+                ) {
                     const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
                     if (worldData && worldData.entries) {
                         for (const entry of Object.values(worldData.entries) as any[]) {
@@ -1890,7 +1908,12 @@ export class MvuManager {
                             if (lorebookMvu.initvarEntry && (c.includes('initvar') || c.includes('khởi tạo biến'))) {
                                 entry.content = lorebookMvu.initvarEntry.content;
                             }
-                            if (lorebookMvu.updateRulesEntry && (c.includes('mvu_update') || c.includes('quy tắc cập nhật') || c.includes('cập nhật biến'))) {
+                            if (
+                                lorebookMvu.updateRulesEntry &&
+                                (c.includes('mvu_update') ||
+                                    c.includes('quy tắc cập nhật') ||
+                                    c.includes('cập nhật biến'))
+                            ) {
                                 entry.content = lorebookMvu.updateRulesEntry.content;
                             }
                         }
@@ -2136,15 +2159,23 @@ export class MvuManager {
         }
 
         if (this.hasMvu(liveChar)) {
-            console.warn('[MvuManager] Cảnh báo: Card đã có hệ thống MVU. Thao tác scaffold sẽ ghi đè lên cấu hình hiện tại (force: true).');
+            console.warn(
+                '[MvuManager] Cảnh báo: Card đã có hệ thống MVU. Thao tác scaffold sẽ ghi đè lên cấu hình hiện tại (force: true).',
+            );
         }
 
         if (!liveChar.data) liveChar.data = {};
         if (!liveChar.data.extensions) liveChar.data.extensions = {};
-        if (!liveChar.data.extensions.tavern_helper) liveChar.data.extensions.tavern_helper = { scripts: [], variables: {} };
+        if (!liveChar.data.extensions.tavern_helper)
+            liveChar.data.extensions.tavern_helper = { scripts: [], variables: {} };
         if (!Array.isArray(liveChar.data.extensions.tavern_helper.scripts)) {
-            if (liveChar.data.extensions.tavern_helper.scripts && typeof liveChar.data.extensions.tavern_helper.scripts === 'object') {
-                liveChar.data.extensions.tavern_helper.scripts = Object.values(liveChar.data.extensions.tavern_helper.scripts);
+            if (
+                liveChar.data.extensions.tavern_helper.scripts &&
+                typeof liveChar.data.extensions.tavern_helper.scripts === 'object'
+            ) {
+                liveChar.data.extensions.tavern_helper.scripts = Object.values(
+                    liveChar.data.extensions.tavern_helper.scripts,
+                );
             } else {
                 liveChar.data.extensions.tavern_helper.scripts = [];
             }
@@ -2292,17 +2323,23 @@ export class MvuManager {
                 scriptName: '[MVU] Ẩn cập nhật biến khỏi AI',
                 findRegex: '/<(update(?:variable)?)>(?:(?!.*<\\/\\1>)(?:(?!<\\1>).)*$|(?:(?!<\\1>).)*<\\/\\1?>)/gsi',
                 replaceString: '',
+                trimStrings: [],
                 placement: [1, 2],
                 promptOnly: true,
+                markdownOnly: false,
+                runOnEdit: false,
                 disabled: false,
             },
             {
                 scriptName: '[MVU] Làm đẹp cập nhật biến',
                 findRegex: '/<(update(?:variable)?)>\\s*((?:(?!<\\1>).)*)\\s*<\\/\\1>/gsi',
                 replaceString:
-                    '<div class="mvu-update-box" style="border:1px solid #4a5568;padding:8px;border-radius:6px;margin:8px 0;background:rgba(0,0,0,0.2);"><strong>📊 Cập nhật trạng thái:</strong><pre style="font-size:12px;margin:4px 0;">$2</pre></div>',
+                    '<div style="width:90%;margin:12px auto;"><details style="background:rgba(20,25,35,0.75);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;font-size:12px;color:#cbd5e1;box-shadow:0 4px 12px rgba(0,0,0,0.3);"><summary style="cursor:pointer;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;"><span>📊 [Cập nhật biến] Biến số thế giới đã đồng bộ</span></summary><div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.1);font-family:monospace;font-size:11px;white-space:pre-wrap;max-height:260px;overflow-y:auto;">$2</div></details></div>',
+                trimStrings: [],
                 placement: [1, 2],
                 markdownOnly: true,
+                promptOnly: false,
+                runOnEdit: false,
                 disabled: false,
             },
             {
@@ -2310,16 +2347,22 @@ export class MvuManager {
                 findRegex: '<StatusPlaceHolderImpl/>',
                 replaceString:
                     '<div class="mvu-status-bar" style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:8px;font-size:12px;">{{format_message_variable::stat_data}}</div>',
+                trimStrings: [],
                 placement: [2],
                 markdownOnly: true,
+                promptOnly: false,
+                runOnEdit: true,
                 disabled: false,
             },
             {
                 scriptName: '[MVU] Ẩn thanh trạng thái khỏi AI',
                 findRegex: '<StatusPlaceHolderImpl/>',
                 replaceString: '',
+                trimStrings: [],
                 placement: [2],
                 promptOnly: true,
+                markdownOnly: false,
+                runOnEdit: true,
                 disabled: false,
             },
         ];
@@ -2328,11 +2371,14 @@ export class MvuManager {
             const idx = arr.findIndex((r: any) => r && (r.scriptName === reg.scriptName || r.id === reg.id));
             const regData = {
                 id: idx !== -1 ? arr[idx].id : `regex-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                ...reg,
-                runOnEdit: true,
+                trimStrings: [],
                 substituteRegex: 0,
                 minDepth: null,
                 maxDepth: null,
+                runOnEdit: false,
+                markdownOnly: false,
+                promptOnly: false,
+                ...reg,
             };
             if (idx !== -1) {
                 arr[idx] = { ...arr[idx], ...regData };
@@ -2349,7 +2395,8 @@ export class MvuManager {
             const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();
             if (regexEngine && regexEngine.SCRIPT_TYPES && typeof regexEngine.saveScriptsByType === 'function') {
                 const { SCRIPT_TYPES, getScriptsByType, saveScriptsByType, allowScopedScripts } = regexEngine;
-                let scoped = (typeof getScriptsByType === 'function' ? getScriptsByType(SCRIPT_TYPES.SCOPED) : null) || [];
+                let scoped =
+                    (typeof getScriptsByType === 'function' ? getScriptsByType(SCRIPT_TYPES.SCOPED) : null) || [];
                 if (!Array.isArray(scoped)) scoped = [];
                 for (const reg of regexes) {
                     upsertRegexScript(scoped, reg);
@@ -2508,7 +2555,9 @@ format: |-
                 }
                 const th = (window as any).TavernHelper;
                 if (th && typeof th.rebindCharWorldbooks === 'function') {
-                    await th.rebindCharWorldbooks('current', { primary: targetBookName, additional: [] }).catch(() => {});
+                    await th
+                        .rebindCharWorldbooks('current', { primary: targetBookName, additional: [] })
+                        .catch(() => {});
                 }
             } catch (e) {
                 console.warn('[MvuManager] Lỗi khi đồng bộ UI liên kết Worldbook:', e);
@@ -2517,7 +2566,11 @@ format: |-
 
         if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
             try {
-                if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function' && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                if (
+                    ST_WorldInfo &&
+                    typeof ST_WorldInfo.loadWorldInfo === 'function' &&
+                    typeof ST_WorldInfo.saveWorldInfo === 'function'
+                ) {
                     let worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
                     if (!worldData) worldData = { entries: {} };
                     if (!worldData.entries) worldData.entries = {};

@@ -388,7 +388,8 @@ export class MvuDashboardModal {
             subtitle += ` • Lượt #${report.currentFloor.displayIndex} (${escapeHtml(report.currentFloor.name)})`;
         }
         if (report.dataSource) {
-            const src = report.dataSource === 'mvu' ? 'MVU API' : report.dataSource === 'helper' ? 'TavernHelper' : 'Bộ nhớ ST';
+            const src =
+                report.dataSource === 'mvu' ? 'MVU API' : report.dataSource === 'helper' ? 'TavernHelper' : 'Bộ nhớ ST';
             subtitle += ` • Nguồn: ${src}`;
         }
         $('#kaiz-mvu-subtitle').html(subtitle);
@@ -459,7 +460,12 @@ export class MvuDashboardModal {
             if (report.hasEjsController) {
                 ejsPill
                     .text('EJS: OK')
-                    .attr('title', report.ejsControllerSummary ? `Bộ điều khiển: ${report.ejsControllerSummary}` : 'Có bộ điều khiển EJS Preprocessing động')
+                    .attr(
+                        'title',
+                        report.ejsControllerSummary
+                            ? `Bộ điều khiển: ${report.ejsControllerSummary}`
+                            : 'Có bộ điều khiển EJS Preprocessing động',
+                    )
                     .removeClass('badge-neutral badge-danger')
                     .addClass('badge-success')
                     .show();
@@ -636,7 +642,8 @@ export class MvuDashboardModal {
                     if (!dynamicDesc) dynamicDesc = currentVal[1];
                     currentVal = currentVal[0];
                 }
-                const isNumeric = desc.type === 'number' || (typeof currentVal === 'number' && Number.isFinite(currentVal));
+                const isNumeric =
+                    desc.type === 'number' || (typeof currentVal === 'number' && Number.isFinite(currentVal));
                 const isObject = typeof currentVal === 'object' && currentVal !== null && !Array.isArray(currentVal);
 
                 catHtml += `
@@ -697,7 +704,11 @@ export class MvuDashboardModal {
                         for (const [subK, subV] of entries) {
                             let valStr = '';
                             if (typeof subV === 'object' && subV !== null) {
-                                try { valStr = JSON.stringify(subV); } catch { valStr = String(subV); }
+                                try {
+                                    valStr = JSON.stringify(subV);
+                                } catch {
+                                    valStr = String(subV);
+                                }
                             } else {
                                 valStr = String(subV);
                             }

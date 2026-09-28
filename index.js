@@ -16661,7 +16661,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   floorData.statData &&
                   typeof floorData.statData === 'object' &&
                   Object.keys(floorData.statData).length > 0) {
-                  const rawText = String(msg.mes || msg.message || '').replace(/\s+/g, ' ').trim();
+                  const rawText = String(msg.mes || msg.message || '')
+                      .replace(/\s+/g, ' ')
+                      .trim();
                   const preview = rawText.length > 70 ? rawText.slice(0, 70) + '…' : rawText;
                   floors.push({
                       messageId: i,
@@ -16706,10 +16708,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               if (raw && typeof raw === 'object') {
                   wrapper = raw;
-                  data =
-                      raw.stat_data && typeof raw.stat_data === 'object'
-                          ? raw.stat_data
-                          : raw;
+                  data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : raw;
               }
           }
           if (!data)
@@ -16932,12 +16931,17 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function') {
                       const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
                       const entries = worldData?.entries
-                          ? (Array.isArray(worldData.entries) ? worldData.entries : Object.values(worldData.entries))
+                          ? Array.isArray(worldData.entries)
+                              ? worldData.entries
+                              : Object.values(worldData.entries)
                           : [];
                       for (const entry of entries) {
                           const comment = (entry?.comment || entry?.name || '').toLowerCase();
                           const content = (entry?.content || '').toLowerCase();
-                          if (!result.initvarEntry && (comment.includes('initvar') || comment.includes('khởi tạo biến') || comment.includes('[initvar]'))) {
+                          if (!result.initvarEntry &&
+                              (comment.includes('initvar') ||
+                                  comment.includes('khởi tạo biến') ||
+                                  comment.includes('[initvar]'))) {
                               result.initvarEntry = entry;
                           }
                           if (!result.updateRulesEntry &&
@@ -17260,12 +17264,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
               }
               // 2. Kiểm tra tham chiếu tới knownSubSchemas (ví dụ: `Tài_sản: TaiSan` hoặc `Bang(NPC)`)
-              if (type === 'unknown' || (type === 'record' && !recordTemplate) || (type === 'object' && (!children || children.length === 0))) {
+              if (type === 'unknown' ||
+                  (type === 'record' && !recordTemplate) ||
+                  (type === 'object' && (!children || children.length === 0))) {
                   for (const [subName, subDescriptors] of Object.entries(knownSubSchemas)) {
                       const wordRegex = new RegExp(`\\b${subName}\\b`);
                       if (wordRegex.test(expr)) {
                           const isRecordHelper = Object.entries(helpers).some(([hName, hInfo]) => hInfo.type === 'record' &&
-                              (expr.includes(`${hName}(${subName})`) || (expr.includes(hName) && expr.includes(subName))));
+                              (expr.includes(`${hName}(${subName})`) ||
+                                  (expr.includes(hName) && expr.includes(subName))));
                           if (isRecord || isRecordHelper || expr.includes(`z.record`)) {
                               type = 'record';
                               recordTemplate = subDescriptors;
@@ -17273,11 +17280,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           }
                           else {
                               type = 'object';
-                              children = subDescriptors.map(d => ({
+                              children = subDescriptors.map((d) => ({
                                   ...d,
                                   path: `${currentPath}.${d.name}`,
                                   children: d.children
-                                      ? d.children.map(c => ({ ...c, path: `${currentPath}.${d.name}.${c.name}` }))
+                                      ? d.children.map((c) => ({ ...c, path: `${currentPath}.${d.name}.${c.name}` }))
                                       : undefined,
                               }));
                           }
@@ -17447,11 +17454,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           if (Object.keys(realVal).length > 0) {
                               desc.children = Object.entries(realVal).map(([subK, subV]) => {
                                   const subPath = `${desc.path}.${subK}`;
-                                  const instanceChildren = desc.recordTemplate.map(t => ({
+                                  const instanceChildren = desc.recordTemplate.map((t) => ({
                                       ...t,
                                       path: `${subPath}.${t.name}`,
                                       children: t.children
-                                          ? t.children.map(c => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
+                                          ? t.children.map((c) => ({ ...c, path: `${subPath}.${t.name}.${c.name}` }))
                                           : undefined,
                                   }));
                                   this.enrichWithLiveData(instanceChildren, subV);
@@ -17598,7 +17605,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               this.cachedStatData = floorData.statData;
               this.cachedWrapper = floorData.wrapper;
               this.cachedDataSource = floorData.source;
-              const matchedFloor = floors.find(f => f.messageId === floorData.messageId);
+              const matchedFloor = floors.find((f) => f.messageId === floorData.messageId);
               this.cachedCurrentFloor =
                   matchedFloor ||
                       (floorData.messageId !== undefined
@@ -17619,9 +17626,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               this.cachedDataSource = 'fallback';
           }
           this.cachedFloors = floors;
-          const liveVars = filterPath
-              ? this.getLiveVariables(filterPath, effectiveFloorId)
-              : this.cachedStatData;
+          const liveVars = filterPath ? this.getLiveVariables(filterPath, effectiveFloorId) : this.cachedStatData;
           const lorebookMvu = await this.getLorebookMvuEntries(adapter, liveChar);
           let initvarParsed = null;
           if (lorebookMvu.initvarEntry?.content) {
@@ -17880,9 +17885,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   if (block) {
                       // Chèn ngay sau dấu { mở
                       const insertPos = block.blockStart + 1;
-                      zodCode = zodCode.substring(0, insertPos) +
-                          `\n    '${leafName}': ${zodLine},` +
-                          zodCode.substring(insertPos);
+                      zodCode =
+                          zodCode.substring(0, insertPos) +
+                              `\n    '${leafName}': ${zodLine},` +
+                              zodCode.substring(insertPos);
                       inserted = true;
                   }
               }
@@ -18060,7 +18066,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
               try {
                   const ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
-                  if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function' && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                  if (ST_WorldInfo &&
+                      typeof ST_WorldInfo.loadWorldInfo === 'function' &&
+                      typeof ST_WorldInfo.saveWorldInfo === 'function') {
                       const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
                       if (worldData && worldData.entries) {
                           for (const entry of Object.values(worldData.entries)) {
@@ -18068,7 +18076,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                               if (lorebookMvu.initvarEntry && (c.includes('initvar') || c.includes('khởi tạo biến'))) {
                                   entry.content = lorebookMvu.initvarEntry.content;
                               }
-                              if (lorebookMvu.updateRulesEntry && (c.includes('mvu_update') || c.includes('quy tắc cập nhật') || c.includes('cập nhật biến'))) {
+                              if (lorebookMvu.updateRulesEntry &&
+                                  (c.includes('mvu_update') ||
+                                      c.includes('quy tắc cập nhật') ||
+                                      c.includes('cập nhật biến'))) {
                                   entry.content = lorebookMvu.updateRulesEntry.content;
                               }
                           }
@@ -18319,7 +18330,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (!liveChar.data.extensions.tavern_helper)
               liveChar.data.extensions.tavern_helper = { scripts: [], variables: {} };
           if (!Array.isArray(liveChar.data.extensions.tavern_helper.scripts)) {
-              if (liveChar.data.extensions.tavern_helper.scripts && typeof liveChar.data.extensions.tavern_helper.scripts === 'object') {
+              if (liveChar.data.extensions.tavern_helper.scripts &&
+                  typeof liveChar.data.extensions.tavern_helper.scripts === 'object') {
                   liveChar.data.extensions.tavern_helper.scripts = Object.values(liveChar.data.extensions.tavern_helper.scripts);
               }
               else {
@@ -18464,32 +18476,44 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   scriptName: '[MVU] Ẩn cập nhật biến khỏi AI',
                   findRegex: '/<(update(?:variable)?)>(?:(?!.*<\\/\\1>)(?:(?!<\\1>).)*$|(?:(?!<\\1>).)*<\\/\\1?>)/gsi',
                   replaceString: '',
+                  trimStrings: [],
                   placement: [1, 2],
                   promptOnly: true,
+                  markdownOnly: false,
+                  runOnEdit: false,
                   disabled: false,
               },
               {
                   scriptName: '[MVU] Làm đẹp cập nhật biến',
                   findRegex: '/<(update(?:variable)?)>\\s*((?:(?!<\\1>).)*)\\s*<\\/\\1>/gsi',
-                  replaceString: '<div class="mvu-update-box" style="border:1px solid #4a5568;padding:8px;border-radius:6px;margin:8px 0;background:rgba(0,0,0,0.2);"><strong>📊 Cập nhật trạng thái:</strong><pre style="font-size:12px;margin:4px 0;">$2</pre></div>',
+                  replaceString: '<div style="width:90%;margin:12px auto;"><details style="background:rgba(20,25,35,0.75);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:8px 12px;font-size:12px;color:#cbd5e1;box-shadow:0 4px 12px rgba(0,0,0,0.3);"><summary style="cursor:pointer;font-weight:600;color:#94a3b8;display:flex;align-items:center;gap:6px;"><span>📊 [Cập nhật biến] Biến số thế giới đã đồng bộ</span></summary><div style="margin-top:8px;padding-top:8px;border-top:1px dashed rgba(255,255,255,0.1);font-family:monospace;font-size:11px;white-space:pre-wrap;max-height:260px;overflow-y:auto;">$2</div></details></div>',
+                  trimStrings: [],
                   placement: [1, 2],
                   markdownOnly: true,
+                  promptOnly: false,
+                  runOnEdit: false,
                   disabled: false,
               },
               {
                   scriptName: '[MVU] Giao diện thanh trạng thái',
                   findRegex: '<StatusPlaceHolderImpl/>',
                   replaceString: '<div class="mvu-status-bar" style="padding:6px;border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:8px;font-size:12px;">{{format_message_variable::stat_data}}</div>',
+                  trimStrings: [],
                   placement: [2],
                   markdownOnly: true,
+                  promptOnly: false,
+                  runOnEdit: true,
                   disabled: false,
               },
               {
                   scriptName: '[MVU] Ẩn thanh trạng thái khỏi AI',
                   findRegex: '<StatusPlaceHolderImpl/>',
                   replaceString: '',
+                  trimStrings: [],
                   placement: [2],
                   promptOnly: true,
+                  markdownOnly: false,
+                  runOnEdit: true,
                   disabled: false,
               },
           ];
@@ -18497,11 +18521,14 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const idx = arr.findIndex((r) => r && (r.scriptName === reg.scriptName || r.id === reg.id));
               const regData = {
                   id: idx !== -1 ? arr[idx].id : `regex-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-                  ...reg,
-                  runOnEdit: true,
+                  trimStrings: [],
                   substituteRegex: 0,
                   minDepth: null,
                   maxDepth: null,
+                  runOnEdit: false,
+                  markdownOnly: false,
+                  promptOnly: false,
+                  ...reg,
               };
               if (idx !== -1) {
                   arr[idx] = { ...arr[idx], ...regData };
@@ -18670,7 +18697,9 @@ format: |-
                   }
                   const th = window.TavernHelper;
                   if (th && typeof th.rebindCharWorldbooks === 'function') {
-                      await th.rebindCharWorldbooks('current', { primary: targetBookName, additional: [] }).catch(() => { });
+                      await th
+                          .rebindCharWorldbooks('current', { primary: targetBookName, additional: [] })
+                          .catch(() => { });
                   }
               }
               catch (e) {
@@ -18679,7 +18708,9 @@ format: |-
           }
           if (linkedWorld && typeof linkedWorld === 'string' && linkedWorld.trim()) {
               try {
-                  if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function' && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                  if (ST_WorldInfo &&
+                      typeof ST_WorldInfo.loadWorldInfo === 'function' &&
+                      typeof ST_WorldInfo.saveWorldInfo === 'function') {
                       let worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
                       if (!worldData)
                           worldData = { entries: {} };
@@ -20499,7 +20530,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   }
                   // 4. Thu thập Lorebook (Embedded hoặc đóng gói từ Linked Worldbook)
                   let characterBook = rawData.character_book ? JSON.parse(JSON.stringify(rawData.character_book)) : null;
-                  if ((!characterBook || !characterBook.entries || characterBook.entries.length === 0) && linkedWorldName) {
+                  if ((!characterBook || !characterBook.entries || characterBook.entries.length === 0) &&
+                      linkedWorldName) {
                       try {
                           let worldData = null;
                           if (typeof ctx.loadWorldInfo === 'function') {
@@ -28305,7 +28337,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (report.hasEjsController) {
                   ejsPill
                       .text('EJS: OK')
-                      .attr('title', report.ejsControllerSummary ? `Bộ điều khiển: ${report.ejsControllerSummary}` : 'Có bộ điều khiển EJS Preprocessing động')
+                      .attr('title', report.ejsControllerSummary
+                      ? `Bộ điều khiển: ${report.ejsControllerSummary}`
+                      : 'Có bộ điều khiển EJS Preprocessing động')
                       .removeClass('badge-neutral badge-danger')
                       .addClass('badge-success')
                       .show();
