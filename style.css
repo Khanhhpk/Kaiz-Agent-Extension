@@ -1312,8 +1312,30 @@
     background: rgba(255, 255, 255, 0.35);
 }
 
+.kaiz-quick-tool-item {
+    padding: 7px 10px;
+    cursor: pointer;
+    border-radius: 6px;
+    margin-bottom: 2px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    transition: background 0.15s ease;
+}
+
 .kaiz-quick-tool-item:hover {
     background: rgba(255, 255, 255, 0.08);
+}
+
+.kaiz-quick-tool-item-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #38bdf8;
+}
+
+.kaiz-quick-tool-item-desc {
+    font-size: 11px;
+    color: #94a3b8;
+    line-height: 1.35;
+    margin-top: 2px;
 }
 
 /* Modern Unified Input Box Card */
