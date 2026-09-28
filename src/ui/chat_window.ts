@@ -241,6 +241,14 @@ export class ChatWindowUI {
             inputEl.setSelectionRange(newCursorPos, newCursorPos);
         }
 
+        quickToolList.on('click', '.kaiz-quick-tool-item', function (this: HTMLElement) {
+            const toolName = $(this).data('tool-name');
+            if (toolName) {
+                insertToolNameToInput(String(toolName));
+                quickToolMenu.hide();
+            }
+        });
+
         function populateQuickTools(filterText = '') {
             quickToolList.empty();
             const available = getActiveToolsForCurrentSpace();
@@ -261,30 +269,18 @@ export class ChatWindowUI {
                 return;
             }
 
-            matches.forEach((schema) => {
-                const desc = schema.userDescription || schema.description || '';
-                const $item = $(`
-                    <div class="kaiz-quick-tool-item" style="
-                        padding: 7px 10px; cursor: pointer; border-radius: 6px; margin-bottom: 2px;
-                        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-                        transition: background 0.15s ease;
-                    ">
-                        <div style="font-size: 12.5px; font-weight: 600; color: #38bdf8;">${escapeHtml(schema.name)}</div>
-                        ${desc ? `<div style="font-size: 11px; color: #94a3b8; line-height: 1.35; margin-top: 2px;">${escapeHtml(desc)}</div>` : ''}
+            const itemsHtml = matches
+                .map((schema) => {
+                    const desc = schema.userDescription || schema.description || '';
+                    return `
+                    <div class="kaiz-quick-tool-item" data-tool-name="${escapeHtml(schema.name)}">
+                        <div class="kaiz-quick-tool-item-name">${escapeHtml(schema.name)}</div>
+                        ${desc ? `<div class="kaiz-quick-tool-item-desc">${escapeHtml(desc)}</div>` : ''}
                     </div>
-                `);
-                $item.on('mouseenter', function (this: HTMLElement) {
-                    $(this).css('background', 'rgba(255, 255, 255, 0.08)');
-                });
-                $item.on('mouseleave', function (this: HTMLElement) {
-                    $(this).css('background', 'transparent');
-                });
-                $item.on('click', () => {
-                    insertToolNameToInput(schema.name);
-                    quickToolMenu.hide();
-                });
-                quickToolList.append($item);
-            });
+                `;
+                })
+                .join('');
+            quickToolList.html(itemsHtml);
         }
 
         quickToolBtn.on('click', (e: any) => {

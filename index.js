@@ -23666,6 +23666,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               inputEl.focus();
               inputEl.setSelectionRange(newCursorPos, newCursorPos);
           }
+          quickToolList.on('click', '.kaiz-quick-tool-item', function () {
+              const toolName = $(this).data('tool-name');
+              if (toolName) {
+                  insertToolNameToInput(String(toolName));
+                  quickToolMenu.hide();
+              }
+          });
           function populateQuickTools(filterText = '') {
               quickToolList.empty();
               const available = getActiveToolsForCurrentSpace();
@@ -23679,30 +23686,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   quickToolList.append('<div style="padding: 14px; color: #888; text-align: center; font-size: 12px;">Không có công cụ nào khả dụng trong không gian hiện tại.</div>');
                   return;
               }
-              matches.forEach((schema) => {
+              const itemsHtml = matches
+                  .map((schema) => {
                   const desc = schema.userDescription || schema.description || '';
-                  const $item = $(`
-                    <div class="kaiz-quick-tool-item" style="
-                        padding: 7px 10px; cursor: pointer; border-radius: 6px; margin-bottom: 2px;
-                        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-                        transition: background 0.15s ease;
-                    ">
-                        <div style="font-size: 12.5px; font-weight: 600; color: #38bdf8;">${escapeHtml$3(schema.name)}</div>
-                        ${desc ? `<div style="font-size: 11px; color: #94a3b8; line-height: 1.35; margin-top: 2px;">${escapeHtml$3(desc)}</div>` : ''}
+                  return `
+                    <div class="kaiz-quick-tool-item" data-tool-name="${escapeHtml$3(schema.name)}">
+                        <div class="kaiz-quick-tool-item-name">${escapeHtml$3(schema.name)}</div>
+                        ${desc ? `<div class="kaiz-quick-tool-item-desc">${escapeHtml$3(desc)}</div>` : ''}
                     </div>
-                `);
-                  $item.on('mouseenter', function () {
-                      $(this).css('background', 'rgba(255, 255, 255, 0.08)');
-                  });
-                  $item.on('mouseleave', function () {
-                      $(this).css('background', 'transparent');
-                  });
-                  $item.on('click', () => {
-                      insertToolNameToInput(schema.name);
-                      quickToolMenu.hide();
-                  });
-                  quickToolList.append($item);
-              });
+                `;
+              })
+                  .join('');
+              quickToolList.html(itemsHtml);
           }
           quickToolBtn.on('click', (e) => {
               e.stopPropagation();
