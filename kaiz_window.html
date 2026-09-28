@@ -1590,6 +1590,9 @@
                 <button type="button" class="kaiz-mvu-tab active" data-tab="stats" title="Chỉ số trực quan">
                     <i class="fa-solid fa-gauge-high"></i> <span>Chỉ số</span>
                 </button>
+                <button type="button" class="kaiz-mvu-tab" data-tab="activity" title="Kiểm tra hệ thống & Bảng hoạt động Lorebook MVU">
+                    <i class="fa-solid fa-clipboard-check"></i> <span>Bảng hoạt động</span>
+                </button>
                 <button type="button" class="kaiz-mvu-tab" data-tab="schema" title="Quản lý cấu trúc Zod">
                     <i class="fa-solid fa-sitemap"></i> <span>Cấu trúc</span>
                 </button>
@@ -1774,9 +1777,11 @@
                         <i class="fa-solid fa-scroll" style="color: #a78bfa"></i>
                         <span id="kaiz-mvu-zod-name" class="kaiz-mvu-stat-val">Zod Schema</span>
                     </div>
-                    <div id="kaiz-mvu-initvar-pill" class="kaiz-status-pill badge-neutral">InitVar: ?</div>
-                    <div id="kaiz-mvu-rules-pill" class="kaiz-status-pill badge-neutral">Quy tắc: ?</div>
-                    <div id="kaiz-mvu-ejs-pill" class="kaiz-status-pill badge-neutral" style="display: none">
+                    <div id="kaiz-mvu-initvar-pill" class="kaiz-status-pill badge-neutral interactable" style="cursor: pointer;" title="Nhấn để mở Bảng hoạt động Lorebook">InitVar: ?</div>
+                    <div id="kaiz-mvu-rules-pill" class="kaiz-status-pill badge-neutral interactable" style="cursor: pointer;" title="Nhấn để mở Bảng hoạt động Lorebook">Quy tắc: ?</div>
+                    <div id="kaiz-mvu-format-pill" class="kaiz-status-pill badge-neutral interactable" style="cursor: pointer;" title="Nhấn để mở Bảng hoạt động Lorebook">Định dạng: ?</div>
+                    <div id="kaiz-mvu-varlist-pill" class="kaiz-status-pill badge-neutral interactable" style="cursor: pointer;" title="Nhấn để mở Bảng hoạt động Lorebook">Danh sách: ?</div>
+                    <div id="kaiz-mvu-ejs-pill" class="kaiz-status-pill badge-neutral interactable" style="display: none; cursor: pointer;" title="Nhấn để mở Bảng hoạt động Lorebook">
                         EJS: ?
                     </div>
                 </div>
@@ -1886,6 +1891,13 @@
             <!-- Tab 1: Stats Visual Cards -->
             <div id="kaiz-mvu-tab-stats" class="kaiz-mvu-tab-content active">
                 <div id="kaiz-mvu-stats-grid" class="kaiz-mvu-categories-container">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Tab: Activity / Lorebook MVU Health Table -->
+            <div id="kaiz-mvu-tab-activity" class="kaiz-mvu-tab-content">
+                <div id="kaiz-mvu-activity-container" class="kaiz-mvu-activity-view">
                     <!-- Rendered by JS -->
                 </div>
             </div>

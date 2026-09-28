@@ -5333,3 +5333,397 @@
     font-size: 13px;
     font-style: italic;
 }
+
+/* ==========================================================================
+   Bảng Hoạt Động MVU / Lorebook Activity Inspector
+   ========================================================================== */
+.kaiz-mvu-activity-view {
+    padding: 4px;
+}
+
+.kaiz-mvu-activity-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* 1. Summary Banner */
+.kaiz-mvu-activity-banner {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+    transition: all 0.25s ease;
+}
+
+.kaiz-mvu-activity-banner.banner-success {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(15, 23, 42, 0.6) 100%);
+    border: 1px solid rgba(16, 185, 129, 0.35);
+    box-shadow: 0 4px 20px rgba(16, 185, 129, 0.1);
+}
+
+.kaiz-mvu-activity-banner.banner-danger {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(15, 23, 42, 0.7) 100%);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    box-shadow: 0 4px 24px rgba(239, 68, 68, 0.15);
+}
+
+.kaiz-mvu-banner-icon {
+    font-size: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.banner-success .kaiz-mvu-banner-icon {
+    color: #34d399;
+    filter: drop-shadow(0 0 8px rgba(52, 211, 153, 0.4));
+}
+
+.banner-danger .kaiz-mvu-banner-icon {
+    color: #f87171;
+    filter: drop-shadow(0 0 10px rgba(248, 113, 113, 0.5));
+}
+
+.kaiz-mvu-banner-content {
+    flex: 1;
+}
+
+.kaiz-mvu-banner-title {
+    margin: 0 0 4px 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: #f8fafc;
+    letter-spacing: -0.2px;
+}
+
+.kaiz-mvu-banner-desc {
+    margin: 0;
+    font-size: 12.5px;
+    color: #94a3b8;
+    line-height: 1.45;
+}
+
+.kaiz-mvu-banner-stats {
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+.kaiz-mvu-banner-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 14px;
+    border-radius: 8px;
+    min-width: 90px;
+}
+
+.kaiz-mvu-banner-metric.metric-success {
+    background: rgba(16, 185, 129, 0.15);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.kaiz-mvu-banner-metric.metric-danger {
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.2);
+}
+
+.kaiz-mvu-banner-metric .metric-num {
+    font-size: 16px;
+    font-weight: 800;
+    line-height: 1.2;
+}
+
+.metric-success .metric-num {
+    color: #34d399;
+}
+
+.metric-danger .metric-num {
+    color: #f87171;
+}
+
+.kaiz-mvu-banner-metric .metric-lbl {
+    font-size: 10.5px;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 2px;
+}
+
+/* 2. Table Card & Header */
+.kaiz-mvu-activity-table-card {
+    background: rgba(15, 23, 42, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.kaiz-mvu-activity-table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: rgba(30, 41, 59, 0.4);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.kaiz-mvu-activity-table-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.kaiz-mvu-activity-legend {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 11.5px;
+    color: #94a3b8;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+}
+
+.legend-dot.dot-active {
+    background: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.5);
+}
+
+.legend-dot.dot-inactive {
+    background: #ef4444;
+    box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+}
+
+.legend-dot.dot-warning {
+    background: #f59e0b;
+    box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+}
+
+/* 3. Table Elements */
+.kaiz-mvu-activity-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    text-align: left;
+}
+
+.kaiz-mvu-activity-table th {
+    padding: 11px 14px;
+    background: rgba(30, 41, 59, 0.6);
+    color: #94a3b8;
+    font-weight: 600;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.kaiz-mvu-activity-table td {
+    padding: 13px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    vertical-align: top;
+    color: #cbd5e1;
+}
+
+/* Row Status Accents */
+.kaiz-mvu-activity-row {
+    transition: background 0.15s;
+}
+
+.kaiz-mvu-activity-row:hover td {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.kaiz-mvu-activity-row.row-active {
+    border-left: 3px solid rgba(16, 185, 129, 0.6);
+}
+
+.kaiz-mvu-activity-row.row-warning {
+    border-left: 3px solid rgba(245, 158, 11, 0.8);
+    background: rgba(245, 158, 11, 0.03);
+}
+
+/* ROW INACTIVE: MÀU ĐỎ RỰC RỠ ĐÚNG YÊU CẦU */
+.kaiz-mvu-activity-row.row-inactive {
+    border-left: 3px solid #ef4444;
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.kaiz-mvu-activity-row.row-inactive:hover td {
+    background: rgba(239, 68, 68, 0.09);
+}
+
+.kaiz-mvu-activity-row.row-optional {
+    border-left: 3px solid rgba(148, 163, 184, 0.3);
+}
+
+/* Column Specific Styles */
+.kaiz-mvu-criterion-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.kaiz-mvu-criterion-name {
+    font-weight: 600;
+    color: #f1f5f9;
+    font-size: 13px;
+}
+
+.kaiz-mvu-req-tag {
+    font-size: 9.5px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.kaiz-mvu-req-tag.required {
+    background: rgba(239, 68, 68, 0.18);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.35);
+}
+
+.kaiz-mvu-req-tag.optional {
+    background: rgba(148, 163, 184, 0.15);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.kaiz-mvu-criterion-desc {
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+/* Entry Badges */
+.kaiz-mvu-entry-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    border-radius: 6px;
+    padding: 4px 9px;
+    color: #38bdf8;
+    font-weight: 600;
+    font-size: 12px;
+    max-width: 100%;
+    word-break: break-word;
+}
+
+.kaiz-mvu-entry-badge i {
+    color: #38bdf8;
+    font-size: 11px;
+}
+
+.kaiz-mvu-entry-missing {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(239, 68, 68, 0.18);
+    border: 1px solid rgba(239, 68, 68, 0.45);
+    border-radius: 6px;
+    padding: 4px 9px;
+    color: #f87171;
+    font-weight: 700;
+    font-size: 11.5px;
+}
+
+.kaiz-mvu-location-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: #94a3b8;
+    margin-top: 5px;
+}
+
+.kaiz-mvu-location-tag i {
+    color: #a78bfa;
+}
+
+.kaiz-mvu-location-tag.empty {
+    color: #64748b;
+}
+
+/* Status Badges */
+.kaiz-mvu-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.kaiz-mvu-status-badge.status-active {
+    background: rgba(16, 185, 129, 0.18);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.kaiz-mvu-status-badge.status-warning {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.45);
+}
+
+/* STATUS INACTIVE: MÀU ĐỎ RỰC RỠ NỔI BẬT */
+.kaiz-mvu-status-badge.status-inactive {
+    background: rgba(239, 68, 68, 0.25);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.6);
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.3);
+}
+
+.kaiz-mvu-status-badge.status-optional {
+    background: rgba(148, 163, 184, 0.12);
+    color: #94a3b8;
+    border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.kaiz-mvu-criterion-details {
+    font-size: 11.5px;
+    color: #cbd5e1;
+    line-height: 1.45;
+}
+
+/* Footer Hint */
+.kaiz-mvu-activity-footer-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(15, 23, 42, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.4;
+}
+
+.kaiz-mvu-activity-footer-hint i {
+    color: #38bdf8;
+    margin-top: 2px;
+    flex-shrink: 0;
+}

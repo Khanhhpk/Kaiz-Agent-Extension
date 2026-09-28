@@ -16890,42 +16890,178 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           return { success: true, oldValue, newValue };
       }
       /**
+       * Nhận diện entry Format dựa trên cấu trúc giao thức đầu ra (XML tags / JSONPatch template / rule protocol list).
+       * Hoàn toàn độc lập với ngôn ngữ hay cách đặt tên comment của tác giả thẻ.
+       */
+      static isFormatEntryContent(content, comment = '') {
+          if (!content)
+              return false;
+          const lower = content.toLowerCase();
+          // Loại trừ nếu là controller hoặc status variable list
+          if (this.isControllerEntryContent(content) ||
+              (this.isVarListEntryContent(content) && !lower.includes('jsonpatch'))) {
+              return false;
+          }
+          // 1. Chứa closing tags hoặc block giao thức MVU Output đặc thù
+          const hasOutputProtocolTags = lower.includes('</update_variable_rules>') ||
+              lower.includes('</updatevariable>') ||
+              lower.includes('</jsonpatch>') ||
+              lower.includes('<update_variable_rules>') ||
+              (lower.includes('<updatevariable>') && lower.includes('<jsonpatch>'));
+          // 2. Chứa mảng JSON Patch template: [ { "op": ... } ]
+          const hasJsonPatchTemplate = /\[\s*\{\s*["']op["']\s*:/i.test(content) ||
+              (lower.includes('"op":') && lower.includes('"path":') && (lower.includes('replace') || lower.includes('delta')));
+          // 3. Phân tích cấu trúc YAML: Format entry thường có dạng { [root]: { rule: [...] } }
+          let hasRuleProtocolList = false;
+          try {
+              const parsed = YAML.parse(content);
+              if (parsed && typeof parsed === 'object') {
+                  const firstVal = Object.values(parsed)[0];
+                  if (firstVal && typeof firstVal === 'object') {
+                      if (Array.isArray(firstVal.rule) || Array.isArray(firstVal.rules)) {
+                          hasRuleProtocolList = true;
+                      }
+                  }
+              }
+          }
+          catch { }
+          // Format entry KHÔNG bao giờ chứa các block 'check:' định nghĩa điều kiện cho từng biến
+          const hasVariableCheckBlocks = /^\s{2,}(?:check|\bcheck\b)\s*:\s*(?:$|\n|\s*\[)/m.test(content);
+          if (hasRuleProtocolList && !hasVariableCheckBlocks)
+              return true;
+          if (hasOutputProtocolTags && !hasVariableCheckBlocks)
+              return true;
+          if (hasJsonPatchTemplate && !hasVariableCheckBlocks)
+              return true;
+          return false;
+      }
+      /**
+       * Nhận diện entry Rules dựa trên cấu trúc quy tắc cập nhật biến (check blocks / YAML variable mapping).
+       */
+      static isRulesEntryContent(content, comment = '') {
+          if (!content)
+              return false;
+          if (this.isFormatEntryContent(content, comment))
+              return false;
+          if (this.isControllerEntryContent(content))
+              return false;
+          // 1. Đặc trưng cốt lõi: Khối YAML 'check:' thụt lề định nghĩa điều kiện cập nhật từng biến
+          const hasVariableCheckBlocks = /^\s{2,}(?:check|\bcheck\b)\s*:\s*(?:$|\n|\s*\[)/m.test(content);
+          if (hasVariableCheckBlocks)
+              return true;
+          // 2. Phân tích AST của YAML: Tìm cấu trúc Root -> Path -> Object có 'check' hoặc 'type' + 'range'
+          try {
+              const parsed = YAML.parse(content);
+              if (parsed && typeof parsed === 'object') {
+                  const values = Object.values(parsed);
+                  for (const val of values) {
+                      if (val && typeof val === 'object') {
+                          const subEntries = Object.values(val);
+                          const matchingSub = subEntries.filter((s) => s &&
+                              typeof s === 'object' &&
+                              ('check' in s || ('type' in s && 'range' in s)));
+                          if (matchingSub.length > 0)
+                              return true;
+                      }
+                  }
+              }
+          }
+          catch { }
+          // 3. Fallback: Định dạng Markdown rule liệt kê điều kiện cập nhật biến (như Shirley)
+          const lower = content.toLowerCase();
+          if (lower.includes('【cập nhật biến】') || lower.includes('quy tắc cập nhật') || lower.includes('update rules')) {
+              return true;
+          }
+          return false;
+      }
+      /**
+       * Nhận diện entry Status / Variable List dựa trên macro hiển thị biến hoặc thẻ trạng thái
+       */
+      static isVarListEntryContent(content) {
+          if (!content)
+              return false;
+          return (content.includes('{{format_message_variable::') ||
+              content.includes('<status_current_variable>') ||
+              content.includes('<status_current_variables>'));
+      }
+      /**
+       * Nhận diện entry Controller / Preprocessing dựa trên @@preprocessing hoặc EJS code
+       */
+      static isControllerEntryContent(content) {
+          if (!content)
+              return false;
+          return (content.includes('@@preprocessing') ||
+              (content.includes('<%') && (content.includes('getvar(') || content.includes('setvar('))));
+      }
+      /**
+       * Phân loại một tập hợp các Lorebook Entry thành cấu trúc MVU dựa trên đặc trưng cấu trúc nội dung (Content DNA).
+       * Hoàn toàn độc lập với thứ tự, ngôn ngữ và tên gọi.
+       */
+      static classifyLorebookEntries(entries) {
+          const result = {};
+          if (!Array.isArray(entries) || entries.length === 0)
+              return result;
+          // Pass 1: Tìm InitVar chuẩn theo MVU Core specification (bắt buộc theo bundle.js @365298)
+          for (const entry of entries) {
+              const comment = (entry?.comment || entry?.name || '').toLowerCase();
+              const content = entry?.content || '';
+              if (comment.includes('[initvar]') ||
+                  comment.includes('initvar') ||
+                  /<initvar>[\s\S]*<\/initvar>/i.test(content)) {
+                  result.initvarEntry = entry;
+                  break;
+              }
+          }
+          // Pass 2: Phân loại các entry còn lại theo đặc trưng cấu trúc nội dung
+          for (const entry of entries) {
+              if (entry === result.initvarEntry)
+                  continue;
+              const content = entry?.content || '';
+              const comment = entry?.comment || entry?.name || '';
+              if (!result.ejsControllerEntry && this.isControllerEntryContent(content)) {
+                  result.ejsControllerEntry = entry;
+                  continue;
+              }
+              if (!result.varListEntry && this.isVarListEntryContent(content)) {
+                  result.varListEntry = entry;
+                  continue;
+              }
+              if (!result.formatEntry && this.isFormatEntryContent(content, comment)) {
+                  result.formatEntry = entry;
+                  continue;
+              }
+              if (!result.updateRulesEntry && this.isRulesEntryContent(content, comment)) {
+                  result.updateRulesEntry = entry;
+                  continue;
+              }
+          }
+          // Pass 3: Fallback trường hợp đặc biệt (ví dụ card Shirley kết hợp văn bản cập nhật biến bên trong mục chứa status_current_variable)
+          if (!result.updateRulesEntry) {
+              for (const entry of entries) {
+                  const content = entry?.content || '';
+                  if (content.includes('【Cập Nhật Biến】') || content.includes('【cập nhật biến】')) {
+                      result.updateRulesEntry = entry;
+                      break;
+                  }
+              }
+          }
+          return result;
+      }
+      /**
        * Tìm các entry Worldbook liên quan đến MVU
        */
       static async getLorebookMvuEntries(adapter, char) {
-          const result = {};
-          // 1. Kiểm tra embedded character_book
+          // 1. Phân loại trong embedded character_book
           const embeddedEntries = char?.data?.character_book?.entries || [];
-          for (const entry of embeddedEntries) {
-              const comment = (entry.comment || '').toLowerCase();
-              const content = (entry.content || '').toLowerCase();
-              if (comment.includes('initvar') || comment.includes('khởi tạo biến') || comment.includes('[initvar]')) {
-                  result.initvarEntry = entry;
-              }
-              else if (comment.includes('mvu_update') ||
-                  comment.includes('quy tắc cập nhật') ||
-                  comment.includes('cập nhật biến') ||
-                  content.includes('【cập nhật biến】') ||
-                  content.includes('quy tắc cập nhật')) {
-                  result.updateRulesEntry = entry;
-              }
-              else if (comment.includes('mvu_format') ||
-                  comment.includes('định dạng đầu ra') ||
-                  comment.includes('output_format')) {
-                  result.formatEntry = entry;
-              }
-              else if (comment.includes('biến') && comment.includes('danh sách')) {
-                  result.varListEntry = entry;
-              }
-              else if (content.includes('@@preprocessing') ||
-                  comment.includes('bộ điều khiển') ||
-                  comment.includes('preprocessing')) {
-                  result.ejsControllerEntry = entry;
+          for (const e of embeddedEntries) {
+              if (e && typeof e === 'object' && !e._mvuLocation) {
+                  e._mvuLocation = 'Character Book (Sổ tay nhúng)';
               }
           }
-          // 2. Nếu nhân vật có linked Worldbook (Sổ tay thế giới liên kết ngoài), kiểm tra trong đó
+          const result = this.classifyLorebookEntries(embeddedEntries);
+          // 2. Nếu nhân vật có linked Worldbook (Sổ tay liên kết ngoài), bổ sung các mục còn thiếu
           const linkedWorld = char?.data?.extensions?.world || char?.world;
-          if (linkedWorld && (!result.initvarEntry || !result.updateRulesEntry)) {
+          if (linkedWorld && (!result.initvarEntry || !result.updateRulesEntry || !result.formatEntry)) {
               try {
                   const ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
                   if (ST_WorldInfo && typeof ST_WorldInfo.loadWorldInfo === 'function') {
@@ -16935,24 +17071,22 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                               ? worldData.entries
                               : Object.values(worldData.entries)
                           : [];
-                      for (const entry of entries) {
-                          const comment = (entry?.comment || entry?.name || '').toLowerCase();
-                          const content = (entry?.content || '').toLowerCase();
-                          if (!result.initvarEntry &&
-                              (comment.includes('initvar') ||
-                                  comment.includes('khởi tạo biến') ||
-                                  comment.includes('[initvar]'))) {
-                              result.initvarEntry = entry;
-                          }
-                          if (!result.updateRulesEntry &&
-                              (comment.includes('mvu_update') ||
-                                  comment.includes('quy tắc cập nhật') ||
-                                  comment.includes('cập nhật biến') ||
-                                  content.includes('【cập nhật biến】') ||
-                                  content.includes('quy tắc cập nhật'))) {
-                              result.updateRulesEntry = entry;
+                      for (const e of entries) {
+                          if (e && typeof e === 'object' && !e._mvuLocation) {
+                              e._mvuLocation = `Sổ tay liên kết ngoài (${linkedWorld})`;
                           }
                       }
+                      const linkedResult = this.classifyLorebookEntries(entries);
+                      if (!result.initvarEntry && linkedResult.initvarEntry)
+                          result.initvarEntry = linkedResult.initvarEntry;
+                      if (!result.updateRulesEntry && linkedResult.updateRulesEntry)
+                          result.updateRulesEntry = linkedResult.updateRulesEntry;
+                      if (!result.formatEntry && linkedResult.formatEntry)
+                          result.formatEntry = linkedResult.formatEntry;
+                      if (!result.varListEntry && linkedResult.varListEntry)
+                          result.varListEntry = linkedResult.varListEntry;
+                      if (!result.ejsControllerEntry && linkedResult.ejsControllerEntry)
+                          result.ejsControllerEntry = linkedResult.ejsControllerEntry;
                   }
               }
               catch (e) {
@@ -16968,26 +17102,284 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       : worldInfo?.entries && typeof worldInfo.entries === 'object'
                           ? Object.values(worldInfo.entries)
                           : [];
-                  for (const entry of entries) {
-                      const comment = (entry?.comment || '').toLowerCase();
-                      const content = (entry?.content || '').toLowerCase();
-                      if (!result.initvarEntry && (comment.includes('initvar') || comment.includes('khởi tạo biến'))) {
-                          result.initvarEntry = entry;
-                      }
-                      if (!result.updateRulesEntry &&
-                          (comment.includes('mvu_update') ||
-                              comment.includes('quy tắc cập nhật') ||
-                              comment.includes('cập nhật biến') ||
-                              content.includes('【cập nhật biến】'))) {
-                          result.updateRulesEntry = entry;
+                  for (const e of entries) {
+                      if (e && typeof e === 'object' && !e._mvuLocation) {
+                          e._mvuLocation = 'Sổ tay chung SillyTavern (Global)';
                       }
                   }
+                  const globalResult = this.classifyLorebookEntries(entries);
+                  if (!result.initvarEntry && globalResult.initvarEntry)
+                      result.initvarEntry = globalResult.initvarEntry;
+                  if (!result.updateRulesEntry && globalResult.updateRulesEntry)
+                      result.updateRulesEntry = globalResult.updateRulesEntry;
+                  if (!result.formatEntry && globalResult.formatEntry)
+                      result.formatEntry = globalResult.formatEntry;
+                  if (!result.varListEntry && globalResult.varListEntry)
+                      result.varListEntry = globalResult.varListEntry;
+                  if (!result.ejsControllerEntry && globalResult.ejsControllerEntry)
+                      result.ejsControllerEntry = globalResult.ejsControllerEntry;
               }
               catch {
                   // Ignore lorebook search errors
               }
           }
           return result;
+      }
+      /**
+       * Tạo bảng báo cáo kiểm tra chi tiết hoạt động của các tiêu chí Lorebook MVU.
+       * Chỉ kiểm tra Lorebook: Khởi tạo biến, Quy tắc cập nhật, Định dạng đầu ra, Danh sách biến, Bộ điều khiển EJS.
+       */
+      static generateLorebookActivityReport(lorebookMvu) {
+          const items = [];
+          // 1. Khởi tạo biến (InitVar)
+          const initvar = lorebookMvu.initvarEntry;
+          if (initvar) {
+              const entryName = initvar.comment || initvar.name || '[InitVar]';
+              const location = initvar._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isDisabled = initvar.enabled === false || initvar.disable === true;
+              if (isDisabled) {
+                  items.push({
+                      id: 'initvar',
+                      name: 'Khởi tạo biến ban đầu (InitVar)',
+                      description: 'Thiết lập cây dữ liệu ban đầu. Bắt buộc VÔ HIỆU HÓA để không tốn token prompt.',
+                      entryName,
+                      entryId: initvar.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đã tắt đúng chuẩn)',
+                      details: 'Đã tìm thấy entry khởi tạo biến và đã được vô hiệu hóa đúng chuẩn MVU để tiết kiệm 100% token.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'initvar',
+                      name: 'Khởi tạo biến ban đầu (InitVar)',
+                      description: 'Thiết lập cây dữ liệu ban đầu. Bắt buộc VÔ HIỆU HÓA để không tốn token prompt.',
+                      entryName,
+                      entryId: initvar.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'warning',
+                      statusText: 'Cảnh báo: Đang bật',
+                      details: 'Đã tìm thấy entry nhưng đang BẬT. Nên TẮT (disable) mục này trong Worldbook để tránh tốn prompt token thừa.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'initvar',
+                  name: 'Khởi tạo biến ban đầu (InitVar)',
+                  description: 'Thiết lập cây dữ liệu ban đầu. Bắt buộc VÔ HIỆU HÓA để không tốn token prompt.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry [InitVar] trong Lorebook. Nhân vật sẽ không có điểm bắt đầu cho cây biến số.',
+              });
+          }
+          // 2. Quy tắc cập nhật biến (Update Rules)
+          const rules = lorebookMvu.updateRulesEntry;
+          if (rules) {
+              const entryName = rules.comment || rules.name || '[mvu_update] Quy tắc cập nhật';
+              const location = rules._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isEnabled = rules.enabled !== false && !rules.disable;
+              if (isEnabled) {
+                  items.push({
+                      id: 'rules',
+                      name: 'Quy tắc cập nhật biến (Update Rules)',
+                      description: 'Cung cấp các điều kiện check: hướng dẫn AI khi nào thay đổi biến trong ngữ cảnh.',
+                      entryName,
+                      entryId: rules.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đang Bật)',
+                      details: 'Entry quy tắc đang BẬT (enabled). AI sẽ đọc được đầy đủ các điều kiện cập nhật biến.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'rules',
+                      name: 'Quy tắc cập nhật biến (Update Rules)',
+                      description: 'Cung cấp các điều kiện check: hướng dẫn AI khi nào thay đổi biến trong ngữ cảnh.',
+                      entryName,
+                      entryId: rules.id,
+                      location,
+                      isRequired: true,
+                      isActive: false,
+                      status: 'inactive',
+                      statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
+                      details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhận được quy tắc cập nhật biến.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'rules',
+                  name: 'Quy tắc cập nhật biến (Update Rules)',
+                  description: 'Cung cấp các điều kiện check: hướng dẫn AI khi nào thay đổi biến trong ngữ cảnh.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry quy tắc cập nhật trong Lorebook. AI sẽ không biết khi nào cần thay đổi biến.',
+              });
+          }
+          // 3. Định dạng đầu ra (Output Format)
+          const format = lorebookMvu.formatEntry;
+          if (format) {
+              const entryName = format.comment || format.name || '[mvu_update] Định dạng xuất';
+              const location = format._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isEnabled = format.enabled !== false && !format.disable;
+              if (isEnabled) {
+                  items.push({
+                      id: 'format',
+                      name: 'Định dạng đầu ra (Output Format)',
+                      description: 'Chỉ dẫn AI xuất đúng định dạng JSON Patch / thẻ <UpdateVariable> ở cuối tin nhắn.',
+                      entryName,
+                      entryId: format.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đang Bật)',
+                      details: 'Entry định dạng xuất đang BẬT. AI sẽ được chỉ dẫn xuất đúng khối lệnh cập nhật biến.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'format',
+                      name: 'Định dạng đầu ra (Output Format)',
+                      description: 'Chỉ dẫn AI xuất đúng định dạng JSON Patch / thẻ <UpdateVariable> ở cuối tin nhắn.',
+                      entryName,
+                      entryId: format.id,
+                      location,
+                      isRequired: true,
+                      isActive: false,
+                      status: 'inactive',
+                      statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
+                      details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI có thể không xuất lệnh cập nhật biến.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'format',
+                  name: 'Định dạng đầu ra (Output Format)',
+                  description: 'Chỉ dẫn AI xuất đúng định dạng JSON Patch / thẻ <UpdateVariable> ở cuối tin nhắn.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry định dạng xuất trong Lorebook. AI có thể chỉ trả lời văn xuôi mà không cập nhật biến.',
+              });
+          }
+          // 4. Danh sách biến hiện tại (Variable List)
+          const varList = lorebookMvu.varListEntry;
+          if (varList) {
+              const entryName = varList.comment || varList.name || 'Danh sách biến';
+              const location = varList._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              const isEnabled = varList.enabled !== false && !varList.disable;
+              if (isEnabled) {
+                  items.push({
+                      id: 'varlist',
+                      name: 'Danh sách biến hiện tại (Variable List)',
+                      description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                      entryName,
+                      entryId: varList.id,
+                      location,
+                      isRequired: true,
+                      isActive: true,
+                      status: 'active',
+                      statusText: 'Đang hoạt động (Đang Bật)',
+                      details: 'Entry danh sách biến đang BẬT. AI luôn nắm bắt được trạng thái biến mới nhất trước khi phản hồi.',
+                  });
+              }
+              else {
+                  items.push({
+                      id: 'varlist',
+                      name: 'Danh sách biến hiện tại (Variable List)',
+                      description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                      entryName,
+                      entryId: varList.id,
+                      location,
+                      isRequired: true,
+                      isActive: false,
+                      status: 'inactive',
+                      statusText: 'KHÔNG HOẠT ĐỘNG (Bị Tắt)',
+                      details: 'Entry này đang bị VÔ HIỆU HÓA trong Worldbook! AI sẽ không nhìn thấy giá trị biến hiện tại.',
+                  });
+              }
+          }
+          else {
+              items.push({
+                  id: 'varlist',
+                  name: 'Danh sách biến hiện tại (Variable List)',
+                  description: 'Đưa giá trị biến hiện tại vào prompt AI qua macro {{format_message_variable::stat_data}}.',
+                  entryName: 'Không tìm thấy',
+                  location: '—',
+                  isRequired: true,
+                  isActive: false,
+                  status: 'inactive',
+                  statusText: 'KHÔNG HOẠT ĐỘNG (Thiếu)',
+                  details: 'Chưa có entry danh sách biến chứa macro stat_data trong Lorebook. AI sẽ bị mù dữ liệu biến.',
+              });
+          }
+          // 5. Bộ điều khiển EJS / Preprocessing (Tùy chọn)
+          const ejs = lorebookMvu.ejsControllerEntry;
+          if (ejs) {
+              const entryName = ejs.comment || ejs.name || 'Bộ điều khiển EJS';
+              const location = ejs._mvuLocation || 'Character Book (Sổ tay nhúng)';
+              items.push({
+                  id: 'controller',
+                  name: 'Bộ điều khiển động EJS / Preprocessing (Tùy chọn)',
+                  description: 'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
+                  entryName,
+                  entryId: ejs.id,
+                  location,
+                  isRequired: false,
+                  isActive: true,
+                  status: 'active',
+                  statusText: 'Đã kích hoạt',
+                  details: 'Đã phát hiện bộ điều khiển EJS trong Lorebook, hỗ trợ render bối cảnh và tính cách nhân vật động.',
+              });
+          }
+          else {
+              items.push({
+                  id: 'controller',
+                  name: 'Bộ điều khiển động EJS / Preprocessing (Tùy chọn)',
+                  description: 'Kịch bản template EJS điều khiển phân giai đoạn và thay đổi bối cảnh linh hoạt theo biến.',
+                  entryName: 'Không sử dụng',
+                  location: '—',
+                  isRequired: false,
+                  isActive: true,
+                  status: 'optional_none',
+                  statusText: 'Tùy chọn (Không bắt buộc)',
+                  details: 'Thẻ hoạt động theo Zod Schema tiêu chuẩn, không sử dụng template EJS mở rộng.',
+              });
+          }
+          const requiredItems = items.filter((i) => i.isRequired);
+          const inactiveCount = requiredItems.filter((i) => !i.isActive).length;
+          const warningCount = requiredItems.filter((i) => i.status === 'warning').length;
+          const activeCount = requiredItems.filter((i) => i.isActive && i.status !== 'warning').length;
+          return {
+              totalCriteria: items.length,
+              activeCount: activeCount + warningCount,
+              inactiveCount,
+              warningCount,
+              allRequiredActive: inactiveCount === 0,
+              items,
+          };
       }
       /**
        * Bóc tách cây Schema từ code Zod JavaScript (hỗ trợ nested z.object đệ quy)
@@ -17756,6 +18148,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
               }
           }
+          const lorebookActivity = this.generateLorebookActivityReport(lorebookMvu);
           return {
               hasMvu: isMvu,
               characterName: charName,
@@ -17773,6 +18166,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               ejsControllerSummary: lorebookMvu.ejsControllerEntry?.comment || '',
               healthWarnings: warnings,
               inconsistencies,
+              lorebookActivity,
           };
       }
       /**
@@ -18021,9 +18415,11 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               try {
                   const ruleData = YAML.parse(lorebookMvu.updateRulesEntry.content) || {};
                   const keys = Object.keys(ruleData);
-                  let rootKey = keys.find((k) => k === 'Quy_tắc_cập_nhật' || k === 'Update_Rules');
+                  let rootKey = keys.find((k) => /^(quy_tắc_cập_nhật|update_rules?|变量更新规则|cập_nhật_biến)/i.test(k.replace(/[\s_]/g, '_')));
                   if (!rootKey && keys.length > 0) {
-                      rootKey = keys[0];
+                      if (typeof ruleData[keys[0]] === 'object' && ruleData[keys[0]] !== null) {
+                          rootKey = keys[0];
+                      }
                   }
                   if (!rootKey) {
                       rootKey = 'Quy_tắc_cập_nhật';
@@ -18071,17 +18467,15 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       typeof ST_WorldInfo.saveWorldInfo === 'function') {
                       const worldData = await ST_WorldInfo.loadWorldInfo(linkedWorld);
                       if (worldData && worldData.entries) {
-                          for (const entry of Object.values(worldData.entries)) {
-                              const c = (entry.comment || entry.name || '').toLowerCase();
-                              if (lorebookMvu.initvarEntry && (c.includes('initvar') || c.includes('khởi tạo biến'))) {
-                                  entry.content = lorebookMvu.initvarEntry.content;
-                              }
-                              if (lorebookMvu.updateRulesEntry &&
-                                  (c.includes('mvu_update') ||
-                                      c.includes('quy tắc cập nhật') ||
-                                      c.includes('cập nhật biến'))) {
-                                  entry.content = lorebookMvu.updateRulesEntry.content;
-                              }
+                          const rawEntries = Array.isArray(worldData.entries)
+                              ? worldData.entries
+                              : Object.values(worldData.entries);
+                          const classified = this.classifyLorebookEntries(rawEntries);
+                          if (classified.initvarEntry && lorebookMvu.initvarEntry) {
+                              classified.initvarEntry.content = lorebookMvu.initvarEntry.content;
+                          }
+                          if (classified.updateRulesEntry && lorebookMvu.updateRulesEntry) {
+                              classified.updateRulesEntry.content = lorebookMvu.updateRulesEntry.content;
                           }
                           await ST_WorldInfo.saveWorldInfo(linkedWorld, worldData, true);
                           if (typeof ST_WorldInfo.reloadEditor === 'function') {
@@ -28028,6 +28422,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const tab = $(e.currentTarget).data('tab');
               this.switchTab(tab);
           });
+          // 4.1 Bấm vào Ribbon Pills nhảy sang Tab Bảng hoạt động
+          $('#kaiz-mvu-initvar-pill, #kaiz-mvu-rules-pill, #kaiz-mvu-format-pill, #kaiz-mvu-varlist-pill, #kaiz-mvu-ejs-pill')
+              .off('click')
+              .on('click', () => {
+              this.switchTab('activity');
+          });
           // 5. Chuyển Chế Độ Khởi Tạo MVU (khi nhân vật chưa có MVU)
           $('.kaiz-mvu-scaffold-tab')
               .off('click')
@@ -28308,44 +28708,91 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const allDescriptors = this.flattenDescriptorsForSchema(report.parsedSchema);
           $('#kaiz-mvu-stat-count').text(allDescriptors.length);
           $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'MagVarUpdate / MVU');
-          if (report.initvarVariables) {
-              $('#kaiz-mvu-initvar-pill')
-                  .text('InitVar: OK')
-                  .removeClass('badge-neutral badge-danger')
-                  .addClass('badge-success');
-          }
-          else {
-              $('#kaiz-mvu-initvar-pill')
-                  .text('InitVar: Thiếu')
-                  .removeClass('badge-neutral badge-success')
-                  .addClass('badge-danger');
-          }
-          if (report.updateRulesSummary) {
-              $('#kaiz-mvu-rules-pill')
-                  .text('Quy tắc: OK')
-                  .removeClass('badge-neutral badge-danger')
-                  .addClass('badge-success');
-          }
-          else {
-              $('#kaiz-mvu-rules-pill')
-                  .text('Quy tắc: Thiếu')
-                  .removeClass('badge-neutral badge-success')
-                  .addClass('badge-danger');
-          }
-          const ejsPill = $('#kaiz-mvu-ejs-pill');
-          if (ejsPill.length) {
-              if (report.hasEjsController) {
-                  ejsPill
-                      .text('EJS: OK')
-                      .attr('title', report.ejsControllerSummary
-                      ? `Bộ điều khiển: ${report.ejsControllerSummary}`
-                      : 'Có bộ điều khiển EJS Preprocessing động')
-                      .removeClass('badge-neutral badge-danger')
-                      .addClass('badge-success')
-                      .show();
+          if (report.lorebookActivity) {
+              const act = report.lorebookActivity;
+              const initItem = act.items.find((i) => i.id === 'initvar');
+              const rulesItem = act.items.find((i) => i.id === 'rules');
+              const formatItem = act.items.find((i) => i.id === 'format');
+              const varlistItem = act.items.find((i) => i.id === 'varlist');
+              const ejsItem = act.items.find((i) => i.id === 'controller');
+              const updatePill = (id, item, defaultLabel) => {
+                  const el = $(`#${id}`);
+                  if (!el.length)
+                      return;
+                  if (!item) {
+                      el.text(`${defaultLabel}: ?`)
+                          .removeClass('badge-success badge-danger badge-warning')
+                          .addClass('badge-neutral');
+                      return;
+                  }
+                  el.removeClass('badge-success badge-danger badge-warning badge-neutral');
+                  if (item.status === 'active') {
+                      el.text(`${defaultLabel}: OK`).addClass('badge-success');
+                  }
+                  else if (item.status === 'warning') {
+                      el.text(`${defaultLabel}: Bật`).addClass('badge-warning');
+                  }
+                  else if (item.status === 'inactive') {
+                      el.text(`${defaultLabel}: Thiếu`).addClass('badge-danger');
+                  }
+                  else {
+                      el.text(`${defaultLabel}: —`).addClass('badge-neutral');
+                  }
+                  el.attr('title', `Nhấn để mở Bảng hoạt động · Entry: "${item.entryName}" (${item.statusText})`);
+              };
+              updatePill('kaiz-mvu-initvar-pill', initItem, 'InitVar');
+              updatePill('kaiz-mvu-rules-pill', rulesItem, 'Quy tắc');
+              updatePill('kaiz-mvu-format-pill', formatItem, 'Định dạng');
+              updatePill('kaiz-mvu-varlist-pill', varlistItem, 'Danh sách');
+              const ejsPill = $('#kaiz-mvu-ejs-pill');
+              if (ejsItem && ejsItem.status === 'active') {
+                  updatePill('kaiz-mvu-ejs-pill', ejsItem, 'EJS');
+                  ejsPill.show();
               }
               else {
                   ejsPill.hide();
+              }
+          }
+          else {
+              if (report.initvarVariables) {
+                  $('#kaiz-mvu-initvar-pill')
+                      .text('InitVar: OK')
+                      .removeClass('badge-neutral badge-danger')
+                      .addClass('badge-success');
+              }
+              else {
+                  $('#kaiz-mvu-initvar-pill')
+                      .text('InitVar: Thiếu')
+                      .removeClass('badge-neutral badge-success')
+                      .addClass('badge-danger');
+              }
+              if (report.updateRulesSummary) {
+                  $('#kaiz-mvu-rules-pill')
+                      .text('Quy tắc: OK')
+                      .removeClass('badge-neutral badge-danger')
+                      .addClass('badge-success');
+              }
+              else {
+                  $('#kaiz-mvu-rules-pill')
+                      .text('Quy tắc: Thiếu')
+                      .removeClass('badge-neutral badge-success')
+                      .addClass('badge-danger');
+              }
+              const ejsPill = $('#kaiz-mvu-ejs-pill');
+              if (ejsPill.length) {
+                  if (report.hasEjsController) {
+                      ejsPill
+                          .text('EJS: OK')
+                          .attr('title', report.ejsControllerSummary
+                          ? `Bộ điều khiển: ${report.ejsControllerSummary}`
+                          : 'Có bộ điều khiển EJS Preprocessing động')
+                          .removeClass('badge-neutral badge-danger')
+                          .addClass('badge-success')
+                          .show();
+                  }
+                  else {
+                      ejsPill.hide();
+                  }
               }
           }
           // 2. Cảnh báo Inconsistencies / Warnings
@@ -28364,9 +28811,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           // 3. Render Tab 1: Stats Grid
           this.renderStatsTab(report);
-          // 4. Render Tab 2: Schema Table
+          // 4. Render Tab 2: Activity / Lorebook MVU Table
+          this.renderActivityTab(report);
+          // 5. Render Tab 3: Schema Table
           this.renderSchemaTab(allDescriptors, report);
-          // 5. Render Tab 3: Raw / YAML Panes
+          // 6. Render Tab 4: Raw / YAML Panes
           this.renderRawTab(report);
       }
       flattenDescriptorsForSchema(descriptors) {
@@ -28770,6 +29219,155 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           $('#kaiz-mvu-raw-zod').text(report.zodSchemaCode || 'Không tìm thấy Zod Schema script.');
           $('#kaiz-mvu-raw-initvar').text(report.initvarVariables ? YAML.stringify(report.initvarVariables) : 'Chưa có Worldbook [InitVar].');
           $('#kaiz-mvu-raw-rules').text(report.updateRulesSummary || 'Chưa có Worldbook [mvu_update].');
+      }
+      renderActivityTab(report) {
+          const $ = jQuery;
+          const container = $('#kaiz-mvu-activity-container');
+          if (!container.length)
+              return;
+          const act = report.lorebookActivity;
+          if (!act) {
+              container.html(`
+                <div class="kaiz-mvu-empty-badge" style="padding: 24px; text-align: center;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: #f59e0b; margin-bottom: 8px; display: block;"></i>
+                    Chưa có dữ liệu kiểm tra Lorebook MVU. Vui lòng bấm nút làm mới ở góc phải.
+                </div>
+            `);
+              return;
+          }
+          const isAllOk = act.allRequiredActive;
+          const statusBannerClass = isAllOk ? 'banner-success' : 'banner-danger';
+          const bannerIcon = isAllOk ? 'fa-circle-check' : 'fa-triangle-exclamation';
+          const bannerTitle = isAllOk
+              ? 'Hệ thống Lorebook MVU đạt chuẩn hoạt động'
+              : `Phát hiện ${act.inactiveCount} tiêu chí Lorebook MVU chưa hoạt động!`;
+          const bannerSubtitle = isAllOk
+              ? 'Tất cả các tiêu chí cốt lõi (Khởi tạo biến, Quy tắc cập nhật, Định dạng xuất, Danh sách biến) đã được cấu hình chuẩn xác trong Worldbook.'
+              : 'Các tiêu chí hiển thị màu đỏ bên dưới đang bị thiếu hoặc bị tắt trong Worldbook. AI sẽ không thể đọc hiểu hoặc cập nhật biến.';
+          let rowsHtml = '';
+          for (const item of act.items) {
+              let rowStatusClass = '';
+              let statusBadgeClass = '';
+              let iconHtml = '';
+              if (item.status === 'active') {
+                  rowStatusClass = 'row-active';
+                  statusBadgeClass = 'status-active';
+                  iconHtml = '<i class="fa-solid fa-circle-check"></i>';
+              }
+              else if (item.status === 'warning') {
+                  rowStatusClass = 'row-warning';
+                  statusBadgeClass = 'status-warning';
+                  iconHtml = '<i class="fa-solid fa-triangle-exclamation"></i>';
+              }
+              else if (item.status === 'inactive') {
+                  // ĐỎ RỰC RỠ: Tiêu chí không hoạt động
+                  rowStatusClass = 'row-inactive';
+                  statusBadgeClass = 'status-inactive';
+                  iconHtml = '<i class="fa-solid fa-circle-xmark"></i>';
+              }
+              else {
+                  rowStatusClass = 'row-optional';
+                  statusBadgeClass = 'status-optional';
+                  iconHtml = '<i class="fa-solid fa-circle-minus"></i>';
+              }
+              const isMissing = item.entryName === 'Không tìm thấy' || item.entryName === 'Không sử dụng';
+              const entryDisplay = !isMissing
+                  ? `<div class="kaiz-mvu-entry-badge" title="Entry ID: ${escapeHtml(item.entryId ?? 'N/A')}">
+                    <i class="fa-solid fa-bookmark"></i>
+                    <span class="kaiz-mvu-entry-name">${escapeHtml(item.entryName)}</span>
+                   </div>`
+                  : `<span class="kaiz-mvu-entry-missing"><i class="fa-solid fa-ban"></i> ${escapeHtml(item.entryName)}</span>`;
+              const locationBadge = item.location && item.location !== '—'
+                  ? `<div class="kaiz-mvu-location-tag"><i class="fa-solid fa-book-atlas"></i> <span>${escapeHtml(item.location)}</span></div>`
+                  : `<div class="kaiz-mvu-location-tag empty"><span>—</span></div>`;
+              const reqBadge = item.isRequired
+                  ? '<span class="kaiz-mvu-req-tag required">Bắt buộc</span>'
+                  : '<span class="kaiz-mvu-req-tag optional">Tùy chọn</span>';
+              rowsHtml += `
+                <tr class="kaiz-mvu-activity-row ${rowStatusClass}">
+                    <td class="col-criterion">
+                        <div class="kaiz-mvu-criterion-header">
+                            <span class="kaiz-mvu-criterion-name">${escapeHtml(item.name)}</span>
+                            ${reqBadge}
+                        </div>
+                        <div class="kaiz-mvu-criterion-desc">${escapeHtml(item.description)}</div>
+                    </td>
+                    <td class="col-entry">
+                        ${entryDisplay}
+                        ${locationBadge}
+                    </td>
+                    <td class="col-status">
+                        <span class="kaiz-mvu-status-badge ${statusBadgeClass}">
+                            ${iconHtml} <span>${escapeHtml(item.statusText)}</span>
+                        </span>
+                    </td>
+                    <td class="col-details">
+                        <div class="kaiz-mvu-criterion-details">${escapeHtml(item.details)}</div>
+                    </td>
+                </tr>
+            `;
+          }
+          const html = `
+            <div class="kaiz-mvu-activity-wrapper">
+                <!-- Summary Banner -->
+                <div class="kaiz-mvu-activity-banner ${statusBannerClass}">
+                    <div class="kaiz-mvu-banner-icon"><i class="fa-solid ${bannerIcon}"></i></div>
+                    <div class="kaiz-mvu-banner-content">
+                        <h4 class="kaiz-mvu-banner-title">${bannerTitle}</h4>
+                        <p class="kaiz-mvu-banner-desc">${bannerSubtitle}</p>
+                    </div>
+                    <div class="kaiz-mvu-banner-stats">
+                        <div class="kaiz-mvu-banner-metric ${act.inactiveCount > 0 ? 'metric-danger' : 'metric-success'}">
+                            <span class="metric-num">${act.activeCount}/${act.totalCriteria}</span>
+                            <span class="metric-lbl">Tiêu chí đạt</span>
+                        </div>
+                        ${act.inactiveCount > 0 ? `
+                        <div class="kaiz-mvu-banner-metric metric-danger">
+                            <span class="metric-num">${act.inactiveCount}</span>
+                            <span class="metric-lbl">Không hoạt động</span>
+                        </div>` : ''}
+                    </div>
+                </div>
+
+                <!-- Lorebook Activity Table -->
+                <div class="kaiz-mvu-activity-table-card">
+                    <div class="kaiz-mvu-activity-table-header">
+                        <div class="kaiz-mvu-activity-table-title">
+                            <i class="fa-solid fa-list-check" style="color: #38bdf8;"></i>
+                            <span>Bảng Đối Chiếu Hoạt Động & Chỉ Điểm Entry Worldbook</span>
+                        </div>
+                        <div class="kaiz-mvu-activity-legend">
+                            <span class="legend-item"><span class="legend-dot dot-active"></span> Hoạt động</span>
+                            <span class="legend-item"><span class="legend-dot dot-inactive"></span> Không hoạt động</span>
+                            <span class="legend-item"><span class="legend-dot dot-warning"></span> Cảnh báo</span>
+                        </div>
+                    </div>
+                    <div class="kaiz-mvu-table-responsive">
+                        <table class="kaiz-mvu-activity-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 28%;">Tiêu chí MVU</th>
+                                    <th style="width: 25%;">Entry chỉ điểm (Worldbook)</th>
+                                    <th style="width: 20%;">Trạng thái hoạt động</th>
+                                    <th style="width: 27%;">Đánh giá & Chi tiết kỹ thuật</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="kaiz-mvu-activity-footer-hint">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>
+                        <strong>Ghi chú:</strong> Hệ thống tự động phân tích cấu trúc nội dung (Content DNA) của tất cả sổ tay liên kết và sổ tay nhúng của nhân vật. Các mục hiển thị <strong>màu đỏ</strong> sẽ khiến AI không thể đọc được quy tắc hoặc xuất lệnh cập nhật biến.
+                    </span>
+                </div>
+            </div>
+        `;
+          container.html(html);
       }
       renderBuilderList() {
           const $ = jQuery;

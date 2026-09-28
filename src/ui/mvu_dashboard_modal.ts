@@ -18,7 +18,7 @@ const escapeHtml = (str: any): string => {
 
 export class MvuDashboardModal {
     private currentReport: MvuInspectionResult | null = null;
-    private activeTab: 'stats' | 'schema' | 'raw' = 'stats';
+    private activeTab: 'stats' | 'activity' | 'schema' | 'raw' = 'stats';
     private builderVariables: MvuVariableInput[] = [];
     private selectedFloorId?: number;
 
@@ -122,8 +122,15 @@ export class MvuDashboardModal {
         $('.kaiz-mvu-tab')
             .off('click')
             .on('click', (e: any) => {
-                const tab = $(e.currentTarget).data('tab') as 'stats' | 'schema' | 'raw';
+                const tab = $(e.currentTarget).data('tab') as 'stats' | 'activity' | 'schema' | 'raw';
                 this.switchTab(tab);
+            });
+
+        // 4.1 Bấm vào Ribbon Pills nhảy sang Tab Bảng hoạt động
+        $('#kaiz-mvu-initvar-pill, #kaiz-mvu-rules-pill, #kaiz-mvu-format-pill, #kaiz-mvu-varlist-pill, #kaiz-mvu-ejs-pill')
+            .off('click')
+            .on('click', () => {
+                this.switchTab('activity');
             });
 
         // 5. Chuyển Chế Độ Khởi Tạo MVU (khi nhân vật chưa có MVU)
@@ -308,7 +315,7 @@ export class MvuDashboardModal {
         }
     }
 
-    private switchTab(tab: 'stats' | 'schema' | 'raw'): void {
+    private switchTab(tab: 'stats' | 'activity' | 'schema' | 'raw'): void {
         const $ = jQuery;
         this.activeTab = tab;
         $('.kaiz-mvu-tab').removeClass('active');
@@ -431,46 +438,90 @@ export class MvuDashboardModal {
         $('#kaiz-mvu-stat-count').text(allDescriptors.length);
         $('#kaiz-mvu-zod-name').text(report.zodScriptName || 'MagVarUpdate / MVU');
 
-        if (report.initvarVariables) {
-            $('#kaiz-mvu-initvar-pill')
-                .text('InitVar: OK')
-                .removeClass('badge-neutral badge-danger')
-                .addClass('badge-success');
-        } else {
-            $('#kaiz-mvu-initvar-pill')
-                .text('InitVar: Thiếu')
-                .removeClass('badge-neutral badge-success')
-                .addClass('badge-danger');
-        }
+        if (report.lorebookActivity) {
+            const act = report.lorebookActivity;
+            const initItem = act.items.find((i) => i.id === 'initvar');
+            const rulesItem = act.items.find((i) => i.id === 'rules');
+            const formatItem = act.items.find((i) => i.id === 'format');
+            const varlistItem = act.items.find((i) => i.id === 'varlist');
+            const ejsItem = act.items.find((i) => i.id === 'controller');
 
-        if (report.updateRulesSummary) {
-            $('#kaiz-mvu-rules-pill')
-                .text('Quy tắc: OK')
-                .removeClass('badge-neutral badge-danger')
-                .addClass('badge-success');
-        } else {
-            $('#kaiz-mvu-rules-pill')
-                .text('Quy tắc: Thiếu')
-                .removeClass('badge-neutral badge-success')
-                .addClass('badge-danger');
-        }
+            const updatePill = (id: string, item: any, defaultLabel: string) => {
+                const el = $(`#${id}`);
+                if (!el.length) return;
+                if (!item) {
+                    el.text(`${defaultLabel}: ?`)
+                        .removeClass('badge-success badge-danger badge-warning')
+                        .addClass('badge-neutral');
+                    return;
+                }
+                el.removeClass('badge-success badge-danger badge-warning badge-neutral');
+                if (item.status === 'active') {
+                    el.text(`${defaultLabel}: OK`).addClass('badge-success');
+                } else if (item.status === 'warning') {
+                    el.text(`${defaultLabel}: Bật`).addClass('badge-warning');
+                } else if (item.status === 'inactive') {
+                    el.text(`${defaultLabel}: Thiếu`).addClass('badge-danger');
+                } else {
+                    el.text(`${defaultLabel}: —`).addClass('badge-neutral');
+                }
+                el.attr('title', `Nhấn để mở Bảng hoạt động · Entry: "${item.entryName}" (${item.statusText})`);
+            };
 
-        const ejsPill = $('#kaiz-mvu-ejs-pill');
-        if (ejsPill.length) {
-            if (report.hasEjsController) {
-                ejsPill
-                    .text('EJS: OK')
-                    .attr(
-                        'title',
-                        report.ejsControllerSummary
-                            ? `Bộ điều khiển: ${report.ejsControllerSummary}`
-                            : 'Có bộ điều khiển EJS Preprocessing động',
-                    )
-                    .removeClass('badge-neutral badge-danger')
-                    .addClass('badge-success')
-                    .show();
+            updatePill('kaiz-mvu-initvar-pill', initItem, 'InitVar');
+            updatePill('kaiz-mvu-rules-pill', rulesItem, 'Quy tắc');
+            updatePill('kaiz-mvu-format-pill', formatItem, 'Định dạng');
+            updatePill('kaiz-mvu-varlist-pill', varlistItem, 'Danh sách');
+
+            const ejsPill = $('#kaiz-mvu-ejs-pill');
+            if (ejsItem && ejsItem.status === 'active') {
+                updatePill('kaiz-mvu-ejs-pill', ejsItem, 'EJS');
+                ejsPill.show();
             } else {
                 ejsPill.hide();
+            }
+        } else {
+            if (report.initvarVariables) {
+                $('#kaiz-mvu-initvar-pill')
+                    .text('InitVar: OK')
+                    .removeClass('badge-neutral badge-danger')
+                    .addClass('badge-success');
+            } else {
+                $('#kaiz-mvu-initvar-pill')
+                    .text('InitVar: Thiếu')
+                    .removeClass('badge-neutral badge-success')
+                    .addClass('badge-danger');
+            }
+
+            if (report.updateRulesSummary) {
+                $('#kaiz-mvu-rules-pill')
+                    .text('Quy tắc: OK')
+                    .removeClass('badge-neutral badge-danger')
+                    .addClass('badge-success');
+            } else {
+                $('#kaiz-mvu-rules-pill')
+                    .text('Quy tắc: Thiếu')
+                    .removeClass('badge-neutral badge-success')
+                    .addClass('badge-danger');
+            }
+
+            const ejsPill = $('#kaiz-mvu-ejs-pill');
+            if (ejsPill.length) {
+                if (report.hasEjsController) {
+                    ejsPill
+                        .text('EJS: OK')
+                        .attr(
+                            'title',
+                            report.ejsControllerSummary
+                                ? `Bộ điều khiển: ${report.ejsControllerSummary}`
+                                : 'Có bộ điều khiển EJS Preprocessing động',
+                        )
+                        .removeClass('badge-neutral badge-danger')
+                        .addClass('badge-success')
+                        .show();
+                } else {
+                    ejsPill.hide();
+                }
             }
         }
 
@@ -491,10 +542,13 @@ export class MvuDashboardModal {
         // 3. Render Tab 1: Stats Grid
         this.renderStatsTab(report);
 
-        // 4. Render Tab 2: Schema Table
+        // 4. Render Tab 2: Activity / Lorebook MVU Table
+        this.renderActivityTab(report);
+
+        // 5. Render Tab 3: Schema Table
         this.renderSchemaTab(allDescriptors, report);
 
-        // 5. Render Tab 3: Raw / YAML Panes
+        // 6. Render Tab 4: Raw / YAML Panes
         this.renderRawTab(report);
     }
 
@@ -932,6 +986,162 @@ export class MvuDashboardModal {
             report.initvarVariables ? YAML.stringify(report.initvarVariables) : 'Chưa có Worldbook [InitVar].',
         );
         $('#kaiz-mvu-raw-rules').text(report.updateRulesSummary || 'Chưa có Worldbook [mvu_update].');
+    }
+
+    private renderActivityTab(report: MvuInspectionResult): void {
+        const $ = jQuery;
+        const container = $('#kaiz-mvu-activity-container');
+        if (!container.length) return;
+
+        const act = report.lorebookActivity;
+        if (!act) {
+            container.html(`
+                <div class="kaiz-mvu-empty-badge" style="padding: 24px; text-align: center;">
+                    <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: #f59e0b; margin-bottom: 8px; display: block;"></i>
+                    Chưa có dữ liệu kiểm tra Lorebook MVU. Vui lòng bấm nút làm mới ở góc phải.
+                </div>
+            `);
+            return;
+        }
+
+        const isAllOk = act.allRequiredActive;
+        const statusBannerClass = isAllOk ? 'banner-success' : 'banner-danger';
+        const bannerIcon = isAllOk ? 'fa-circle-check' : 'fa-triangle-exclamation';
+        const bannerTitle = isAllOk
+            ? 'Hệ thống Lorebook MVU đạt chuẩn hoạt động'
+            : `Phát hiện ${act.inactiveCount} tiêu chí Lorebook MVU chưa hoạt động!`;
+        const bannerSubtitle = isAllOk
+            ? 'Tất cả các tiêu chí cốt lõi (Khởi tạo biến, Quy tắc cập nhật, Định dạng xuất, Danh sách biến) đã được cấu hình chuẩn xác trong Worldbook.'
+            : 'Các tiêu chí hiển thị màu đỏ bên dưới đang bị thiếu hoặc bị tắt trong Worldbook. AI sẽ không thể đọc hiểu hoặc cập nhật biến.';
+
+        let rowsHtml = '';
+        for (const item of act.items) {
+            let rowStatusClass = '';
+            let statusBadgeClass = '';
+            let iconHtml = '';
+
+            if (item.status === 'active') {
+                rowStatusClass = 'row-active';
+                statusBadgeClass = 'status-active';
+                iconHtml = '<i class="fa-solid fa-circle-check"></i>';
+            } else if (item.status === 'warning') {
+                rowStatusClass = 'row-warning';
+                statusBadgeClass = 'status-warning';
+                iconHtml = '<i class="fa-solid fa-triangle-exclamation"></i>';
+            } else if (item.status === 'inactive') {
+                // ĐỎ RỰC RỠ: Tiêu chí không hoạt động
+                rowStatusClass = 'row-inactive';
+                statusBadgeClass = 'status-inactive';
+                iconHtml = '<i class="fa-solid fa-circle-xmark"></i>';
+            } else {
+                rowStatusClass = 'row-optional';
+                statusBadgeClass = 'status-optional';
+                iconHtml = '<i class="fa-solid fa-circle-minus"></i>';
+            }
+
+            const isMissing = item.entryName === 'Không tìm thấy' || item.entryName === 'Không sử dụng';
+            const entryDisplay = !isMissing
+                ? `<div class="kaiz-mvu-entry-badge" title="Entry ID: ${escapeHtml(item.entryId ?? 'N/A')}">
+                    <i class="fa-solid fa-bookmark"></i>
+                    <span class="kaiz-mvu-entry-name">${escapeHtml(item.entryName)}</span>
+                   </div>`
+                : `<span class="kaiz-mvu-entry-missing"><i class="fa-solid fa-ban"></i> ${escapeHtml(item.entryName)}</span>`;
+
+            const locationBadge = item.location && item.location !== '—'
+                ? `<div class="kaiz-mvu-location-tag"><i class="fa-solid fa-book-atlas"></i> <span>${escapeHtml(item.location)}</span></div>`
+                : `<div class="kaiz-mvu-location-tag empty"><span>—</span></div>`;
+
+            const reqBadge = item.isRequired
+                ? '<span class="kaiz-mvu-req-tag required">Bắt buộc</span>'
+                : '<span class="kaiz-mvu-req-tag optional">Tùy chọn</span>';
+
+            rowsHtml += `
+                <tr class="kaiz-mvu-activity-row ${rowStatusClass}">
+                    <td class="col-criterion">
+                        <div class="kaiz-mvu-criterion-header">
+                            <span class="kaiz-mvu-criterion-name">${escapeHtml(item.name)}</span>
+                            ${reqBadge}
+                        </div>
+                        <div class="kaiz-mvu-criterion-desc">${escapeHtml(item.description)}</div>
+                    </td>
+                    <td class="col-entry">
+                        ${entryDisplay}
+                        ${locationBadge}
+                    </td>
+                    <td class="col-status">
+                        <span class="kaiz-mvu-status-badge ${statusBadgeClass}">
+                            ${iconHtml} <span>${escapeHtml(item.statusText)}</span>
+                        </span>
+                    </td>
+                    <td class="col-details">
+                        <div class="kaiz-mvu-criterion-details">${escapeHtml(item.details)}</div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        const html = `
+            <div class="kaiz-mvu-activity-wrapper">
+                <!-- Summary Banner -->
+                <div class="kaiz-mvu-activity-banner ${statusBannerClass}">
+                    <div class="kaiz-mvu-banner-icon"><i class="fa-solid ${bannerIcon}"></i></div>
+                    <div class="kaiz-mvu-banner-content">
+                        <h4 class="kaiz-mvu-banner-title">${bannerTitle}</h4>
+                        <p class="kaiz-mvu-banner-desc">${bannerSubtitle}</p>
+                    </div>
+                    <div class="kaiz-mvu-banner-stats">
+                        <div class="kaiz-mvu-banner-metric ${act.inactiveCount > 0 ? 'metric-danger' : 'metric-success'}">
+                            <span class="metric-num">${act.activeCount}/${act.totalCriteria}</span>
+                            <span class="metric-lbl">Tiêu chí đạt</span>
+                        </div>
+                        ${act.inactiveCount > 0 ? `
+                        <div class="kaiz-mvu-banner-metric metric-danger">
+                            <span class="metric-num">${act.inactiveCount}</span>
+                            <span class="metric-lbl">Không hoạt động</span>
+                        </div>` : ''}
+                    </div>
+                </div>
+
+                <!-- Lorebook Activity Table -->
+                <div class="kaiz-mvu-activity-table-card">
+                    <div class="kaiz-mvu-activity-table-header">
+                        <div class="kaiz-mvu-activity-table-title">
+                            <i class="fa-solid fa-list-check" style="color: #38bdf8;"></i>
+                            <span>Bảng Đối Chiếu Hoạt Động & Chỉ Điểm Entry Worldbook</span>
+                        </div>
+                        <div class="kaiz-mvu-activity-legend">
+                            <span class="legend-item"><span class="legend-dot dot-active"></span> Hoạt động</span>
+                            <span class="legend-item"><span class="legend-dot dot-inactive"></span> Không hoạt động</span>
+                            <span class="legend-item"><span class="legend-dot dot-warning"></span> Cảnh báo</span>
+                        </div>
+                    </div>
+                    <div class="kaiz-mvu-table-responsive">
+                        <table class="kaiz-mvu-activity-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 28%;">Tiêu chí MVU</th>
+                                    <th style="width: 25%;">Entry chỉ điểm (Worldbook)</th>
+                                    <th style="width: 20%;">Trạng thái hoạt động</th>
+                                    <th style="width: 27%;">Đánh giá & Chi tiết kỹ thuật</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rowsHtml}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="kaiz-mvu-activity-footer-hint">
+                    <i class="fa-solid fa-circle-info"></i>
+                    <span>
+                        <strong>Ghi chú:</strong> Hệ thống tự động phân tích cấu trúc nội dung (Content DNA) của tất cả sổ tay liên kết và sổ tay nhúng của nhân vật. Các mục hiển thị <strong>màu đỏ</strong> sẽ khiến AI không thể đọc được quy tắc hoặc xuất lệnh cập nhật biến.
+                    </span>
+                </div>
+            </div>
+        `;
+
+        container.html(html);
     }
 
     private renderBuilderList(): void {
