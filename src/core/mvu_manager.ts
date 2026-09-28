@@ -1525,7 +1525,7 @@ export class MvuManager {
                 } else if (c === '(') {
                     parenDepth++;
                 } else if (c === ')') {
-                    parenDepth--;
+                    if (parenDepth > 0) parenDepth--;
                 } else if (c === '{') {
                     braceDepth++;
                 } else if (c === '}') {
@@ -1534,7 +1534,7 @@ export class MvuManager {
                 } else if (c === '[') {
                     bracketDepth++;
                 } else if (c === ']') {
-                    bracketDepth--;
+                    if (bracketDepth > 0) bracketDepth--;
                 } else if (c === ',' && parenDepth === 0 && braceDepth === 0 && bracketDepth === 0) {
                     break;
                 }
@@ -2000,6 +2000,21 @@ export class MvuManager {
                 parsedSchema = this.generateSchemaFromData(liveVars);
             }
             this.enrichWithLiveData(parsedSchema, liveVars);
+
+            // Bổ sung các biến cấp gốc có trong liveVars nhưng chưa có trong parsedSchema (tự phục hồi toàn diện)
+            if (typeof liveVars === 'object') {
+                const existingTopKeys = new Set(parsedSchema.map((d) => d.name));
+                for (const [key, val] of Object.entries(liveVars)) {
+                    if (key.startsWith('$')) continue;
+                    if (!existingTopKeys.has(key)) {
+                        const extraDesc = this.generateSchemaFromData({ [key]: val });
+                        if (extraDesc.length > 0) {
+                            parsedSchema.push(...extraDesc);
+                            existingTopKeys.add(key);
+                        }
+                    }
+                }
+            }
         }
 
         // Kiểm tra tính nhất quán giữa Schema và InitVar (theo chuẩn Zod 4 & MVUZOD)
