@@ -143,28 +143,61 @@ export class MvuManager {
     }
 
     /**
-     * Kiểm tra xem nhân vật hiện tại có hệ thống MVU hay không
+     * Kiểm tra xem nhân vật hiện tại có hệ thống MVU hay không.
+     * Hỗ trợ toàn diện mọi thế hệ thẻ MVU (Gen 1 Lodash, Gen 2/2.5 Disjoint, Gen 3 Tiếng Việt):
+     * 1. Có kịch bản MVU/Zod trong TavernHelper scripts.
+     * 2. Hoặc có Lorebook MVU ([InitVar], <initvar>) nhúng trong Character Book.
+     * 3. Hoặc đã có biến stat_data đang hoạt động trong phiên trò chuyện.
      */
     public static hasMvu(char: any): boolean {
         if (!char) return false;
-        const scripts = char.data?.extensions?.tavern_helper?.scripts;
-        if (!scripts || typeof scripts !== 'object') return false;
 
-        for (const [key, script] of Object.entries(scripts)) {
-            const s = script as any;
-            const content = s?.content || '';
-            const scriptName = s?.name || key;
-            if (
-                scriptName.toLowerCase().includes('mvu') ||
-                scriptName.toLowerCase().includes('zod') ||
-                scriptName.includes('Cấu trúc biến') ||
-                content.includes('registerMvuSchema') ||
-                content.includes('MagVarUpdate') ||
-                content.includes('mvu_zod.js')
-            ) {
-                return true;
+        // 1. Kiểm tra TavernHelper scripts
+        const scripts = char.data?.extensions?.tavern_helper?.scripts;
+        if (scripts && typeof scripts === 'object') {
+            for (const [key, script] of Object.entries(scripts)) {
+                const s = script as any;
+                const content = s?.content || '';
+                const scriptName = s?.name || key;
+                if (
+                    scriptName.toLowerCase().includes('mvu') ||
+                    scriptName.toLowerCase().includes('zod') ||
+                    scriptName.includes('Cấu trúc biến') ||
+                    content.includes('registerMvuSchema') ||
+                    content.includes('MagVarUpdate') ||
+                    content.includes('mvu_zod.js')
+                ) {
+                    return true;
+                }
             }
         }
+
+        // 2. Kiểm tra Lorebook nhúng trong thẻ nhân vật (Character Book)
+        const entries = char.data?.character_book?.entries;
+        if (Array.isArray(entries) && entries.length > 0) {
+            const hasInitVar = entries.some((e: any) => {
+                const comment = (e?.comment || e?.name || '').toLowerCase();
+                const content = e?.content || '';
+                return (
+                    comment.includes('[initvar]') ||
+                    comment.includes('initvar') ||
+                    comment.includes('init_var') ||
+                    comment.includes('khởi tạo biến') ||
+                    /<initvar>[\s\S]*<\/initvar>/i.test(content)
+                );
+            });
+            if (hasInitVar) return true;
+        }
+
+        // 3. Kiểm tra dữ liệu runtime stat_data
+        if (
+            this.cachedStatData &&
+            typeof this.cachedStatData === 'object' &&
+            Object.keys(this.cachedStatData).length > 0
+        ) {
+            return true;
+        }
+
         return false;
     }
 
@@ -452,9 +485,96 @@ export class MvuManager {
     }
 
     /**
+     * Chuẩn hóa và bóc tách đường dẫn biến MVU thành mảng các tầng thuộc tính.
+     * Hỗ trợ linh hoạt và tương thích ngược 100%:
+     * - Dạng Dot-notation: "stat_data.Người chơi.Tu vi" -> ["Người chơi", "Tu vi"]
+     * - Dạng JSON Pointer (RFC 6902): "/Người chơi/Tu vi" -> ["Người chơi", "Tu vi"]
+     * - Dạng JSON Pointer có tiền tố: "/stat_data/Người chơi/Tu vi" -> ["Người chơi", "Tu vi"]
+     * - Dạng biến đơn: "Trạng_thái" -> ["Trạng_thái"]
+     */
+    public static normalizePathParts(rawPath?: string): string[] {
+        if (!rawPath) return [];
+        let clean = String(rawPath).trim();
+        if (!clean) return [];
+
+        // 1. Loại bỏ tiền tố stat_data ở đầu (cả dạng dot và slash)
+        clean = clean.replace(/^\/?stat_data[./]/, '');
+
+        // 2. Nếu là JSON Pointer (bắt đầu bằng /)
+        if (clean.startsWith('/')) {
+            return clean
+                .substring(1)
+                .split('/')
+                .map((p) =>
+                    p
+                        .trim()
+                        .replace(/~1/g, '/')
+                        .replace(/~0/g, '~')
+                        .replace(/^['"`](.*)['"`]$/, '$1'),
+                )
+                .filter(Boolean);
+        }
+
+        if (!clean || clean === 'stat_data') return [];
+
+        // 3. Nếu chứa /, phân tách theo / và unescape RFC 6901
+        if (clean.includes('/')) {
+            return clean
+                .split('/')
+                .map((p) =>
+                    p
+                        .trim()
+                        .replace(/~1/g, '/')
+                        .replace(/~0/g, '~')
+                        .replace(/^['"`](.*)['"`]$/, '$1'),
+                )
+                .filter(Boolean);
+        }
+
+        // 4. Phân tách theo dấu chấm ., hỗ trợ bọc nháy '...' hoặc "..."
+        const parts: string[] = [];
+        let current = '';
+        let inQuote = false;
+        let quoteChar = '';
+
+        for (let i = 0; i < clean.length; i++) {
+            const char = clean[i];
+            if (char === "'" || char === '"' || char === '`') {
+                if (!inQuote) {
+                    inQuote = true;
+                    quoteChar = char;
+                } else if (char === quoteChar) {
+                    inQuote = false;
+                    quoteChar = '';
+                } else {
+                    current += char;
+                }
+            } else if (char === '.' && !inQuote) {
+                if (current.trim().length > 0) {
+                    parts.push(current.trim().replace(/~1/g, '/').replace(/~0/g, '~'));
+                }
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        if (current.trim().length > 0) {
+            parts.push(current.trim().replace(/~1/g, '/').replace(/~0/g, '~'));
+        }
+        return parts.filter(Boolean);
+    }
+
+    /**
+     * Chuẩn hóa đường dẫn về dạng dot-notation phân cấp chuẩn
+     */
+    public static normalizePath(rawPath?: string): string {
+        return this.normalizePathParts(rawPath).join('.');
+    }
+
+    /**
      * Lấy toàn bộ biến thời gian thực của nhân vật (đã bóc tách sạch khỏi preset prompts)
      */
-    public static getLiveVariables(subPath?: string, messageId?: number): any {
+    public static getLiveVariables(subPath?: string, _messageId?: number): any {
         let data = this.cachedStatData;
         let wrapper = this.cachedWrapper;
 
@@ -488,15 +608,25 @@ export class MvuManager {
         if (!data) return null;
 
         if (subPath) {
-            const cleanPath = subPath.replace(/^stat_data\./, '');
-            const parts = cleanPath.split('.');
+            const parts = this.normalizePathParts(subPath);
+            if (parts.length === 0) return data;
 
-            // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU)
+            // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
             let curr = data;
             let found = true;
             for (const p of parts) {
-                if (curr && typeof curr === 'object' && p in curr) {
-                    curr = curr[p];
+                if (curr && typeof curr === 'object') {
+                    if (p in curr) {
+                        curr = curr[p];
+                    } else {
+                        const matchKey = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                        if (matchKey && matchKey in curr) {
+                            curr = curr[matchKey];
+                        } else {
+                            found = false;
+                            break;
+                        }
+                    }
                 } else {
                     found = false;
                     break;
@@ -509,8 +639,18 @@ export class MvuManager {
                 let rootCurr = wrapper;
                 let rootFound = true;
                 for (const p of parts) {
-                    if (rootCurr && typeof rootCurr === 'object' && p in rootCurr) {
-                        rootCurr = rootCurr[p];
+                    if (rootCurr && typeof rootCurr === 'object') {
+                        if (p in rootCurr) {
+                            rootCurr = rootCurr[p];
+                        } else {
+                            const matchKey = Object.keys(rootCurr).find((k) => k.toLowerCase() === p.toLowerCase());
+                            if (matchKey && matchKey in rootCurr) {
+                                rootCurr = rootCurr[matchKey];
+                            } else {
+                                rootFound = false;
+                                break;
+                            }
+                        }
                     } else {
                         rootFound = false;
                         break;
@@ -556,8 +696,11 @@ export class MvuManager {
             );
         }
 
-        const cleanPath = path.replace(/^stat_data\./, '');
-        const cleanParts = cleanPath.split('.');
+        const cleanParts = this.normalizePathParts(path);
+        if (cleanParts.length === 0) {
+            throw new Error('Đường dẫn biến không hợp lệ.');
+        }
+        const cleanPath = cleanParts.join('.');
         const oldValue = this.getLiveVariables(cleanPath, targetMessageId);
 
         // Tự động ép kiểu thông minh nếu truyền vào dạng chuỗi
@@ -586,22 +729,51 @@ export class MvuManager {
             let curr = obj;
             for (let i = 0; i < parts.length - 1; i++) {
                 const p = parts[i];
-                if (!curr[p] || typeof curr[p] !== 'object') {
-                    curr[p] = {};
+                let actualP = p;
+                if (curr && typeof curr === 'object' && !(p in curr)) {
+                    const match = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                    if (match) actualP = match;
                 }
-                curr = curr[p];
+                if (!curr[actualP] || typeof curr[actualP] !== 'object') {
+                    curr[actualP] = {};
+                }
+                curr = curr[actualP];
             }
-            const lastKey = parts[parts.length - 1];
+            const lastPart = parts[parts.length - 1];
+            let lastKey = lastPart;
+            if (curr && typeof curr === 'object' && !(lastPart in curr)) {
+                const match = Object.keys(curr).find((k) => k.toLowerCase() === lastPart.toLowerCase());
+                if (match) lastKey = match;
+            }
+
             const existing = curr[lastKey];
+
+            // Bảo toàn kiểu dữ liệu (Type Preservation):
+            // Nếu biến cũ đang là number mà giá trị truyền vào là chuỗi số -> ép kiểu number
+            let effectiveVal = val;
+            if (existing !== undefined && existing !== null) {
+                if (
+                    typeof existing === 'number' &&
+                    typeof val === 'string' &&
+                    !isNaN(Number(val)) &&
+                    val.trim() !== ''
+                ) {
+                    effectiveVal = Number(val);
+                } else if (typeof existing === 'boolean' && typeof val === 'string') {
+                    if (val.trim().toLowerCase() === 'true') effectiveVal = true;
+                    if (val.trim().toLowerCase() === 'false') effectiveVal = false;
+                }
+            }
+
             if (
                 Array.isArray(existing) &&
                 existing.length === 2 &&
                 typeof existing[1] === 'string' &&
                 (existing[0] === null || ['string', 'number', 'boolean'].includes(typeof existing[0]))
             ) {
-                existing[0] = val;
+                existing[0] = effectiveVal;
             } else {
-                curr[lastKey] = val;
+                curr[lastKey] = effectiveVal;
             }
         };
 
@@ -681,6 +853,27 @@ export class MvuManager {
     }
 
     /**
+     * Bóc tách các thẻ bao bọc (XML tags hoặc markdown code fences ```yaml ... ```) trước khi phân tích YAML/JSON
+     */
+    public static cleanContentForYaml(raw: string): string {
+        if (!raw) return '';
+        let s = raw.trim();
+        // Bóc tách thẻ XML như <initvar>...</initvar> hoặc <update_variable_rules>...</update_variable_rules>
+        const xmlMatch = s.match(/^<([a-zA-Z0-9_-]+)[^>]*>([\s\S]*?)<\/\1>$/i);
+        if (xmlMatch) {
+            s = xmlMatch[2].trim();
+        }
+        // Bóc tách markdown code fences ```yaml ... ``` hoặc ```json ... ``` hoặc ``` ... ```
+        if (s.startsWith('```')) {
+            const lines = s.split(/\r?\n/);
+            if (lines[0].startsWith('```')) lines.shift();
+            if (lines.length > 0 && lines[lines.length - 1].trim().startsWith('```')) lines.pop();
+            s = lines.join('\n').trim();
+        }
+        return s;
+    }
+
+    /**
      * Nhận diện entry Format dựa trên cấu trúc giao thức đầu ra (XML tags / JSONPatch template / rule protocol list).
      * Hoàn toàn độc lập với ngôn ngữ hay cách đặt tên comment của tác giả thẻ.
      */
@@ -691,30 +884,31 @@ export class MvuManager {
 
         if (this.isControllerEntryContent(content, comment)) return false;
 
-        if (lowerComment.includes('định dạng') || lowerComment.includes('format')) {
+        if (
+            lowerComment.includes('định dạng') ||
+            lowerComment.includes('format') ||
+            lowerComment.includes('格式') ||
+            lowerComment.includes('mvu_format')
+        ) {
             return true;
         }
 
-        // 1. Chứa closing tags hoặc block giao thức MVU Output đặc thù
+        // 1. Chứa closing tags hoặc block giao thức MVU Output đặc thù (<UpdateVariable> hoặc <update_variable_rules>)
         const hasOutputProtocolTags =
             lower.includes('</update_variable_rules>') ||
             lower.includes('</updatevariable>') ||
-            lower.includes('</jsonpatch>') ||
             lower.includes('<update_variable_rules>') ||
             (lower.includes('<updatevariable>') && lower.includes('<analysis>')) ||
             (lower.includes('<updatevariable>') && lower.includes('<jsonpatch>'));
 
-        // 2. Chứa mảng JSON Patch template: [ { "op": ... } ]
+        // 2. Chứa mảng JSON Patch template: [ { "op": ... } ] hoặc [ { "path": ... } ] hoặc khối <jsonpatch> chuẩn
         const hasJsonPatchTemplate =
-            /\[\s*\{\s*["']op["']\s*:/i.test(content) ||
-            (lower.includes('"op":') &&
-                lower.includes('"path":') &&
-                (lower.includes('replace') || lower.includes('delta')));
+            /\[\s*\{[^}]*?["']op["']\s*:/i.test(content) || (lower.includes('<jsonpatch>') && lower.includes('"op":'));
 
         // 3. Phân tích cấu trúc YAML: Format entry thường có dạng { [root]: { rule: [...] } }
         let hasRuleProtocolList = false;
         try {
-            const parsed = YAML.parse(content);
+            const parsed = YAML.parse(this.cleanContentForYaml(content));
             if (parsed && typeof parsed === 'object') {
                 const firstVal = Object.values(parsed)[0];
                 if (firstVal && typeof firstVal === 'object') {
@@ -728,11 +922,17 @@ export class MvuManager {
         // Format entry KHÔNG bao giờ chứa các block 'check:' định nghĩa điều kiện cho từng biến
         const hasVariableCheckBlocks = /^\s{2,}(?:check|\bcheck\b)\s*:\s*(?:$|\n|\s*\[)/m.test(content);
 
-        if (hasRuleProtocolList && !hasVariableCheckBlocks) return true;
+        if (
+            hasRuleProtocolList &&
+            !hasVariableCheckBlocks &&
+            (lower.includes('<updatevariable>') || lower.includes('jsonpatch'))
+        ) {
+            return true;
+        }
         if (hasOutputProtocolTags && !hasVariableCheckBlocks) return true;
         if (hasJsonPatchTemplate && !hasVariableCheckBlocks) return true;
 
-        // Trường hợp all-in-one như Shirley có format block riêng
+        // Trường hợp all-in-one có format block riêng
         if (lower.includes('format:') && lower.includes('<updatevariable>')) return true;
 
         return false;
@@ -751,8 +951,15 @@ export class MvuManager {
         if (
             lowerComment.includes('quy tắc cập nhật') ||
             lowerComment.includes('quy_tắc_cập_nhật') ||
+            lowerComment.includes('quy tắc biến') ||
+            lowerComment.includes('quy tắc và biến') ||
             lowerComment.includes('update_rule') ||
-            lowerComment.includes('update rules')
+            lowerComment.includes('update rules') ||
+            lowerComment.includes('mvu_update') ||
+            lowerComment.includes('mvu_rule') ||
+            lowerComment.includes('mvu rules') ||
+            lowerComment.includes('更新规则') ||
+            lowerComment.includes('变量更新')
         ) {
             return true;
         }
@@ -763,7 +970,7 @@ export class MvuManager {
 
         // 2. Phân tích AST của YAML: Tìm cấu trúc Root -> Path -> Object có 'check' hoặc 'type' + 'range'
         try {
-            const parsed = YAML.parse(content);
+            const parsed = YAML.parse(this.cleanContentForYaml(content));
             if (parsed && typeof parsed === 'object') {
                 const values = Object.values(parsed);
                 for (const val of values) {
@@ -778,17 +985,18 @@ export class MvuManager {
             }
         } catch {}
 
-        // 3. Fallback: Định dạng Markdown rule liệt kê điều kiện cập nhật biến (như Shirley, Quỷ Bí, Tiên Kiếm)
+        // 3. Fallback: Định dạng Markdown/YAML rule liệt kê điều kiện cập nhật biến phổ quát (không hardcode)
         if (
-            lower.includes('【cập nhật biến】') ||
+            lower.includes('cập nhật biến') ||
             lower.includes('quy tắc cập nhật') ||
-            lower.includes('tsundere_rules') ||
+            lower.includes('cập nhật mvu') ||
             (lower.includes('mỗi lượt') &&
                 lower.includes('biến') &&
                 (lower.includes('tối đa') ||
                     lower.includes('thay đổi') ||
                     lower.includes('tăng') ||
-                    lower.includes('giảm')))
+                    lower.includes('giảm'))) ||
+            (lower.includes('_.set') && (lower.includes('_.add') || lower.includes('_.insert')))
         ) {
             return true;
         }
@@ -807,13 +1015,19 @@ export class MvuManager {
         if (
             lowerComment.includes('danh sách biến') ||
             lowerComment.includes('variable list') ||
-            lowerComment.includes('status list')
+            lowerComment.includes('status list') ||
+            lowerComment.includes('mvu_vars') ||
+            lowerComment.includes('mvu_varlist') ||
+            lowerComment.includes('mvu_list') ||
+            lowerComment.includes('mvu_status') ||
+            lowerComment.includes('变量列表')
         ) {
             return true;
         }
 
         return (
             content.includes('{{format_message_variable::') ||
+            content.includes('{{get_message_variable::') ||
             lower.includes('<status_current_variable>') ||
             lower.includes('<status_current_variables>') ||
             lower.includes('<biến_trạng_thái') ||
@@ -837,7 +1051,11 @@ export class MvuManager {
             lowerComment.includes('định dạng') ||
             lowerComment.includes('format') ||
             lowerComment.includes('update_rule') ||
-            lowerComment.includes('initvar')
+            lowerComment.includes('mvu_update') ||
+            lowerComment.includes('mvu_rules') ||
+            lowerComment.includes('initvar') ||
+            lowerComment.includes('更新规则') ||
+            lowerComment.includes('格式')
         ) {
             return false;
         }
@@ -850,6 +1068,9 @@ export class MvuManager {
             lowerComment.includes('bộ điều khiển') ||
             lowerComment.includes('giai đoạn') ||
             lowerComment.includes('controller') ||
+            lowerComment.includes('mvu_plot') ||
+            lowerComment.includes('mvu_controller') ||
+            lowerComment.includes('控制器') ||
             lower.includes('phân giai đoạn') ||
             lower.includes('thời kỳ');
 
@@ -892,6 +1113,8 @@ export class MvuManager {
             if (
                 comment.includes('[initvar]') ||
                 comment.includes('initvar') ||
+                comment.includes('init_var') ||
+                comment.includes('khởi tạo biến') ||
                 /<initvar>[\s\S]*<\/initvar>/i.test(content)
             ) {
                 result.initvarEntry = entry;
@@ -908,19 +1131,36 @@ export class MvuManager {
                 !result.updateRulesEntry &&
                 (comment.includes('quy tắc cập nhật') ||
                     comment.includes('quy_tắc_cập_nhật') ||
+                    comment.includes('quy tắc và biến') ||
                     comment.includes('update_rule') ||
-                    comment.includes('update rules'))
+                    comment.includes('update rules') ||
+                    comment.includes('mvu_update') ||
+                    comment.includes('mvu_rule') ||
+                    comment.includes('mvu rules') ||
+                    comment.includes('更新规则') ||
+                    comment.includes('变量更新'))
             ) {
                 result.updateRulesEntry = entry;
             }
-            if (!result.formatEntry && (comment.includes('định dạng') || comment.includes('format'))) {
+            if (
+                !result.formatEntry &&
+                (comment.includes('định dạng') ||
+                    comment.includes('format') ||
+                    comment.includes('mvu_format') ||
+                    comment.includes('格式'))
+            ) {
                 result.formatEntry = entry;
             }
             if (
                 !result.varListEntry &&
                 (comment.includes('danh sách biến') ||
                     comment.includes('variable list') ||
-                    comment.includes('status list'))
+                    comment.includes('status list') ||
+                    comment.includes('mvu_vars') ||
+                    comment.includes('mvu_varlist') ||
+                    comment.includes('mvu_list') ||
+                    comment.includes('mvu_status') ||
+                    comment.includes('变量列表'))
             ) {
                 result.varListEntry = entry;
             }
@@ -937,17 +1177,18 @@ export class MvuManager {
                 continue;
             }
 
+            const isAllInOne =
+                (this.isVarListEntryContent(content, comment) &&
+                    (this.isFormatEntryContent(content, comment) || this.isRulesEntryContent(content, comment))) ||
+                (this.isFormatEntryContent(content, comment) && this.isRulesEntryContent(content, comment));
+
             if (!result.varListEntry && this.isVarListEntryContent(content, comment)) {
                 result.varListEntry = entry;
-                const isAllInOne =
-                    content.includes('【Cập Nhật Biến】') ||
-                    (content.includes('format:') && content.includes('<UpdateVariable>'));
                 if (!isAllInOne) continue;
             }
 
             if (!result.formatEntry && this.isFormatEntryContent(content, comment)) {
                 result.formatEntry = entry;
-                const isAllInOne = content.includes('【Cập Nhật Biến】') || content.includes('tsundere_rules');
                 if (!isAllInOne) continue;
             }
 
@@ -957,11 +1198,17 @@ export class MvuManager {
             }
         }
 
-        // Pass 3: Fallback nếu còn thiếu format hoặc rules do gom chung entry (All-in-one pattern như Shirley)
+        // Pass 3: Fallback nếu còn thiếu format hoặc rules do gom chung entry (All-in-one pattern như Shirley / KUBG)
         if (!result.formatEntry && result.updateRulesEntry) {
             const content = result.updateRulesEntry?.content || '';
             if (this.isFormatEntryContent(content)) {
                 result.formatEntry = result.updateRulesEntry;
+            }
+        }
+        if (!result.formatEntry && result.varListEntry) {
+            const content = result.varListEntry?.content || '';
+            if (this.isFormatEntryContent(content)) {
+                result.formatEntry = result.varListEntry;
             }
         }
         if (!result.updateRulesEntry && result.formatEntry) {
@@ -974,6 +1221,12 @@ export class MvuManager {
             const content = result.varListEntry?.content || '';
             if (this.isRulesEntryContent(content)) {
                 result.updateRulesEntry = result.varListEntry;
+            }
+        }
+        if (!result.varListEntry && result.updateRulesEntry) {
+            const content = result.updateRulesEntry?.content || '';
+            if (this.isVarListEntryContent(content)) {
+                result.varListEntry = result.updateRulesEntry;
             }
         }
 
@@ -1030,7 +1283,7 @@ export class MvuManager {
                     if (!result.ejsControllerEntry && linkedResult.ejsControllerEntry)
                         result.ejsControllerEntry = linkedResult.ejsControllerEntry;
                 }
-            } catch (e) {
+            } catch (_e) {
                 // Ignore
             }
         }
@@ -1774,11 +2027,21 @@ export class MvuManager {
         if (!liveData || typeof liveData !== 'object') return;
 
         for (const desc of descriptors) {
-            const parts = desc.path.split('.');
+            const parts = this.normalizePathParts(desc.path);
             let curr = liveData;
             for (const p of parts) {
-                if (curr && typeof curr === 'object' && p in curr) {
-                    curr = curr[p];
+                if (curr && typeof curr === 'object') {
+                    if (p in curr) {
+                        curr = curr[p];
+                    } else {
+                        const matchKey = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                        if (matchKey && matchKey in curr) {
+                            curr = curr[matchKey];
+                        } else {
+                            curr = undefined;
+                            break;
+                        }
+                    }
                 } else {
                     curr = undefined;
                     break;
@@ -2013,7 +2276,7 @@ export class MvuManager {
         let initvarParsed: any = null;
         if (lorebookMvu.initvarEntry?.content) {
             try {
-                initvarParsed = YAML.parse(lorebookMvu.initvarEntry.content);
+                initvarParsed = YAML.parse(this.cleanContentForYaml(lorebookMvu.initvarEntry.content));
             } catch (e) {
                 console.warn('[MvuManager] Failed to parse YAML of initvar:', e);
             }
@@ -2082,12 +2345,22 @@ export class MvuManager {
                     if (desc.defaultValue !== undefined) {
                         continue;
                     }
-                    const parts = desc.path.split('.');
+                    const parts = this.normalizePathParts(desc.path);
                     let curr = initvarParsed;
                     let found = true;
                     for (const p of parts) {
-                        if (curr && typeof curr === 'object' && p in curr) {
-                            curr = curr[p];
+                        if (curr && typeof curr === 'object') {
+                            if (p in curr) {
+                                curr = curr[p];
+                            } else {
+                                const matchKey = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                                if (matchKey && matchKey in curr) {
+                                    curr = curr[matchKey];
+                                } else {
+                                    found = false;
+                                    break;
+                                }
+                            }
                         } else {
                             found = false;
                             break;
@@ -2111,14 +2384,23 @@ export class MvuManager {
         let effectiveParsedSchema = parsedSchema;
 
         if (filterPath && typeof filterPath === 'string' && filterPath.trim()) {
-            const cleanFilter = filterPath.replace(/^stat_data\./, '').trim();
-            if (cleanFilter) {
-                const parts = cleanFilter.split('.');
+            const parts = this.normalizePathParts(filterPath);
+            const cleanFilter = parts.join('.');
+            if (parts.length > 0) {
                 const getDeep = (obj: any, pathParts: string[]) => {
                     let curr = obj;
                     for (const p of pathParts) {
-                        if (curr && typeof curr === 'object' && p in curr) {
-                            curr = curr[p];
+                        if (curr && typeof curr === 'object') {
+                            if (p in curr) {
+                                curr = curr[p];
+                            } else {
+                                const matchKey = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                                if (matchKey && matchKey in curr) {
+                                    curr = curr[matchKey];
+                                } else {
+                                    return undefined;
+                                }
+                            }
                         } else {
                             return undefined;
                         }
@@ -2205,8 +2487,9 @@ export class MvuManager {
 
         // 1. Cập nhật Zod Script
         let zodCode = zodScriptInfo.content;
-        const varPath = options.variablePath.replace(/^stat_data\./, '');
-        const parts = varPath.split('.');
+        const parts = this.normalizePathParts(options.variablePath);
+        if (parts.length === 0) throw new Error('Đường dẫn biến không hợp lệ.');
+        const varPath = parts.join('.');
         const leafName = parts[parts.length - 1];
 
         const buildZodLine = () => {
@@ -2494,30 +2777,64 @@ export class MvuManager {
         // 2. Cập nhật [InitVar] YAML
         if (lorebookMvu.initvarEntry?.content) {
             try {
-                const yamlData = YAML.parse(lorebookMvu.initvarEntry.content) || {};
+                const cleaned = this.cleanContentForYaml(lorebookMvu.initvarEntry.content);
+                const yamlData = YAML.parse(cleaned) || {};
                 if (options.action === 'add' || options.action === 'modify') {
                     let curr = yamlData;
                     for (let i = 0; i < parts.length - 1; i++) {
-                        if (!curr[parts[i]]) curr[parts[i]] = {};
-                        curr = curr[parts[i]];
+                        const p = parts[i];
+                        let actualP = p;
+                        if (curr && typeof curr === 'object' && !(p in curr)) {
+                            const match = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                            if (match) actualP = match;
+                        }
+                        if (!curr[actualP] || typeof curr[actualP] !== 'object') curr[actualP] = {};
+                        curr = curr[actualP];
                     }
-                    curr[leafName] =
+                    let lastKey = leafName;
+                    if (curr && typeof curr === 'object' && !(leafName in curr)) {
+                        const match = Object.keys(curr).find((k) => k.toLowerCase() === leafName.toLowerCase());
+                        if (match) lastKey = match;
+                    }
+                    curr[lastKey] =
                         options.defaultValue !== undefined ? options.defaultValue : options.type === 'number' ? 0 : '';
                 } else if (options.action === 'rename' && options.newName) {
                     let curr = yamlData;
                     for (let i = 0; i < parts.length - 1; i++) {
-                        if (curr[parts[i]]) curr = curr[parts[i]];
+                        const p = parts[i];
+                        let actualP = p;
+                        if (curr && typeof curr === 'object' && !(p in curr)) {
+                            const match = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                            if (match) actualP = match;
+                        }
+                        if (curr[actualP]) curr = curr[actualP];
                     }
-                    if (leafName in curr) {
-                        curr[options.newName] = curr[leafName];
-                        delete curr[leafName];
+                    let lastKey = leafName;
+                    if (curr && typeof curr === 'object' && !(leafName in curr)) {
+                        const match = Object.keys(curr).find((k) => k.toLowerCase() === leafName.toLowerCase());
+                        if (match) lastKey = match;
+                    }
+                    if (lastKey in curr) {
+                        curr[options.newName] = curr[lastKey];
+                        delete curr[lastKey];
                     }
                 } else if (options.action === 'delete') {
                     let curr = yamlData;
                     for (let i = 0; i < parts.length - 1; i++) {
-                        if (curr[parts[i]]) curr = curr[parts[i]];
+                        const p = parts[i];
+                        let actualP = p;
+                        if (curr && typeof curr === 'object' && !(p in curr)) {
+                            const match = Object.keys(curr).find((k) => k.toLowerCase() === p.toLowerCase());
+                            if (match) actualP = match;
+                        }
+                        if (curr[actualP]) curr = curr[actualP];
                     }
-                    delete curr[leafName];
+                    let lastKey = leafName;
+                    if (curr && typeof curr === 'object' && !(leafName in curr)) {
+                        const match = Object.keys(curr).find((k) => k.toLowerCase() === leafName.toLowerCase());
+                        if (match) lastKey = match;
+                    }
+                    delete curr[lastKey];
                 }
                 lorebookMvu.initvarEntry.content = YAML.stringify(yamlData);
                 modifiedFiles.push(`Worldbook: ${lorebookMvu.initvarEntry.comment || '[InitVar]'}`);
@@ -2529,7 +2846,8 @@ export class MvuManager {
         // 3. Cập nhật [mvu_update] Quy tắc
         if (lorebookMvu.updateRulesEntry?.content) {
             try {
-                const ruleData = YAML.parse(lorebookMvu.updateRulesEntry.content) || {};
+                const cleaned = this.cleanContentForYaml(lorebookMvu.updateRulesEntry.content);
+                const ruleData = YAML.parse(cleaned) || {};
                 const keys = Object.keys(ruleData);
                 let rootKey: string | undefined = keys.find((k) =>
                     /^(quy_tắc_cập_nhật|update_rules?|变量更新规则|cập_nhật_biến)/i.test(k.replace(/[\s_]/g, '_')),
@@ -2674,9 +2992,8 @@ export class MvuManager {
     private static buildVariableTree(variables: MvuVariableInput[]): any {
         const root: any = {};
         for (const v of variables) {
-            const cleanPath = v.path.replace(/^stat_data\./, '').trim();
-            if (!cleanPath) continue;
-            const parts = cleanPath.split('.');
+            const parts = this.normalizePathParts(v.path);
+            if (parts.length === 0) continue;
             let curr = root;
             for (let i = 0; i < parts.length - 1; i++) {
                 const part = parts[i];
@@ -2787,12 +3104,11 @@ export class MvuManager {
     private static renderRulesFromVariables(variables: MvuVariableInput[]): any {
         const rules: Record<string, any> = {};
         for (const v of variables) {
-            const cleanPath = v.path.replace(/^stat_data\./, '').trim();
-            if (!cleanPath) continue;
-
-            const parts = cleanPath.split('.');
+            const parts = this.normalizePathParts(v.path);
+            if (parts.length === 0) continue;
             const leafName = parts[parts.length - 1];
             if (leafName.startsWith('_') || leafName.startsWith('$')) continue;
+            const ruleKey = parts.join('.');
 
             const ruleObj: any = {
                 type: v.type,
@@ -2810,7 +3126,7 @@ export class MvuManager {
                 ruleObj.check = [v.description];
             }
 
-            rules[cleanPath] = ruleObj;
+            rules[ruleKey] = ruleObj;
         }
         return { Quy_tắc_cập_nhật: rules };
     }
@@ -2897,7 +3213,7 @@ export class MvuManager {
         if (options.customInitvarYaml) {
             if (typeof options.customInitvarYaml === 'string') {
                 try {
-                    initvarData = YAML.parse(options.customInitvarYaml);
+                    initvarData = YAML.parse(this.cleanContentForYaml(options.customInitvarYaml));
                 } catch {
                     initvarData = { raw: options.customInitvarYaml };
                 }
@@ -2909,7 +3225,7 @@ export class MvuManager {
         if (options.customRulesYaml) {
             if (typeof options.customRulesYaml === 'string') {
                 try {
-                    updateRulesData = YAML.parse(options.customRulesYaml);
+                    updateRulesData = YAML.parse(this.cleanContentForYaml(options.customRulesYaml));
                 } catch {
                     updateRulesData = { Quy_tắc_cập_nhật: { raw: options.customRulesYaml } };
                 }

@@ -15,7 +15,7 @@ export const setMvuVariableTool: ITool = {
                 path: {
                     type: 'string',
                     description:
-                        'Đường dẫn biến cần sửa (VD: "stat_data.Thuộc_tính.Sức_khỏe" hoặc "Trạng_thái" hoặc "Nhân_vật.Túi_đồ").',
+                        'Đường dẫn biến cần sửa, hỗ trợ cả dạng dấu chấm hoặc JSON Pointer (VD: "Người chơi.Tu vi.Chân nguyên", "/Người chơi/Tu vi/Chân nguyên", "stat_data.Thuộc_tính.Sức_khỏe" hoặc "Trạng_thái").',
                 },
                 value: {
                     description:
