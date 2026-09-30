@@ -714,7 +714,7 @@ export class MvuDashboardModal {
         const categoryName = parentParts.join(' ➔ ');
 
         let icon = 'fa-solid fa-folder-open';
-        let order = 50;
+        let order: number;
 
         // Ưu tiên các trường cấu hình/hệ thống có tiền tố "_"
         if (categoryName.startsWith('_')) {
@@ -855,7 +855,7 @@ export class MvuDashboardModal {
                     } else {
                         catHtml += `<div class="kaiz-mvu-card-value"><div class="kaiz-mvu-object-badge">`;
                         for (const [subK, subV] of entries) {
-                            let valStr = '';
+                            let valStr: string;
                             if (typeof subV === 'object' && subV !== null) {
                                 try {
                                     valStr = JSON.stringify(subV);
@@ -930,18 +930,18 @@ export class MvuDashboardModal {
 
         // Gắn sự kiện click inline edit
         container.find('.kaiz-mvu-inline-edit-btn').on('click', (e: any) => {
-            const path = $(e.currentTarget).data('path');
-            const editorId = `#editor-${path.replace(/\./g, '_')}`;
-            $(editorId).slideToggle(150);
+            const card = $(e.currentTarget).closest('.kaiz-mvu-stat-card');
+            card.find('.kaiz-mvu-inline-editor').slideToggle(150);
         });
 
         container.find('.kaiz-mvu-inline-save-btn').on('click', async (e: any) => {
+            const card = $(e.currentTarget).closest('.kaiz-mvu-stat-card');
             const path = $(e.currentTarget).data('path');
             const isJson = $(e.currentTarget).data('is-json') === true;
-            const editorId = `#editor-${path.replace(/\./g, '_')}`;
+            const editor = card.find('.kaiz-mvu-inline-editor');
             const inputVal = isJson
-                ? $(editorId).find('.kaiz-mvu-inline-textarea').val()
-                : $(editorId).find('.kaiz-mvu-inline-input').val();
+                ? editor.find('.kaiz-mvu-inline-textarea').val()
+                : editor.find('.kaiz-mvu-inline-input').val();
 
             let finalVal: any = inputVal;
             if (isJson) {
@@ -1115,9 +1115,9 @@ export class MvuDashboardModal {
 
         let rowsHtml = '';
         for (const item of act.items) {
-            let rowStatusClass = '';
-            let statusBadgeClass = '';
-            let iconHtml = '';
+            let rowStatusClass: string;
+            let statusBadgeClass: string;
+            let iconHtml: string;
 
             if (item.status === 'active') {
                 rowStatusClass = 'row-active';
