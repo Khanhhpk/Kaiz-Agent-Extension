@@ -25,6 +25,10 @@ export class MascotWidget {
     private bubbleTimeout: any = null;
     private returnToIdleTimeout: any = null;
 
+    // Autonomous Roaming movement state
+    private moveTimeout: any = null;
+    private isMovingState = false;
+
     // Dragging state
     private isDragging = false;
     private hasMoved = false;
@@ -120,6 +124,11 @@ export class MascotWidget {
     public setState(state: PetState, quote?: string, durationMs?: number): void {
         if (!this.imgEl) return;
         this.currentState = state;
+
+        // Nếu chuyển sang trạng thái làm việc hoặc báo lỗi/thành công, dừng ngay mọi di chuyển đi dạo
+        if (state === 'thinking' || state === 'working' || state === 'success' || state === 'error') {
+            this.stopMoving();
+        }
 
         // Clear any pending return to idle
         if (this.returnToIdleTimeout) {
@@ -256,6 +265,84 @@ export class MascotWidget {
         }
     }
 
+    public getPosition(): { x: number; y: number } {
+        if (!this.el) return { x: 0, y: 0 };
+        const rect = this.el.getBoundingClientRect();
+        return { x: rect.left, y: rect.top };
+    }
+
+    public isMoving(): boolean {
+        return this.isMovingState;
+    }
+
+    public stopMoving(): void {
+        if (this.moveTimeout) {
+            clearTimeout(this.moveTimeout);
+            this.moveTimeout = null;
+        }
+        if (this.el && this.isMovingState) {
+            this.isMovingState = false;
+            this.el.classList.remove('kaiz-pet-moving');
+            const rect = this.el.getBoundingClientRect();
+            this.el.style.transition = '';
+            this.el.style.left = `${rect.left}px`;
+            this.el.style.top = `${rect.top}px`;
+            this.el.style.right = 'auto';
+            this.el.style.bottom = 'auto';
+            this.savePosition(rect.left, rect.top);
+            if (this.currentState === 'bounce') {
+                this.setState('idle');
+            }
+        }
+    }
+
+    public moveTo(targetX: number, targetY: number, durationMs: number = 2200, onArrival?: () => void): void {
+        if (!this.el || !this.avatarEl || this.isDragging) return;
+        this.stopMoving();
+
+        const rect = this.el.getBoundingClientRect();
+        const currentX = rect.left;
+
+        // Lật mặt theo hướng di chuyển: sang trái thì scaleX(-1), sang phải thì scaleX(1)
+        if (targetX < currentX - 8) {
+            this.avatarEl.style.transform = 'scaleX(-1)';
+        } else if (targetX > currentX + 8) {
+            this.avatarEl.style.transform = 'scaleX(1)';
+        }
+
+        this.isMovingState = true;
+        this.el.classList.add('kaiz-pet-moving');
+
+        // Bật hoạt ảnh bounce khi di chuyển
+        this.setState('bounce');
+
+        // Thiết lập CSS transition mượt mà
+        const sec = (durationMs / 1000).toFixed(2);
+        this.el.style.transition = `left ${sec}s cubic-bezier(0.25, 1, 0.5, 1), top ${sec}s cubic-bezier(0.25, 1, 0.5, 1)`;
+
+        // Kích hoạt tọa độ mới
+        this.el.style.left = `${targetX}px`;
+        this.el.style.top = `${targetY}px`;
+        this.el.style.right = 'auto';
+        this.el.style.bottom = 'auto';
+
+        this.moveTimeout = setTimeout(() => {
+            this.moveTimeout = null;
+            this.isMovingState = false;
+            if (this.el) {
+                this.el.classList.remove('kaiz-pet-moving');
+                this.el.style.transition = '';
+            }
+            this.savePosition(targetX, targetY);
+            if (this.currentState === 'bounce') {
+                this.setState('idle');
+            }
+            if (onArrival) {
+                onArrival();
+            }
+        }, durationMs);
+    }
+
     private restorePosition(): void {
         if (!this.el) return;
         try {
@@ -304,6 +391,9 @@ export class MascotWidget {
             // Only respond to main button
             if (e.button !== 0) return;
             e.preventDefault();
+
+            // Dừng ngay di chuyển tự do nếu người dùng tương tác
+            this.stopMoving();
 
             this.isDragging = false;
             this.hasMoved = false;
@@ -421,6 +511,7 @@ export class MascotWidget {
     }
 
     public destroy(): void {
+        this.stopMoving();
         if (this.bubbleTimeout) clearTimeout(this.bubbleTimeout);
         if (this.returnToIdleTimeout) clearTimeout(this.returnToIdleTimeout);
         if (this.singleClickTimeout) clearTimeout(this.singleClickTimeout);

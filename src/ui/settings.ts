@@ -212,6 +212,7 @@ export class SettingsUI {
 
         $('#kaiz-pet-enabled').prop('checked', !!petConfig.enabled);
         $('#kaiz-pet-bubble-enabled').prop('checked', !!petConfig.bubbleEnabled);
+        $('#kaiz-pet-roaming-enabled').prop('checked', petConfig.roamingEnabled !== false);
         $('#kaiz-pet-scale').val(petConfig.scale || 96);
         $('#kaiz-pet-scale-val').text(`${petConfig.scale || 96}px`);
         $('#kaiz-pet-opacity').val(petConfig.opacity ?? 100);
@@ -223,6 +224,10 @@ export class SettingsUI {
 
         $('#kaiz-pet-bubble-enabled').on('change', function (this: HTMLInputElement) {
             mascot.updateConfig({ bubbleEnabled: !!this.checked });
+        });
+
+        $('#kaiz-pet-roaming-enabled').on('change', function (this: HTMLInputElement) {
+            mascot.updateConfig({ roamingEnabled: !!this.checked });
         });
 
         $('#kaiz-pet-scale').on('input change', function (this: HTMLInputElement) {

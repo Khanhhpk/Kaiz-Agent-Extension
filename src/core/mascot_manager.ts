@@ -17,8 +17,11 @@ export class MascotManager {
     private extPath = '';
     private config: PetConfig = { ...DEFAULT_PET_CONFIG };
     private idleTimer: any = null;
-    private readonly idleTimeoutMs = 180000; // 3 minutes idle -> sleep
+    private readonly idleTimeoutMs = 180000; // 3 minutes idle -> sleep (when roaming is disabled)
+    private roamTimer: any = null;
+    private wakeTimer: any = null;
     private isActionRunning = false;
+    private consecutiveRoams = 0;
     private loopUnsubscribe: (() => void) | null = null;
 
     private constructor() {}
@@ -58,8 +61,12 @@ export class MascotManager {
             this.connectLoop(loop);
         }
 
-        // 4. Start idle timer for sleep state
-        this.startIdleTimer();
+        // 4. Start autonomous roaming or idle timer
+        if (this.config.roamingEnabled) {
+            this.startRoamingLoop();
+        } else {
+            this.startIdleTimer();
+        }
 
         console.log('[KaizAgent] Virtual Assistance Pet (Crystal Slime Mascot) initialized.');
     }
@@ -75,43 +82,66 @@ export class MascotManager {
 
             switch (event.type) {
                 case 'think_start':
+                case 'step_start':
                     this.isActionRunning = true;
+                    this.stopRoaming();
                     this.resetIdleTimer();
                     this.setState('thinking', this.getRandomQuote('thinking'));
                     break;
 
-                case 'step_start':
-                    this.isActionRunning = true;
-                    this.resetIdleTimer();
-                    if (this.widget?.getState() !== 'working') {
-                        this.setState('thinking', this.getRandomQuote('thinking'));
-                    }
-                    break;
-
                 case 'tool_call': {
                     this.isActionRunning = true;
+                    this.stopRoaming();
                     this.resetIdleTimer();
                     const toolName = event.data?.name || 'Công cụ';
                     this.setState('working', `Đang dùng: ${toolName}... ⚡`);
                     break;
                 }
 
+                case 'tool_result':
+                    this.isActionRunning = true;
+                    this.stopRoaming();
+                    this.resetIdleTimer();
+                    this.setState('thinking', 'Đang đọc và phân tích kết quả công cụ... 💭');
+                    break;
+
                 case 'retry':
+                    this.stopRoaming();
                     this.resetIdleTimer();
                     this.setState('error', 'Đang thử lại kết nối... 🔄', 3500);
                     break;
 
                 case 'error':
                     this.isActionRunning = false;
+                    this.stopRoaming();
                     this.resetIdleTimer();
                     this.setState('error', 'Ối, có lỗi xảy ra rồi... 💦', 5000);
+                    setTimeout(() => {
+                        if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                            if (this.config.roamingEnabled) {
+                                this.startRoamingLoop();
+                            } else {
+                                this.resetIdleTimer();
+                            }
+                        }
+                    }, 5200);
                     break;
 
                 case 'step_end':
                     if (event.isFinal) {
                         this.isActionRunning = false;
+                        this.stopRoaming();
                         this.resetIdleTimer();
                         this.setState('success', this.getRandomQuote('success'), 4500);
+                        setTimeout(() => {
+                            if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                                if (this.config.roamingEnabled) {
+                                    this.startRoamingLoop();
+                                } else {
+                                    this.resetIdleTimer();
+                                }
+                            }
+                        }, 4800);
                     }
                     break;
             }
@@ -159,8 +189,13 @@ export class MascotManager {
         this.widget?.applyConfig(this.config);
 
         if (!this.config.enabled) {
+            this.stopRoaming();
             this.clearIdleTimer();
+        } else if (this.config.roamingEnabled) {
+            this.clearIdleTimer();
+            this.startRoamingLoop();
         } else {
+            this.stopRoaming();
             this.resetIdleTimer();
         }
     }
@@ -179,9 +214,17 @@ export class MascotManager {
 
         // If currently sleeping, wake up joyfully!
         if (this.widget?.getState() === 'sleeping') {
+            this.clearWakeTimer();
             this.setState('idle', 'Oáp... Bé thức dậy rồi nè! ✨', 3500);
         }
-        this.resetIdleTimer();
+
+        if (!this.isActionRunning) {
+            if (this.config.roamingEnabled) {
+                this.startRoamingLoop();
+            } else {
+                this.resetIdleTimer();
+            }
+        }
     }
 
     private handleDoubleClick(): void {
@@ -196,9 +239,118 @@ export class MascotManager {
         return quotes[Math.floor(Math.random() * quotes.length)];
     }
 
+    // --- AUTONOMOUS ROAMING & SLEEP CYCLE ---
+
+    public startRoamingLoop(): void {
+        this.clearRoamTimer();
+        if (!this.config.enabled || !this.config.roamingEnabled || this.isActionRunning) {
+            return;
+        }
+
+        // Random delay between 12s and 25s for next autonomous action
+        const nextDelayMs = Math.floor(Math.random() * 13000) + 12000;
+        this.roamTimer = setTimeout(() => {
+            this.executeAutonomousCycle();
+        }, nextDelayMs);
+    }
+
+    public stopRoaming(): void {
+        this.clearRoamTimer();
+        this.clearWakeTimer();
+        this.widget?.stopMoving();
+    }
+
+    private clearRoamTimer(): void {
+        if (this.roamTimer) {
+            clearTimeout(this.roamTimer);
+            this.roamTimer = null;
+        }
+    }
+
+    private clearWakeTimer(): void {
+        if (this.wakeTimer) {
+            clearTimeout(this.wakeTimer);
+            this.wakeTimer = null;
+        }
+    }
+
+    private executeAutonomousCycle(): void {
+        if (!this.config.enabled || !this.config.roamingEnabled || this.isActionRunning || !this.widget) {
+            return;
+        }
+
+        const currentState = this.widget.getState();
+        // If agent is working/busy, do not roam
+        if (currentState !== 'idle') {
+            if (currentState !== 'sleeping') {
+                this.startRoamingLoop();
+            }
+            return;
+        }
+
+        // Decision: Roam or take a nap?
+        // Normal chance: 70% roam, 30% nap. If already roamed 3+ times in a row, 60% nap.
+        const sleepChance = this.consecutiveRoams >= 3 ? 0.6 : 0.3;
+        const willSleep = Math.random() < sleepChance;
+
+        if (willSleep) {
+            this.consecutiveRoams = 0;
+            this.setState('sleeping', this.getRandomQuote('sleeping'));
+            // Sleep for 18 - 35 seconds, then automatically wake up
+            const sleepDurationMs = Math.floor(Math.random() * 17000) + 18000;
+            this.clearWakeTimer();
+            this.wakeTimer = setTimeout(() => {
+                this.wakeTimer = null;
+                if (!this.isActionRunning && this.widget?.getState() === 'sleeping') {
+                    this.setState('idle', 'Oáp... Bé tỉnh rồi nè! ✨', 3500);
+                    this.startRoamingLoop();
+                }
+            }, sleepDurationMs);
+        } else {
+            this.consecutiveRoams++;
+            this.roamToRandomPosition();
+        }
+    }
+
+    private roamToRandomPosition(): void {
+        if (!this.widget || this.isActionRunning) return;
+
+        const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+        const minX = 25;
+        const maxX = Math.max(minX, window.innerWidth - scale - 25);
+        const minY = 65; // Below SillyTavern header bar
+        const maxY = Math.max(minY, window.innerHeight - scale - 85); // Above chat input box
+
+        const targetX = Math.floor(minX + Math.random() * (maxX - minX));
+        const targetY = Math.floor(minY + Math.random() * (maxY - minY));
+
+        const currentPos = this.widget.getPosition();
+        const dx = targetX - currentPos.x;
+        const dy = targetY - currentPos.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+
+        // Smooth speed: duration clamped between 1800ms and 3800ms
+        const durationMs = Math.min(3800, Math.max(1800, Math.round((distance / 180) * 1000)));
+
+        // Occasionally speak a cute roam line (~35% chance)
+        if (Math.random() < 0.35) {
+            const roamQuotes = PET_QUOTES.roam;
+            const quote = roamQuotes[Math.floor(Math.random() * roamQuotes.length)];
+            this.widget.showBubble(quote, Math.min(durationMs + 1000, 4000));
+        }
+
+        this.widget.moveTo(targetX, targetY, durationMs, () => {
+            if (!this.isActionRunning) {
+                this.startRoamingLoop();
+            }
+        });
+    }
+
+    // --- IDLE SLEEP FALLBACK (when roaming is disabled) ---
+
     private startIdleTimer(): void {
         this.clearIdleTimer();
-        if (!this.config.enabled) return;
+        if (!this.config.enabled || this.config.roamingEnabled) return;
 
         this.idleTimer = setTimeout(() => {
             if (!this.isActionRunning && this.widget?.getState() === 'idle') {
@@ -208,7 +360,9 @@ export class MascotManager {
     }
 
     private resetIdleTimer(): void {
-        this.startIdleTimer();
+        if (!this.config.roamingEnabled) {
+            this.startIdleTimer();
+        }
     }
 
     private clearIdleTimer(): void {
@@ -219,6 +373,7 @@ export class MascotManager {
     }
 
     public destroy(): void {
+        this.stopRoaming();
         this.clearIdleTimer();
         if (this.loopUnsubscribe) {
             this.loopUnsubscribe();

@@ -529,7 +529,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                       break;
                   }
                   step++;
-                  await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
+                  await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1, step } });
                   try {
                       const truncatedHistory = await this.applyTokenSafeLimit(internalHistory);
                       const messages = this.buildMessages(truncatedHistory, maxSteps, step, lastToolError, cachedSystemPrompt, continueMode);
@@ -22540,6 +22540,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       opacity: 100,
       bubbleEnabled: true,
       soundEnabled: false,
+      roamingEnabled: true,
   };
   const PET_ASSETS = {
       idle: 'assets/pet/slime_idle_20f.webp',
@@ -22562,6 +22563,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           'Chờ xíu nhé, đang tính toán CoT...',
           'Hmm... Ý tưởng này thú vị đấy!',
           'Đang kết nối luồng tư duy ma thuật...',
+          'Đang đọc và phân tích dữ liệu...',
+          'Suy luận bước tiếp theo nào...',
       ],
       working: [
           'Đang thi hành công cụ...',
@@ -22583,6 +22586,13 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       ],
       sleeping: ['Khò khò... Zzz... 💤', 'Bé chợp mắt tí xíu nha... Zzz', 'Bong bóng ngủ bồng bềnh... 🫧'],
       bounce: ['Vèo vèo... Đang bay lượn nè! 🎈', 'Nảy tưng tưng khắp màn hình! ✨', 'Ú òa, đổi chỗ ở mới thôi nào!'],
+      roam: [
+          'Đi dạo quanh màn hình tí nào~ ✨',
+          'Khám phá góc mới xem có gì vui không!',
+          'Nhún nhảy tung tăng khắp nơi~ 🎈',
+          'Chỗ này ngắm SillyTavern thích thật đấy!',
+          'Bồng bềnh bồng bềnh đổi chỗ mới thôi!',
+      ],
       click: [
           'Nhột quá hihi! 😄',
           'Nảy nảy tưng tưng nè! ✨',
@@ -22609,6 +22619,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       currentState = 'idle';
       bubbleTimeout = null;
       returnToIdleTimeout = null;
+      // Autonomous Roaming movement state
+      moveTimeout = null;
+      isMovingState = false;
       // Dragging state
       isDragging = false;
       hasMoved = false;
@@ -22685,6 +22698,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           if (!this.imgEl)
               return;
           this.currentState = state;
+          // Nếu chuyển sang trạng thái làm việc hoặc báo lỗi/thành công, dừng ngay mọi di chuyển đi dạo
+          if (state === 'thinking' || state === 'working' || state === 'success' || state === 'error') {
+              this.stopMoving();
+          }
           // Clear any pending return to idle
           if (this.returnToIdleTimeout) {
               clearTimeout(this.returnToIdleTimeout);
@@ -22804,6 +22821,76 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               this.onPoke();
           }
       }
+      getPosition() {
+          if (!this.el)
+              return { x: 0, y: 0 };
+          const rect = this.el.getBoundingClientRect();
+          return { x: rect.left, y: rect.top };
+      }
+      isMoving() {
+          return this.isMovingState;
+      }
+      stopMoving() {
+          if (this.moveTimeout) {
+              clearTimeout(this.moveTimeout);
+              this.moveTimeout = null;
+          }
+          if (this.el && this.isMovingState) {
+              this.isMovingState = false;
+              this.el.classList.remove('kaiz-pet-moving');
+              const rect = this.el.getBoundingClientRect();
+              this.el.style.transition = '';
+              this.el.style.left = `${rect.left}px`;
+              this.el.style.top = `${rect.top}px`;
+              this.el.style.right = 'auto';
+              this.el.style.bottom = 'auto';
+              this.savePosition(rect.left, rect.top);
+              if (this.currentState === 'bounce') {
+                  this.setState('idle');
+              }
+          }
+      }
+      moveTo(targetX, targetY, durationMs = 2200, onArrival) {
+          if (!this.el || !this.avatarEl || this.isDragging)
+              return;
+          this.stopMoving();
+          const rect = this.el.getBoundingClientRect();
+          const currentX = rect.left;
+          // Lật mặt theo hướng di chuyển: sang trái thì scaleX(-1), sang phải thì scaleX(1)
+          if (targetX < currentX - 8) {
+              this.avatarEl.style.transform = 'scaleX(-1)';
+          }
+          else if (targetX > currentX + 8) {
+              this.avatarEl.style.transform = 'scaleX(1)';
+          }
+          this.isMovingState = true;
+          this.el.classList.add('kaiz-pet-moving');
+          // Bật hoạt ảnh bounce khi di chuyển
+          this.setState('bounce');
+          // Thiết lập CSS transition mượt mà
+          const sec = (durationMs / 1000).toFixed(2);
+          this.el.style.transition = `left ${sec}s cubic-bezier(0.25, 1, 0.5, 1), top ${sec}s cubic-bezier(0.25, 1, 0.5, 1)`;
+          // Kích hoạt tọa độ mới
+          this.el.style.left = `${targetX}px`;
+          this.el.style.top = `${targetY}px`;
+          this.el.style.right = 'auto';
+          this.el.style.bottom = 'auto';
+          this.moveTimeout = setTimeout(() => {
+              this.moveTimeout = null;
+              this.isMovingState = false;
+              if (this.el) {
+                  this.el.classList.remove('kaiz-pet-moving');
+                  this.el.style.transition = '';
+              }
+              this.savePosition(targetX, targetY);
+              if (this.currentState === 'bounce') {
+                  this.setState('idle');
+              }
+              if (onArrival) {
+                  onArrival();
+              }
+          }, durationMs);
+      }
       restorePosition() {
           if (!this.el)
               return;
@@ -22852,6 +22939,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               if (e.button !== 0)
                   return;
               e.preventDefault();
+              // Dừng ngay di chuyển tự do nếu người dùng tương tác
+              this.stopMoving();
               this.isDragging = false;
               this.hasMoved = false;
               this.activePointerId = e.pointerId;
@@ -22960,6 +23049,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           });
       }
       destroy() {
+          this.stopMoving();
           if (this.bubbleTimeout)
               clearTimeout(this.bubbleTimeout);
           if (this.returnToIdleTimeout)
@@ -22983,8 +23073,11 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       extPath = '';
       config = { ...DEFAULT_PET_CONFIG };
       idleTimer = null;
-      idleTimeoutMs = 180000; // 3 minutes idle -> sleep
+      idleTimeoutMs = 180000; // 3 minutes idle -> sleep (when roaming is disabled)
+      roamTimer = null;
+      wakeTimer = null;
       isActionRunning = false;
+      consecutiveRoams = 0;
       loopUnsubscribe = null;
       constructor() { }
       static getInstance() {
@@ -23013,8 +23106,13 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           if (loop) {
               this.connectLoop(loop);
           }
-          // 4. Start idle timer for sleep state
-          this.startIdleTimer();
+          // 4. Start autonomous roaming or idle timer
+          if (this.config.roamingEnabled) {
+              this.startRoamingLoop();
+          }
+          else {
+              this.startIdleTimer();
+          }
           console.log('[KaizAgent] Virtual Assistance Pet (Crystal Slime Mascot) initialized.');
       }
       connectLoop(loop) {
@@ -23027,38 +23125,63 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   return;
               switch (event.type) {
                   case 'think_start':
+                  case 'step_start':
                       this.isActionRunning = true;
+                      this.stopRoaming();
                       this.resetIdleTimer();
                       this.setState('thinking', this.getRandomQuote('thinking'));
                       break;
-                  case 'step_start':
-                      this.isActionRunning = true;
-                      this.resetIdleTimer();
-                      if (this.widget?.getState() !== 'working') {
-                          this.setState('thinking', this.getRandomQuote('thinking'));
-                      }
-                      break;
                   case 'tool_call': {
                       this.isActionRunning = true;
+                      this.stopRoaming();
                       this.resetIdleTimer();
                       const toolName = event.data?.name || 'Công cụ';
                       this.setState('working', `Đang dùng: ${toolName}... ⚡`);
                       break;
                   }
+                  case 'tool_result':
+                      this.isActionRunning = true;
+                      this.stopRoaming();
+                      this.resetIdleTimer();
+                      this.setState('thinking', 'Đang đọc và phân tích kết quả công cụ... 💭');
+                      break;
                   case 'retry':
+                      this.stopRoaming();
                       this.resetIdleTimer();
                       this.setState('error', 'Đang thử lại kết nối... 🔄', 3500);
                       break;
                   case 'error':
                       this.isActionRunning = false;
+                      this.stopRoaming();
                       this.resetIdleTimer();
                       this.setState('error', 'Ối, có lỗi xảy ra rồi... 💦', 5000);
+                      setTimeout(() => {
+                          if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                              if (this.config.roamingEnabled) {
+                                  this.startRoamingLoop();
+                              }
+                              else {
+                                  this.resetIdleTimer();
+                              }
+                          }
+                      }, 5200);
                       break;
                   case 'step_end':
                       if (event.isFinal) {
                           this.isActionRunning = false;
+                          this.stopRoaming();
                           this.resetIdleTimer();
                           this.setState('success', this.getRandomQuote('success'), 4500);
+                          setTimeout(() => {
+                              if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                                  if (this.config.roamingEnabled) {
+                                      this.startRoamingLoop();
+                                  }
+                                  else {
+                                      this.resetIdleTimer();
+                                  }
+                              }
+                          }, 4800);
                       }
                       break;
               }
@@ -23099,9 +23222,15 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           // Apply to widget
           this.widget?.applyConfig(this.config);
           if (!this.config.enabled) {
+              this.stopRoaming();
               this.clearIdleTimer();
           }
+          else if (this.config.roamingEnabled) {
+              this.clearIdleTimer();
+              this.startRoamingLoop();
+          }
           else {
+              this.stopRoaming();
               this.resetIdleTimer();
           }
       }
@@ -23117,9 +23246,17 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               return;
           // If currently sleeping, wake up joyfully!
           if (this.widget?.getState() === 'sleeping') {
+              this.clearWakeTimer();
               this.setState('idle', 'Oáp... Bé thức dậy rồi nè! ✨', 3500);
           }
-          this.resetIdleTimer();
+          if (!this.isActionRunning) {
+              if (this.config.roamingEnabled) {
+                  this.startRoamingLoop();
+              }
+              else {
+                  this.resetIdleTimer();
+              }
+          }
       }
       handleDoubleClick() {
           if (typeof jQuery !== 'undefined') {
@@ -23131,9 +23268,102 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           const quotes = PET_QUOTES[state] || PET_QUOTES.idle;
           return quotes[Math.floor(Math.random() * quotes.length)];
       }
+      // --- AUTONOMOUS ROAMING & SLEEP CYCLE ---
+      startRoamingLoop() {
+          this.clearRoamTimer();
+          if (!this.config.enabled || !this.config.roamingEnabled || this.isActionRunning) {
+              return;
+          }
+          // Random delay between 12s and 25s for next autonomous action
+          const nextDelayMs = Math.floor(Math.random() * 13000) + 12000;
+          this.roamTimer = setTimeout(() => {
+              this.executeAutonomousCycle();
+          }, nextDelayMs);
+      }
+      stopRoaming() {
+          this.clearRoamTimer();
+          this.clearWakeTimer();
+          this.widget?.stopMoving();
+      }
+      clearRoamTimer() {
+          if (this.roamTimer) {
+              clearTimeout(this.roamTimer);
+              this.roamTimer = null;
+          }
+      }
+      clearWakeTimer() {
+          if (this.wakeTimer) {
+              clearTimeout(this.wakeTimer);
+              this.wakeTimer = null;
+          }
+      }
+      executeAutonomousCycle() {
+          if (!this.config.enabled || !this.config.roamingEnabled || this.isActionRunning || !this.widget) {
+              return;
+          }
+          const currentState = this.widget.getState();
+          // If agent is working/busy, do not roam
+          if (currentState !== 'idle') {
+              if (currentState !== 'sleeping') {
+                  this.startRoamingLoop();
+              }
+              return;
+          }
+          // Decision: Roam or take a nap?
+          // Normal chance: 70% roam, 30% nap. If already roamed 3+ times in a row, 60% nap.
+          const sleepChance = this.consecutiveRoams >= 3 ? 0.6 : 0.3;
+          const willSleep = Math.random() < sleepChance;
+          if (willSleep) {
+              this.consecutiveRoams = 0;
+              this.setState('sleeping', this.getRandomQuote('sleeping'));
+              // Sleep for 18 - 35 seconds, then automatically wake up
+              const sleepDurationMs = Math.floor(Math.random() * 17000) + 18000;
+              this.clearWakeTimer();
+              this.wakeTimer = setTimeout(() => {
+                  this.wakeTimer = null;
+                  if (!this.isActionRunning && this.widget?.getState() === 'sleeping') {
+                      this.setState('idle', 'Oáp... Bé tỉnh rồi nè! ✨', 3500);
+                      this.startRoamingLoop();
+                  }
+              }, sleepDurationMs);
+          }
+          else {
+              this.consecutiveRoams++;
+              this.roamToRandomPosition();
+          }
+      }
+      roamToRandomPosition() {
+          if (!this.widget || this.isActionRunning)
+              return;
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65; // Below SillyTavern header bar
+          const maxY = Math.max(minY, window.innerHeight - scale - 85); // Above chat input box
+          const targetX = Math.floor(minX + Math.random() * (maxX - minX));
+          const targetY = Math.floor(minY + Math.random() * (maxY - minY));
+          const currentPos = this.widget.getPosition();
+          const dx = targetX - currentPos.x;
+          const dy = targetY - currentPos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          // Smooth speed: duration clamped between 1800ms and 3800ms
+          const durationMs = Math.min(3800, Math.max(1800, Math.round((distance / 180) * 1000)));
+          // Occasionally speak a cute roam line (~35% chance)
+          if (Math.random() < 0.35) {
+              const roamQuotes = PET_QUOTES.roam;
+              const quote = roamQuotes[Math.floor(Math.random() * roamQuotes.length)];
+              this.widget.showBubble(quote, Math.min(durationMs + 1000, 4000));
+          }
+          this.widget.moveTo(targetX, targetY, durationMs, () => {
+              if (!this.isActionRunning) {
+                  this.startRoamingLoop();
+              }
+          });
+      }
+      // --- IDLE SLEEP FALLBACK (when roaming is disabled) ---
       startIdleTimer() {
           this.clearIdleTimer();
-          if (!this.config.enabled)
+          if (!this.config.enabled || this.config.roamingEnabled)
               return;
           this.idleTimer = setTimeout(() => {
               if (!this.isActionRunning && this.widget?.getState() === 'idle') {
@@ -23142,7 +23372,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           }, this.idleTimeoutMs);
       }
       resetIdleTimer() {
-          this.startIdleTimer();
+          if (!this.config.roamingEnabled) {
+              this.startIdleTimer();
+          }
       }
       clearIdleTimer() {
           if (this.idleTimer) {
@@ -23151,6 +23383,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           }
       }
       destroy() {
+          this.stopRoaming();
           this.clearIdleTimer();
           if (this.loopUnsubscribe) {
               this.loopUnsubscribe();
@@ -23351,6 +23584,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           const petConfig = mascot.getConfig();
           $('#kaiz-pet-enabled').prop('checked', !!petConfig.enabled);
           $('#kaiz-pet-bubble-enabled').prop('checked', !!petConfig.bubbleEnabled);
+          $('#kaiz-pet-roaming-enabled').prop('checked', petConfig.roamingEnabled !== false);
           $('#kaiz-pet-scale').val(petConfig.scale || 96);
           $('#kaiz-pet-scale-val').text(`${petConfig.scale || 96}px`);
           $('#kaiz-pet-opacity').val(petConfig.opacity ?? 100);
@@ -23360,6 +23594,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           });
           $('#kaiz-pet-bubble-enabled').on('change', function () {
               mascot.updateConfig({ bubbleEnabled: !!this.checked });
+          });
+          $('#kaiz-pet-roaming-enabled').on('change', function () {
+              mascot.updateConfig({ roamingEnabled: !!this.checked });
           });
           $('#kaiz-pet-scale').on('input change', function () {
               const val = parseInt(this.value, 10) || 96;

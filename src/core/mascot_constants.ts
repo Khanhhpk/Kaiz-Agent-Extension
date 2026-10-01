@@ -10,6 +10,7 @@ export interface PetConfig {
     opacity: number; // 40 to 100 (%)
     bubbleEnabled: boolean;
     soundEnabled: boolean;
+    roamingEnabled: boolean; // Tự do đi dạo quanh màn hình khi rảnh
 }
 
 export const DEFAULT_PET_CONFIG: PetConfig = {
@@ -18,6 +19,7 @@ export const DEFAULT_PET_CONFIG: PetConfig = {
     opacity: 100,
     bubbleEnabled: true,
     soundEnabled: false,
+    roamingEnabled: true,
 };
 
 export const PET_ASSETS: Record<PetState, string> = {
@@ -30,7 +32,7 @@ export const PET_ASSETS: Record<PetState, string> = {
     bounce: 'assets/pet/slime_bounce_20f.webp',
 };
 
-export const PET_QUOTES: Record<PetState | 'click', string[]> = {
+export const PET_QUOTES: Record<PetState | 'click' | 'roam', string[]> = {
     idle: [
         'Bé Slime đang sẵn sàng giúp bạn nè! ✨',
         'Bồng bềnh bồng bềnh... Hôm nay chúng ta làm gì thế?',
@@ -42,6 +44,8 @@ export const PET_QUOTES: Record<PetState | 'click', string[]> = {
         'Chờ xíu nhé, đang tính toán CoT...',
         'Hmm... Ý tưởng này thú vị đấy!',
         'Đang kết nối luồng tư duy ma thuật...',
+        'Đang đọc và phân tích dữ liệu...',
+        'Suy luận bước tiếp theo nào...',
     ],
     working: [
         'Đang thi hành công cụ...',
@@ -63,6 +67,13 @@ export const PET_QUOTES: Record<PetState | 'click', string[]> = {
     ],
     sleeping: ['Khò khò... Zzz... 💤', 'Bé chợp mắt tí xíu nha... Zzz', 'Bong bóng ngủ bồng bềnh... 🫧'],
     bounce: ['Vèo vèo... Đang bay lượn nè! 🎈', 'Nảy tưng tưng khắp màn hình! ✨', 'Ú òa, đổi chỗ ở mới thôi nào!'],
+    roam: [
+        'Đi dạo quanh màn hình tí nào~ ✨',
+        'Khám phá góc mới xem có gì vui không!',
+        'Nhún nhảy tung tăng khắp nơi~ 🎈',
+        'Chỗ này ngắm SillyTavern thích thật đấy!',
+        'Bồng bềnh bồng bềnh đổi chỗ mới thôi!',
+    ],
     click: [
         'Nhột quá hihi! 😄',
         'Nảy nảy tưng tưng nè! ✨',

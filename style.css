@@ -6360,6 +6360,10 @@
     transform: scale(1.08);
 }
 
+#kaiz-assistant-pet.kaiz-pet-moving {
+    will-change: left, top;
+}
+
 .kaiz-pet-avatar {
     position: relative;
     display: flex;

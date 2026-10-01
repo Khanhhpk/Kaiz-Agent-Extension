@@ -520,7 +520,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                     break;
                 }
                 step++;
-                await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
+                await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1, step } });
 
                 try {
                     const truncatedHistory = await this.applyTokenSafeLimit(internalHistory);
