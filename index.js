@@ -106,10 +106,27 @@ CẤU TRÚC PROMPT (TIẾNG ANH):
       _forceAbortReject = null;
       _safeModeReject = null;
       _currentAbortController = null;
+      _subscribers = [];
       constructor(adapter, toolRegistry, stateManager) {
           this.adapter = adapter;
           this.toolRegistry = toolRegistry;
           this.stateManager = stateManager;
+      }
+      subscribe(callback) {
+          this._subscribers.push(callback);
+          return () => {
+              this._subscribers = this._subscribers.filter((cb) => cb !== callback);
+          };
+      }
+      emitEvent(event) {
+          for (const cb of this._subscribers) {
+              try {
+                  cb(event);
+              }
+              catch (err) {
+                  console.error('[AgentLoop] Subscriber error:', err);
+              }
+          }
       }
       /**
        * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng sau khi hoàn thành bước hiện tại.
@@ -463,6 +480,12 @@ CÁC CÔNG CỤ HIỆN CÓ:
       }
       async run(history, maxSteps, onEvent, continueMode = false, toolsConfigOverride) {
           console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
+          this.emitEvent({ type: 'think_start' });
+          const originalOnEvent = onEvent;
+          onEvent = async (event) => {
+              this.emitEvent(event);
+              await originalOnEvent(event);
+          };
           const cachedSystemPrompt = this.generateSystemPrompt(maxSteps, toolsConfigOverride);
           const internalHistory = history.map((msg) => ({ ...msg }));
           for (let i = internalHistory.length - 1; i >= 0; i--) {
@@ -761,6 +784,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
           }
           finally {
               this._isRunning = false;
+              this.emitEvent({ type: 'step_end', isFinal: true });
           }
       }
   }
@@ -22507,6 +22531,638 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       }
   }
 
+  /**
+   * Virtual Assistance Pet (Crystal Slime Mascot) Constants & Types
+   */
+  const DEFAULT_PET_CONFIG = {
+      enabled: true,
+      scale: 96,
+      opacity: 100,
+      bubbleEnabled: true,
+      soundEnabled: false,
+  };
+  const PET_ASSETS = {
+      idle: 'assets/pet/slime_idle_20f.webp',
+      thinking: 'assets/pet/slime_thinking_20f.webp',
+      working: 'assets/pet/slime_working_20f.webp',
+      success: 'assets/pet/slime_hurray_20f.webp',
+      error: 'assets/pet/slime_worry_20f.webp',
+      sleeping: 'assets/pet/slime_sleeping_20f.webp',
+      bounce: 'assets/pet/slime_bounce_20f.webp',
+  };
+  const PET_QUOTES = {
+      idle: [
+          'Bé Slime đang sẵn sàng giúp bạn nè! ✨',
+          'Bồng bềnh bồng bềnh... Hôm nay chúng ta làm gì thế?',
+          'Pha lê phát sáng lung linh! Cần gì cứ gọi Kaiz nhé!',
+          'Chủ nhân ơi, bé đang trực đây!',
+      ],
+      thinking: [
+          'Đang suy ngẫm giải pháp tối ưu...',
+          'Chờ xíu nhé, đang tính toán CoT...',
+          'Hmm... Ý tưởng này thú vị đấy!',
+          'Đang kết nối luồng tư duy ma thuật...',
+      ],
+      working: [
+          'Đang thi hành công cụ...',
+          'Thao tác dữ liệu SillyTavern...',
+          'Gõ phím lách cách, chạy tool vèo vèo! ⚡',
+          'Đang xử lý tác vụ cho bạn nè!',
+      ],
+      success: [
+          'Xong xuôi rồi nè, yay! 🎉',
+          'Nhiệm vụ hoàn thành xuất sắc! ✨',
+          'Pha lê rực sáng ăn mừng nào! 🌟',
+          'Tác vụ đã hoàn tất trọn vẹn!',
+      ],
+      error: [
+          'Ối, có gì đó sai sai rồi... 💦',
+          'Gặp trục trặc rồi, để bé gỡ lỗi nhé!',
+          'Ui da, tan chảy xẹp lép luôn... 🌀',
+          'Đang thử lại nè, đừng lo lắng!',
+      ],
+      sleeping: ['Khò khò... Zzz... 💤', 'Bé chợp mắt tí xíu nha... Zzz', 'Bong bóng ngủ bồng bềnh... 🫧'],
+      bounce: ['Vèo vèo... Đang bay lượn nè! 🎈', 'Nảy tưng tưng khắp màn hình! ✨', 'Ú òa, đổi chỗ ở mới thôi nào!'],
+      click: [
+          'Nhột quá hihi! 😄',
+          'Nảy nảy tưng tưng nè! ✨',
+          'Chủ nhân gọi bé có việc gì thế ạ?',
+          'Bé Slime tinh thể luôn bên bạn! 💙',
+          'Double click vào bé để mở nhanh Kaiz Chat nha!',
+      ],
+  };
+
+  /**
+   * Virtual Assistance Pet (Crystal Slime Mascot) Widget
+   * Manages the floating DOM element, dragging, boundary clamping, speech bubble, and animations.
+   */
+  class MascotWidget {
+      extPath;
+      config;
+      onPoke;
+      onDoubleClick;
+      el = null;
+      avatarEl = null;
+      imgEl = null;
+      bubbleEl = null;
+      bubbleTextEl = null;
+      currentState = 'idle';
+      bubbleTimeout = null;
+      returnToIdleTimeout = null;
+      // Dragging state
+      isDragging = false;
+      hasMoved = false;
+      startPointerX = 0;
+      startPointerY = 0;
+      startElemX = 0;
+      startElemY = 0;
+      activePointerId = null;
+      // Click & double click tracking
+      lastClickTime = 0;
+      singleClickTimeout = null;
+      constructor(extPath, config, onPoke, onDoubleClick) {
+          this.extPath = extPath;
+          this.config = config;
+          this.onPoke = onPoke;
+          this.onDoubleClick = onDoubleClick;
+      }
+      init() {
+          const existing = document.getElementById('kaiz-assistant-pet');
+          if (existing) {
+              existing.remove();
+          }
+          // Create widget root container
+          const widget = document.createElement('div');
+          widget.id = 'kaiz-assistant-pet';
+          widget.className = 'kaiz-pet-widget';
+          widget.setAttribute('role', 'complementary');
+          widget.setAttribute('aria-label', 'Kaiz Virtual Assistance Pet');
+          // Create Speech Bubble
+          const bubble = document.createElement('div');
+          bubble.className = 'kaiz-pet-bubble';
+          bubble.style.display = 'none';
+          const bubbleText = document.createElement('span');
+          bubbleText.className = 'kaiz-pet-bubble-text';
+          const bubbleTail = document.createElement('div');
+          bubbleTail.className = 'kaiz-pet-bubble-tail';
+          bubble.appendChild(bubbleText);
+          bubble.appendChild(bubbleTail);
+          // Click bubble to dismiss immediately
+          bubble.addEventListener('click', (e) => {
+              e.stopPropagation();
+              this.hideBubble();
+          });
+          // Create Avatar container & Image
+          const avatar = document.createElement('div');
+          avatar.className = 'kaiz-pet-avatar';
+          const img = document.createElement('img');
+          img.className = 'kaiz-pet-sprite';
+          img.alt = 'Bé Slime Tinh Thể Kaiz';
+          img.draggable = false;
+          avatar.appendChild(img);
+          widget.appendChild(bubble);
+          widget.appendChild(avatar);
+          document.body.appendChild(widget);
+          this.el = widget;
+          this.avatarEl = avatar;
+          this.imgEl = img;
+          this.bubbleEl = bubble;
+          this.bubbleTextEl = bubbleText;
+          // Restore saved position or use default bottom-right
+          this.restorePosition();
+          // Bind Dragging & Click events
+          this.bindEvents();
+          // Apply initial config
+          this.applyConfig(this.config);
+          // Set initial state
+          this.setState('idle');
+      }
+      resolveAssetUrl(state) {
+          const relPath = PET_ASSETS[state] || PET_ASSETS.idle;
+          return `/scripts/extensions/${this.extPath}/${relPath}`;
+      }
+      setState(state, quote, durationMs) {
+          if (!this.imgEl)
+              return;
+          this.currentState = state;
+          // Clear any pending return to idle
+          if (this.returnToIdleTimeout) {
+              clearTimeout(this.returnToIdleTimeout);
+              this.returnToIdleTimeout = null;
+          }
+          // Update image source
+          const newSrc = this.resolveAssetUrl(state);
+          if (this.imgEl.src !== newSrc) {
+              this.imgEl.src = newSrc;
+          }
+          // Update CSS class for container
+          if (this.el) {
+              this.el.className = `kaiz-pet-widget kaiz-pet-state-${state}`;
+          }
+          // Show contextual speech bubble if quote provided
+          if (quote) {
+              this.showBubble(quote, durationMs);
+          }
+          // If state is transient (e.g. success or error or bounce), schedule return to idle
+          if (state === 'success' || state === 'error' || state === 'bounce') {
+              const delay = durationMs || (state === 'bounce' ? 1200 : 4500);
+              this.returnToIdleTimeout = setTimeout(() => {
+                  if (this.currentState === state) {
+                      this.setState('idle');
+                  }
+              }, delay);
+          }
+      }
+      getState() {
+          return this.currentState;
+      }
+      showBubble(text, durationMs = 4500) {
+          if (!this.config.bubbleEnabled || !this.bubbleEl || !this.bubbleTextEl || !this.el)
+              return;
+          if (this.bubbleTimeout) {
+              clearTimeout(this.bubbleTimeout);
+              this.bubbleTimeout = null;
+          }
+          this.bubbleTextEl.textContent = text;
+          this.bubbleEl.style.display = 'flex';
+          this.bubbleEl.classList.remove('kaiz-bubble-fadeout');
+          // Check if pet is too close to top of viewport -> flip bubble to bottom
+          const rect = this.el.getBoundingClientRect();
+          if (rect.top < 95) {
+              this.bubbleEl.classList.add('bubble-bottom');
+          }
+          else {
+              this.bubbleEl.classList.remove('bubble-bottom');
+          }
+          this.bubbleTimeout = setTimeout(() => {
+              this.hideBubble();
+          }, durationMs);
+      }
+      hideBubble() {
+          if (!this.bubbleEl)
+              return;
+          this.bubbleEl.classList.add('kaiz-bubble-fadeout');
+          setTimeout(() => {
+              if (this.bubbleEl && this.bubbleEl.classList.contains('kaiz-bubble-fadeout')) {
+                  this.bubbleEl.style.display = 'none';
+                  this.bubbleEl.classList.remove('kaiz-bubble-fadeout');
+              }
+          }, 220);
+      }
+      applyConfig(newConfig) {
+          this.config = { ...this.config, ...newConfig };
+          if (!this.el || !this.avatarEl || !this.imgEl)
+              return;
+          // Visibility
+          if (!this.config.enabled) {
+              this.el.style.display = 'none';
+              return;
+          }
+          else {
+              this.el.style.display = 'flex';
+          }
+          // Scale
+          const scalePx = Math.max(48, Math.min(180, this.config.scale || 96));
+          this.avatarEl.style.width = `${scalePx}px`;
+          this.avatarEl.style.height = `${scalePx}px`;
+          this.imgEl.style.width = `${scalePx}px`;
+          this.imgEl.style.height = `${scalePx}px`;
+          // Opacity
+          const opVal = Math.max(0.4, Math.min(1.0, (this.config.opacity ?? 100) / 100));
+          this.avatarEl.style.opacity = opVal.toString();
+          // Bubble visibility
+          if (!this.config.bubbleEnabled) {
+              this.hideBubble();
+          }
+      }
+      resetPosition() {
+          if (!this.el)
+              return;
+          try {
+              localStorage.removeItem('kaiz_pet_pos');
+          }
+          catch (_) { }
+          this.el.style.left = 'auto';
+          this.el.style.top = 'auto';
+          this.el.style.right = '28px';
+          this.el.style.bottom = '100px';
+          // Play brief bounce & squish celebration
+          this.poke();
+      }
+      poke() {
+          if (!this.avatarEl)
+              return;
+          // Trigger squish animation
+          this.avatarEl.classList.remove('kaiz-pet-squished');
+          void this.avatarEl.offsetWidth; // Trigger reflow
+          this.avatarEl.classList.add('kaiz-pet-squished');
+          // Play random poke quote
+          const quotes = PET_QUOTES.click;
+          const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+          this.showBubble(randomQuote, 3500);
+          if (this.onPoke) {
+              this.onPoke();
+          }
+      }
+      restorePosition() {
+          if (!this.el)
+              return;
+          try {
+              const raw = localStorage.getItem('kaiz_pet_pos');
+              if (raw) {
+                  const pos = JSON.parse(raw);
+                  if (typeof pos.x === 'number' && typeof pos.y === 'number') {
+                      const maxW = Math.max(100, window.innerWidth - (this.config.scale || 96));
+                      const maxH = Math.max(100, window.innerHeight - (this.config.scale || 96));
+                      const clampedX = Math.max(10, Math.min(maxW - 10, pos.x));
+                      const clampedY = Math.max(10, Math.min(maxH - 10, pos.y));
+                      this.el.style.left = `${clampedX}px`;
+                      this.el.style.top = `${clampedY}px`;
+                      this.el.style.right = 'auto';
+                      this.el.style.bottom = 'auto';
+                      return;
+                  }
+              }
+          }
+          catch (_) { }
+          // Default: Bottom-right corner above ST bar
+          this.el.style.left = 'auto';
+          this.el.style.top = 'auto';
+          this.el.style.right = '28px';
+          this.el.style.bottom = '100px';
+      }
+      savePosition(x, y) {
+          try {
+              const pos = {
+                  x,
+                  y,
+                  winW: window.innerWidth,
+                  winH: window.innerHeight,
+              };
+              localStorage.setItem('kaiz_pet_pos', JSON.stringify(pos));
+          }
+          catch (_) { }
+      }
+      bindEvents() {
+          if (!this.el)
+              return;
+          // Pointer Down (Mouse, Touch, Pen)
+          this.el.addEventListener('pointerdown', (e) => {
+              // Only respond to main button
+              if (e.button !== 0)
+                  return;
+              e.preventDefault();
+              this.isDragging = false;
+              this.hasMoved = false;
+              this.activePointerId = e.pointerId;
+              this.el?.setPointerCapture(e.pointerId);
+              this.startPointerX = e.clientX;
+              this.startPointerY = e.clientY;
+              const rect = this.el.getBoundingClientRect();
+              this.startElemX = rect.left;
+              this.startElemY = rect.top;
+          });
+          // Pointer Move
+          this.el.addEventListener('pointermove', (e) => {
+              if (this.activePointerId !== e.pointerId)
+                  return;
+              const dx = e.clientX - this.startPointerX;
+              const dy = e.clientY - this.startPointerY;
+              // Threshold of 5px to distinguish drag from click
+              if (!this.isDragging && Math.hypot(dx, dy) > 5) {
+                  this.isDragging = true;
+                  this.hasMoved = true;
+                  this.el?.classList.add('kaiz-pet-dragging');
+                  // Switch to bounce animation while dragging
+                  if (this.currentState === 'idle' || this.currentState === 'sleeping') {
+                      this.setState('bounce');
+                  }
+              }
+              if (this.isDragging && this.el) {
+                  const targetScale = this.config.scale || 96;
+                  const maxX = Math.max(0, window.innerWidth - targetScale);
+                  const maxY = Math.max(0, window.innerHeight - targetScale);
+                  const newX = Math.max(0, Math.min(maxX, this.startElemX + dx));
+                  const newY = Math.max(0, Math.min(maxY, this.startElemY + dy));
+                  this.el.style.left = `${newX}px`;
+                  this.el.style.top = `${newY}px`;
+                  this.el.style.right = 'auto';
+                  this.el.style.bottom = 'auto';
+              }
+          });
+          // Pointer Up
+          const onPointerUp = (e) => {
+              if (this.activePointerId !== e.pointerId)
+                  return;
+              if (this.el?.hasPointerCapture(e.pointerId)) {
+                  this.el.releasePointerCapture(e.pointerId);
+              }
+              this.activePointerId = null;
+              this.el?.classList.remove('kaiz-pet-dragging');
+              if (this.isDragging && this.el) {
+                  this.isDragging = false;
+                  const rect = this.el.getBoundingClientRect();
+                  this.savePosition(rect.left, rect.top);
+                  // Return from bounce to idle after dropping
+                  setTimeout(() => {
+                      if (this.currentState === 'bounce') {
+                          this.setState('idle');
+                      }
+                  }, 300);
+              }
+              else if (!this.hasMoved) {
+                  // Click handler (Single vs Double Click)
+                  const now = Date.now();
+                  if (now - this.lastClickTime < 320) {
+                      // Double click!
+                      if (this.singleClickTimeout) {
+                          clearTimeout(this.singleClickTimeout);
+                          this.singleClickTimeout = null;
+                      }
+                      this.lastClickTime = 0;
+                      if (this.onDoubleClick) {
+                          this.onDoubleClick();
+                      }
+                      else {
+                          // Default double-click action: trigger floating button to open chat window
+                          if (typeof jQuery !== 'undefined') {
+                              jQuery('#kaiz-floating-btn').trigger('click');
+                          }
+                      }
+                  }
+                  else {
+                      // Single click with slight delay to distinguish from double click
+                      this.lastClickTime = now;
+                      this.singleClickTimeout = setTimeout(() => {
+                          this.poke();
+                          this.singleClickTimeout = null;
+                      }, 320);
+                  }
+              }
+          };
+          this.el.addEventListener('pointerup', onPointerUp);
+          this.el.addEventListener('pointercancel', onPointerUp);
+          // Window resize boundary protection
+          window.addEventListener('resize', () => {
+              if (!this.el || this.el.style.display === 'none')
+                  return;
+              const rect = this.el.getBoundingClientRect();
+              const targetScale = this.config.scale || 96;
+              const maxX = Math.max(0, window.innerWidth - targetScale);
+              const maxY = Math.max(0, window.innerHeight - targetScale);
+              if (rect.left > maxX || rect.top > maxY) {
+                  const clampedX = Math.max(0, Math.min(maxX, rect.left));
+                  const clampedY = Math.max(0, Math.min(maxY, rect.top));
+                  this.el.style.left = `${clampedX}px`;
+                  this.el.style.top = `${clampedY}px`;
+                  this.savePosition(clampedX, clampedY);
+              }
+          });
+      }
+      destroy() {
+          if (this.bubbleTimeout)
+              clearTimeout(this.bubbleTimeout);
+          if (this.returnToIdleTimeout)
+              clearTimeout(this.returnToIdleTimeout);
+          if (this.singleClickTimeout)
+              clearTimeout(this.singleClickTimeout);
+          if (this.el) {
+              this.el.remove();
+              this.el = null;
+          }
+      }
+  }
+
+  /**
+   * Virtual Assistance Pet (Crystal Slime Mascot) Manager
+   * Central coordinator linking AgentLoop, AutoTasks, Idle/Sleep timers, and the MascotWidget UI.
+   */
+  class MascotManager {
+      static instance = null;
+      widget = null;
+      extPath = '';
+      config = { ...DEFAULT_PET_CONFIG };
+      idleTimer = null;
+      idleTimeoutMs = 180000; // 3 minutes idle -> sleep
+      isActionRunning = false;
+      loopUnsubscribe = null;
+      constructor() { }
+      static getInstance() {
+          if (!MascotManager.instance) {
+              MascotManager.instance = new MascotManager();
+          }
+          return MascotManager.instance;
+      }
+      init(extPath, loop, _scheduler) {
+          this.extPath = extPath;
+          // 1. Load saved config from SillyTavern context
+          const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+          if (ctx && ctx.extensionSettings?.kaiz_agent) {
+              const saved = ctx.extensionSettings.kaiz_agent.petConfig;
+              if (saved && typeof saved === 'object') {
+                  this.config = { ...DEFAULT_PET_CONFIG, ...saved };
+              }
+              else {
+                  ctx.extensionSettings.kaiz_agent.petConfig = { ...this.config };
+              }
+          }
+          // 2. Initialize Widget
+          this.widget = new MascotWidget(this.extPath, this.config, () => this.handlePoke(), () => this.handleDoubleClick());
+          this.widget.init();
+          // 3. Connect to AgentLoop if provided
+          if (loop) {
+              this.connectLoop(loop);
+          }
+          // 4. Start idle timer for sleep state
+          this.startIdleTimer();
+          console.log('[KaizAgent] Virtual Assistance Pet (Crystal Slime Mascot) initialized.');
+      }
+      connectLoop(loop) {
+          if (this.loopUnsubscribe) {
+              this.loopUnsubscribe();
+              this.loopUnsubscribe = null;
+          }
+          this.loopUnsubscribe = loop.subscribe((event) => {
+              if (!this.config.enabled)
+                  return;
+              switch (event.type) {
+                  case 'think_start':
+                      this.isActionRunning = true;
+                      this.resetIdleTimer();
+                      this.setState('thinking', this.getRandomQuote('thinking'));
+                      break;
+                  case 'step_start':
+                      this.isActionRunning = true;
+                      this.resetIdleTimer();
+                      if (this.widget?.getState() !== 'working') {
+                          this.setState('thinking', this.getRandomQuote('thinking'));
+                      }
+                      break;
+                  case 'tool_call': {
+                      this.isActionRunning = true;
+                      this.resetIdleTimer();
+                      const toolName = event.data?.name || 'Công cụ';
+                      this.setState('working', `Đang dùng: ${toolName}... ⚡`);
+                      break;
+                  }
+                  case 'retry':
+                      this.resetIdleTimer();
+                      this.setState('error', 'Đang thử lại kết nối... 🔄', 3500);
+                      break;
+                  case 'error':
+                      this.isActionRunning = false;
+                      this.resetIdleTimer();
+                      this.setState('error', 'Ối, có lỗi xảy ra rồi... 💦', 5000);
+                      break;
+                  case 'step_end':
+                      if (event.isFinal) {
+                          this.isActionRunning = false;
+                          this.resetIdleTimer();
+                          this.setState('success', this.getRandomQuote('success'), 4500);
+                      }
+                      break;
+              }
+          });
+      }
+      setState(state, quote, durationMs) {
+          if (!this.widget)
+              return;
+          this.widget.setState(state, quote, durationMs);
+      }
+      getState() {
+          return this.widget ? this.widget.getState() : 'idle';
+      }
+      showBubble(text, durationMs) {
+          this.widget?.showBubble(text, durationMs);
+      }
+      hideBubble() {
+          this.widget?.hideBubble();
+      }
+      getConfig() {
+          return { ...this.config };
+      }
+      updateConfig(newConfig) {
+          this.config = { ...this.config, ...newConfig };
+          // Save to SillyTavern settings
+          try {
+              const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+              if (ctx && ctx.extensionSettings?.kaiz_agent) {
+                  ctx.extensionSettings.kaiz_agent.petConfig = { ...this.config };
+                  if (typeof ctx.saveSettingsDebounced === 'function') {
+                      ctx.saveSettingsDebounced();
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[KaizAgent] Failed to save petConfig:', e);
+          }
+          // Apply to widget
+          this.widget?.applyConfig(this.config);
+          if (!this.config.enabled) {
+              this.clearIdleTimer();
+          }
+          else {
+              this.resetIdleTimer();
+          }
+      }
+      resetPosition() {
+          this.widget?.resetPosition();
+      }
+      poke() {
+          this.widget?.poke();
+          this.handlePoke();
+      }
+      handlePoke() {
+          if (!this.config.enabled)
+              return;
+          // If currently sleeping, wake up joyfully!
+          if (this.widget?.getState() === 'sleeping') {
+              this.setState('idle', 'Oáp... Bé thức dậy rồi nè! ✨', 3500);
+          }
+          this.resetIdleTimer();
+      }
+      handleDoubleClick() {
+          if (typeof jQuery !== 'undefined') {
+              // Trigger Kaiz floating button to toggle chat window
+              jQuery('#kaiz-floating-btn').trigger('click');
+          }
+      }
+      getRandomQuote(state) {
+          const quotes = PET_QUOTES[state] || PET_QUOTES.idle;
+          return quotes[Math.floor(Math.random() * quotes.length)];
+      }
+      startIdleTimer() {
+          this.clearIdleTimer();
+          if (!this.config.enabled)
+              return;
+          this.idleTimer = setTimeout(() => {
+              if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                  this.setState('sleeping', this.getRandomQuote('sleeping'));
+              }
+          }, this.idleTimeoutMs);
+      }
+      resetIdleTimer() {
+          this.startIdleTimer();
+      }
+      clearIdleTimer() {
+          if (this.idleTimer) {
+              clearTimeout(this.idleTimer);
+              this.idleTimer = null;
+          }
+      }
+      destroy() {
+          this.clearIdleTimer();
+          if (this.loopUnsubscribe) {
+              this.loopUnsubscribe();
+              this.loopUnsubscribe = null;
+          }
+          if (this.widget) {
+              this.widget.destroy();
+              this.widget = null;
+          }
+      }
+  }
+
   const escapeHtml$4 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SettingsUI {
       static async init(extPath, EXT_NAME, registry) {
@@ -22689,6 +23345,38 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           $('#kaiz-cot-display-mode').on('change', function () {
               settings.cotDisplayMode = this.value;
               ctx.saveSettingsDebounced();
+          });
+          // --- VIRTUAL ASSISTANCE PET (MASCOT) ---
+          const mascot = MascotManager.getInstance();
+          const petConfig = mascot.getConfig();
+          $('#kaiz-pet-enabled').prop('checked', !!petConfig.enabled);
+          $('#kaiz-pet-bubble-enabled').prop('checked', !!petConfig.bubbleEnabled);
+          $('#kaiz-pet-scale').val(petConfig.scale || 96);
+          $('#kaiz-pet-scale-val').text(`${petConfig.scale || 96}px`);
+          $('#kaiz-pet-opacity').val(petConfig.opacity ?? 100);
+          $('#kaiz-pet-opacity-val').text(`${petConfig.opacity ?? 100}%`);
+          $('#kaiz-pet-enabled').on('change', function () {
+              mascot.updateConfig({ enabled: !!this.checked });
+          });
+          $('#kaiz-pet-bubble-enabled').on('change', function () {
+              mascot.updateConfig({ bubbleEnabled: !!this.checked });
+          });
+          $('#kaiz-pet-scale').on('input change', function () {
+              const val = parseInt(this.value, 10) || 96;
+              $('#kaiz-pet-scale-val').text(`${val}px`);
+              mascot.updateConfig({ scale: val });
+          });
+          $('#kaiz-pet-opacity').on('input change', function () {
+              const val = parseInt(this.value, 10) ?? 100;
+              $('#kaiz-pet-opacity-val').text(`${val}%`);
+              mascot.updateConfig({ opacity: val });
+          });
+          $('#kaiz-pet-poke-btn').on('click', function () {
+              mascot.poke();
+          });
+          $('#kaiz-pet-reset-pos').on('click', function () {
+              mascot.resetPosition();
+              toastr.info('Đã đặt lại vị trí Bé Pet về góc dưới phải!');
           });
           // --- SAFE MODE LOGIC ---
           $('#kaiz-safe-mode').prop('checked', settings.safeMode);
@@ -30473,6 +31161,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const stateManager = new StateManager();
               const loop = new AgentLoop(adapter, registry, stateManager);
               const autoTaskScheduler = new AutoTaskScheduler(loop, stateManager);
+              // Khởi tạo Bé Pet Ảo Đồng Hành (Crystal Slime Mascot)
+              MascotManager.getInstance().init(extPath, loop, autoTaskScheduler);
               // Gắn kết UI trước để đăng ký callback
               ChatWindowUI.init(loop, stateManager, registry);
               ToolCheckerUI.init(registry, adapter);

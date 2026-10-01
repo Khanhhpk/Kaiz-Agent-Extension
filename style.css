@@ -6330,3 +6330,204 @@
         grid-template-columns: 1fr;
     }
 }
+
+/* ==========================================================================
+   VIRTUAL ASSISTANCE PET (CRYSTAL SLIME MASCOT) STYLES
+   ========================================================================== */
+
+#kaiz-assistant-pet.kaiz-pet-widget {
+    position: fixed;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+    cursor: grab;
+    pointer-events: auto;
+    transition: filter 0.3s ease;
+}
+
+#kaiz-assistant-pet.kaiz-pet-dragging {
+    cursor: grabbing !important;
+    transition: none !important;
+    filter: drop-shadow(0 14px 28px rgba(56, 189, 248, 0.45));
+}
+
+#kaiz-assistant-pet.kaiz-pet-dragging .kaiz-pet-avatar {
+    transform: scale(1.08);
+}
+
+.kaiz-pet-avatar {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+        transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1),
+        filter 0.3s ease;
+    will-change: transform, filter;
+}
+
+.kaiz-pet-avatar:hover {
+    transform: scale(1.06);
+    filter: drop-shadow(0 8px 20px rgba(56, 189, 248, 0.38));
+}
+
+.kaiz-pet-sprite {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+    -webkit-user-drag: none;
+}
+
+/* Squish Poke Animation */
+.kaiz-pet-squished {
+    animation: kaiz-pet-poke-squish 0.48s cubic-bezier(0.25, 1, 0.5, 1) !important;
+}
+
+@keyframes kaiz-pet-poke-squish {
+    0% {
+        transform: scale(1, 1);
+    }
+    28% {
+        transform: scale(1.32, 0.68) translateY(10%);
+    }
+    55% {
+        transform: scale(0.86, 1.2) translateY(-8%);
+    }
+    78% {
+        transform: scale(1.08, 0.94) translateY(2%);
+    }
+    100% {
+        transform: scale(1, 1) translateY(0);
+    }
+}
+
+/* State Glows & Auras */
+.kaiz-pet-state-thinking .kaiz-pet-avatar {
+    filter: drop-shadow(0 6px 18px rgba(168, 85, 247, 0.45));
+}
+
+.kaiz-pet-state-working .kaiz-pet-avatar {
+    filter: drop-shadow(0 6px 18px rgba(251, 191, 36, 0.5));
+}
+
+.kaiz-pet-state-success .kaiz-pet-avatar {
+    filter: drop-shadow(0 8px 22px rgba(52, 211, 153, 0.55));
+}
+
+.kaiz-pet-state-error .kaiz-pet-avatar {
+    filter: drop-shadow(0 6px 18px rgba(248, 113, 113, 0.5));
+}
+
+.kaiz-pet-state-sleeping .kaiz-pet-avatar {
+    filter: drop-shadow(0 4px 14px rgba(96, 165, 250, 0.25));
+    opacity: 0.88;
+}
+
+/* Mascot Speech Bubble */
+.kaiz-pet-bubble {
+    position: absolute;
+    bottom: 100%;
+    margin-bottom: 12px;
+    max-width: 240px;
+    min-width: 120px;
+    background: rgba(15, 23, 42, 0.9);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    box-shadow:
+        0 8px 24px rgba(0, 0, 0, 0.45),
+        0 0 14px rgba(56, 189, 248, 0.22);
+    border-radius: 12px;
+    padding: 8px 14px;
+    color: #f1f5f9;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.45;
+    text-align: center;
+    pointer-events: auto;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: kaiz-bubble-pop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition:
+        opacity 0.22s ease,
+        transform 0.22s ease;
+    z-index: 10000;
+}
+
+.kaiz-pet-bubble-text {
+    word-break: break-word;
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.kaiz-pet-bubble-tail {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 7px solid rgba(15, 23, 42, 0.9);
+}
+
+.kaiz-pet-bubble-tail::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 8px solid transparent;
+    border-top: 8px solid rgba(56, 189, 248, 0.35);
+    z-index: -1;
+}
+
+/* Flipped Bubble when close to top viewport edge */
+.kaiz-pet-bubble.bubble-bottom {
+    bottom: auto;
+    top: 100%;
+    margin-top: 12px;
+    margin-bottom: 0;
+}
+
+.kaiz-pet-bubble.bubble-bottom .kaiz-pet-bubble-tail {
+    top: auto;
+    bottom: 100%;
+    border-top: none;
+    border-bottom: 7px solid rgba(15, 23, 42, 0.9);
+}
+
+.kaiz-pet-bubble.bubble-bottom .kaiz-pet-bubble-tail::before {
+    top: 0;
+    border-top: none;
+    border-bottom: 8px solid rgba(56, 189, 248, 0.35);
+}
+
+.kaiz-pet-bubble.kaiz-bubble-fadeout {
+    opacity: 0;
+    transform: scale(0.88) translateY(4px);
+    pointer-events: none;
+}
+
+@keyframes kaiz-bubble-pop {
+    0% {
+        opacity: 0;
+        transform: scale(0.8) translateY(6px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}

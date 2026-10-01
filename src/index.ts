@@ -19,6 +19,7 @@ import { WebImageBridge } from './core/web_image_bridge';
 import { ImageGalleryModal } from './ui/image_gallery_modal';
 import { PresetGitModal } from './ui/preset_git_modal';
 import { MvuDashboardModal } from './ui/mvu_dashboard_modal';
+import { MascotManager } from './core/mascot_manager';
 import { DEFAULT_VIEW_SYSTEM_PROMPT } from './core/defaults';
 
 const EXT_NAME = 'kaiz_agent';
@@ -214,6 +215,9 @@ jQuery(async () => {
             const stateManager = new StateManager();
             const loop = new AgentLoop(adapter, registry, stateManager);
             const autoTaskScheduler = new AutoTaskScheduler(loop, stateManager);
+
+            // Khởi tạo Bé Pet Ảo Đồng Hành (Crystal Slime Mascot)
+            MascotManager.getInstance().init(extPath, loop, autoTaskScheduler);
 
             // Gắn kết UI trước để đăng ký callback
             ChatWindowUI.init(loop, stateManager, registry);

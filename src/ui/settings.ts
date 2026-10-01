@@ -5,6 +5,7 @@ declare const toastr: any;
 import { ToolRegistry } from '../core/tool_registry';
 import { BrowserWindowUI } from './browser_window';
 import { WebImageBridge } from '../core/web_image_bridge';
+import { MascotManager } from '../core/mascot_manager';
 import {
     DEFAULT_CORE_IDENTITY,
     DEFAULT_CORE_BEHAVIOR,
@@ -203,6 +204,46 @@ export class SettingsUI {
         $('#kaiz-cot-display-mode').on('change', function (this: HTMLSelectElement) {
             settings.cotDisplayMode = this.value;
             ctx.saveSettingsDebounced();
+        });
+
+        // --- VIRTUAL ASSISTANCE PET (MASCOT) ---
+        const mascot = MascotManager.getInstance();
+        const petConfig = mascot.getConfig();
+
+        $('#kaiz-pet-enabled').prop('checked', !!petConfig.enabled);
+        $('#kaiz-pet-bubble-enabled').prop('checked', !!petConfig.bubbleEnabled);
+        $('#kaiz-pet-scale').val(petConfig.scale || 96);
+        $('#kaiz-pet-scale-val').text(`${petConfig.scale || 96}px`);
+        $('#kaiz-pet-opacity').val(petConfig.opacity ?? 100);
+        $('#kaiz-pet-opacity-val').text(`${petConfig.opacity ?? 100}%`);
+
+        $('#kaiz-pet-enabled').on('change', function (this: HTMLInputElement) {
+            mascot.updateConfig({ enabled: !!this.checked });
+        });
+
+        $('#kaiz-pet-bubble-enabled').on('change', function (this: HTMLInputElement) {
+            mascot.updateConfig({ bubbleEnabled: !!this.checked });
+        });
+
+        $('#kaiz-pet-scale').on('input change', function (this: HTMLInputElement) {
+            const val = parseInt(this.value, 10) || 96;
+            $('#kaiz-pet-scale-val').text(`${val}px`);
+            mascot.updateConfig({ scale: val });
+        });
+
+        $('#kaiz-pet-opacity').on('input change', function (this: HTMLInputElement) {
+            const val = parseInt(this.value, 10) ?? 100;
+            $('#kaiz-pet-opacity-val').text(`${val}%`);
+            mascot.updateConfig({ opacity: val });
+        });
+
+        $('#kaiz-pet-poke-btn').on('click', function () {
+            mascot.poke();
+        });
+
+        $('#kaiz-pet-reset-pos').on('click', function () {
+            mascot.resetPosition();
+            toastr.info('Đã đặt lại vị trí Bé Pet về góc dưới phải!');
         });
 
         // --- SAFE MODE LOGIC ---
