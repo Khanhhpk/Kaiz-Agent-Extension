@@ -15,16 +15,20 @@ export class AvatarCropperModal {
     private onSaveCallback: ((dataUrl: string) => void) | null = null;
 
     // State
+    private zoom = 1.0; // Zoom multiplier relative to baseScale (0.2 to 5.0)
     private scale = 1.0;
     private baseScale = 1.0;
     private offsetX = 0;
     private offsetY = 0;
     private rotation = 0; // 0, 90, 180, 270
+    private rafId: number | null = null;
 
     // Interaction
     private isDragging = false;
     private startX = 0;
     private startY = 0;
+    private initialPinchDist = 0;
+    private initialPinchZoom = 1.0;
 
     private readonly canvasSize = 340;
     private readonly cropRadius = 120; // 240px đường kính
@@ -61,7 +65,7 @@ export class AvatarCropperModal {
 
             <div style="padding: 16px 18px; display: flex; flex-direction: column; align-items: center; gap: 14px;">
                 <!-- Main Canvas Viewport -->
-                <div style="position: relative; width: 340px; height: 340px; background: #0c0d11; border-radius: 10px; overflow: hidden; box-shadow: inset 0 0 16px rgba(0,0,0,0.8); cursor: grab; user-select: none;" id="kaiz-crop-canvas-wrapper">
+                <div style="position: relative; width: 340px; height: 340px; background: #0c0d11; border-radius: 10px; overflow: hidden; box-shadow: inset 0 0 16px rgba(0,0,0,0.8); cursor: grab; user-select: none; touch-action: none;" id="kaiz-crop-canvas-wrapper">
                     <canvas id="kaiz-crop-main-canvas" width="340" height="340" style="display: block; width: 340px; height: 340px;"></canvas>
                 </div>
 
@@ -73,7 +77,7 @@ export class AvatarCropperModal {
                 <div style="width: 100%; display: flex; flex-direction: column; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
                         <span style="font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-magnifying-glass"></i> Thu phóng:</span>
-                        <input id="kaiz-crop-zoom-range" type="range" class="kaiz-range" min="0.5" max="3.5" step="0.05" value="1" style="flex: 1;" />
+                        <input id="kaiz-crop-zoom-range" type="range" class="kaiz-range" min="0.3" max="4.0" step="0.02" value="1" style="flex: 1;" />
                         <span id="kaiz-crop-zoom-val" style="font-size: 11px; color: var(--accent, #6495ed); min-width: 38px; text-align: right; font-weight: 600;">100%</span>
                     </div>
 
@@ -124,6 +128,13 @@ export class AvatarCropperModal {
             this.modal?.close();
         });
 
+        // Click outside dialog to close
+        this.modal.addEventListener('click', (e: MouseEvent) => {
+            if (e.target === this.modal) {
+                this.modal?.close();
+            }
+        });
+
         // Mouse drag on canvas
         const wrapper = document.getElementById('kaiz-crop-canvas-wrapper');
         if (wrapper) {
@@ -138,7 +149,8 @@ export class AvatarCropperModal {
                 if (!this.isDragging) return;
                 this.offsetX = e.clientX - this.startX;
                 this.offsetY = e.clientY - this.startY;
-                this.draw();
+                this.clampOffset();
+                this.requestDraw();
             });
 
             window.addEventListener('mouseup', () => {
@@ -148,13 +160,59 @@ export class AvatarCropperModal {
                 }
             });
 
-            // Mouse wheel zoom
+            // Touch support for Mobile / Phone Mode
+            wrapper.addEventListener(
+                'touchstart',
+                (e: TouchEvent) => {
+                    if (e.touches.length === 1) {
+                        this.isDragging = true;
+                        this.startX = e.touches[0].clientX - this.offsetX;
+                        this.startY = e.touches[0].clientY - this.offsetY;
+                    } else if (e.touches.length === 2) {
+                        this.isDragging = false;
+                        this.initialPinchDist = Math.hypot(
+                            e.touches[0].clientX - e.touches[1].clientX,
+                            e.touches[0].clientY - e.touches[1].clientY,
+                        );
+                        this.initialPinchZoom = this.zoom;
+                    }
+                },
+                { passive: true },
+            );
+
+            window.addEventListener(
+                'touchmove',
+                (e: TouchEvent) => {
+                    if (this.isDragging && e.touches.length === 1) {
+                        this.offsetX = e.touches[0].clientX - this.startX;
+                        this.offsetY = e.touches[0].clientY - this.startY;
+                        this.clampOffset();
+                        this.requestDraw();
+                    } else if (e.touches.length === 2 && this.initialPinchDist > 0) {
+                        const dist = Math.hypot(
+                            e.touches[0].clientX - e.touches[1].clientX,
+                            e.touches[0].clientY - e.touches[1].clientY,
+                        );
+                        const pinchFactor = dist / this.initialPinchDist;
+                        this.setZoom(this.initialPinchZoom * pinchFactor);
+                    }
+                },
+                { passive: true },
+            );
+
+            window.addEventListener('touchend', () => {
+                this.isDragging = false;
+                this.initialPinchDist = 0;
+            });
+
+            // Mouse wheel zoom - smooth & predictable
             wrapper.addEventListener(
                 'wheel',
-                (e) => {
+                (e: WheelEvent) => {
                     e.preventDefault();
-                    const delta = e.deltaY < 0 ? 0.08 : -0.08;
-                    this.setScale(this.scale + delta);
+                    // Smooth multiplicative zoom
+                    const factor = e.deltaY < 0 ? 1.08 : 0.92;
+                    this.setZoom(this.zoom * factor);
                 },
                 { passive: false },
             );
@@ -163,13 +221,15 @@ export class AvatarCropperModal {
         // Zoom range input
         $('#kaiz-crop-zoom-range').on('input', (e: any) => {
             const val = parseFloat(e.target.value);
-            this.setScale(val);
+            if (!isNaN(val)) {
+                this.setZoom(val);
+            }
         });
 
         // Rotate button
         $('#kaiz-crop-rotate-btn').on('click', () => {
             this.rotation = (this.rotation + 90) % 360;
-            this.draw();
+            this.requestDraw();
         });
 
         // Center button
@@ -195,6 +255,8 @@ export class AvatarCropperModal {
         const reader = new FileReader();
         reader.onload = (e) => {
             const dataUrl = e.target?.result as string;
+            if (!dataUrl) return;
+
             const img = new Image();
             img.onload = () => {
                 this.img = img;
@@ -202,46 +264,70 @@ export class AvatarCropperModal {
                 this.resetView();
                 this.modal?.showModal();
             };
+            img.onerror = () => {
+                const toastr = (window as any).toastr;
+                if (toastr) {
+                    toastr.error('Không thể đọc file ảnh này. Vui lòng chọn ảnh định dạng hợp lệ!');
+                }
+            };
             img.src = dataUrl;
         };
         reader.readAsDataURL(file);
+    }
+
+    private clampOffset(): void {
+        // Prevent image from being dragged completely outside the crop area
+        const limit = this.canvasSize;
+        this.offsetX = Math.max(-limit, Math.min(limit * 2, this.offsetX));
+        this.offsetY = Math.max(-limit, Math.min(limit * 2, this.offsetY));
     }
 
     private resetView(): void {
         if (!this.img) return;
         const cropDiameter = this.cropRadius * 2;
         // Fit image so minimum dimension covers the crop circle
-        const minDim = Math.min(this.img.width, this.img.height);
+        const minDim = Math.min(this.img.width, this.img.height) || 1;
         this.baseScale = cropDiameter / minDim;
+        this.zoom = 1.0;
         this.scale = this.baseScale;
         this.offsetX = this.canvasSize / 2;
         this.offsetY = this.canvasSize / 2;
 
         const zoomInput = document.getElementById('kaiz-crop-zoom-range') as HTMLInputElement;
         if (zoomInput) {
-            zoomInput.value = '1';
+            zoomInput.value = '1.0';
         }
         this.updateZoomLabel();
-        this.draw();
+        this.requestDraw();
     }
 
-    private setScale(val: number): void {
-        const clamped = Math.max(0.2, Math.min(5.0, val));
-        this.scale = clamped * this.baseScale;
+    private setZoom(val: number): void {
+        const clamped = Math.max(0.3, Math.min(4.0, val));
+        this.zoom = clamped;
+        this.scale = this.zoom * this.baseScale;
+
         const zoomInput = document.getElementById('kaiz-crop-zoom-range') as HTMLInputElement;
         if (zoomInput) {
             zoomInput.value = clamped.toFixed(2);
         }
         this.updateZoomLabel();
-        this.draw();
+        this.requestDraw();
     }
 
     private updateZoomLabel(): void {
         const label = document.getElementById('kaiz-crop-zoom-val');
-        if (label && this.baseScale > 0) {
-            const pct = Math.round((this.scale / this.baseScale) * 100);
+        if (label) {
+            const pct = Math.round(this.zoom * 100);
             label.textContent = `${pct}%`;
         }
+    }
+
+    private requestDraw(): void {
+        if (this.rafId !== null) return;
+        this.rafId = requestAnimationFrame(() => {
+            this.rafId = null;
+            this.draw();
+        });
     }
 
     private draw(): void {
@@ -330,8 +416,8 @@ export class AvatarCropperModal {
     private exportAndSave(): void {
         if (!this.img) return;
 
-        // Export high-res 256x256 circular image
-        const exportSize = 256;
+        // Export optimal 192x192 circular image (~25KB vs 150KB+, sharp on retina & lightweight)
+        const exportSize = 192;
         const outCanvas = document.createElement('canvas');
         outCanvas.width = exportSize;
         outCanvas.height = exportSize;
