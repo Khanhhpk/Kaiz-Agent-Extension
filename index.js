@@ -106,10 +106,27 @@ CẤU TRÚC PROMPT (TIẾNG ANH):
       _forceAbortReject = null;
       _safeModeReject = null;
       _currentAbortController = null;
+      _subscribers = [];
       constructor(adapter, toolRegistry, stateManager) {
           this.adapter = adapter;
           this.toolRegistry = toolRegistry;
           this.stateManager = stateManager;
+      }
+      subscribe(callback) {
+          this._subscribers.push(callback);
+          return () => {
+              this._subscribers = this._subscribers.filter((cb) => cb !== callback);
+          };
+      }
+      emitEvent(event) {
+          for (const cb of this._subscribers) {
+              try {
+                  cb(event);
+              }
+              catch (err) {
+                  console.error('[AgentLoop] Subscriber error:', err);
+              }
+          }
       }
       /**
        * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng sau khi hoàn thành bước hiện tại.
@@ -463,6 +480,12 @@ CÁC CÔNG CỤ HIỆN CÓ:
       }
       async run(history, maxSteps, onEvent, continueMode = false, toolsConfigOverride) {
           console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
+          this.emitEvent({ type: 'think_start' });
+          const originalOnEvent = onEvent;
+          onEvent = async (event) => {
+              this.emitEvent(event);
+              await originalOnEvent(event);
+          };
           const cachedSystemPrompt = this.generateSystemPrompt(maxSteps, toolsConfigOverride);
           const internalHistory = history.map((msg) => ({ ...msg }));
           for (let i = internalHistory.length - 1; i >= 0; i--) {
@@ -506,7 +529,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                       break;
                   }
                   step++;
-                  await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
+                  await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1, step } });
                   try {
                       const truncatedHistory = await this.applyTokenSafeLimit(internalHistory);
                       const messages = this.buildMessages(truncatedHistory, maxSteps, step, lastToolError, cachedSystemPrompt, continueMode);
@@ -761,6 +784,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
           }
           finally {
               this._isRunning = false;
+              this.emitEvent({ type: 'step_end', isFinal: true });
           }
       }
   }
@@ -22507,6 +22531,1739 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       }
   }
 
+  /**
+   * Virtual Assistance Pet (Crystal Slime Mascot) Constants & Types
+   */
+  const DEFAULT_PET_CONFIG = {
+      enabled: true,
+      scale: 96,
+      opacity: 100,
+      bubbleEnabled: true,
+      soundEnabled: false,
+      roamingEnabled: true,
+  };
+  const PET_ASSETS = {
+      idle: 'assets/pet/slime_idle_20f.webp',
+      thinking: 'assets/pet/slime_thinking_20f.webp',
+      working: 'assets/pet/slime_working_20f.webp',
+      success: 'assets/pet/slime_hurray_20f.webp',
+      error: 'assets/pet/slime_worry_20f.webp',
+      sleeping: 'assets/pet/slime_sleeping_20f.webp',
+      bounce: 'assets/pet/slime_bounce_20f.webp',
+  };
+  const PET_QUOTES = {
+      idle: [
+          'Bé Slime đang sẵn sàng giúp bạn nè! ✨',
+          'Bồng bềnh bồng bềnh... Hôm nay chúng ta làm gì thế?',
+          'Pha lê phát sáng lung linh! Cần gì cứ gọi Kaiz nhé!',
+          'Chủ nhân ơi, bé đang trực đây!',
+      ],
+      thinking: [
+          'Đang suy ngẫm giải pháp tối ưu...',
+          'Chờ xíu nhé, đang tính toán CoT...',
+          'Hmm... Ý tưởng này thú vị đấy!',
+          'Đang kết nối luồng tư duy ma thuật...',
+          'Đang đọc và phân tích dữ liệu...',
+          'Suy luận bước tiếp theo nào...',
+      ],
+      working: [
+          'Đang thi hành công cụ...',
+          'Thao tác dữ liệu SillyTavern...',
+          'Gõ phím lách cách, chạy tool vèo vèo! ⚡',
+          'Đang xử lý tác vụ cho bạn nè!',
+      ],
+      success: [
+          'Xong xuôi rồi nè, yay! 🎉',
+          'Nhiệm vụ hoàn thành xuất sắc! ✨',
+          'Pha lê rực sáng ăn mừng nào! 🌟',
+          'Tác vụ đã hoàn tất trọn vẹn!',
+      ],
+      error: [
+          'Ối, có gì đó sai sai rồi... 💦',
+          'Gặp trục trặc rồi, để bé gỡ lỗi nhé!',
+          'Ui da, tan chảy xẹp lép luôn... 🌀',
+          'Đang thử lại nè, đừng lo lắng!',
+      ],
+      sleeping: ['Khò khò... Zzz... 💤', 'Bé chợp mắt tí xíu nha... Zzz', 'Bong bóng ngủ bồng bềnh... 🫧'],
+      bounce: ['Vèo vèo... Đang bay lượn nè! 🎈', 'Nảy tưng tưng khắp màn hình! ✨', 'Ú òa, đổi chỗ ở mới thôi nào!'],
+      roam: [
+          'Đi dạo quanh màn hình tí nào~ ✨',
+          'Khám phá góc mới xem có gì vui không!',
+          'Nhún nhảy tung tăng khắp nơi~ 🎈',
+          'Chỗ này ngắm SillyTavern thích thật đấy!',
+          'Bồng bềnh bồng bềnh đổi chỗ mới thôi!',
+      ],
+      click: [
+          'Nhột quá hihi! 😄',
+          'Nảy nảy tưng tưng nè! ✨',
+          'Chủ nhân gọi bé có việc gì thế ạ?',
+          'Bé Slime tinh thể luôn bên bạn! 💙',
+          'Double click vào bé để mở nhanh Kaiz Chat nha!',
+      ],
+  };
+
+  /**
+   * Virtual Assistance Pet (Crystal Slime Mascot) Widget
+   * Manages the floating DOM element, dragging, boundary clamping, speech bubble, and animations.
+   */
+  class MascotWidget {
+      extPath;
+      config;
+      onPoke;
+      onDoubleClick;
+      el = null;
+      avatarEl = null;
+      imgEl = null;
+      bubbleEl = null;
+      bubbleTextEl = null;
+      currentState = 'idle';
+      bubbleTimeout = null;
+      returnToIdleTimeout = null;
+      // Autonomous Roaming movement state
+      moveTimeout = null;
+      isMovingState = false;
+      // Dragging state
+      isDragging = false;
+      hasMoved = false;
+      startPointerX = 0;
+      startPointerY = 0;
+      startElemX = 0;
+      startElemY = 0;
+      activePointerId = null;
+      // Click & double click tracking
+      lastClickTime = 0;
+      singleClickTimeout = null;
+      constructor(extPath, config, onPoke, onDoubleClick) {
+          this.extPath = extPath;
+          this.config = config;
+          this.onPoke = onPoke;
+          this.onDoubleClick = onDoubleClick;
+      }
+      init() {
+          const existing = document.getElementById('kaiz-assistant-pet');
+          if (existing) {
+              existing.remove();
+          }
+          // Create widget root container
+          const widget = document.createElement('div');
+          widget.id = 'kaiz-assistant-pet';
+          widget.className = 'kaiz-pet-widget';
+          widget.setAttribute('role', 'complementary');
+          widget.setAttribute('aria-label', 'Kaiz Virtual Assistance Pet');
+          // Create Speech Bubble
+          const bubble = document.createElement('div');
+          bubble.className = 'kaiz-pet-bubble';
+          bubble.style.display = 'none';
+          const bubbleText = document.createElement('span');
+          bubbleText.className = 'kaiz-pet-bubble-text';
+          const bubbleTail = document.createElement('div');
+          bubbleTail.className = 'kaiz-pet-bubble-tail';
+          bubble.appendChild(bubbleText);
+          bubble.appendChild(bubbleTail);
+          // Click bubble to dismiss immediately
+          bubble.addEventListener('click', (e) => {
+              e.stopPropagation();
+              this.hideBubble();
+          });
+          // Create Avatar container & Image
+          const avatar = document.createElement('div');
+          avatar.className = 'kaiz-pet-avatar';
+          const img = document.createElement('img');
+          img.className = 'kaiz-pet-sprite';
+          img.alt = 'Bé Slime Tinh Thể Kaiz';
+          img.draggable = false;
+          avatar.appendChild(img);
+          widget.appendChild(bubble);
+          widget.appendChild(avatar);
+          document.body.appendChild(widget);
+          this.el = widget;
+          this.avatarEl = avatar;
+          this.imgEl = img;
+          this.bubbleEl = bubble;
+          this.bubbleTextEl = bubbleText;
+          // Restore saved position or use default bottom-right
+          this.restorePosition();
+          // Bind Dragging & Click events
+          this.bindEvents();
+          // Apply initial config
+          this.applyConfig(this.config);
+          // Set initial state
+          this.setState('idle');
+      }
+      resolveAssetUrl(state) {
+          const relPath = PET_ASSETS[state] || PET_ASSETS.idle;
+          return `/scripts/extensions/${this.extPath}/${relPath}`;
+      }
+      setState(state, quote, durationMs) {
+          if (!this.imgEl)
+              return;
+          this.currentState = state;
+          // Nếu chuyển sang trạng thái làm việc hoặc báo lỗi/thành công, dừng ngay mọi di chuyển đi dạo
+          if (state === 'thinking' || state === 'working' || state === 'success' || state === 'error') {
+              this.stopMoving();
+          }
+          // Clear any pending return to idle
+          if (this.returnToIdleTimeout) {
+              clearTimeout(this.returnToIdleTimeout);
+              this.returnToIdleTimeout = null;
+          }
+          // Update image source
+          const newSrc = this.resolveAssetUrl(state);
+          if (this.imgEl.src !== newSrc) {
+              this.imgEl.src = newSrc;
+          }
+          // Update CSS class for container
+          if (this.el) {
+              this.el.className = `kaiz-pet-widget kaiz-pet-state-${state}`;
+          }
+          // Show contextual speech bubble if quote provided
+          if (quote) {
+              this.showBubble(quote, durationMs);
+          }
+          // If state is transient (e.g. success or error or bounce), schedule return to idle
+          if (state === 'success' || state === 'error' || state === 'bounce') {
+              const delay = durationMs || (state === 'bounce' ? 1200 : 4500);
+              this.returnToIdleTimeout = setTimeout(() => {
+                  if (this.currentState === state) {
+                      this.setState('idle');
+                  }
+              }, delay);
+          }
+      }
+      getState() {
+          return this.currentState;
+      }
+      showBubble(text, durationMs = 4500) {
+          if (!this.config.bubbleEnabled || !this.bubbleEl || !this.bubbleTextEl || !this.el)
+              return;
+          if (this.bubbleTimeout) {
+              clearTimeout(this.bubbleTimeout);
+              this.bubbleTimeout = null;
+          }
+          this.bubbleTextEl.textContent = text;
+          this.bubbleEl.style.display = 'flex';
+          this.bubbleEl.classList.remove('kaiz-bubble-fadeout');
+          // Check if pet is too close to top of viewport -> flip bubble to bottom
+          const rect = this.el.getBoundingClientRect();
+          if (rect.top < 95) {
+              this.bubbleEl.classList.add('bubble-bottom');
+          }
+          else {
+              this.bubbleEl.classList.remove('bubble-bottom');
+          }
+          this.bubbleTimeout = setTimeout(() => {
+              this.hideBubble();
+          }, durationMs);
+      }
+      hideBubble() {
+          if (!this.bubbleEl)
+              return;
+          this.bubbleEl.classList.add('kaiz-bubble-fadeout');
+          setTimeout(() => {
+              if (this.bubbleEl && this.bubbleEl.classList.contains('kaiz-bubble-fadeout')) {
+                  this.bubbleEl.style.display = 'none';
+                  this.bubbleEl.classList.remove('kaiz-bubble-fadeout');
+              }
+          }, 220);
+      }
+      applyConfig(newConfig) {
+          this.config = { ...this.config, ...newConfig };
+          if (!this.el || !this.avatarEl || !this.imgEl)
+              return;
+          // Visibility
+          if (!this.config.enabled) {
+              this.el.style.display = 'none';
+              return;
+          }
+          else {
+              this.el.style.display = 'flex';
+          }
+          // Scale
+          const scalePx = Math.max(48, Math.min(180, this.config.scale || 96));
+          this.avatarEl.style.width = `${scalePx}px`;
+          this.avatarEl.style.height = `${scalePx}px`;
+          this.imgEl.style.width = `${scalePx}px`;
+          this.imgEl.style.height = `${scalePx}px`;
+          // Opacity
+          const opVal = Math.max(0.4, Math.min(1.0, (this.config.opacity ?? 100) / 100));
+          this.avatarEl.style.opacity = opVal.toString();
+          // Bubble visibility
+          if (!this.config.bubbleEnabled) {
+              this.hideBubble();
+          }
+      }
+      resetPosition() {
+          if (!this.el)
+              return;
+          try {
+              localStorage.removeItem('kaiz_pet_pos');
+          }
+          catch (_) { }
+          this.el.style.left = 'auto';
+          this.el.style.top = 'auto';
+          this.el.style.right = '28px';
+          this.el.style.bottom = '100px';
+          // Play brief bounce & squish celebration
+          this.poke();
+      }
+      poke() {
+          if (!this.avatarEl)
+              return;
+          // Trigger squish animation
+          this.avatarEl.classList.remove('kaiz-pet-squished');
+          void this.avatarEl.offsetWidth; // Trigger reflow
+          this.avatarEl.classList.add('kaiz-pet-squished');
+          // Play random poke quote
+          const quotes = PET_QUOTES.click;
+          const randomQuote = quotes[Math.floor(Math.random() * quotes.length)];
+          this.showBubble(randomQuote, 3500);
+          if (this.onPoke) {
+              this.onPoke();
+          }
+      }
+      getPosition() {
+          if (!this.el)
+              return { x: 0, y: 0 };
+          const rect = this.el.getBoundingClientRect();
+          return { x: rect.left, y: rect.top };
+      }
+      isMoving() {
+          return this.isMovingState;
+      }
+      stopMoving() {
+          if (this.moveTimeout) {
+              clearTimeout(this.moveTimeout);
+              this.moveTimeout = null;
+          }
+          if (this.el && this.isMovingState) {
+              this.isMovingState = false;
+              this.el.classList.remove('kaiz-pet-moving');
+              const rect = this.el.getBoundingClientRect();
+              this.el.style.transition = '';
+              this.el.style.left = `${rect.left}px`;
+              this.el.style.top = `${rect.top}px`;
+              this.el.style.right = 'auto';
+              this.el.style.bottom = 'auto';
+              this.savePosition(rect.left, rect.top);
+              if (this.currentState === 'bounce') {
+                  this.setState('idle');
+              }
+          }
+      }
+      moveTo(targetX, targetY, durationMs = 2200, onArrival) {
+          if (!this.el || !this.avatarEl || this.isDragging)
+              return;
+          this.stopMoving();
+          const rect = this.el.getBoundingClientRect();
+          const currentX = rect.left;
+          // Lật mặt theo hướng di chuyển: sang trái thì scaleX(-1), sang phải thì scaleX(1)
+          if (targetX < currentX - 8) {
+              this.avatarEl.style.transform = 'scaleX(-1)';
+          }
+          else if (targetX > currentX + 8) {
+              this.avatarEl.style.transform = 'scaleX(1)';
+          }
+          this.isMovingState = true;
+          this.el.classList.add('kaiz-pet-moving');
+          // Bật hoạt ảnh bounce khi di chuyển
+          this.setState('bounce');
+          // Thiết lập CSS transition mượt mà
+          const sec = (durationMs / 1000).toFixed(2);
+          this.el.style.transition = `left ${sec}s cubic-bezier(0.25, 1, 0.5, 1), top ${sec}s cubic-bezier(0.25, 1, 0.5, 1)`;
+          // Kích hoạt tọa độ mới
+          this.el.style.left = `${targetX}px`;
+          this.el.style.top = `${targetY}px`;
+          this.el.style.right = 'auto';
+          this.el.style.bottom = 'auto';
+          this.moveTimeout = setTimeout(() => {
+              this.moveTimeout = null;
+              this.isMovingState = false;
+              if (this.el) {
+                  this.el.classList.remove('kaiz-pet-moving');
+                  this.el.style.transition = '';
+              }
+              this.savePosition(targetX, targetY);
+              if (this.currentState === 'bounce') {
+                  this.setState('idle');
+              }
+              if (onArrival) {
+                  onArrival();
+              }
+          }, durationMs);
+      }
+      restorePosition() {
+          if (!this.el)
+              return;
+          try {
+              const raw = localStorage.getItem('kaiz_pet_pos');
+              if (raw) {
+                  const pos = JSON.parse(raw);
+                  if (typeof pos.x === 'number' && typeof pos.y === 'number') {
+                      const maxW = Math.max(100, window.innerWidth - (this.config.scale || 96));
+                      const maxH = Math.max(100, window.innerHeight - (this.config.scale || 96));
+                      const clampedX = Math.max(10, Math.min(maxW - 10, pos.x));
+                      const clampedY = Math.max(10, Math.min(maxH - 10, pos.y));
+                      this.el.style.left = `${clampedX}px`;
+                      this.el.style.top = `${clampedY}px`;
+                      this.el.style.right = 'auto';
+                      this.el.style.bottom = 'auto';
+                      return;
+                  }
+              }
+          }
+          catch (_) { }
+          // Default: Bottom-right corner above ST bar
+          this.el.style.left = 'auto';
+          this.el.style.top = 'auto';
+          this.el.style.right = '28px';
+          this.el.style.bottom = '100px';
+      }
+      savePosition(x, y) {
+          try {
+              const pos = {
+                  x,
+                  y,
+                  winW: window.innerWidth,
+                  winH: window.innerHeight,
+              };
+              localStorage.setItem('kaiz_pet_pos', JSON.stringify(pos));
+          }
+          catch (_) { }
+      }
+      bindEvents() {
+          if (!this.el)
+              return;
+          // Pointer Down (Mouse, Touch, Pen)
+          this.el.addEventListener('pointerdown', (e) => {
+              // Only respond to main button
+              if (e.button !== 0)
+                  return;
+              e.preventDefault();
+              // Dừng ngay di chuyển tự do nếu người dùng tương tác
+              this.stopMoving();
+              this.isDragging = false;
+              this.hasMoved = false;
+              this.activePointerId = e.pointerId;
+              this.el?.setPointerCapture(e.pointerId);
+              this.startPointerX = e.clientX;
+              this.startPointerY = e.clientY;
+              const rect = this.el.getBoundingClientRect();
+              this.startElemX = rect.left;
+              this.startElemY = rect.top;
+          });
+          // Pointer Move
+          this.el.addEventListener('pointermove', (e) => {
+              if (this.activePointerId !== e.pointerId)
+                  return;
+              const dx = e.clientX - this.startPointerX;
+              const dy = e.clientY - this.startPointerY;
+              // Threshold of 5px to distinguish drag from click
+              if (!this.isDragging && Math.hypot(dx, dy) > 5) {
+                  this.isDragging = true;
+                  this.hasMoved = true;
+                  this.el?.classList.add('kaiz-pet-dragging');
+                  // Switch to bounce animation while dragging
+                  if (this.currentState === 'idle' || this.currentState === 'sleeping') {
+                      this.setState('bounce');
+                  }
+              }
+              if (this.isDragging && this.el) {
+                  const targetScale = this.config.scale || 96;
+                  const maxX = Math.max(0, window.innerWidth - targetScale);
+                  const maxY = Math.max(0, window.innerHeight - targetScale);
+                  const newX = Math.max(0, Math.min(maxX, this.startElemX + dx));
+                  const newY = Math.max(0, Math.min(maxY, this.startElemY + dy));
+                  this.el.style.left = `${newX}px`;
+                  this.el.style.top = `${newY}px`;
+                  this.el.style.right = 'auto';
+                  this.el.style.bottom = 'auto';
+              }
+          });
+          // Pointer Up
+          const onPointerUp = (e) => {
+              if (this.activePointerId !== e.pointerId)
+                  return;
+              if (this.el?.hasPointerCapture(e.pointerId)) {
+                  this.el.releasePointerCapture(e.pointerId);
+              }
+              this.activePointerId = null;
+              this.el?.classList.remove('kaiz-pet-dragging');
+              if (this.isDragging && this.el) {
+                  this.isDragging = false;
+                  const rect = this.el.getBoundingClientRect();
+                  this.savePosition(rect.left, rect.top);
+                  // Return from bounce to idle after dropping
+                  setTimeout(() => {
+                      if (this.currentState === 'bounce') {
+                          this.setState('idle');
+                      }
+                  }, 300);
+              }
+              else if (!this.hasMoved) {
+                  // Click handler (Single vs Double Click)
+                  const now = Date.now();
+                  if (now - this.lastClickTime < 320) {
+                      // Double click!
+                      if (this.singleClickTimeout) {
+                          clearTimeout(this.singleClickTimeout);
+                          this.singleClickTimeout = null;
+                      }
+                      this.lastClickTime = 0;
+                      if (this.onDoubleClick) {
+                          this.onDoubleClick();
+                      }
+                      else {
+                          // Default double-click action: trigger floating button to open chat window
+                          if (typeof jQuery !== 'undefined') {
+                              jQuery('#kaiz-floating-btn').trigger('click');
+                          }
+                      }
+                  }
+                  else {
+                      // Single click with slight delay to distinguish from double click
+                      this.lastClickTime = now;
+                      this.singleClickTimeout = setTimeout(() => {
+                          this.poke();
+                          this.singleClickTimeout = null;
+                      }, 320);
+                  }
+              }
+          };
+          this.el.addEventListener('pointerup', onPointerUp);
+          this.el.addEventListener('pointercancel', onPointerUp);
+          // Window resize boundary protection
+          window.addEventListener('resize', () => {
+              if (!this.el || this.el.style.display === 'none')
+                  return;
+              const rect = this.el.getBoundingClientRect();
+              const targetScale = this.config.scale || 96;
+              const maxX = Math.max(0, window.innerWidth - targetScale);
+              const maxY = Math.max(0, window.innerHeight - targetScale);
+              if (rect.left > maxX || rect.top > maxY) {
+                  const clampedX = Math.max(0, Math.min(maxX, rect.left));
+                  const clampedY = Math.max(0, Math.min(maxY, rect.top));
+                  this.el.style.left = `${clampedX}px`;
+                  this.el.style.top = `${clampedY}px`;
+                  this.savePosition(clampedX, clampedY);
+              }
+          });
+      }
+      destroy() {
+          this.stopMoving();
+          if (this.bubbleTimeout)
+              clearTimeout(this.bubbleTimeout);
+          if (this.returnToIdleTimeout)
+              clearTimeout(this.returnToIdleTimeout);
+          if (this.singleClickTimeout)
+              clearTimeout(this.singleClickTimeout);
+          if (this.el) {
+              this.el.remove();
+              this.el = null;
+          }
+      }
+  }
+
+  /**
+   * Virtual Assistance Pet (Crystal Slime Mascot) Manager
+   * Central coordinator linking AgentLoop, AutoTasks, Idle/Sleep timers, and the MascotWidget UI.
+   */
+  class MascotManager {
+      static instance = null;
+      widget = null;
+      extPath = '';
+      config = { ...DEFAULT_PET_CONFIG };
+      idleTimer = null;
+      idleTimeoutMs = 180000; // 3 minutes idle -> sleep (when roaming is disabled)
+      roamTimer = null;
+      wakeTimer = null;
+      resizeDebounceTimer = null;
+      debuggerTimer = null;
+      isActionRunning = false;
+      consecutiveRoams = 0;
+      loopUnsubscribe = null;
+      constructor() { }
+      static getInstance() {
+          if (!MascotManager.instance) {
+              MascotManager.instance = new MascotManager();
+          }
+          return MascotManager.instance;
+      }
+      init(extPath, loop, _scheduler) {
+          this.extPath = extPath;
+          // 1. Load saved config from SillyTavern context
+          const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+          if (ctx && ctx.extensionSettings?.kaiz_agent) {
+              const saved = ctx.extensionSettings.kaiz_agent.petConfig;
+              if (saved && typeof saved === 'object') {
+                  this.config = { ...DEFAULT_PET_CONFIG, ...saved };
+              }
+              else {
+                  ctx.extensionSettings.kaiz_agent.petConfig = { ...this.config };
+              }
+          }
+          // 2. Initialize Widget
+          this.widget = new MascotWidget(this.extPath, this.config, () => this.handlePoke(), () => this.handleDoubleClick());
+          this.widget.init();
+          // 3. Connect to AgentLoop if provided
+          if (loop) {
+              this.connectLoop(loop);
+          }
+          // 4. Start autonomous roaming or idle timer
+          if (this.config.roamingEnabled) {
+              this.startRoamingLoop();
+          }
+          else {
+              this.startIdleTimer();
+          }
+          // 5. Listen to window resize to intelligently keep pet within visible viewport
+          window.addEventListener('resize', this.handleWindowResize);
+          console.log('[KaizAgent] Virtual Assistance Pet (Crystal Slime Mascot) initialized.');
+      }
+      connectLoop(loop) {
+          if (this.loopUnsubscribe) {
+              this.loopUnsubscribe();
+              this.loopUnsubscribe = null;
+          }
+          this.loopUnsubscribe = loop.subscribe((event) => {
+              if (!this.config.enabled)
+                  return;
+              switch (event.type) {
+                  case 'think_start':
+                      this.isActionRunning = true;
+                      this.stopRoaming();
+                      this.resetIdleTimer();
+                      this.setState('thinking', this.getRandomQuote('thinking'));
+                      break;
+                  case 'step_start':
+                      this.isActionRunning = true;
+                      this.stopRoaming();
+                      this.resetIdleTimer();
+                      // Khi chưa bước vào làm việc với tool, bé tiếp tục ở trạng thái thinking
+                      if (this.widget?.getState() !== 'working') {
+                          this.setState('thinking', this.getRandomQuote('thinking'));
+                      }
+                      break;
+                  case 'tool_call': {
+                      this.isActionRunning = true;
+                      this.stopRoaming();
+                      this.resetIdleTimer();
+                      const toolName = event.data?.name || 'Công cụ';
+                      this.setState('working', `Đang dùng: ${toolName}... ⚡`);
+                      break;
+                  }
+                  case 'retry':
+                      this.stopRoaming();
+                      this.resetIdleTimer();
+                      this.setState('error', 'Đang thử lại kết nối... 🔄', 3500);
+                      break;
+                  case 'error':
+                      this.isActionRunning = false;
+                      this.stopRoaming();
+                      this.resetIdleTimer();
+                      this.setState('error', 'Ối, có lỗi xảy ra rồi... 💦', 5000);
+                      setTimeout(() => {
+                          if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                              if (this.config.roamingEnabled) {
+                                  this.startRoamingLoop();
+                              }
+                              else {
+                                  this.resetIdleTimer();
+                              }
+                          }
+                      }, 5200);
+                      break;
+                  case 'step_end':
+                      if (event.isFinal) {
+                          this.isActionRunning = false;
+                          this.stopRoaming();
+                          this.resetIdleTimer();
+                          this.setState('success', this.getRandomQuote('success'), 4500);
+                          setTimeout(() => {
+                              if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                                  if (this.config.roamingEnabled) {
+                                      this.startRoamingLoop();
+                                  }
+                                  else {
+                                      this.resetIdleTimer();
+                                  }
+                              }
+                          }, 4800);
+                      }
+                      break;
+              }
+          });
+      }
+      setState(state, quote, durationMs) {
+          if (!this.widget)
+              return;
+          this.widget.setState(state, quote, durationMs);
+      }
+      getState() {
+          return this.widget ? this.widget.getState() : 'idle';
+      }
+      showBubble(text, durationMs) {
+          this.widget?.showBubble(text, durationMs);
+      }
+      hideBubble() {
+          this.widget?.hideBubble();
+      }
+      getConfig() {
+          return { ...this.config };
+      }
+      updateConfig(newConfig) {
+          this.config = { ...this.config, ...newConfig };
+          // Save to SillyTavern settings
+          try {
+              const ctx = typeof SillyTavern !== 'undefined' ? SillyTavern.getContext() : null;
+              if (ctx && ctx.extensionSettings?.kaiz_agent) {
+                  ctx.extensionSettings.kaiz_agent.petConfig = { ...this.config };
+                  if (typeof ctx.saveSettingsDebounced === 'function') {
+                      ctx.saveSettingsDebounced();
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[KaizAgent] Failed to save petConfig:', e);
+          }
+          // Apply to widget
+          this.widget?.applyConfig(this.config);
+          if (!this.config.enabled) {
+              this.stopRoaming();
+              this.clearIdleTimer();
+          }
+          else if (this.config.roamingEnabled) {
+              this.clearIdleTimer();
+              this.startRoamingLoop();
+          }
+          else {
+              this.stopRoaming();
+              this.resetIdleTimer();
+          }
+      }
+      resetPosition() {
+          this.widget?.resetPosition();
+      }
+      poke() {
+          this.widget?.poke();
+          this.handlePoke();
+      }
+      handlePoke() {
+          if (!this.config.enabled)
+              return;
+          // If currently sleeping, wake up joyfully!
+          if (this.widget?.getState() === 'sleeping') {
+              this.clearWakeTimer();
+              this.setState('idle', 'Oáp... Bé thức dậy rồi nè! ✨', 3500);
+          }
+          if (!this.isActionRunning) {
+              if (this.config.roamingEnabled) {
+                  this.startRoamingLoop();
+              }
+              else {
+                  this.resetIdleTimer();
+              }
+          }
+      }
+      handleDoubleClick() {
+          if (typeof jQuery !== 'undefined') {
+              // Trigger Kaiz floating button to toggle chat window
+              jQuery('#kaiz-floating-btn').trigger('click');
+          }
+      }
+      getRandomQuote(state) {
+          const quotes = PET_QUOTES[state] || PET_QUOTES.idle;
+          return quotes[Math.floor(Math.random() * quotes.length)];
+      }
+      // --- AUTONOMOUS ROAMING & SLEEP CYCLE ---
+      startRoamingLoop() {
+          this.clearRoamTimer();
+          if (!this.config.enabled || !this.config.roamingEnabled || this.isActionRunning) {
+              return;
+          }
+          // Random delay between 12s and 25s for next autonomous action
+          const nextDelayMs = Math.floor(Math.random() * 13000) + 12000;
+          this.roamTimer = setTimeout(() => {
+              this.executeAutonomousCycle();
+          }, nextDelayMs);
+      }
+      stopRoaming() {
+          this.clearRoamTimer();
+          this.clearWakeTimer();
+          this.widget?.stopMoving();
+      }
+      clearRoamTimer() {
+          if (this.roamTimer) {
+              clearTimeout(this.roamTimer);
+              this.roamTimer = null;
+          }
+      }
+      clearWakeTimer() {
+          if (this.wakeTimer) {
+              clearTimeout(this.wakeTimer);
+              this.wakeTimer = null;
+          }
+      }
+      executeAutonomousCycle() {
+          if (!this.config.enabled || !this.config.roamingEnabled || this.isActionRunning || !this.widget) {
+              return;
+          }
+          const currentState = this.widget.getState();
+          // If agent is working/busy, do not roam
+          if (currentState !== 'idle') {
+              if (currentState !== 'sleeping') {
+                  this.startRoamingLoop();
+              }
+              return;
+          }
+          // Decision: Roam or take a nap?
+          // Normal chance: 70% roam, 30% nap. If already roamed 3+ times in a row, 60% nap.
+          const sleepChance = this.consecutiveRoams >= 3 ? 0.6 : 0.3;
+          const willSleep = Math.random() < sleepChance;
+          if (willSleep) {
+              this.consecutiveRoams = 0;
+              this.setState('sleeping', this.getRandomQuote('sleeping'));
+              // Sleep for 18 - 35 seconds, then automatically wake up
+              const sleepDurationMs = Math.floor(Math.random() * 17000) + 18000;
+              this.clearWakeTimer();
+              this.wakeTimer = setTimeout(() => {
+                  this.wakeTimer = null;
+                  if (!this.isActionRunning && this.widget?.getState() === 'sleeping') {
+                      this.setState('idle', 'Oáp... Bé tỉnh rồi nè! ✨', 3500);
+                      this.startRoamingLoop();
+                  }
+              }, sleepDurationMs);
+          }
+          else {
+              this.consecutiveRoams++;
+              this.roamToRandomPosition();
+          }
+      }
+      roamToRandomPosition() {
+          if (!this.widget || this.isActionRunning)
+              return;
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65; // Below SillyTavern header bar
+          const maxY = Math.max(minY, window.innerHeight - scale - 85); // Above chat input box
+          const targetX = Math.floor(minX + Math.random() * (maxX - minX));
+          const targetY = Math.floor(minY + Math.random() * (maxY - minY));
+          const currentPos = this.widget.getPosition();
+          const dx = targetX - currentPos.x;
+          const dy = targetY - currentPos.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          // Smooth speed: duration clamped between 1800ms and 3800ms
+          const durationMs = Math.min(3800, Math.max(1800, Math.round((distance / 180) * 1000)));
+          // Occasionally speak a cute roam line (~35% chance)
+          if (Math.random() < 0.35) {
+              const roamQuotes = PET_QUOTES.roam;
+              const quote = roamQuotes[Math.floor(Math.random() * roamQuotes.length)];
+              this.widget.showBubble(quote, Math.min(durationMs + 1000, 4000));
+          }
+          this.widget.moveTo(targetX, targetY, durationMs, () => {
+              if (!this.isActionRunning) {
+                  this.startRoamingLoop();
+              }
+          });
+      }
+      // --- IDLE SLEEP FALLBACK (when roaming is disabled) ---
+      startIdleTimer() {
+          this.clearIdleTimer();
+          if (!this.config.enabled || this.config.roamingEnabled)
+              return;
+          this.idleTimer = setTimeout(() => {
+              if (!this.isActionRunning && this.widget?.getState() === 'idle') {
+                  this.setState('sleeping', this.getRandomQuote('sleeping'));
+              }
+          }, this.idleTimeoutMs);
+      }
+      resetIdleTimer() {
+          if (!this.config.roamingEnabled) {
+              this.startIdleTimer();
+          }
+      }
+      clearIdleTimer() {
+          if (this.idleTimer) {
+              clearTimeout(this.idleTimer);
+              this.idleTimer = null;
+          }
+      }
+      // --- SMART RESIZE HANDLING (WINDOW SHRINK / MINIMIZE RECOVERY) ---
+      handleWindowResize = () => {
+          if (this.resizeDebounceTimer) {
+              clearTimeout(this.resizeDebounceTimer);
+          }
+          this.resizeDebounceTimer = setTimeout(() => {
+              this.resizeDebounceTimer = null;
+              this.checkAndRelocateIfOutOfBounds();
+          }, 220);
+      };
+      checkAndRelocateIfOutOfBounds() {
+          if (!this.widget || !this.config.enabled)
+              return;
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65;
+          const maxY = Math.max(minY, window.innerHeight - scale - 85);
+          const pos = this.widget.getPosition();
+          // Check if pet is outside the safe boundary (e.g. window resized smaller or minimized)
+          const isOutOfBounds = pos.x < minX - 10 || pos.x > maxX + 10 || pos.y < minY - 10 || pos.y > maxY + 10;
+          if (!isOutOfBounds) {
+              this.updateViewportDebugger();
+              return;
+          }
+          // If currently in an agent action (thinking, working, etc.), clamp gently so it stays visible without interrupting CoT
+          if (this.isActionRunning) {
+              const clampedX = Math.min(maxX, Math.max(minX, pos.x));
+              const clampedY = Math.min(maxY, Math.max(minY, pos.y));
+              this.widget.moveTo(clampedX, clampedY, 600);
+              this.updateViewportDebugger();
+              return;
+          }
+          // Pet is idle / roaming / sleeping: smartly jump into a random spot inside the safe viewport!
+          this.stopRoaming();
+          const targetX = Math.floor(minX + Math.random() * (maxX - minX));
+          const targetY = Math.floor(minY + Math.random() * (maxY - minY));
+          const rescueQuotes = [
+              'Úi, cửa sổ co lại rồi! Bé dời vào trong đây nhé~ 💨',
+              'Phù... Cửa sổ nhỏ quá, nhảy vào vùng an toàn thôi nào! ✨',
+              'Bé bị kẹt ngoài rìa kìa! May mà né kịp vô trong! 🎈',
+          ];
+          const randomQuote = rescueQuotes[Math.floor(Math.random() * rescueQuotes.length)];
+          this.widget.showBubble(randomQuote, 3500);
+          this.widget.moveTo(targetX, targetY, 1500, () => {
+              this.updateViewportDebugger();
+              if (!this.isActionRunning && this.config.roamingEnabled) {
+                  this.startRoamingLoop();
+              }
+          });
+      }
+      // --- VIEWPORT BOUNDARY DEBUGGER OVERLAY ---
+      toggleViewportDebugger() {
+          const existing = document.getElementById('kaiz-pet-viewport-debugger');
+          if (existing) {
+              this.closeViewportDebugger();
+              return false;
+          }
+          else {
+              this.openViewportDebugger();
+              return true;
+          }
+      }
+      closeViewportDebugger() {
+          if (this.debuggerTimer) {
+              clearTimeout(this.debuggerTimer);
+              this.debuggerTimer = null;
+          }
+          const el = document.getElementById('kaiz-pet-viewport-debugger');
+          if (el) {
+              el.classList.add('kaiz-vp-fadeout');
+              setTimeout(() => el.remove(), 220);
+          }
+      }
+      openViewportDebugger() {
+          this.closeViewportDebugger();
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65;
+          const maxY = Math.max(minY, window.innerHeight - scale - 85);
+          const pos = this.widget?.getPosition() || { x: 0, y: 0 };
+          const overlay = document.createElement('div');
+          overlay.id = 'kaiz-pet-viewport-debugger';
+          overlay.className = 'kaiz-viewport-debugger';
+          overlay.innerHTML = `
+            <div class="kaiz-vp-guide-top">
+                <span><i class="fa-solid fa-arrow-down"></i> VÙNG TRÁNH: HEADER SILLYTAVERN (0px → 65px)</span>
+            </div>
+            <div class="kaiz-vp-safe-box" style="top: ${minY}px; left: ${minX}px; width: ${maxX - minX + scale}px; height: ${maxY - minY + scale}px;">
+                <div class="kaiz-vp-corner top-left"></div>
+                <div class="kaiz-vp-corner top-right"></div>
+                <div class="kaiz-vp-corner bottom-left"></div>
+                <div class="kaiz-vp-corner bottom-right"></div>
+                <div class="kaiz-vp-header">
+                    <div class="kaiz-vp-title">
+                        <i class="fa-solid fa-vector-square"></i> VÙNG VIEWPORT AN TOÀN CỦA BÉ SLIME
+                    </div>
+                    <div class="kaiz-vp-badge">
+                        <span id="kaiz-vp-dim">${window.innerWidth} × ${window.innerHeight}</span>
+                    </div>
+                    <button class="kaiz-vp-close" type="button" title="Đóng">&times;</button>
+                </div>
+                <div class="kaiz-vp-info-box">
+                    <div class="kaiz-vp-row">
+                        <span class="kaiz-vp-label"><i class="fa-solid fa-paw"></i> Tọa độ Bé hiện tại:</span>
+                        <span id="kaiz-vp-pet-pos" class="kaiz-vp-val">X: ${Math.round(pos.x)}px, Y: ${Math.round(pos.y)}px</span>
+                    </div>
+                    <div class="kaiz-vp-row">
+                        <span class="kaiz-vp-label"><i class="fa-solid fa-shield-halved"></i> Giới hạn an toàn:</span>
+                        <span id="kaiz-vp-limits" class="kaiz-vp-val">X: ${minX}px → ${Math.round(maxX)}px | Y: ${minY}px → ${Math.round(maxY)}px</span>
+                    </div>
+                    <div class="kaiz-vp-row">
+                        <span class="kaiz-vp-label"><i class="fa-solid fa-arrows-up-down-left-right"></i> Vùng khả dụng:</span>
+                        <span class="kaiz-vp-val" style="color: #38bdf8;">${Math.round(maxX - minX + scale)}px × ${Math.round(maxY - minY + scale)}px</span>
+                    </div>
+                    <div class="kaiz-vp-hint">
+                        Bé Slime sẽ chỉ tự do đi dạo và nhảy nhót trong khung viền xanh này. Khi bạn thu nhỏ cửa sổ, bé sẽ tự động nhảy vào bên trong!
+                    </div>
+                </div>
+            </div>
+            <div class="kaiz-vp-guide-bottom">
+                <span><i class="fa-solid fa-arrow-up"></i> VÙNG TRÁNH: KHUNG NHẬP CHAT BAR (Dưới cùng 85px)</span>
+            </div>
+        `;
+          document.body.appendChild(overlay);
+          overlay.querySelector('.kaiz-vp-close')?.addEventListener('click', (e) => {
+              e.stopPropagation();
+              this.closeViewportDebugger();
+          });
+          // Auto close after 10 seconds
+          this.debuggerTimer = setTimeout(() => {
+              this.closeViewportDebugger();
+          }, 10000);
+      }
+      updateViewportDebugger() {
+          const overlay = document.getElementById('kaiz-pet-viewport-debugger');
+          if (!overlay)
+              return;
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65;
+          const maxY = Math.max(minY, window.innerHeight - scale - 85);
+          const pos = this.widget?.getPosition() || { x: 0, y: 0 };
+          const safeBox = overlay.querySelector('.kaiz-vp-safe-box');
+          if (safeBox) {
+              safeBox.style.top = `${minY}px`;
+              safeBox.style.left = `${minX}px`;
+              safeBox.style.width = `${maxX - minX + scale}px`;
+              safeBox.style.height = `${maxY - minY + scale}px`;
+          }
+          const dimEl = overlay.querySelector('#kaiz-vp-dim');
+          if (dimEl)
+              dimEl.textContent = `${window.innerWidth} × ${window.innerHeight}`;
+          const petPosEl = overlay.querySelector('#kaiz-vp-pet-pos');
+          if (petPosEl)
+              petPosEl.textContent = `X: ${Math.round(pos.x)}px, Y: ${Math.round(pos.y)}px`;
+          const limitsEl = overlay.querySelector('#kaiz-vp-limits');
+          if (limitsEl)
+              limitsEl.textContent = `X: ${minX}px → ${Math.round(maxX)}px | Y: ${minY}px → ${Math.round(maxY)}px`;
+      }
+      destroy() {
+          window.removeEventListener('resize', this.handleWindowResize);
+          if (this.resizeDebounceTimer) {
+              clearTimeout(this.resizeDebounceTimer);
+              this.resizeDebounceTimer = null;
+          }
+          this.closeViewportDebugger();
+          this.stopRoaming();
+          this.clearIdleTimer();
+          if (this.loopUnsubscribe) {
+              this.loopUnsubscribe();
+              this.loopUnsubscribe = null;
+          }
+          if (this.widget) {
+              this.widget.destroy();
+              this.widget = null;
+          }
+      }
+  }
+
+  /**
+   * App Icon & Avatar Manager
+   * Quản lý biểu tượng của Extension (Bóng nổi Floating Button & Avatar Agent trong tin nhắn).
+   * Quản lý màu nền biểu tượng (thay vì chỉ màu đen) và Avatar người dùng (User Avatar).
+   */
+  const APP_ICON_PRESETS = [
+      {
+          id: 'default',
+          name: 'Âm Dương Cổ Điển',
+          subtitle: 'Thái Cực Đạo (FontAwesome)',
+          type: 'font-awesome',
+          faClass: 'fa-solid fa-yin-yang',
+          previewGlow: 'rgba(255, 255, 255, 0.35)',
+          badgeEmoji: '☯️',
+      },
+      {
+          id: 'orb_ocean_emerald',
+          name: 'Thạch Lam & Lục Bảo',
+          subtitle: 'Ocean & Emerald Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_ocean_emerald.png',
+          previewGlow: 'rgba(46, 204, 113, 0.45)',
+          badgeEmoji: '🌊',
+      },
+      {
+          id: 'orb_sunset_azure',
+          name: 'Thạch Hoàng Hôn & Lam Biển',
+          subtitle: 'Sunset & Azure Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_sunset_azure.png',
+          previewGlow: 'rgba(255, 118, 117, 0.45)',
+          badgeEmoji: '🌅',
+      },
+      {
+          id: 'orb_cosmic_gold',
+          name: 'Tinh Vân & Ánh Sao Vàng',
+          subtitle: 'Cosmic Astral & Gold Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_cosmic_gold.png',
+          previewGlow: 'rgba(241, 196, 15, 0.45)',
+          badgeEmoji: '✨',
+      },
+      {
+          id: 'orb_sakura_mint',
+          name: 'Hoa Anh Đào & Bạc Hà',
+          subtitle: 'Sakura & Mint Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_sakura_mint.png',
+          previewGlow: 'rgba(253, 121, 168, 0.45)',
+          badgeEmoji: '🌸',
+      },
+      {
+          id: 'custom',
+          name: 'Ảnh Tùy Chỉnh',
+          subtitle: 'Tải lên & Cắt từ thiết bị',
+          type: 'image',
+          previewGlow: 'rgba(155, 89, 182, 0.45)',
+          badgeEmoji: '📁',
+      },
+  ];
+  const AVATAR_BG_PRESETS = [
+      {
+          id: 'dark',
+          name: 'Đen Huyền Bí',
+          bgValue: 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)',
+          previewColor: '#1a1a1a',
+      },
+      {
+          id: 'transparent',
+          name: 'Trong Suốt (Không nền)',
+          bgValue: 'transparent',
+          previewColor: 'rgba(255, 255, 255, 0.08)',
+          isTransparent: true,
+      },
+      {
+          id: 'glass',
+          name: 'Kính Mờ (Glass)',
+          bgValue: 'rgba(255, 255, 255, 0.12)',
+          previewColor: 'rgba(255, 255, 255, 0.25)',
+      },
+      {
+          id: 'ocean',
+          name: 'Đại Dương Xanh',
+          bgValue: 'linear-gradient(135deg, #0984e3 0%, #00cec9 100%)',
+          previewColor: '#0984e3',
+      },
+      {
+          id: 'cosmic',
+          name: 'Tím Vũ Trụ',
+          bgValue: 'linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%)',
+          previewColor: '#6c5ce7',
+      },
+      {
+          id: 'sakura',
+          name: 'Hồng Sakura',
+          bgValue: 'linear-gradient(135deg, #fd79a8 0%, #e84393 100%)',
+          previewColor: '#fd79a8',
+      },
+      {
+          id: 'sunset',
+          name: 'Hoàng Hôn',
+          bgValue: 'linear-gradient(135deg, #e17055 0%, #f0932b 100%)',
+          previewColor: '#e17055',
+      },
+      {
+          id: 'emerald',
+          name: 'Ngọc Lục Bảo',
+          bgValue: 'linear-gradient(135deg, #00b894 0%, #55efc4 100%)',
+          previewColor: '#00b894',
+      },
+      {
+          id: 'white',
+          name: 'Trắng Tinh Khôi',
+          bgValue: 'linear-gradient(135deg, #ffffff 0%, #dfe6e9 100%)',
+          previewColor: '#f1f2f6',
+      },
+      {
+          id: 'custom',
+          name: 'Màu Tự Chọn',
+          bgValue: '#1e272e',
+          previewColor: '#ffa801',
+      },
+  ];
+  class AppIconManager {
+      static instance;
+      extPath = 'Kaiz-Agent-Extension';
+      listeners = [];
+      constructor() { }
+      static getInstance() {
+          if (!AppIconManager.instance) {
+              AppIconManager.instance = new AppIconManager();
+          }
+          return AppIconManager.instance;
+      }
+      init(extPath) {
+          this.extPath = extPath || this.extPath;
+          this.applyCurrentIcon();
+          this.applyAvatarBg();
+          this.applyUserAvatar();
+      }
+      getExtPath() {
+          return this.extPath;
+      }
+      getSettings() {
+          const ctx = window.SillyTavern?.getContext();
+          const extSettings = ctx?.extensionSettings?.['kaiz_agent'] || {};
+          return {
+              appIconType: extSettings.appIconType || 'default',
+              customIconUrl: extSettings.customIconUrl || '',
+              avatarBgType: extSettings.avatarBgType || 'dark',
+              avatarBgValue: extSettings.avatarBgValue || 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)',
+              userAvatarUrl: extSettings.userAvatarUrl || '',
+          };
+      }
+      /**
+       * Lấy URL ảnh hoặc null (nếu là default fontawesome)
+       */
+      getIconUrl(type, customUrl) {
+          const current = this.getSettings();
+          const targetType = type || current.appIconType;
+          const targetCustom = customUrl !== undefined ? customUrl : current.customIconUrl;
+          if (targetType === 'default') {
+              return null;
+          }
+          if (targetType === 'custom') {
+              return targetCustom || null;
+          }
+          const preset = APP_ICON_PRESETS.find((p) => p.id === targetType);
+          if (preset && preset.fileName) {
+              return `/scripts/extensions/${this.extPath}/${preset.fileName}`;
+          }
+          return null;
+      }
+      /**
+       * Trả về HTML bên trong nút Floating Button
+       */
+      getFloatingBtnInnerHtml(type, customUrl) {
+          const imgUrl = this.getIconUrl(type, customUrl);
+          if (imgUrl) {
+              return `<img class="kaiz-app-icon" src="${imgUrl}" alt="Kaiz" draggable="false" />`;
+          }
+          return `<i class="fa-solid fa-yin-yang kaiz-app-icon"></i>`;
+      }
+      /**
+       * Trả về HTML avatar của Agent trong khung Chat
+       */
+      getAvatarHtml(type, customUrl) {
+          const imgUrl = this.getIconUrl(type, customUrl);
+          if (imgUrl) {
+              return `<img class="kaiz-app-icon kaiz-msg-avatar-img" src="${imgUrl}" alt="Kaiz" draggable="false" />`;
+          }
+          return `<i class="fa-solid fa-yin-yang kaiz-app-icon"></i>`;
+      }
+      /**
+       * Trả về HTML avatar của User trong khung Chat
+       */
+      getUserAvatarHtml() {
+          const { userAvatarUrl } = this.getSettings();
+          if (userAvatarUrl) {
+              return `<img class="kaiz-app-icon kaiz-user-avatar-img" src="${userAvatarUrl}" alt="User" draggable="false" />`;
+          }
+          return `<i class="fa-solid fa-user"></i>`;
+      }
+      /**
+       * Lấy giá trị màu nền avatar hiện tại
+       */
+      getAvatarBg() {
+          return this.getSettings().avatarBgValue;
+      }
+      /**
+       * Áp dụng màu nền cho Floating Button, Avatar Agent trong chat và Live Preview
+       */
+      applyAvatarBg(bgValue) {
+          const $ = window.jQuery;
+          const currentBg = bgValue || this.getAvatarBg();
+          // 1. Gán CSS variable trên :root
+          document.documentElement.style.setProperty('--kaiz-avatar-bg', currentBg);
+          if (!$)
+              return;
+          const isTransparent = currentBg === 'transparent';
+          // 2. Cập nhật floating button
+          const floatBtn = $('#kaiz-floating-btn');
+          if (floatBtn.length > 0) {
+              floatBtn.css('background', currentBg);
+              if (isTransparent) {
+                  floatBtn.addClass('kaiz-bg-transparent');
+              }
+              else {
+                  floatBtn.removeClass('kaiz-bg-transparent');
+              }
+          }
+          // 3. Cập nhật live preview trong bảng cài đặt
+          const previewBtn = $('#kaiz-icon-live-preview-btn');
+          if (previewBtn.length > 0) {
+              previewBtn.css('background', currentBg);
+              if (isTransparent) {
+                  previewBtn.addClass('kaiz-bg-transparent');
+              }
+              else {
+                  previewBtn.removeClass('kaiz-bg-transparent');
+              }
+          }
+          // 4. Cập nhật tất cả avatar của Agent trong khung chat
+          $('.kaiz-msg-agent .kaiz-msg-avatar').css('background', currentBg);
+      }
+      /**
+       * Cập nhật avatar User cho toàn bộ tin nhắn trong khung chat
+       */
+      applyUserAvatar() {
+          const $ = window.jQuery;
+          if (!$)
+              return;
+          const userAvatars = $('.kaiz-msg-user .kaiz-msg-avatar');
+          if (userAvatars.length > 0) {
+              userAvatars.each((_, el) => {
+                  $(el).html(this.getUserAvatarHtml());
+              });
+          }
+      }
+      /**
+       * Cập nhật ngay lập tức DOM của nút Floating Button và thông báo các thành phần giao diện
+       */
+      applyCurrentIcon() {
+          const $ = window.jQuery;
+          if (!$)
+              return;
+          const floatBtn = $('#kaiz-floating-btn');
+          if (floatBtn.length > 0) {
+              const existingIcon = floatBtn.find('.kaiz-app-icon, i, img');
+              const isSpinning = existingIcon.hasClass('kaiz-icon-spin');
+              floatBtn.empty();
+              const newElement = $(this.getFloatingBtnInnerHtml());
+              if (isSpinning) {
+                  newElement.addClass('kaiz-icon-spin');
+              }
+              floatBtn.append(newElement);
+          }
+          // Cập nhật các avatar tin nhắn của Agent hiện có trên màn hình
+          const agentAvatars = $('.kaiz-msg-agent .kaiz-msg-avatar');
+          if (agentAvatars.length > 0) {
+              agentAvatars.each((_, el) => {
+                  $(el).html(this.getAvatarHtml());
+              });
+          }
+          // Đồng bộ lại màu nền
+          this.applyAvatarBg();
+          // Kích hoạt listeners
+          this.listeners.forEach((fn) => {
+              try {
+                  fn();
+              }
+              catch (e) {
+                  console.error('[AppIconManager] Listener error:', e);
+              }
+          });
+      }
+      onIconChanged(listener) {
+          this.listeners.push(listener);
+          return () => {
+              this.listeners = this.listeners.filter((l) => l !== listener);
+          };
+      }
+  }
+
+  /**
+   * Interactive Circular Avatar Cropper Modal
+   * Cung cấp công cụ cắt ảnh tròn trực quan (Pan / Drag, Zoom, Xoay 90 độ, Live Preview).
+   * Dùng cho cả Avatar Người Dùng và Biểu tượng tùy chỉnh của Kaiz Agent.
+   */
+  class AvatarCropperModal {
+      static instance;
+      modal = null;
+      canvas = null;
+      ctx = null;
+      previewCanvas = null;
+      img = null;
+      onSaveCallback = null;
+      // State
+      zoom = 1.0; // Zoom multiplier relative to baseScale (0.2 to 5.0)
+      scale = 1.0;
+      baseScale = 1.0;
+      offsetX = 0;
+      offsetY = 0;
+      rotation = 0; // 0, 90, 180, 270
+      rafId = null;
+      // Interaction
+      isDragging = false;
+      startX = 0;
+      startY = 0;
+      initialPinchDist = 0;
+      initialPinchZoom = 1.0;
+      canvasSize = 340;
+      cropRadius = 120; // 240px đường kính
+      constructor() {
+          this.ensureModalDOM();
+          this.bindEvents();
+      }
+      static getInstance() {
+          if (!AvatarCropperModal.instance) {
+              AvatarCropperModal.instance = new AvatarCropperModal();
+          }
+          return AvatarCropperModal.instance;
+      }
+      ensureModalDOM() {
+          if (document.getElementById('kaiz-avatar-cropper-modal')) {
+              this.modal = document.getElementById('kaiz-avatar-cropper-modal');
+              this.canvas = document.getElementById('kaiz-crop-main-canvas');
+              this.previewCanvas = document.getElementById('kaiz-crop-live-preview');
+              if (this.canvas)
+                  this.ctx = this.canvas.getContext('2d');
+              return;
+          }
+          const modalHtml = `
+        <dialog id="kaiz-avatar-cropper-modal" class="kaiz-cropper-dialog" style="padding: 0; background: #181920; color: #fff; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,0.85); width: 420px; max-width: 95vw; overflow: hidden; z-index: 10005;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);">
+                <div id="kaiz-cropper-title" style="font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-crop-simple" style="color: var(--accent, #6495ed);"></i> Cắt & Căn Chỉnh Avatar
+                </div>
+                <i id="kaiz-cropper-close-btn" class="fa-solid fa-xmark interactable" style="cursor: pointer; font-size: 16px; color: #aaa;"></i>
+            </div>
+
+            <div style="padding: 16px 18px; display: flex; flex-direction: column; align-items: center; gap: 14px;">
+                <!-- Main Canvas Viewport -->
+                <div style="position: relative; width: 340px; height: 340px; background: #0c0d11; border-radius: 10px; overflow: hidden; box-shadow: inset 0 0 16px rgba(0,0,0,0.8); cursor: grab; user-select: none; touch-action: none;" id="kaiz-crop-canvas-wrapper">
+                    <canvas id="kaiz-crop-main-canvas" width="340" height="340" style="display: block; width: 340px; height: 340px;"></canvas>
+                </div>
+
+                <div style="font-size: 11px; color: #888; text-align: center;">
+                    <i class="fa-solid fa-hand-pointer"></i> Kéo để di chuyển • <i class="fa-solid fa-arrows-up-down"></i> Cuộn chuột để Phóng to/Thu nhỏ
+                </div>
+
+                <!-- Controls & Slider -->
+                <div style="width: 100%; display: flex; flex-direction: column; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                        <span style="font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-magnifying-glass"></i> Thu phóng:</span>
+                        <input id="kaiz-crop-zoom-range" type="range" class="kaiz-range" min="0.3" max="4.0" step="0.02" value="1" style="flex: 1;" />
+                        <span id="kaiz-crop-zoom-val" style="font-size: 11px; color: var(--accent, #6495ed); min-width: 38px; text-align: right; font-weight: 600;">100%</span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" id="kaiz-crop-rotate-btn" class="menu_button interactable" style="font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-rotate-right"></i> Xoay 90°
+                            </button>
+                            <button type="button" id="kaiz-crop-center-btn" class="menu_button interactable" style="font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-arrows-to-dot"></i> Căn giữa
+                            </button>
+                        </div>
+
+                        <!-- Live Mini Preview -->
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 11px; color: #888;">Xem trước:</span>
+                            <canvas id="kaiz-crop-live-preview" width="38" height="38" style="width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: #000; display: block;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div style="display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px; border-top: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.2);">
+                <button type="button" id="kaiz-crop-cancel-btn" class="menu_button interactable" style="font-size: 12px; padding: 6px 14px;">
+                    Hủy bỏ
+                </button>
+                <button type="button" id="kaiz-crop-apply-btn" class="menu_button interactable" style="font-size: 12px; padding: 6px 18px; background: var(--accent, #6495ed); color: #fff; font-weight: 600;">
+                    <i class="fa-solid fa-check"></i> Cắt & Áp dụng
+                </button>
+            </div>
+        </dialog>
+        `;
+          document.body.insertAdjacentHTML('beforeend', modalHtml);
+          this.modal = document.getElementById('kaiz-avatar-cropper-modal');
+          this.canvas = document.getElementById('kaiz-crop-main-canvas');
+          this.previewCanvas = document.getElementById('kaiz-crop-live-preview');
+          if (this.canvas)
+              this.ctx = this.canvas.getContext('2d');
+      }
+      bindEvents() {
+          if (!this.canvas || !this.modal)
+              return;
+          const $ = window.jQuery;
+          $('#kaiz-cropper-close-btn, #kaiz-crop-cancel-btn').on('click', () => {
+              this.modal?.close();
+          });
+          // Click outside dialog to close
+          this.modal.addEventListener('click', (e) => {
+              if (e.target === this.modal) {
+                  this.modal?.close();
+              }
+          });
+          // Mouse drag on canvas
+          const wrapper = document.getElementById('kaiz-crop-canvas-wrapper');
+          if (wrapper) {
+              wrapper.addEventListener('mousedown', (e) => {
+                  this.isDragging = true;
+                  wrapper.style.cursor = 'grabbing';
+                  this.startX = e.clientX - this.offsetX;
+                  this.startY = e.clientY - this.offsetY;
+              });
+              window.addEventListener('mousemove', (e) => {
+                  if (!this.isDragging)
+                      return;
+                  this.offsetX = e.clientX - this.startX;
+                  this.offsetY = e.clientY - this.startY;
+                  this.clampOffset();
+                  this.requestDraw();
+              });
+              window.addEventListener('mouseup', () => {
+                  if (this.isDragging && wrapper) {
+                      this.isDragging = false;
+                      wrapper.style.cursor = 'grab';
+                  }
+              });
+              // Touch support for Mobile / Phone Mode
+              wrapper.addEventListener('touchstart', (e) => {
+                  if (e.touches.length === 1) {
+                      this.isDragging = true;
+                      this.startX = e.touches[0].clientX - this.offsetX;
+                      this.startY = e.touches[0].clientY - this.offsetY;
+                  }
+                  else if (e.touches.length === 2) {
+                      this.isDragging = false;
+                      this.initialPinchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                      this.initialPinchZoom = this.zoom;
+                  }
+              }, { passive: true });
+              window.addEventListener('touchmove', (e) => {
+                  if (this.isDragging && e.touches.length === 1) {
+                      this.offsetX = e.touches[0].clientX - this.startX;
+                      this.offsetY = e.touches[0].clientY - this.startY;
+                      this.clampOffset();
+                      this.requestDraw();
+                  }
+                  else if (e.touches.length === 2 && this.initialPinchDist > 0) {
+                      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+                      const pinchFactor = dist / this.initialPinchDist;
+                      this.setZoom(this.initialPinchZoom * pinchFactor);
+                  }
+              }, { passive: true });
+              window.addEventListener('touchend', () => {
+                  this.isDragging = false;
+                  this.initialPinchDist = 0;
+              });
+              // Mouse wheel zoom - smooth & predictable
+              wrapper.addEventListener('wheel', (e) => {
+                  e.preventDefault();
+                  // Smooth multiplicative zoom
+                  const factor = e.deltaY < 0 ? 1.08 : 0.92;
+                  this.setZoom(this.zoom * factor);
+              }, { passive: false });
+          }
+          // Zoom range input
+          $('#kaiz-crop-zoom-range').on('input', (e) => {
+              const val = parseFloat(e.target.value);
+              if (!isNaN(val)) {
+                  this.setZoom(val);
+              }
+          });
+          // Rotate button
+          $('#kaiz-crop-rotate-btn').on('click', () => {
+              this.rotation = (this.rotation + 90) % 360;
+              this.requestDraw();
+          });
+          // Center button
+          $('#kaiz-crop-center-btn').on('click', () => {
+              this.resetView();
+          });
+          // Apply crop button
+          $('#kaiz-crop-apply-btn').on('click', () => {
+              this.exportAndSave();
+          });
+      }
+      open(file, onSave, titleText) {
+          this.ensureModalDOM();
+          this.onSaveCallback = onSave;
+          if (titleText && document.getElementById('kaiz-cropper-title')) {
+              document.getElementById('kaiz-cropper-title').innerHTML =
+                  `<i class="fa-solid fa-crop-simple" style="color: var(--accent, #6495ed);"></i> ${titleText}`;
+          }
+          const reader = new FileReader();
+          reader.onload = (e) => {
+              const dataUrl = e.target?.result;
+              if (!dataUrl)
+                  return;
+              const img = new Image();
+              img.onload = () => {
+                  this.img = img;
+                  this.rotation = 0;
+                  this.resetView();
+                  this.modal?.showModal();
+              };
+              img.onerror = () => {
+                  const toastr = window.toastr;
+                  if (toastr) {
+                      toastr.error('Không thể đọc file ảnh này. Vui lòng chọn ảnh định dạng hợp lệ!');
+                  }
+              };
+              img.src = dataUrl;
+          };
+          reader.readAsDataURL(file);
+      }
+      clampOffset() {
+          // Prevent image from being dragged completely outside the crop area
+          const limit = this.canvasSize;
+          this.offsetX = Math.max(-limit, Math.min(limit * 2, this.offsetX));
+          this.offsetY = Math.max(-limit, Math.min(limit * 2, this.offsetY));
+      }
+      resetView() {
+          if (!this.img)
+              return;
+          const cropDiameter = this.cropRadius * 2;
+          // Fit image so minimum dimension covers the crop circle
+          const minDim = Math.min(this.img.width, this.img.height) || 1;
+          this.baseScale = cropDiameter / minDim;
+          this.zoom = 1.0;
+          this.scale = this.baseScale;
+          this.offsetX = this.canvasSize / 2;
+          this.offsetY = this.canvasSize / 2;
+          const zoomInput = document.getElementById('kaiz-crop-zoom-range');
+          if (zoomInput) {
+              zoomInput.value = '1.0';
+          }
+          this.updateZoomLabel();
+          this.requestDraw();
+      }
+      setZoom(val) {
+          const clamped = Math.max(0.3, Math.min(4.0, val));
+          this.zoom = clamped;
+          this.scale = this.zoom * this.baseScale;
+          const zoomInput = document.getElementById('kaiz-crop-zoom-range');
+          if (zoomInput) {
+              zoomInput.value = clamped.toFixed(2);
+          }
+          this.updateZoomLabel();
+          this.requestDraw();
+      }
+      updateZoomLabel() {
+          const label = document.getElementById('kaiz-crop-zoom-val');
+          if (label) {
+              const pct = Math.round(this.zoom * 100);
+              label.textContent = `${pct}%`;
+          }
+      }
+      requestDraw() {
+          if (this.rafId !== null)
+              return;
+          this.rafId = requestAnimationFrame(() => {
+              this.rafId = null;
+              this.draw();
+          });
+      }
+      draw() {
+          if (!this.ctx || !this.canvas || !this.img)
+              return;
+          const cx = this.canvasSize / 2;
+          const cy = this.canvasSize / 2;
+          // 1. Clear canvas
+          this.ctx.clearRect(0, 0, this.canvasSize, this.canvasSize);
+          // 2. Draw user image transformed
+          this.ctx.save();
+          this.ctx.translate(this.offsetX, this.offsetY);
+          this.ctx.rotate((this.rotation * Math.PI) / 180);
+          this.ctx.scale(this.scale, this.scale);
+          this.ctx.drawImage(this.img, -this.img.width / 2, -this.img.height / 2);
+          this.ctx.restore();
+          // 3. Draw Dark Mask with Circular Cutout
+          this.ctx.save();
+          this.ctx.fillStyle = 'rgba(10, 12, 16, 0.72)';
+          this.ctx.beginPath();
+          // Outer rect
+          this.ctx.rect(0, 0, this.canvasSize, this.canvasSize);
+          // Inner circle (counter-clockwise cutout)
+          this.ctx.arc(cx, cy, this.cropRadius, 0, Math.PI * 2, true);
+          this.ctx.fill();
+          // 4. Draw Circular Guide Border
+          this.ctx.strokeStyle = 'rgba(100, 149, 237, 0.85)';
+          this.ctx.lineWidth = 2;
+          this.ctx.setLineDash([6, 4]);
+          this.ctx.beginPath();
+          this.ctx.arc(cx, cy, this.cropRadius, 0, Math.PI * 2);
+          this.ctx.stroke();
+          // Crosshair ticks
+          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+          this.ctx.lineWidth = 1;
+          this.ctx.setLineDash([]);
+          this.ctx.beginPath();
+          this.ctx.moveTo(cx - 10, cy);
+          this.ctx.lineTo(cx + 10, cy);
+          this.ctx.moveTo(cx, cy - 10);
+          this.ctx.lineTo(cx, cy + 10);
+          this.ctx.stroke();
+          this.ctx.restore();
+          // 5. Update live mini preview
+          this.drawMiniPreview();
+      }
+      drawMiniPreview() {
+          if (!this.previewCanvas || !this.img)
+              return;
+          const pCtx = this.previewCanvas.getContext('2d');
+          if (!pCtx)
+              return;
+          const pSize = 38;
+          pCtx.clearRect(0, 0, pSize, pSize);
+          pCtx.save();
+          // Circular clip
+          pCtx.beginPath();
+          pCtx.arc(pSize / 2, pSize / 2, pSize / 2, 0, Math.PI * 2);
+          pCtx.clip();
+          // Calculate mapping from crop circle (diameter 240) to mini preview (diameter 38)
+          const scaleFactor = pSize / (this.cropRadius * 2);
+          const cx = this.canvasSize / 2;
+          const cy = this.canvasSize / 2;
+          pCtx.translate(pSize / 2, pSize / 2);
+          pCtx.scale(scaleFactor, scaleFactor);
+          pCtx.translate(-cx, -cy);
+          pCtx.translate(this.offsetX, this.offsetY);
+          pCtx.rotate((this.rotation * Math.PI) / 180);
+          pCtx.scale(this.scale, this.scale);
+          pCtx.drawImage(this.img, -this.img.width / 2, -this.img.height / 2);
+          pCtx.restore();
+      }
+      exportAndSave() {
+          if (!this.img)
+              return;
+          // Export optimal 192x192 circular image (~25KB vs 150KB+, sharp on retina & lightweight)
+          const exportSize = 192;
+          const outCanvas = document.createElement('canvas');
+          outCanvas.width = exportSize;
+          outCanvas.height = exportSize;
+          const outCtx = outCanvas.getContext('2d');
+          if (!outCtx)
+              return;
+          const cx = this.canvasSize / 2;
+          const cy = this.canvasSize / 2;
+          const scaleFactor = exportSize / (this.cropRadius * 2);
+          outCtx.save();
+          outCtx.beginPath();
+          outCtx.arc(exportSize / 2, exportSize / 2, exportSize / 2, 0, Math.PI * 2);
+          outCtx.clip();
+          outCtx.translate(exportSize / 2, exportSize / 2);
+          outCtx.scale(scaleFactor, scaleFactor);
+          outCtx.translate(-cx, -cy);
+          outCtx.translate(this.offsetX, this.offsetY);
+          outCtx.rotate((this.rotation * Math.PI) / 180);
+          outCtx.scale(this.scale, this.scale);
+          outCtx.drawImage(this.img, -this.img.width / 2, -this.img.height / 2);
+          outCtx.restore();
+          const croppedDataUrl = outCanvas.toDataURL('image/png');
+          if (this.onSaveCallback) {
+              this.onSaveCallback(croppedDataUrl);
+          }
+          this.modal?.close();
+      }
+  }
+
   const escapeHtml$4 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SettingsUI {
       static async init(extPath, EXT_NAME, registry) {
@@ -22683,12 +24440,287 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           $('#kaiz-phone-mode, #kaiz-phone-mode-tab').on('change', function () {
               applyPhoneMode(!!this.checked);
           });
+          // --- APP ICON CUSTOMIZATION ---
+          const iconManager = AppIconManager.getInstance();
+          iconManager.init(extPath);
+          const currentIconType = settings.appIconType || 'default';
+          const currentCustomUrl = settings.customIconUrl || '';
+          const updateCustomPanelVisibility = (type) => {
+              if (type === 'custom') {
+                  $('#kaiz-custom-icon-panel').slideDown(150);
+              }
+              else {
+                  $('#kaiz-custom-icon-panel').slideUp(150);
+              }
+          };
+          const updateLivePreview = (type, customUrl) => {
+              const previewBtn = $('#kaiz-icon-live-preview-btn');
+              previewBtn.empty();
+              const inner = $(iconManager.getFloatingBtnInnerHtml(type, customUrl));
+              if ($('#kaiz-icon-test-spin-btn').hasClass('spinning')) {
+                  inner.addClass('kaiz-icon-spin');
+              }
+              previewBtn.append(inner);
+              const preset = APP_ICON_PRESETS.find((p) => p.id === type);
+              const title = preset ? preset.name : 'Tùy chỉnh';
+              $('#kaiz-icon-preview-desc').text(`Đang chọn: ${title}`);
+              if (customUrl) {
+                  $('#kaiz-custom-icon-preview-box').html(`<img src="${customUrl}" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;" />`);
+              }
+              else {
+                  $('#kaiz-custom-icon-preview-box').html(`<i class="fa-solid fa-image" style="color: #888; font-size: 18px;"></i>`);
+              }
+          };
+          const renderIconPresetCards = (activeType) => {
+              const container = $('#kaiz-app-icon-cards');
+              container.empty();
+              APP_ICON_PRESETS.forEach((p) => {
+                  const isActive = p.id === activeType;
+                  let thumbHtml = '';
+                  if (p.type === 'font-awesome') {
+                      thumbHtml = `<i class="${p.faClass}"></i>`;
+                  }
+                  else if (p.id === 'custom') {
+                      if (settings.customIconUrl) {
+                          thumbHtml = `<img src="${settings.customIconUrl}" alt="${p.name}" />`;
+                      }
+                      else {
+                          thumbHtml = `<i class="fa-solid fa-cloud-arrow-up" style="color: #aaa; font-size: 20px;"></i>`;
+                      }
+                  }
+                  else if (p.fileName) {
+                      const src = `/scripts/extensions/${extPath}/${p.fileName}`;
+                      thumbHtml = `<img src="${src}" alt="${p.name}" />`;
+                  }
+                  const card = $(`
+                    <div class="kaiz-icon-preset-card interactable ${isActive ? 'active' : ''}" data-icon-id="${p.id}" title="${p.subtitle}">
+                        <div class="kaiz-icon-preset-thumb" style="${isActive ? `box-shadow: 0 0 12px ${p.previewGlow}` : ''}">
+                            ${thumbHtml}
+                        </div>
+                        <div class="kaiz-icon-preset-title">${p.name}</div>
+                    </div>
+                `);
+                  card.on('click', () => {
+                      selectAppIcon(p.id);
+                  });
+                  container.append(card);
+              });
+          };
+          const selectAppIcon = (type) => {
+              settings.appIconType = type;
+              ctx.saveSettingsDebounced();
+              renderIconPresetCards(type);
+              updateCustomPanelVisibility(type);
+              updateLivePreview(type, settings.customIconUrl);
+              iconManager.applyCurrentIcon();
+          };
+          // Gán giá trị ban đầu lên UI
+          renderIconPresetCards(currentIconType);
+          updateCustomPanelVisibility(currentIconType);
+          updateLivePreview(currentIconType, currentCustomUrl);
+          // Test spin preview button
+          $('#kaiz-icon-test-spin-btn').on('click', function () {
+              const btn = $(this);
+              const previewIcon = $('#kaiz-icon-live-preview-btn .kaiz-app-icon');
+              if (btn.hasClass('spinning')) {
+                  btn.removeClass('spinning');
+                  previewIcon.removeClass('kaiz-icon-spin');
+                  btn.html('<i class="fa-solid fa-rotate"></i> Xem thử hiệu ứng xoay');
+              }
+              else {
+                  btn.addClass('spinning');
+                  previewIcon.addClass('kaiz-icon-spin');
+                  btn.html('<i class="fa-solid fa-circle-stop"></i> Dừng quay');
+              }
+          });
+          // Custom icon upload & Cropper
+          $('#kaiz-custom-icon-browse-btn, #kaiz-custom-icon-crop-btn').on('click', () => {
+              $('#kaiz-custom-icon-file-input').trigger('click');
+          });
+          $('#kaiz-custom-icon-file-input').on('change', function () {
+              const file = this.files?.[0];
+              if (!file)
+                  return;
+              if (file.size > 5 * 1024 * 1024) {
+                  toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
+                  return;
+              }
+              // Mở công cụ cắt ảnh tròn trực quan
+              AvatarCropperModal.getInstance().open(file, (croppedDataUrl) => {
+                  settings.customIconUrl = croppedDataUrl;
+                  selectAppIcon('custom');
+                  toastr.success('Đã cắt và áp dụng biểu tượng tùy chỉnh!');
+              }, 'Cắt Biểu Tượng Extension');
+              this.value = '';
+          });
+          $('#kaiz-custom-icon-delete-btn').on('click', () => {
+              if (confirm('Bạn có chắc muốn xóa ảnh tùy chỉnh và quay về biểu tượng Âm Dương mặc định?')) {
+                  settings.customIconUrl = '';
+                  selectAppIcon('default');
+                  toastr.info('Đã xóa ảnh tùy chỉnh và đặt lại icon mặc định.');
+              }
+          });
+          // --- AVATAR BACKGROUND COLOR PALETTE ---
+          const currentBgType = settings.avatarBgType || 'dark';
+          const currentBgVal = settings.avatarBgValue || 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)';
+          const updateAvatarBgUI = (type, bgVal) => {
+              $('#kaiz-avatar-bg-swatches .kaiz-bg-swatch').removeClass('active');
+              $(`#kaiz-avatar-bg-swatches .kaiz-bg-swatch[data-bg-id="${type}"]`).addClass('active');
+              const preset = AVATAR_BG_PRESETS.find((p) => p.id === type);
+              $('#kaiz-avatar-bg-name').text(preset ? preset.name : 'Tùy chọn');
+              if (type === 'custom') {
+                  $('#kaiz-avatar-bg-custom-box').css('display', 'flex');
+                  $('#kaiz-avatar-bg-custom-input').val(bgVal);
+                  if (bgVal.startsWith('#') && (bgVal.length === 7 || bgVal.length === 4)) {
+                      $('#kaiz-avatar-bg-color-picker').val(bgVal);
+                  }
+              }
+              else {
+                  $('#kaiz-avatar-bg-custom-box').hide();
+              }
+          };
+          const selectAvatarBg = (type, bgVal) => {
+              settings.avatarBgType = type;
+              settings.avatarBgValue = bgVal;
+              ctx.saveSettingsDebounced();
+              updateAvatarBgUI(type, bgVal);
+              iconManager.applyAvatarBg(bgVal);
+          };
+          const renderAvatarBgSwatches = () => {
+              const container = $('#kaiz-avatar-bg-swatches');
+              container.empty();
+              AVATAR_BG_PRESETS.forEach((p) => {
+                  const isActive = p.id === (settings.avatarBgType || 'dark');
+                  const isChecker = p.id === 'transparent';
+                  const swatch = $(`
+                    <div class="kaiz-bg-swatch interactable ${isActive ? 'active' : ''} ${isChecker ? 'kaiz-bg-swatch-checker' : ''}"
+                         data-bg-id="${p.id}"
+                         style="${!isChecker ? `background: ${p.previewColor};` : ''}"
+                         title="${p.name}">
+                    </div>
+                `);
+                  swatch.on('click', () => {
+                      selectAvatarBg(p.id, p.bgValue);
+                  });
+                  container.append(swatch);
+              });
+          };
+          renderAvatarBgSwatches();
+          updateAvatarBgUI(currentBgType, currentBgVal);
+          iconManager.applyAvatarBg(currentBgVal);
+          // Custom Color Picker input
+          $('#kaiz-avatar-bg-color-picker').on('input', function () {
+              const hex = this.value;
+              $('#kaiz-avatar-bg-custom-input').val(hex);
+              selectAvatarBg('custom', hex);
+          });
+          $('#kaiz-avatar-bg-custom-apply').on('click', () => {
+              const val = $('#kaiz-avatar-bg-custom-input').val()?.trim();
+              if (val) {
+                  selectAvatarBg('custom', val);
+                  toastr.success('Đã áp dụng màu nền tùy chọn!');
+              }
+          });
+          // --- USER CHAT AVATAR CUSTOMIZATION ---
+          const updateUserAvatarPreview = () => {
+              const previewBox = $('#kaiz-user-avatar-preview-box');
+              const statusText = $('#kaiz-user-avatar-status-text');
+              const userAvatarUrl = settings.userAvatarUrl || '';
+              if (userAvatarUrl) {
+                  previewBox.html(`<img src="${userAvatarUrl}" class="kaiz-user-avatar-img" alt="User" />`);
+                  statusText.text('Đang dùng ảnh đại diện tùy chỉnh');
+              }
+              else {
+                  previewBox.html(`<i class="fa-solid fa-user" style="font-size: 20px; color: #fff;"></i>`);
+                  statusText.text('Đang dùng biểu tượng mặc định');
+              }
+          };
+          updateUserAvatarPreview();
+          iconManager.applyUserAvatar();
+          $('#kaiz-user-avatar-browse-btn').on('click', () => {
+              $('#kaiz-user-avatar-file-input').trigger('click');
+          });
+          $('#kaiz-user-avatar-file-input').on('change', function () {
+              const file = this.files?.[0];
+              if (!file)
+                  return;
+              if (file.size > 5 * 1024 * 1024) {
+                  toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
+                  return;
+              }
+              AvatarCropperModal.getInstance().open(file, (croppedDataUrl) => {
+                  settings.userAvatarUrl = croppedDataUrl;
+                  ctx.saveSettingsDebounced();
+                  updateUserAvatarPreview();
+                  iconManager.applyUserAvatar();
+                  toastr.success('Đã lưu và áp dụng Avatar Người dùng trong Chat!');
+              }, 'Cắt Avatar Người Dùng');
+              this.value = '';
+          });
+          $('#kaiz-user-avatar-delete-btn').on('click', () => {
+              if (!settings.userAvatarUrl) {
+                  toastr.info('Hiện tại đang dùng avatar mặc định rồi.');
+                  return;
+              }
+              if (confirm('Bạn có chắc muốn xóa avatar cá nhân và quay về biểu tượng mặc định?')) {
+                  settings.userAvatarUrl = '';
+                  ctx.saveSettingsDebounced();
+                  updateUserAvatarPreview();
+                  iconManager.applyUserAvatar();
+                  toastr.info('Đã xóa avatar và đặt lại mặc định!');
+              }
+          });
           // --- AGENT THINK DISPLAY MODE ---
           const currentCotMode = settings.cotDisplayMode || 'collapse_streaming';
           $('#kaiz-cot-display-mode').val(currentCotMode);
           $('#kaiz-cot-display-mode').on('change', function () {
               settings.cotDisplayMode = this.value;
               ctx.saveSettingsDebounced();
+          });
+          // --- VIRTUAL ASSISTANCE PET (MASCOT) ---
+          const mascot = MascotManager.getInstance();
+          const petConfig = mascot.getConfig();
+          $('#kaiz-pet-enabled').prop('checked', !!petConfig.enabled);
+          $('#kaiz-pet-bubble-enabled').prop('checked', !!petConfig.bubbleEnabled);
+          $('#kaiz-pet-roaming-enabled').prop('checked', petConfig.roamingEnabled !== false);
+          $('#kaiz-pet-scale').val(petConfig.scale || 96);
+          $('#kaiz-pet-scale-val').text(`${petConfig.scale || 96}px`);
+          $('#kaiz-pet-opacity').val(petConfig.opacity ?? 100);
+          $('#kaiz-pet-opacity-val').text(`${petConfig.opacity ?? 100}%`);
+          $('#kaiz-pet-enabled').on('change', function () {
+              mascot.updateConfig({ enabled: !!this.checked });
+          });
+          $('#kaiz-pet-bubble-enabled').on('change', function () {
+              mascot.updateConfig({ bubbleEnabled: !!this.checked });
+          });
+          $('#kaiz-pet-roaming-enabled').on('change', function () {
+              mascot.updateConfig({ roamingEnabled: !!this.checked });
+          });
+          $('#kaiz-pet-scale').on('input change', function () {
+              const val = parseInt(this.value, 10) || 96;
+              $('#kaiz-pet-scale-val').text(`${val}px`);
+              mascot.updateConfig({ scale: val });
+          });
+          $('#kaiz-pet-opacity').on('input change', function () {
+              const val = parseInt(this.value, 10) ?? 100;
+              $('#kaiz-pet-opacity-val').text(`${val}%`);
+              mascot.updateConfig({ opacity: val });
+          });
+          $('#kaiz-pet-poke-btn').on('click', function () {
+              mascot.poke();
+          });
+          $('#kaiz-pet-reset-pos').on('click', function () {
+              mascot.resetPosition();
+              toastr.info('Đã đặt lại vị trí Bé Pet về góc dưới phải!');
+          });
+          $('#kaiz-pet-debug-viewport-btn').on('click', function () {
+              const isOpen = mascot.toggleViewportDebugger();
+              if (isOpen) {
+                  toastr.info('Đang soi vùng Viewport an toàn của Bé Slime! (Tự đóng sau 10s hoặc bấm nút để tắt)');
+              }
+              else {
+                  toastr.info('Đã tắt chế độ soi Viewport.');
+              }
           });
           // --- SAFE MODE LOGIC ---
           $('#kaiz-safe-mode').prop('checked', settings.safeMode);
@@ -25537,9 +27569,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       : formatUserMessage(msg.content, msg.attachments);
                   const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
                   const avatar = msg.role === 'user'
-                      ? '<i class="fa-solid fa-user"></i>'
+                      ? AppIconManager.getInstance().getUserAvatarHtml()
                       : msg.role === 'agent'
-                          ? '<i class="fa-solid fa-yin-yang"></i>'
+                          ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
                   const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                   const deleteBtnHtml = msg.id
@@ -25569,7 +27601,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const addWelcomeMessage = () => {
               const welcomeHtml = `
             <div class="kaiz-msg kaiz-msg-agent kaiz-msg-welcome">
-                <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
+                <div class="kaiz-msg-avatar">${AppIconManager.getInstance().getAvatarHtml()}</div>
                 <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
               history.append(welcomeHtml);
@@ -25581,11 +27613,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               let avatar;
               let extraClass;
               if (role === 'user') {
-                  avatar = '<i class="fa-solid fa-user"></i>';
+                  avatar = AppIconManager.getInstance().getUserAvatarHtml();
                   extraClass = 'kaiz-msg-user';
               }
               else if (role === 'agent') {
-                  avatar = '<i class="fa-solid fa-yin-yang"></i>';
+                  avatar = AppIconManager.getInstance().getAvatarHtml();
                   extraClass = 'kaiz-msg-agent';
               }
               else {
@@ -25720,7 +27752,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   });
               };
               await loop.run(historyMsgs, maxLoops, async (event) => {
-                  const btnIcon = $('#kaiz-floating-btn i');
+                  const btnIcon = $('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img');
                   const btnFloat = $('#kaiz-floating-btn');
                   if (event.type === 'step_start') {
                       btnIcon.addClass('kaiz-icon-spin');
@@ -25859,7 +27891,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   $(this).html(`<div style="color: #95a5a6; font-style: italic;"><i class="fa-solid fa-ban"></i> Đã hủy xác nhận công cụ (Tiến trình bị ngắt).</div>`);
                   $(this).removeClass('kaiz-safe-mode-pending');
               });
-              $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+              $('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img').removeClass('kaiz-icon-spin');
               $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
               if (!sendBtn.hasClass('kaiz-force-aborted')) {
                   sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
@@ -26368,7 +28400,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   // Update Floating UI Icon & Request Logs
                   if (event.type === 'step_start') {
                       turnRequests++;
-                      window.jQuery?.('#kaiz-floating-btn i').addClass('kaiz-icon-spin');
+                      window
+                          .jQuery?.('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img')
+                          .addClass('kaiz-icon-spin');
                       window.jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
                   }
                   else if (event.type === 'debug') {
@@ -26395,7 +28429,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }, false, // continueMode
               task.toolsConfig);
               // Stop UI spinning
-              window.jQuery?.('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+              window
+                  .jQuery?.('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img')
+                  .removeClass('kaiz-icon-spin');
               window.jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
               // Final result isn't needed here anymore since we saved in stream
               // Expiry logic
@@ -26815,7 +28851,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       }
                   }
                   const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-                  const avatar = isUser ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-yin-yang"></i>';
+                  const avatar = isUser
+                      ? AppIconManager.getInstance().getUserAvatarHtml()
+                      : AppIconManager.getInstance().getAvatarHtml();
                   const extraClass = isUser ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                   const msgHtml = `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}" style="margin-bottom: 15px; background: transparent; padding: 0; border: none;">
@@ -30357,9 +32395,29 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
               cotDisplayMode: 'collapse_streaming',
               prefillAsSystem: false,
+              appIconType: 'default',
+              customIconUrl: '',
+              avatarBgType: 'dark',
+              avatarBgValue: 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)',
+              userAvatarUrl: '',
           };
       }
       else {
+          if (ctx.extensionSettings[EXT_NAME].appIconType === undefined) {
+              ctx.extensionSettings[EXT_NAME].appIconType = 'default';
+          }
+          if (ctx.extensionSettings[EXT_NAME].customIconUrl === undefined) {
+              ctx.extensionSettings[EXT_NAME].customIconUrl = '';
+          }
+          if (ctx.extensionSettings[EXT_NAME].avatarBgType === undefined) {
+              ctx.extensionSettings[EXT_NAME].avatarBgType = 'dark';
+          }
+          if (ctx.extensionSettings[EXT_NAME].avatarBgValue === undefined) {
+              ctx.extensionSettings[EXT_NAME].avatarBgValue = 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)';
+          }
+          if (ctx.extensionSettings[EXT_NAME].userAvatarUrl === undefined) {
+              ctx.extensionSettings[EXT_NAME].userAvatarUrl = '';
+          }
           if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
               ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
           }
@@ -30470,9 +32528,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               $('body').append(kaizWindowHtml);
               // 2. Nạp giao diện Settings (Cần DOM của kaiz_window có sẵn cho các Modal)
               await SettingsUI.init(extPath, EXT_NAME, registry);
+              // Khởi tạo App Icon cho Floating Button và Avatars
+              AppIconManager.getInstance().init(extPath);
               const stateManager = new StateManager();
               const loop = new AgentLoop(adapter, registry, stateManager);
               const autoTaskScheduler = new AutoTaskScheduler(loop, stateManager);
+              // Khởi tạo Bé Pet Ảo Đồng Hành (Crystal Slime Mascot)
+              MascotManager.getInstance().init(extPath, loop, autoTaskScheduler);
               // Gắn kết UI trước để đăng ký callback
               ChatWindowUI.init(loop, stateManager, registry);
               ToolCheckerUI.init(registry, adapter);

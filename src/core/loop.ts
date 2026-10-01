@@ -41,12 +41,30 @@ export class AgentLoop {
     private _forceAbortReject: ((reason: any) => void) | null = null;
     private _safeModeReject: ((reason: any) => void) | null = null;
     private _currentAbortController: AbortController | null = null;
+    private _subscribers: ((event: AgentEvent) => void)[] = [];
 
     constructor(
         private adapter: SillyTavernAdapter,
         private toolRegistry: ToolRegistry,
         private stateManager: StateManager,
     ) {}
+
+    public subscribe(callback: (event: AgentEvent) => void): () => void {
+        this._subscribers.push(callback);
+        return () => {
+            this._subscribers = this._subscribers.filter((cb) => cb !== callback);
+        };
+    }
+
+    public emitEvent(event: AgentEvent): void {
+        for (const cb of this._subscribers) {
+            try {
+                cb(event);
+            } catch (err) {
+                console.error('[AgentLoop] Subscriber error:', err);
+            }
+        }
+    }
 
     /**
      * Hủy bỏ chuỗi agent hiện tại. Vòng lặp sẽ dừng sau khi hoàn thành bước hiện tại.
@@ -447,6 +465,13 @@ CÁC CÔNG CỤ HIỆN CÓ:
         toolsConfigOverride?: Record<string, boolean>,
     ) {
         console.log(`[AgentLoop] Starting run with history length: ${history.length}`);
+        this.emitEvent({ type: 'think_start' });
+
+        const originalOnEvent = onEvent;
+        onEvent = async (event: AgentEvent) => {
+            this.emitEvent(event);
+            await originalOnEvent(event);
+        };
 
         const cachedSystemPrompt = this.generateSystemPrompt(maxSteps, toolsConfigOverride);
 
@@ -495,7 +520,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                     break;
                 }
                 step++;
-                await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1 } });
+                await onEvent({ type: 'step_start', data: { isContinue: continueMode && step === 1, step } });
 
                 try {
                     const truncatedHistory = await this.applyTokenSafeLimit(internalHistory);
@@ -785,6 +810,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
             }
         } finally {
             this._isRunning = false;
+            this.emitEvent({ type: 'step_end', isFinal: true });
         }
     }
 }
