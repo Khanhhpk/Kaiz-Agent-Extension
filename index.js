@@ -23076,6 +23076,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       idleTimeoutMs = 180000; // 3 minutes idle -> sleep (when roaming is disabled)
       roamTimer = null;
       wakeTimer = null;
+      resizeDebounceTimer = null;
+      debuggerTimer = null;
       isActionRunning = false;
       consecutiveRoams = 0;
       loopUnsubscribe = null;
@@ -23113,6 +23115,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           else {
               this.startIdleTimer();
           }
+          // 5. Listen to window resize to intelligently keep pet within visible viewport
+          window.addEventListener('resize', this.handleWindowResize);
           console.log('[KaizAgent] Virtual Assistance Pet (Crystal Slime Mascot) initialized.');
       }
       connectLoop(loop) {
@@ -23382,7 +23386,175 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               this.idleTimer = null;
           }
       }
+      // --- SMART RESIZE HANDLING (WINDOW SHRINK / MINIMIZE RECOVERY) ---
+      handleWindowResize = () => {
+          if (this.resizeDebounceTimer) {
+              clearTimeout(this.resizeDebounceTimer);
+          }
+          this.resizeDebounceTimer = setTimeout(() => {
+              this.resizeDebounceTimer = null;
+              this.checkAndRelocateIfOutOfBounds();
+          }, 220);
+      };
+      checkAndRelocateIfOutOfBounds() {
+          if (!this.widget || !this.config.enabled)
+              return;
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65;
+          const maxY = Math.max(minY, window.innerHeight - scale - 85);
+          const pos = this.widget.getPosition();
+          // Check if pet is outside the safe boundary (e.g. window resized smaller or minimized)
+          const isOutOfBounds = pos.x < minX - 10 || pos.x > maxX + 10 || pos.y < minY - 10 || pos.y > maxY + 10;
+          if (!isOutOfBounds) {
+              this.updateViewportDebugger();
+              return;
+          }
+          // If currently in an agent action (thinking, working, etc.), clamp gently so it stays visible without interrupting CoT
+          if (this.isActionRunning) {
+              const clampedX = Math.min(maxX, Math.max(minX, pos.x));
+              const clampedY = Math.min(maxY, Math.max(minY, pos.y));
+              this.widget.moveTo(clampedX, clampedY, 600);
+              this.updateViewportDebugger();
+              return;
+          }
+          // Pet is idle / roaming / sleeping: smartly jump into a random spot inside the safe viewport!
+          this.stopRoaming();
+          const targetX = Math.floor(minX + Math.random() * (maxX - minX));
+          const targetY = Math.floor(minY + Math.random() * (maxY - minY));
+          const rescueQuotes = [
+              'Úi, cửa sổ co lại rồi! Bé dời vào trong đây nhé~ 💨',
+              'Phù... Cửa sổ nhỏ quá, nhảy vào vùng an toàn thôi nào! ✨',
+              'Bé bị kẹt ngoài rìa kìa! May mà né kịp vô trong! 🎈',
+          ];
+          const randomQuote = rescueQuotes[Math.floor(Math.random() * rescueQuotes.length)];
+          this.widget.showBubble(randomQuote, 3500);
+          this.widget.moveTo(targetX, targetY, 1500, () => {
+              this.updateViewportDebugger();
+              if (!this.isActionRunning && this.config.roamingEnabled) {
+                  this.startRoamingLoop();
+              }
+          });
+      }
+      // --- VIEWPORT BOUNDARY DEBUGGER OVERLAY ---
+      toggleViewportDebugger() {
+          const existing = document.getElementById('kaiz-pet-viewport-debugger');
+          if (existing) {
+              this.closeViewportDebugger();
+              return false;
+          }
+          else {
+              this.openViewportDebugger();
+              return true;
+          }
+      }
+      closeViewportDebugger() {
+          if (this.debuggerTimer) {
+              clearTimeout(this.debuggerTimer);
+              this.debuggerTimer = null;
+          }
+          const el = document.getElementById('kaiz-pet-viewport-debugger');
+          if (el) {
+              el.classList.add('kaiz-vp-fadeout');
+              setTimeout(() => el.remove(), 220);
+          }
+      }
+      openViewportDebugger() {
+          this.closeViewportDebugger();
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65;
+          const maxY = Math.max(minY, window.innerHeight - scale - 85);
+          const pos = this.widget?.getPosition() || { x: 0, y: 0 };
+          const overlay = document.createElement('div');
+          overlay.id = 'kaiz-pet-viewport-debugger';
+          overlay.className = 'kaiz-viewport-debugger';
+          overlay.innerHTML = `
+            <div class="kaiz-vp-guide-top">
+                <span><i class="fa-solid fa-arrow-down"></i> VÙNG TRÁNH: HEADER SILLYTAVERN (0px → 65px)</span>
+            </div>
+            <div class="kaiz-vp-safe-box" style="top: ${minY}px; left: ${minX}px; width: ${maxX - minX + scale}px; height: ${maxY - minY + scale}px;">
+                <div class="kaiz-vp-corner top-left"></div>
+                <div class="kaiz-vp-corner top-right"></div>
+                <div class="kaiz-vp-corner bottom-left"></div>
+                <div class="kaiz-vp-corner bottom-right"></div>
+                <div class="kaiz-vp-header">
+                    <div class="kaiz-vp-title">
+                        <i class="fa-solid fa-vector-square"></i> VÙNG VIEWPORT AN TOÀN CỦA BÉ SLIME
+                    </div>
+                    <div class="kaiz-vp-badge">
+                        <span id="kaiz-vp-dim">${window.innerWidth} × ${window.innerHeight}</span>
+                    </div>
+                    <button class="kaiz-vp-close" type="button" title="Đóng">&times;</button>
+                </div>
+                <div class="kaiz-vp-info-box">
+                    <div class="kaiz-vp-row">
+                        <span class="kaiz-vp-label"><i class="fa-solid fa-paw"></i> Tọa độ Bé hiện tại:</span>
+                        <span id="kaiz-vp-pet-pos" class="kaiz-vp-val">X: ${Math.round(pos.x)}px, Y: ${Math.round(pos.y)}px</span>
+                    </div>
+                    <div class="kaiz-vp-row">
+                        <span class="kaiz-vp-label"><i class="fa-solid fa-shield-halved"></i> Giới hạn an toàn:</span>
+                        <span id="kaiz-vp-limits" class="kaiz-vp-val">X: ${minX}px → ${Math.round(maxX)}px | Y: ${minY}px → ${Math.round(maxY)}px</span>
+                    </div>
+                    <div class="kaiz-vp-row">
+                        <span class="kaiz-vp-label"><i class="fa-solid fa-arrows-up-down-left-right"></i> Vùng khả dụng:</span>
+                        <span class="kaiz-vp-val" style="color: #38bdf8;">${Math.round(maxX - minX + scale)}px × ${Math.round(maxY - minY + scale)}px</span>
+                    </div>
+                    <div class="kaiz-vp-hint">
+                        Bé Slime sẽ chỉ tự do đi dạo và nhảy nhót trong khung viền xanh này. Khi bạn thu nhỏ cửa sổ, bé sẽ tự động nhảy vào bên trong!
+                    </div>
+                </div>
+            </div>
+            <div class="kaiz-vp-guide-bottom">
+                <span><i class="fa-solid fa-arrow-up"></i> VÙNG TRÁNH: KHUNG NHẬP CHAT BAR (Dưới cùng 85px)</span>
+            </div>
+        `;
+          document.body.appendChild(overlay);
+          overlay.querySelector('.kaiz-vp-close')?.addEventListener('click', (e) => {
+              e.stopPropagation();
+              this.closeViewportDebugger();
+          });
+          // Auto close after 10 seconds
+          this.debuggerTimer = setTimeout(() => {
+              this.closeViewportDebugger();
+          }, 10000);
+      }
+      updateViewportDebugger() {
+          const overlay = document.getElementById('kaiz-pet-viewport-debugger');
+          if (!overlay)
+              return;
+          const scale = Math.max(48, Math.min(180, this.config.scale || 96));
+          const minX = 25;
+          const maxX = Math.max(minX, window.innerWidth - scale - 25);
+          const minY = 65;
+          const maxY = Math.max(minY, window.innerHeight - scale - 85);
+          const pos = this.widget?.getPosition() || { x: 0, y: 0 };
+          const safeBox = overlay.querySelector('.kaiz-vp-safe-box');
+          if (safeBox) {
+              safeBox.style.top = `${minY}px`;
+              safeBox.style.left = `${minX}px`;
+              safeBox.style.width = `${maxX - minX + scale}px`;
+              safeBox.style.height = `${maxY - minY + scale}px`;
+          }
+          const dimEl = overlay.querySelector('#kaiz-vp-dim');
+          if (dimEl)
+              dimEl.textContent = `${window.innerWidth} × ${window.innerHeight}`;
+          const petPosEl = overlay.querySelector('#kaiz-vp-pet-pos');
+          if (petPosEl)
+              petPosEl.textContent = `X: ${Math.round(pos.x)}px, Y: ${Math.round(pos.y)}px`;
+          const limitsEl = overlay.querySelector('#kaiz-vp-limits');
+          if (limitsEl)
+              limitsEl.textContent = `X: ${minX}px → ${Math.round(maxX)}px | Y: ${minY}px → ${Math.round(maxY)}px`;
+      }
       destroy() {
+          window.removeEventListener('resize', this.handleWindowResize);
+          if (this.resizeDebounceTimer) {
+              clearTimeout(this.resizeDebounceTimer);
+              this.resizeDebounceTimer = null;
+          }
+          this.closeViewportDebugger();
           this.stopRoaming();
           this.clearIdleTimer();
           if (this.loopUnsubscribe) {
@@ -23614,6 +23786,15 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           $('#kaiz-pet-reset-pos').on('click', function () {
               mascot.resetPosition();
               toastr.info('Đã đặt lại vị trí Bé Pet về góc dưới phải!');
+          });
+          $('#kaiz-pet-debug-viewport-btn').on('click', function () {
+              const isOpen = mascot.toggleViewportDebugger();
+              if (isOpen) {
+                  toastr.info('Đang soi vùng Viewport an toàn của Bé Slime! (Tự đóng sau 10s hoặc bấm nút để tắt)');
+              }
+              else {
+                  toastr.info('Đã tắt chế độ soi Viewport.');
+              }
           });
           // --- SAFE MODE LOGIC ---
           $('#kaiz-safe-mode').prop('checked', settings.safeMode);

@@ -251,6 +251,15 @@ export class SettingsUI {
             toastr.info('Đã đặt lại vị trí Bé Pet về góc dưới phải!');
         });
 
+        $('#kaiz-pet-debug-viewport-btn').on('click', function () {
+            const isOpen = mascot.toggleViewportDebugger();
+            if (isOpen) {
+                toastr.info('Đang soi vùng Viewport an toàn của Bé Slime! (Tự đóng sau 10s hoặc bấm nút để tắt)');
+            } else {
+                toastr.info('Đã tắt chế độ soi Viewport.');
+            }
+        });
+
         // --- SAFE MODE LOGIC ---
         $('#kaiz-safe-mode').prop('checked', settings.safeMode);
         if (settings.safeMode) {
