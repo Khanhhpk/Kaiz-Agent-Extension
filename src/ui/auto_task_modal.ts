@@ -466,7 +466,7 @@ export class AutoTaskModal {
 
                 const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
                 const avatar = isUser
-                    ? '<i class="fa-solid fa-user"></i>'
+                    ? AppIconManager.getInstance().getUserAvatarHtml()
                     : AppIconManager.getInstance().getAvatarHtml();
                 const extraClass = isUser ? 'kaiz-msg-user' : 'kaiz-msg-agent';
 

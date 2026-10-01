@@ -6,7 +6,8 @@ import { ToolRegistry } from '../core/tool_registry';
 import { BrowserWindowUI } from './browser_window';
 import { WebImageBridge } from '../core/web_image_bridge';
 import { MascotManager } from '../core/mascot_manager';
-import { AppIconManager, APP_ICON_PRESETS, AppIconType } from '../core/app_icon_manager';
+import { AppIconManager, APP_ICON_PRESETS, AVATAR_BG_PRESETS, AppIconType } from '../core/app_icon_manager';
+import { AvatarCropperModal } from './avatar_cropper';
 import {
     DEFAULT_CORE_IDENTITY,
     DEFAULT_CORE_BEHAVIOR,
@@ -305,8 +306,8 @@ export class SettingsUI {
             }
         });
 
-        // Custom icon upload
-        $('#kaiz-custom-icon-browse-btn').on('click', () => {
+        // Custom icon upload & Cropper
+        $('#kaiz-custom-icon-browse-btn, #kaiz-custom-icon-crop-btn').on('click', () => {
             $('#kaiz-custom-icon-file-input').trigger('click');
         });
 
@@ -314,21 +315,21 @@ export class SettingsUI {
             const file = this.files?.[0];
             if (!file) return;
 
-            if (file.size > 3 * 1024 * 1024) {
-                toastr.warning('Ảnh tải lên quá lớn (tối đa 3MB). Vui lòng chọn ảnh nhỏ hơn!');
+            if (file.size > 5 * 1024 * 1024) {
+                toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
                 return;
             }
 
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const dataUrl = e.target?.result as string;
-                if (!dataUrl) return;
-
-                settings.customIconUrl = dataUrl;
-                selectAppIcon('custom');
-                toastr.success('Đã tải lên và áp dụng biểu tượng tùy chỉnh!');
-            };
-            reader.readAsDataURL(file);
+            // Mở công cụ cắt ảnh tròn trực quan
+            AvatarCropperModal.getInstance().open(
+                file,
+                (croppedDataUrl: string) => {
+                    settings.customIconUrl = croppedDataUrl;
+                    selectAppIcon('custom');
+                    toastr.success('Đã cắt và áp dụng biểu tượng tùy chỉnh!');
+                },
+                'Cắt Biểu Tượng Extension',
+            );
             this.value = '';
         });
 
@@ -337,6 +338,138 @@ export class SettingsUI {
                 settings.customIconUrl = '';
                 selectAppIcon('default');
                 toastr.info('Đã xóa ảnh tùy chỉnh và đặt lại icon mặc định.');
+            }
+        });
+
+        // --- AVATAR BACKGROUND COLOR PALETTE ---
+        const currentBgType = settings.avatarBgType || 'dark';
+        const currentBgVal = settings.avatarBgValue || 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)';
+
+        const updateAvatarBgUI = (type: string, bgVal: string) => {
+            $('#kaiz-avatar-bg-swatches .kaiz-bg-swatch').removeClass('active');
+            $(`#kaiz-avatar-bg-swatches .kaiz-bg-swatch[data-bg-id="${type}"]`).addClass('active');
+
+            const preset = AVATAR_BG_PRESETS.find((p) => p.id === type);
+            $('#kaiz-avatar-bg-name').text(preset ? preset.name : 'Tùy chọn');
+
+            if (type === 'custom') {
+                $('#kaiz-avatar-bg-custom-box').css('display', 'flex');
+                $('#kaiz-avatar-bg-custom-input').val(bgVal);
+                if (bgVal.startsWith('#') && (bgVal.length === 7 || bgVal.length === 4)) {
+                    $('#kaiz-avatar-bg-color-picker').val(bgVal);
+                }
+            } else {
+                $('#kaiz-avatar-bg-custom-box').hide();
+            }
+        };
+
+        const selectAvatarBg = (type: string, bgVal: string) => {
+            settings.avatarBgType = type;
+            settings.avatarBgValue = bgVal;
+            ctx.saveSettingsDebounced();
+
+            updateAvatarBgUI(type, bgVal);
+            iconManager.applyAvatarBg(bgVal);
+        };
+
+        const renderAvatarBgSwatches = () => {
+            const container = $('#kaiz-avatar-bg-swatches');
+            container.empty();
+
+            AVATAR_BG_PRESETS.forEach((p) => {
+                const isActive = p.id === (settings.avatarBgType || 'dark');
+                const isChecker = p.id === 'transparent';
+                const swatch = $(`
+                    <div class="kaiz-bg-swatch interactable ${isActive ? 'active' : ''} ${isChecker ? 'kaiz-bg-swatch-checker' : ''}"
+                         data-bg-id="${p.id}"
+                         style="${!isChecker ? `background: ${p.previewColor};` : ''}"
+                         title="${p.name}">
+                    </div>
+                `);
+
+                swatch.on('click', () => {
+                    selectAvatarBg(p.id, p.bgValue);
+                });
+
+                container.append(swatch);
+            });
+        };
+
+        renderAvatarBgSwatches();
+        updateAvatarBgUI(currentBgType, currentBgVal);
+        iconManager.applyAvatarBg(currentBgVal);
+
+        // Custom Color Picker input
+        $('#kaiz-avatar-bg-color-picker').on('input', function (this: HTMLInputElement) {
+            const hex = this.value;
+            $('#kaiz-avatar-bg-custom-input').val(hex);
+            selectAvatarBg('custom', hex);
+        });
+
+        $('#kaiz-avatar-bg-custom-apply').on('click', () => {
+            const val = ($('#kaiz-avatar-bg-custom-input').val() as string)?.trim();
+            if (val) {
+                selectAvatarBg('custom', val);
+                toastr.success('Đã áp dụng màu nền tùy chọn!');
+            }
+        });
+
+        // --- USER CHAT AVATAR CUSTOMIZATION ---
+        const updateUserAvatarPreview = () => {
+            const previewBox = $('#kaiz-user-avatar-preview-box');
+            const statusText = $('#kaiz-user-avatar-status-text');
+            const userAvatarUrl = settings.userAvatarUrl || '';
+
+            if (userAvatarUrl) {
+                previewBox.html(`<img src="${userAvatarUrl}" class="kaiz-user-avatar-img" alt="User" />`);
+                statusText.text('Đang dùng ảnh đại diện tùy chỉnh');
+            } else {
+                previewBox.html(`<i class="fa-solid fa-user" style="font-size: 20px; color: #fff;"></i>`);
+                statusText.text('Đang dùng biểu tượng mặc định');
+            }
+        };
+
+        updateUserAvatarPreview();
+        iconManager.applyUserAvatar();
+
+        $('#kaiz-user-avatar-browse-btn').on('click', () => {
+            $('#kaiz-user-avatar-file-input').trigger('click');
+        });
+
+        $('#kaiz-user-avatar-file-input').on('change', function (this: HTMLInputElement) {
+            const file = this.files?.[0];
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
+                return;
+            }
+
+            AvatarCropperModal.getInstance().open(
+                file,
+                (croppedDataUrl: string) => {
+                    settings.userAvatarUrl = croppedDataUrl;
+                    ctx.saveSettingsDebounced();
+                    updateUserAvatarPreview();
+                    iconManager.applyUserAvatar();
+                    toastr.success('Đã lưu và áp dụng Avatar Người dùng trong Chat!');
+                },
+                'Cắt Avatar Người Dùng',
+            );
+            this.value = '';
+        });
+
+        $('#kaiz-user-avatar-delete-btn').on('click', () => {
+            if (!settings.userAvatarUrl) {
+                toastr.info('Hiện tại đang dùng avatar mặc định rồi.');
+                return;
+            }
+            if (confirm('Bạn có chắc muốn xóa avatar cá nhân và quay về biểu tượng mặc định?')) {
+                settings.userAvatarUrl = '';
+                ctx.saveSettingsDebounced();
+                updateUserAvatarPreview();
+                iconManager.applyUserAvatar();
+                toastr.info('Đã xóa avatar và đặt lại mặc định!');
             }
         });
 

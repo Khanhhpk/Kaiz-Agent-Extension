@@ -1915,7 +1915,7 @@ export class ChatWindowUI {
 
                 const avatar =
                     msg.role === 'user'
-                        ? '<i class="fa-solid fa-user"></i>'
+                        ? AppIconManager.getInstance().getUserAvatarHtml()
                         : msg.role === 'agent'
                           ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
@@ -1966,7 +1966,7 @@ export class ChatWindowUI {
             let avatar: string;
             let extraClass: string;
             if (role === 'user') {
-                avatar = '<i class="fa-solid fa-user"></i>';
+                avatar = AppIconManager.getInstance().getUserAvatarHtml();
                 extraClass = 'kaiz-msg-user';
             } else if (role === 'agent') {
                 avatar = AppIconManager.getInstance().getAvatarHtml();

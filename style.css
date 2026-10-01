@@ -1,3 +1,7 @@
+:root {
+    --kaiz-avatar-bg: linear-gradient(135deg, #2b2b2b 0%, #000000 100%);
+}
+
 /* Bóng nổi */
 .kaiz-floating-btn {
     position: fixed;
@@ -6,7 +10,7 @@
     width: 42px;
     height: 42px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #2b2b2b 0%, #000000 100%);
+    background: var(--kaiz-avatar-bg);
     color: #ffffff;
     display: flex;
     align-items: center;
@@ -942,8 +946,13 @@
 }
 
 .kaiz-msg-agent .kaiz-msg-avatar {
-    background: linear-gradient(135deg, #2b2b2b 0%, #000000 100%);
+    background: var(--kaiz-avatar-bg, linear-gradient(135deg, #2b2b2b 0%, #000000 100%));
     color: #ffffff;
+}
+
+.kaiz-msg-user .kaiz-msg-avatar {
+    overflow: hidden;
+    position: relative;
 }
 
 .kaiz-msg-content {
@@ -1936,6 +1945,7 @@ img.kaiz-app-icon {
     max-width: 100%;
     display: -webkit-box;
     -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     height: 28px;
@@ -1945,6 +1955,75 @@ img.kaiz-app-icon {
 .kaiz-icon-preset-card.active .kaiz-icon-preset-title {
     color: #fff;
     font-weight: 600;
+}
+
+/* Avatar Background Swatches */
+.kaiz-avatar-bg-swatches {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 6px;
+    align-items: center;
+}
+
+.kaiz-bg-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid rgba(255, 255, 255, 0.18);
+    transition: all 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    position: relative;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.kaiz-bg-swatch:hover {
+    transform: scale(1.18);
+    border-color: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+}
+
+.kaiz-bg-swatch.active {
+    border-color: #ffffff;
+    box-shadow: 0 0 0 2px var(--accent, #6495ed), 0 4px 14px rgba(100, 149, 237, 0.6);
+    transform: scale(1.15);
+}
+
+.kaiz-bg-swatch.active::after {
+    content: '\f00c';
+    font-family: 'Font Awesome 6 Free', 'Font Awesome 5 Free', 'FontAwesome';
+    font-weight: 900;
+    font-size: 13px;
+    color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+
+.kaiz-bg-swatch-checker {
+    background-image: linear-gradient(45deg, #444 25%, transparent 25%),
+        linear-gradient(-45deg, #444 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #444 75%),
+        linear-gradient(-45deg, transparent 75%, #444 75%);
+    background-size: 10px 10px;
+    background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+    background-color: #222;
+}
+
+.kaiz-bg-transparent {
+    background: transparent !important;
+    box-shadow: none !important;
+}
+
+/* User Avatar Image In Chat */
+.kaiz-user-avatar-img {
+    width: 100% !important;
+    height: 100% !important;
+    border-radius: 50% !important;
+    object-fit: cover !important;
+    display: block !important;
 }
 
 .kaiz-btn-blink {

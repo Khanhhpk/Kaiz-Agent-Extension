@@ -95,6 +95,9 @@ jQuery(async () => {
             prefillAsSystem: false,
             appIconType: 'default',
             customIconUrl: '',
+            avatarBgType: 'dark',
+            avatarBgValue: 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)',
+            userAvatarUrl: '',
         };
     } else {
         if (ctx.extensionSettings[EXT_NAME].appIconType === undefined) {
@@ -102,6 +105,15 @@ jQuery(async () => {
         }
         if (ctx.extensionSettings[EXT_NAME].customIconUrl === undefined) {
             ctx.extensionSettings[EXT_NAME].customIconUrl = '';
+        }
+        if (ctx.extensionSettings[EXT_NAME].avatarBgType === undefined) {
+            ctx.extensionSettings[EXT_NAME].avatarBgType = 'dark';
+        }
+        if (ctx.extensionSettings[EXT_NAME].avatarBgValue === undefined) {
+            ctx.extensionSettings[EXT_NAME].avatarBgValue = 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)';
+        }
+        if (ctx.extensionSettings[EXT_NAME].userAvatarUrl === undefined) {
+            ctx.extensionSettings[EXT_NAME].userAvatarUrl = '';
         }
         if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
             ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;

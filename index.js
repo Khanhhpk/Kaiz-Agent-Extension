@@ -23571,9 +23571,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
   }
 
   /**
-   * App Icon Manager
+   * App Icon & Avatar Manager
    * Quản lý biểu tượng của Extension (Bóng nổi Floating Button & Avatar Agent trong tin nhắn).
-   * Hỗ trợ icon Âm Dương mặc định, 4 biến thể Thạch Triskelion Slime Orbs, và ảnh tùy chỉnh người dùng tải lên.
+   * Quản lý màu nền biểu tượng (thay vì chỉ màu đen) và Avatar người dùng (User Avatar).
    */
   const APP_ICON_PRESETS = [
       {
@@ -23624,10 +23624,73 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       {
           id: 'custom',
           name: 'Ảnh Tùy Chỉnh',
-          subtitle: 'Tải lên từ thiết bị',
+          subtitle: 'Tải lên & Cắt từ thiết bị',
           type: 'image',
           previewGlow: 'rgba(155, 89, 182, 0.45)',
           badgeEmoji: '📁',
+      },
+  ];
+  const AVATAR_BG_PRESETS = [
+      {
+          id: 'dark',
+          name: 'Đen Huyền Bí',
+          bgValue: 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)',
+          previewColor: '#1a1a1a',
+      },
+      {
+          id: 'transparent',
+          name: 'Trong Suốt (Không nền)',
+          bgValue: 'transparent',
+          previewColor: 'rgba(255, 255, 255, 0.08)',
+          isTransparent: true,
+      },
+      {
+          id: 'glass',
+          name: 'Kính Mờ (Glass)',
+          bgValue: 'rgba(255, 255, 255, 0.12)',
+          previewColor: 'rgba(255, 255, 255, 0.25)',
+      },
+      {
+          id: 'ocean',
+          name: 'Đại Dương Xanh',
+          bgValue: 'linear-gradient(135deg, #0984e3 0%, #00cec9 100%)',
+          previewColor: '#0984e3',
+      },
+      {
+          id: 'cosmic',
+          name: 'Tím Vũ Trụ',
+          bgValue: 'linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%)',
+          previewColor: '#6c5ce7',
+      },
+      {
+          id: 'sakura',
+          name: 'Hồng Sakura',
+          bgValue: 'linear-gradient(135deg, #fd79a8 0%, #e84393 100%)',
+          previewColor: '#fd79a8',
+      },
+      {
+          id: 'sunset',
+          name: 'Hoàng Hôn',
+          bgValue: 'linear-gradient(135deg, #e17055 0%, #f0932b 100%)',
+          previewColor: '#e17055',
+      },
+      {
+          id: 'emerald',
+          name: 'Ngọc Lục Bảo',
+          bgValue: 'linear-gradient(135deg, #00b894 0%, #55efc4 100%)',
+          previewColor: '#00b894',
+      },
+      {
+          id: 'white',
+          name: 'Trắng Tinh Khôi',
+          bgValue: 'linear-gradient(135deg, #ffffff 0%, #dfe6e9 100%)',
+          previewColor: '#f1f2f6',
+      },
+      {
+          id: 'custom',
+          name: 'Màu Tự Chọn',
+          bgValue: '#1e272e',
+          previewColor: '#ffa801',
       },
   ];
   class AppIconManager {
@@ -23644,6 +23707,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       init(extPath) {
           this.extPath = extPath || this.extPath;
           this.applyCurrentIcon();
+          this.applyAvatarBg();
+          this.applyUserAvatar();
       }
       getExtPath() {
           return this.extPath;
@@ -23654,6 +23719,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           return {
               appIconType: extSettings.appIconType || 'default',
               customIconUrl: extSettings.customIconUrl || '',
+              avatarBgType: extSettings.avatarBgType || 'dark',
+              avatarBgValue: extSettings.avatarBgValue || 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)',
+              userAvatarUrl: extSettings.userAvatarUrl || '',
           };
       }
       /**
@@ -23696,6 +23764,72 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           return `<i class="fa-solid fa-yin-yang kaiz-app-icon"></i>`;
       }
       /**
+       * Trả về HTML avatar của User trong khung Chat
+       */
+      getUserAvatarHtml() {
+          const { userAvatarUrl } = this.getSettings();
+          if (userAvatarUrl) {
+              return `<img class="kaiz-app-icon kaiz-user-avatar-img" src="${userAvatarUrl}" alt="User" draggable="false" />`;
+          }
+          return `<i class="fa-solid fa-user"></i>`;
+      }
+      /**
+       * Lấy giá trị màu nền avatar hiện tại
+       */
+      getAvatarBg() {
+          return this.getSettings().avatarBgValue;
+      }
+      /**
+       * Áp dụng màu nền cho Floating Button, Avatar Agent trong chat và Live Preview
+       */
+      applyAvatarBg(bgValue) {
+          const $ = window.jQuery;
+          const currentBg = bgValue || this.getAvatarBg();
+          // 1. Gán CSS variable trên :root
+          document.documentElement.style.setProperty('--kaiz-avatar-bg', currentBg);
+          if (!$)
+              return;
+          const isTransparent = currentBg === 'transparent';
+          // 2. Cập nhật floating button
+          const floatBtn = $('#kaiz-floating-btn');
+          if (floatBtn.length > 0) {
+              floatBtn.css('background', currentBg);
+              if (isTransparent) {
+                  floatBtn.addClass('kaiz-bg-transparent');
+              }
+              else {
+                  floatBtn.removeClass('kaiz-bg-transparent');
+              }
+          }
+          // 3. Cập nhật live preview trong bảng cài đặt
+          const previewBtn = $('#kaiz-icon-live-preview-btn');
+          if (previewBtn.length > 0) {
+              previewBtn.css('background', currentBg);
+              if (isTransparent) {
+                  previewBtn.addClass('kaiz-bg-transparent');
+              }
+              else {
+                  previewBtn.removeClass('kaiz-bg-transparent');
+              }
+          }
+          // 4. Cập nhật tất cả avatar của Agent trong khung chat
+          $('.kaiz-msg-agent .kaiz-msg-avatar').css('background', currentBg);
+      }
+      /**
+       * Cập nhật avatar User cho toàn bộ tin nhắn trong khung chat
+       */
+      applyUserAvatar() {
+          const $ = window.jQuery;
+          if (!$)
+              return;
+          const userAvatars = $('.kaiz-msg-user .kaiz-msg-avatar');
+          if (userAvatars.length > 0) {
+              userAvatars.each((_, el) => {
+                  $(el).html(this.getUserAvatarHtml());
+              });
+          }
+      }
+      /**
        * Cập nhật ngay lập tức DOM của nút Floating Button và thông báo các thành phần giao diện
        */
       applyCurrentIcon() {
@@ -23704,7 +23838,6 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               return;
           const floatBtn = $('#kaiz-floating-btn');
           if (floatBtn.length > 0) {
-              // Giữ lại trạng thái quay nếu đang chạy
               const existingIcon = floatBtn.find('.kaiz-app-icon, i, img');
               const isSpinning = existingIcon.hasClass('kaiz-icon-spin');
               floatBtn.empty();
@@ -23714,13 +23847,15 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }
               floatBtn.append(newElement);
           }
-          // Cập nhật các avatar tin nhắn của Agent hiện có trên màn hình (nếu có)
+          // Cập nhật các avatar tin nhắn của Agent hiện có trên màn hình
           const agentAvatars = $('.kaiz-msg-agent .kaiz-msg-avatar');
           if (agentAvatars.length > 0) {
               agentAvatars.each((_, el) => {
                   $(el).html(this.getAvatarHtml());
               });
           }
+          // Đồng bộ lại màu nền
+          this.applyAvatarBg();
           // Kích hoạt listeners
           this.listeners.forEach((fn) => {
               try {
@@ -23736,6 +23871,328 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           return () => {
               this.listeners = this.listeners.filter((l) => l !== listener);
           };
+      }
+  }
+
+  /**
+   * Interactive Circular Avatar Cropper Modal
+   * Cung cấp công cụ cắt ảnh tròn trực quan (Pan / Drag, Zoom, Xoay 90 độ, Live Preview).
+   * Dùng cho cả Avatar Người Dùng và Biểu tượng tùy chỉnh của Kaiz Agent.
+   */
+  class AvatarCropperModal {
+      static instance;
+      modal = null;
+      canvas = null;
+      ctx = null;
+      previewCanvas = null;
+      img = null;
+      onSaveCallback = null;
+      // State
+      scale = 1.0;
+      baseScale = 1.0;
+      offsetX = 0;
+      offsetY = 0;
+      rotation = 0; // 0, 90, 180, 270
+      // Interaction
+      isDragging = false;
+      startX = 0;
+      startY = 0;
+      canvasSize = 340;
+      cropRadius = 120; // 240px đường kính
+      constructor() {
+          this.ensureModalDOM();
+          this.bindEvents();
+      }
+      static getInstance() {
+          if (!AvatarCropperModal.instance) {
+              AvatarCropperModal.instance = new AvatarCropperModal();
+          }
+          return AvatarCropperModal.instance;
+      }
+      ensureModalDOM() {
+          if (document.getElementById('kaiz-avatar-cropper-modal')) {
+              this.modal = document.getElementById('kaiz-avatar-cropper-modal');
+              this.canvas = document.getElementById('kaiz-crop-main-canvas');
+              this.previewCanvas = document.getElementById('kaiz-crop-live-preview');
+              if (this.canvas)
+                  this.ctx = this.canvas.getContext('2d');
+              return;
+          }
+          const modalHtml = `
+        <dialog id="kaiz-avatar-cropper-modal" class="kaiz-cropper-dialog" style="padding: 0; background: #181920; color: #fff; border: 1px solid rgba(255,255,255,0.18); border-radius: 14px; box-shadow: 0 16px 40px rgba(0,0,0,0.85); width: 420px; max-width: 95vw; overflow: hidden; z-index: 10005;">
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02);">
+                <div id="kaiz-cropper-title" style="font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 8px;">
+                    <i class="fa-solid fa-crop-simple" style="color: var(--accent, #6495ed);"></i> Cắt & Căn Chỉnh Avatar
+                </div>
+                <i id="kaiz-cropper-close-btn" class="fa-solid fa-xmark interactable" style="cursor: pointer; font-size: 16px; color: #aaa;"></i>
+            </div>
+
+            <div style="padding: 16px 18px; display: flex; flex-direction: column; align-items: center; gap: 14px;">
+                <!-- Main Canvas Viewport -->
+                <div style="position: relative; width: 340px; height: 340px; background: #0c0d11; border-radius: 10px; overflow: hidden; box-shadow: inset 0 0 16px rgba(0,0,0,0.8); cursor: grab; user-select: none;" id="kaiz-crop-canvas-wrapper">
+                    <canvas id="kaiz-crop-main-canvas" width="340" height="340" style="display: block; width: 340px; height: 340px;"></canvas>
+                </div>
+
+                <div style="font-size: 11px; color: #888; text-align: center;">
+                    <i class="fa-solid fa-hand-pointer"></i> Kéo để di chuyển • <i class="fa-solid fa-arrows-up-down"></i> Cuộn chuột để Phóng to/Thu nhỏ
+                </div>
+
+                <!-- Controls & Slider -->
+                <div style="width: 100%; display: flex; flex-direction: column; gap: 10px; background: rgba(255,255,255,0.03); padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                        <span style="font-size: 12px; color: #ccc; display: flex; align-items: center; gap: 6px;"><i class="fa-solid fa-magnifying-glass"></i> Thu phóng:</span>
+                        <input id="kaiz-crop-zoom-range" type="range" class="kaiz-range" min="0.5" max="3.5" step="0.05" value="1" style="flex: 1;" />
+                        <span id="kaiz-crop-zoom-val" style="font-size: 11px; color: var(--accent, #6495ed); min-width: 38px; text-align: right; font-weight: 600;">100%</span>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                        <div style="display: flex; gap: 6px;">
+                            <button type="button" id="kaiz-crop-rotate-btn" class="menu_button interactable" style="font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-rotate-right"></i> Xoay 90°
+                            </button>
+                            <button type="button" id="kaiz-crop-center-btn" class="menu_button interactable" style="font-size: 11px; padding: 4px 10px; display: inline-flex; align-items: center; gap: 5px;">
+                                <i class="fa-solid fa-arrows-to-dot"></i> Căn giữa
+                            </button>
+                        </div>
+
+                        <!-- Live Mini Preview -->
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 11px; color: #888;">Xem trước:</span>
+                            <canvas id="kaiz-crop-live-preview" width="38" height="38" style="width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.25); background: #000; display: block;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div style="display: flex; justify-content: flex-end; gap: 10px; padding: 12px 18px; border-top: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.2);">
+                <button type="button" id="kaiz-crop-cancel-btn" class="menu_button interactable" style="font-size: 12px; padding: 6px 14px;">
+                    Hủy bỏ
+                </button>
+                <button type="button" id="kaiz-crop-apply-btn" class="menu_button interactable" style="font-size: 12px; padding: 6px 18px; background: var(--accent, #6495ed); color: #fff; font-weight: 600;">
+                    <i class="fa-solid fa-check"></i> Cắt & Áp dụng
+                </button>
+            </div>
+        </dialog>
+        `;
+          document.body.insertAdjacentHTML('beforeend', modalHtml);
+          this.modal = document.getElementById('kaiz-avatar-cropper-modal');
+          this.canvas = document.getElementById('kaiz-crop-main-canvas');
+          this.previewCanvas = document.getElementById('kaiz-crop-live-preview');
+          if (this.canvas)
+              this.ctx = this.canvas.getContext('2d');
+      }
+      bindEvents() {
+          if (!this.canvas || !this.modal)
+              return;
+          const $ = window.jQuery;
+          $('#kaiz-cropper-close-btn, #kaiz-crop-cancel-btn').on('click', () => {
+              this.modal?.close();
+          });
+          // Mouse drag on canvas
+          const wrapper = document.getElementById('kaiz-crop-canvas-wrapper');
+          if (wrapper) {
+              wrapper.addEventListener('mousedown', (e) => {
+                  this.isDragging = true;
+                  wrapper.style.cursor = 'grabbing';
+                  this.startX = e.clientX - this.offsetX;
+                  this.startY = e.clientY - this.offsetY;
+              });
+              window.addEventListener('mousemove', (e) => {
+                  if (!this.isDragging)
+                      return;
+                  this.offsetX = e.clientX - this.startX;
+                  this.offsetY = e.clientY - this.startY;
+                  this.draw();
+              });
+              window.addEventListener('mouseup', () => {
+                  if (this.isDragging && wrapper) {
+                      this.isDragging = false;
+                      wrapper.style.cursor = 'grab';
+                  }
+              });
+              // Mouse wheel zoom
+              wrapper.addEventListener('wheel', (e) => {
+                  e.preventDefault();
+                  const delta = e.deltaY < 0 ? 0.08 : -0.08;
+                  this.setScale(this.scale + delta);
+              }, { passive: false });
+          }
+          // Zoom range input
+          $('#kaiz-crop-zoom-range').on('input', (e) => {
+              const val = parseFloat(e.target.value);
+              this.setScale(val);
+          });
+          // Rotate button
+          $('#kaiz-crop-rotate-btn').on('click', () => {
+              this.rotation = (this.rotation + 90) % 360;
+              this.draw();
+          });
+          // Center button
+          $('#kaiz-crop-center-btn').on('click', () => {
+              this.resetView();
+          });
+          // Apply crop button
+          $('#kaiz-crop-apply-btn').on('click', () => {
+              this.exportAndSave();
+          });
+      }
+      open(file, onSave, titleText) {
+          this.ensureModalDOM();
+          this.onSaveCallback = onSave;
+          if (titleText && document.getElementById('kaiz-cropper-title')) {
+              document.getElementById('kaiz-cropper-title').innerHTML =
+                  `<i class="fa-solid fa-crop-simple" style="color: var(--accent, #6495ed);"></i> ${titleText}`;
+          }
+          const reader = new FileReader();
+          reader.onload = (e) => {
+              const dataUrl = e.target?.result;
+              const img = new Image();
+              img.onload = () => {
+                  this.img = img;
+                  this.rotation = 0;
+                  this.resetView();
+                  this.modal?.showModal();
+              };
+              img.src = dataUrl;
+          };
+          reader.readAsDataURL(file);
+      }
+      resetView() {
+          if (!this.img)
+              return;
+          const cropDiameter = this.cropRadius * 2;
+          // Fit image so minimum dimension covers the crop circle
+          const minDim = Math.min(this.img.width, this.img.height);
+          this.baseScale = cropDiameter / minDim;
+          this.scale = this.baseScale;
+          this.offsetX = this.canvasSize / 2;
+          this.offsetY = this.canvasSize / 2;
+          const zoomInput = document.getElementById('kaiz-crop-zoom-range');
+          if (zoomInput) {
+              zoomInput.value = '1';
+          }
+          this.updateZoomLabel();
+          this.draw();
+      }
+      setScale(val) {
+          const clamped = Math.max(0.2, Math.min(5.0, val));
+          this.scale = clamped * this.baseScale;
+          const zoomInput = document.getElementById('kaiz-crop-zoom-range');
+          if (zoomInput) {
+              zoomInput.value = clamped.toFixed(2);
+          }
+          this.updateZoomLabel();
+          this.draw();
+      }
+      updateZoomLabel() {
+          const label = document.getElementById('kaiz-crop-zoom-val');
+          if (label && this.baseScale > 0) {
+              const pct = Math.round((this.scale / this.baseScale) * 100);
+              label.textContent = `${pct}%`;
+          }
+      }
+      draw() {
+          if (!this.ctx || !this.canvas || !this.img)
+              return;
+          const cx = this.canvasSize / 2;
+          const cy = this.canvasSize / 2;
+          // 1. Clear canvas
+          this.ctx.clearRect(0, 0, this.canvasSize, this.canvasSize);
+          // 2. Draw user image transformed
+          this.ctx.save();
+          this.ctx.translate(this.offsetX, this.offsetY);
+          this.ctx.rotate((this.rotation * Math.PI) / 180);
+          this.ctx.scale(this.scale, this.scale);
+          this.ctx.drawImage(this.img, -this.img.width / 2, -this.img.height / 2);
+          this.ctx.restore();
+          // 3. Draw Dark Mask with Circular Cutout
+          this.ctx.save();
+          this.ctx.fillStyle = 'rgba(10, 12, 16, 0.72)';
+          this.ctx.beginPath();
+          // Outer rect
+          this.ctx.rect(0, 0, this.canvasSize, this.canvasSize);
+          // Inner circle (counter-clockwise cutout)
+          this.ctx.arc(cx, cy, this.cropRadius, 0, Math.PI * 2, true);
+          this.ctx.fill();
+          // 4. Draw Circular Guide Border
+          this.ctx.strokeStyle = 'rgba(100, 149, 237, 0.85)';
+          this.ctx.lineWidth = 2;
+          this.ctx.setLineDash([6, 4]);
+          this.ctx.beginPath();
+          this.ctx.arc(cx, cy, this.cropRadius, 0, Math.PI * 2);
+          this.ctx.stroke();
+          // Crosshair ticks
+          this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+          this.ctx.lineWidth = 1;
+          this.ctx.setLineDash([]);
+          this.ctx.beginPath();
+          this.ctx.moveTo(cx - 10, cy);
+          this.ctx.lineTo(cx + 10, cy);
+          this.ctx.moveTo(cx, cy - 10);
+          this.ctx.lineTo(cx, cy + 10);
+          this.ctx.stroke();
+          this.ctx.restore();
+          // 5. Update live mini preview
+          this.drawMiniPreview();
+      }
+      drawMiniPreview() {
+          if (!this.previewCanvas || !this.img)
+              return;
+          const pCtx = this.previewCanvas.getContext('2d');
+          if (!pCtx)
+              return;
+          const pSize = 38;
+          pCtx.clearRect(0, 0, pSize, pSize);
+          pCtx.save();
+          // Circular clip
+          pCtx.beginPath();
+          pCtx.arc(pSize / 2, pSize / 2, pSize / 2, 0, Math.PI * 2);
+          pCtx.clip();
+          // Calculate mapping from crop circle (diameter 240) to mini preview (diameter 38)
+          const scaleFactor = pSize / (this.cropRadius * 2);
+          const cx = this.canvasSize / 2;
+          const cy = this.canvasSize / 2;
+          pCtx.translate(pSize / 2, pSize / 2);
+          pCtx.scale(scaleFactor, scaleFactor);
+          pCtx.translate(-cx, -cy);
+          pCtx.translate(this.offsetX, this.offsetY);
+          pCtx.rotate((this.rotation * Math.PI) / 180);
+          pCtx.scale(this.scale, this.scale);
+          pCtx.drawImage(this.img, -this.img.width / 2, -this.img.height / 2);
+          pCtx.restore();
+      }
+      exportAndSave() {
+          if (!this.img)
+              return;
+          // Export high-res 256x256 circular image
+          const exportSize = 256;
+          const outCanvas = document.createElement('canvas');
+          outCanvas.width = exportSize;
+          outCanvas.height = exportSize;
+          const outCtx = outCanvas.getContext('2d');
+          if (!outCtx)
+              return;
+          const cx = this.canvasSize / 2;
+          const cy = this.canvasSize / 2;
+          const scaleFactor = exportSize / (this.cropRadius * 2);
+          outCtx.save();
+          outCtx.beginPath();
+          outCtx.arc(exportSize / 2, exportSize / 2, exportSize / 2, 0, Math.PI * 2);
+          outCtx.clip();
+          outCtx.translate(exportSize / 2, exportSize / 2);
+          outCtx.scale(scaleFactor, scaleFactor);
+          outCtx.translate(-cx, -cy);
+          outCtx.translate(this.offsetX, this.offsetY);
+          outCtx.rotate((this.rotation * Math.PI) / 180);
+          outCtx.scale(this.scale, this.scale);
+          outCtx.drawImage(this.img, -this.img.width / 2, -this.img.height / 2);
+          outCtx.restore();
+          const croppedDataUrl = outCanvas.toDataURL('image/png');
+          if (this.onSaveCallback) {
+              this.onSaveCallback(croppedDataUrl);
+          }
+          this.modal?.close();
       }
   }
 
@@ -24008,28 +24465,24 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   btn.html('<i class="fa-solid fa-circle-stop"></i> Dừng quay');
               }
           });
-          // Custom icon upload
-          $('#kaiz-custom-icon-browse-btn').on('click', () => {
+          // Custom icon upload & Cropper
+          $('#kaiz-custom-icon-browse-btn, #kaiz-custom-icon-crop-btn').on('click', () => {
               $('#kaiz-custom-icon-file-input').trigger('click');
           });
           $('#kaiz-custom-icon-file-input').on('change', function () {
               const file = this.files?.[0];
               if (!file)
                   return;
-              if (file.size > 3 * 1024 * 1024) {
-                  toastr.warning('Ảnh tải lên quá lớn (tối đa 3MB). Vui lòng chọn ảnh nhỏ hơn!');
+              if (file.size > 5 * 1024 * 1024) {
+                  toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
                   return;
               }
-              const reader = new FileReader();
-              reader.onload = (e) => {
-                  const dataUrl = e.target?.result;
-                  if (!dataUrl)
-                      return;
-                  settings.customIconUrl = dataUrl;
+              // Mở công cụ cắt ảnh tròn trực quan
+              AvatarCropperModal.getInstance().open(file, (croppedDataUrl) => {
+                  settings.customIconUrl = croppedDataUrl;
                   selectAppIcon('custom');
-                  toastr.success('Đã tải lên và áp dụng biểu tượng tùy chỉnh!');
-              };
-              reader.readAsDataURL(file);
+                  toastr.success('Đã cắt và áp dụng biểu tượng tùy chỉnh!');
+              }, 'Cắt Biểu Tượng Extension');
               this.value = '';
           });
           $('#kaiz-custom-icon-delete-btn').on('click', () => {
@@ -24037,6 +24490,116 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   settings.customIconUrl = '';
                   selectAppIcon('default');
                   toastr.info('Đã xóa ảnh tùy chỉnh và đặt lại icon mặc định.');
+              }
+          });
+          // --- AVATAR BACKGROUND COLOR PALETTE ---
+          const currentBgType = settings.avatarBgType || 'dark';
+          const currentBgVal = settings.avatarBgValue || 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)';
+          const updateAvatarBgUI = (type, bgVal) => {
+              $('#kaiz-avatar-bg-swatches .kaiz-bg-swatch').removeClass('active');
+              $(`#kaiz-avatar-bg-swatches .kaiz-bg-swatch[data-bg-id="${type}"]`).addClass('active');
+              const preset = AVATAR_BG_PRESETS.find((p) => p.id === type);
+              $('#kaiz-avatar-bg-name').text(preset ? preset.name : 'Tùy chọn');
+              if (type === 'custom') {
+                  $('#kaiz-avatar-bg-custom-box').css('display', 'flex');
+                  $('#kaiz-avatar-bg-custom-input').val(bgVal);
+                  if (bgVal.startsWith('#') && (bgVal.length === 7 || bgVal.length === 4)) {
+                      $('#kaiz-avatar-bg-color-picker').val(bgVal);
+                  }
+              }
+              else {
+                  $('#kaiz-avatar-bg-custom-box').hide();
+              }
+          };
+          const selectAvatarBg = (type, bgVal) => {
+              settings.avatarBgType = type;
+              settings.avatarBgValue = bgVal;
+              ctx.saveSettingsDebounced();
+              updateAvatarBgUI(type, bgVal);
+              iconManager.applyAvatarBg(bgVal);
+          };
+          const renderAvatarBgSwatches = () => {
+              const container = $('#kaiz-avatar-bg-swatches');
+              container.empty();
+              AVATAR_BG_PRESETS.forEach((p) => {
+                  const isActive = p.id === (settings.avatarBgType || 'dark');
+                  const isChecker = p.id === 'transparent';
+                  const swatch = $(`
+                    <div class="kaiz-bg-swatch interactable ${isActive ? 'active' : ''} ${isChecker ? 'kaiz-bg-swatch-checker' : ''}"
+                         data-bg-id="${p.id}"
+                         style="${!isChecker ? `background: ${p.previewColor};` : ''}"
+                         title="${p.name}">
+                    </div>
+                `);
+                  swatch.on('click', () => {
+                      selectAvatarBg(p.id, p.bgValue);
+                  });
+                  container.append(swatch);
+              });
+          };
+          renderAvatarBgSwatches();
+          updateAvatarBgUI(currentBgType, currentBgVal);
+          iconManager.applyAvatarBg(currentBgVal);
+          // Custom Color Picker input
+          $('#kaiz-avatar-bg-color-picker').on('input', function () {
+              const hex = this.value;
+              $('#kaiz-avatar-bg-custom-input').val(hex);
+              selectAvatarBg('custom', hex);
+          });
+          $('#kaiz-avatar-bg-custom-apply').on('click', () => {
+              const val = $('#kaiz-avatar-bg-custom-input').val()?.trim();
+              if (val) {
+                  selectAvatarBg('custom', val);
+                  toastr.success('Đã áp dụng màu nền tùy chọn!');
+              }
+          });
+          // --- USER CHAT AVATAR CUSTOMIZATION ---
+          const updateUserAvatarPreview = () => {
+              const previewBox = $('#kaiz-user-avatar-preview-box');
+              const statusText = $('#kaiz-user-avatar-status-text');
+              const userAvatarUrl = settings.userAvatarUrl || '';
+              if (userAvatarUrl) {
+                  previewBox.html(`<img src="${userAvatarUrl}" class="kaiz-user-avatar-img" alt="User" />`);
+                  statusText.text('Đang dùng ảnh đại diện tùy chỉnh');
+              }
+              else {
+                  previewBox.html(`<i class="fa-solid fa-user" style="font-size: 20px; color: #fff;"></i>`);
+                  statusText.text('Đang dùng biểu tượng mặc định');
+              }
+          };
+          updateUserAvatarPreview();
+          iconManager.applyUserAvatar();
+          $('#kaiz-user-avatar-browse-btn').on('click', () => {
+              $('#kaiz-user-avatar-file-input').trigger('click');
+          });
+          $('#kaiz-user-avatar-file-input').on('change', function () {
+              const file = this.files?.[0];
+              if (!file)
+                  return;
+              if (file.size > 5 * 1024 * 1024) {
+                  toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
+                  return;
+              }
+              AvatarCropperModal.getInstance().open(file, (croppedDataUrl) => {
+                  settings.userAvatarUrl = croppedDataUrl;
+                  ctx.saveSettingsDebounced();
+                  updateUserAvatarPreview();
+                  iconManager.applyUserAvatar();
+                  toastr.success('Đã lưu và áp dụng Avatar Người dùng trong Chat!');
+              }, 'Cắt Avatar Người Dùng');
+              this.value = '';
+          });
+          $('#kaiz-user-avatar-delete-btn').on('click', () => {
+              if (!settings.userAvatarUrl) {
+                  toastr.info('Hiện tại đang dùng avatar mặc định rồi.');
+                  return;
+              }
+              if (confirm('Bạn có chắc muốn xóa avatar cá nhân và quay về biểu tượng mặc định?')) {
+                  settings.userAvatarUrl = '';
+                  ctx.saveSettingsDebounced();
+                  updateUserAvatarPreview();
+                  iconManager.applyUserAvatar();
+                  toastr.info('Đã xóa avatar và đặt lại mặc định!');
               }
           });
           // --- AGENT THINK DISPLAY MODE ---
@@ -26938,7 +27501,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       : formatUserMessage(msg.content, msg.attachments);
                   const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
                   const avatar = msg.role === 'user'
-                      ? '<i class="fa-solid fa-user"></i>'
+                      ? AppIconManager.getInstance().getUserAvatarHtml()
                       : msg.role === 'agent'
                           ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
@@ -26982,7 +27545,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               let avatar;
               let extraClass;
               if (role === 'user') {
-                  avatar = '<i class="fa-solid fa-user"></i>';
+                  avatar = AppIconManager.getInstance().getUserAvatarHtml();
                   extraClass = 'kaiz-msg-user';
               }
               else if (role === 'agent') {
@@ -28221,7 +28784,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
                   const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
                   const avatar = isUser
-                      ? '<i class="fa-solid fa-user"></i>'
+                      ? AppIconManager.getInstance().getUserAvatarHtml()
                       : AppIconManager.getInstance().getAvatarHtml();
                   const extraClass = isUser ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                   const msgHtml = `
@@ -31766,6 +32329,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               prefillAsSystem: false,
               appIconType: 'default',
               customIconUrl: '',
+              avatarBgType: 'dark',
+              avatarBgValue: 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)',
+              userAvatarUrl: '',
           };
       }
       else {
@@ -31774,6 +32340,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           if (ctx.extensionSettings[EXT_NAME].customIconUrl === undefined) {
               ctx.extensionSettings[EXT_NAME].customIconUrl = '';
+          }
+          if (ctx.extensionSettings[EXT_NAME].avatarBgType === undefined) {
+              ctx.extensionSettings[EXT_NAME].avatarBgType = 'dark';
+          }
+          if (ctx.extensionSettings[EXT_NAME].avatarBgValue === undefined) {
+              ctx.extensionSettings[EXT_NAME].avatarBgValue = 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)';
+          }
+          if (ctx.extensionSettings[EXT_NAME].userAvatarUrl === undefined) {
+              ctx.extensionSettings[EXT_NAME].userAvatarUrl = '';
           }
           if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
               ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
