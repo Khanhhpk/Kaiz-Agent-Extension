@@ -153,9 +153,14 @@ CẤU TRÚC PROMPT (TIẾNG ANH):
               if (persona) {
                   fullText += `\n[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
               }
-              if (memories && memories.length > 0) {
+              const activeMemories = (memories || []).filter((mem) => {
+                  if (typeof mem === 'string')
+                      return true;
+                  return mem && mem.enabled !== false;
+              });
+              if (activeMemories.length > 0) {
                   fullText += `\n[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
-                  memories.forEach((mem, idx) => {
+                  activeMemories.forEach((mem, idx) => {
                       if (typeof mem === 'string') {
                           fullText += `${idx + 1}. [Untracked] ${mem}\n`;
                       }
@@ -364,9 +369,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
               if (persona) {
                   customContent += `[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
               }
-              if (memories && memories.length > 0) {
+              const activeMemories = (memories || []).filter((mem) => {
+                  if (typeof mem === 'string')
+                      return true;
+                  return mem && mem.enabled !== false;
+              });
+              if (activeMemories.length > 0) {
                   customContent += `[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
-                  memories.forEach((mem, idx) => {
+                  activeMemories.forEach((mem, idx) => {
                       if (typeof mem === 'string') {
                           customContent += `${idx + 1}. [Untracked] ${mem}\n`;
                       }
@@ -3056,7 +3066,7 @@ CÁC CÔNG CỤ HIỆN CÓ:
                           content: `Memory với key "${key}" đã tồn tại. Hãy sử dụng action "edit" để sửa đổi.`,
                       };
                   }
-                  settings.memories.push({ key, content });
+                  settings.memories.push({ key, content, enabled: true });
                   ctx.saveSettingsDebounced();
                   document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                   return {
@@ -22978,7 +22988,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               const content = String($('#kaiz-manual-memory-input').val() || '').trim();
               if (key && content) {
                   if (editingMemoryIndex !== -1) {
-                      settings.memories[editingMemoryIndex] = { key, content };
+                      const currentEnabled = settings.memories[editingMemoryIndex]?.enabled !== false;
+                      settings.memories[editingMemoryIndex] = { key, content, enabled: currentEnabled };
                       editingMemoryIndex = -1;
                       $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
                   }
@@ -22989,7 +23000,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                           alert(`Key "${key}" đã tồn tại. Vui lòng chọn tên khác hoặc ấn Edit ở item tương ứng.`);
                           return;
                       }
-                      settings.memories.push({ key, content });
+                      settings.memories.push({ key, content, enabled: true });
                   }
                   $('#kaiz-manual-memory-key-input').val('');
                   $('#kaiz-manual-memory-input').val('');
@@ -23021,20 +23032,34 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   ctx.saveSettingsDebounced();
               let htmlStr = '';
               settings.memories.forEach((mem, index) => {
+                  const isEnabled = mem.enabled !== false;
                   const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                   const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                   const isLongContent = mem.content.length > 100 || mem.content.split('\n').length > 2;
+                  const cardStyle = isEnabled
+                      ? 'background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;'
+                      : 'background: rgba(0,0,0,0.15); border: 1px dashed rgba(255,255,255,0.15); opacity: 0.55; border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;';
+                  const keyStyle = isEnabled
+                      ? 'font-weight: bold; color: #8bc34a;'
+                      : 'font-weight: bold; color: #888; text-decoration: line-through;';
+                  const toggleTitle = isEnabled ? 'Tạm tắt memory này' : 'Bật lại memory này';
+                  const toggleIconClass = isEnabled ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off';
+                  const toggleBtnStyle = isEnabled ? 'color: #8bc34a;' : 'color: #888;';
                   htmlStr += `
-                    <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
+                    <div class="kaiz-memory-item ${isEnabled ? 'is-enabled' : 'is-disabled'}" data-index="${index}" style="${cardStyle}">
                         <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
                             <i class="fa-solid fa-grip-vertical"></i>
                         </div>
                         <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word;">
-                            <span style="font-weight: bold; color: #8bc34a;">[${keyEscaped}]</span> 
+                            <span style="${keyStyle}">[${keyEscaped}]</span>
+                            ${!isEnabled ? '<span style="font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.1); color: #aaa; margin-left: 4px; vertical-align: middle;">Đã tắt</span>' : ''} 
                             <span class="kaiz-memory-text" style="white-space: pre-wrap; ${isLongContent ? 'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;' : ''}">${memEscaped}</span>
                             ${isLongContent ? `<button class="kaiz-memory-expand-btn interactable" style="background: none; border: none; color: #888; cursor: pointer; padding: 2px 0; font-size: 11px;"><i class="fa-solid fa-chevron-down"></i> Hiển thị thêm</button>` : ''}
                         </div>
-                        <div style="display: flex; gap: 4px;">
+                        <div style="display: flex; gap: 4px; align-items: center;">
+                            <button class="menu_button interactable kaiz-memory-toggle-btn" data-index="${index}" style="padding: 2px 6px; font-size: 13px; height: auto; ${toggleBtnStyle}" title="${toggleTitle}">
+                                <i class="${toggleIconClass}"></i>
+                            </button>
                             <button class="menu_button interactable kaiz-memory-edit-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Edit">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
@@ -23074,6 +23099,15 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           }
           renderMemories();
           // --- Event Delegation cho Memory List (Chỉ bind 1 lần) ---
+          $memoryList.on('click', '.kaiz-memory-toggle-btn', function () {
+              const idx = Number($(this).data('index'));
+              if (!isNaN(idx) && settings.memories[idx]) {
+                  const current = settings.memories[idx].enabled !== false;
+                  settings.memories[idx].enabled = !current;
+                  ctx.saveSettingsDebounced();
+                  renderMemories();
+              }
+          });
           $memoryList.on('click', '.kaiz-memory-expand-btn', function () {
               const $text = $(this).siblings('.kaiz-memory-text');
               if ($text.css('-webkit-line-clamp') === '2') {
