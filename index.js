@@ -23984,21 +23984,15 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           const selectAppIcon = (type) => {
               settings.appIconType = type;
               ctx.saveSettingsDebounced();
-              $('#kaiz-app-icon-select').val(type);
               renderIconPresetCards(type);
               updateCustomPanelVisibility(type);
               updateLivePreview(type, settings.customIconUrl);
               iconManager.applyCurrentIcon();
           };
           // Gán giá trị ban đầu lên UI
-          $('#kaiz-app-icon-select').val(currentIconType);
           renderIconPresetCards(currentIconType);
           updateCustomPanelVisibility(currentIconType);
           updateLivePreview(currentIconType, currentCustomUrl);
-          // Lắng nghe dropdown
-          $('#kaiz-app-icon-select').on('change', function () {
-              selectAppIcon(this.value);
-          });
           // Test spin preview button
           $('#kaiz-icon-test-spin-btn').on('click', function () {
               const btn = $(this);

@@ -1864,9 +1864,9 @@ img.kaiz-app-icon {
 /* Icon Preset Grid & Slide Selector */
 .kaiz-icon-picker-slide {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
     gap: 10px;
-    margin-top: 12px;
+    margin-top: 10px;
 }
 
 .kaiz-icon-preset-card {
@@ -1931,11 +1931,15 @@ img.kaiz-app-icon {
     font-size: 11px;
     font-weight: 500;
     color: #e0e0e0;
-    line-height: 1.2;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.3;
+    text-align: center;
     max-width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    height: 28px;
+    word-break: break-word;
 }
 
 .kaiz-icon-preset-card.active .kaiz-icon-preset-title {
