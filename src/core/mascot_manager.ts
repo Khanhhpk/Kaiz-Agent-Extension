@@ -87,11 +87,20 @@ export class MascotManager {
 
             switch (event.type) {
                 case 'think_start':
-                case 'step_start':
                     this.isActionRunning = true;
                     this.stopRoaming();
                     this.resetIdleTimer();
                     this.setState('thinking', this.getRandomQuote('thinking'));
+                    break;
+
+                case 'step_start':
+                    this.isActionRunning = true;
+                    this.stopRoaming();
+                    this.resetIdleTimer();
+                    // Khi chưa bước vào làm việc với tool, bé tiếp tục ở trạng thái thinking
+                    if (this.widget?.getState() !== 'working') {
+                        this.setState('thinking', this.getRandomQuote('thinking'));
+                    }
                     break;
 
                 case 'tool_call': {
@@ -102,13 +111,6 @@ export class MascotManager {
                     this.setState('working', `Đang dùng: ${toolName}... ⚡`);
                     break;
                 }
-
-                case 'tool_result':
-                    this.isActionRunning = true;
-                    this.stopRoaming();
-                    this.resetIdleTimer();
-                    this.setState('thinking', 'Đang đọc và phân tích kết quả công cụ... 💭');
-                    break;
 
                 case 'retry':
                     this.stopRoaming();
