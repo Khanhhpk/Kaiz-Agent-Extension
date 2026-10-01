@@ -98,9 +98,14 @@ export class AgentLoop {
                 fullText += `\n[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
             }
 
-            if (memories && memories.length > 0) {
+            const activeMemories = (memories || []).filter((mem: any) => {
+                if (typeof mem === 'string') return true;
+                return mem && mem.enabled !== false;
+            });
+
+            if (activeMemories.length > 0) {
                 fullText += `\n[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
-                memories.forEach((mem: any, idx: number) => {
+                activeMemories.forEach((mem: any, idx: number) => {
                     if (typeof mem === 'string') {
                         fullText += `${idx + 1}. [Untracked] ${mem}\n`;
                     } else if (mem && mem.key && mem.content) {
@@ -336,9 +341,14 @@ CÁC CÔNG CỤ HIỆN CÓ:
                 customContent += `[CUSTOM PERSONA / SYSTEM PROMPT OVERRIDE]\n${persona}\n\n`;
             }
 
-            if (memories && memories.length > 0) {
+            const activeMemories = (memories || []).filter((mem: any) => {
+                if (typeof mem === 'string') return true;
+                return mem && mem.enabled !== false;
+            });
+
+            if (activeMemories.length > 0) {
                 customContent += `[AGENT MEMORY]\nBạn có một bộ nhớ dài hạn chứa các ghi chú và luật lệ của người dùng:\n<agent_memory>\n`;
-                memories.forEach((mem: any, idx: number) => {
+                activeMemories.forEach((mem: any, idx: number) => {
                     if (typeof mem === 'string') {
                         customContent += `${idx + 1}. [Untracked] ${mem}\n`;
                     } else if (mem && mem.key && mem.content) {

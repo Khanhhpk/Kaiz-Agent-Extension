@@ -78,7 +78,7 @@ export const manageAgentMemory: ITool = {
                         content: `Memory với key "${key}" đã tồn tại. Hãy sử dụng action "edit" để sửa đổi.`,
                     };
                 }
-                settings.memories.push({ key, content });
+                settings.memories.push({ key, content, enabled: true });
                 ctx.saveSettingsDebounced();
                 document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                 return {
