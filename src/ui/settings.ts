@@ -6,6 +6,7 @@ import { ToolRegistry } from '../core/tool_registry';
 import { BrowserWindowUI } from './browser_window';
 import { WebImageBridge } from '../core/web_image_bridge';
 import { MascotManager } from '../core/mascot_manager';
+import { AppIconManager, APP_ICON_PRESETS, AppIconType } from '../core/app_icon_manager';
 import {
     DEFAULT_CORE_IDENTITY,
     DEFAULT_CORE_BEHAVIOR,
@@ -196,6 +197,154 @@ export class SettingsUI {
         $('#kaiz-phone-mode, #kaiz-phone-mode-tab').prop('checked', !!settings.phoneMode);
         $('#kaiz-phone-mode, #kaiz-phone-mode-tab').on('change', function (this: HTMLInputElement) {
             applyPhoneMode(!!this.checked);
+        });
+
+        // --- APP ICON CUSTOMIZATION ---
+        const iconManager = AppIconManager.getInstance();
+        iconManager.init(extPath);
+
+        const currentIconType: AppIconType = settings.appIconType || 'default';
+        const currentCustomUrl: string = settings.customIconUrl || '';
+
+        const updateCustomPanelVisibility = (type: AppIconType) => {
+            if (type === 'custom') {
+                $('#kaiz-custom-icon-panel').slideDown(150);
+            } else {
+                $('#kaiz-custom-icon-panel').slideUp(150);
+            }
+        };
+
+        const updateLivePreview = (type: AppIconType, customUrl?: string) => {
+            const previewBtn = $('#kaiz-icon-live-preview-btn');
+            previewBtn.empty();
+            const inner = $(iconManager.getFloatingBtnInnerHtml(type, customUrl));
+            if ($('#kaiz-icon-test-spin-btn').hasClass('spinning')) {
+                inner.addClass('kaiz-icon-spin');
+            }
+            previewBtn.append(inner);
+
+            const preset = APP_ICON_PRESETS.find((p) => p.id === type);
+            const title = preset ? preset.name : 'Tùy chỉnh';
+            $('#kaiz-icon-preview-desc').text(`Đang chọn: ${title}`);
+
+            if (customUrl) {
+                $('#kaiz-custom-icon-preview-box').html(
+                    `<img src="${customUrl}" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;" />`,
+                );
+            } else {
+                $('#kaiz-custom-icon-preview-box').html(
+                    `<i class="fa-solid fa-image" style="color: #888; font-size: 18px;"></i>`,
+                );
+            }
+        };
+
+        const renderIconPresetCards = (activeType: AppIconType) => {
+            const container = $('#kaiz-app-icon-cards');
+            container.empty();
+
+            APP_ICON_PRESETS.forEach((p) => {
+                const isActive = p.id === activeType;
+                let thumbHtml = '';
+                if (p.type === 'font-awesome') {
+                    thumbHtml = `<i class="${p.faClass}"></i>`;
+                } else if (p.id === 'custom') {
+                    if (settings.customIconUrl) {
+                        thumbHtml = `<img src="${settings.customIconUrl}" alt="${p.name}" />`;
+                    } else {
+                        thumbHtml = `<i class="fa-solid fa-cloud-arrow-up" style="color: #aaa; font-size: 20px;"></i>`;
+                    }
+                } else if (p.fileName) {
+                    const src = `/scripts/extensions/${extPath}/${p.fileName}`;
+                    thumbHtml = `<img src="${src}" alt="${p.name}" />`;
+                }
+
+                const card = $(`
+                    <div class="kaiz-icon-preset-card interactable ${isActive ? 'active' : ''}" data-icon-id="${p.id}" title="${p.subtitle}">
+                        <div class="kaiz-icon-preset-thumb" style="${isActive ? `box-shadow: 0 0 12px ${p.previewGlow}` : ''}">
+                            ${thumbHtml}
+                        </div>
+                        <div class="kaiz-icon-preset-title">${p.name}</div>
+                    </div>
+                `);
+
+                card.on('click', () => {
+                    selectAppIcon(p.id);
+                });
+
+                container.append(card);
+            });
+        };
+
+        const selectAppIcon = (type: AppIconType) => {
+            settings.appIconType = type;
+            ctx.saveSettingsDebounced();
+
+            $('#kaiz-app-icon-select').val(type);
+            renderIconPresetCards(type);
+            updateCustomPanelVisibility(type);
+            updateLivePreview(type, settings.customIconUrl);
+            iconManager.applyCurrentIcon();
+        };
+
+        // Gán giá trị ban đầu lên UI
+        $('#kaiz-app-icon-select').val(currentIconType);
+        renderIconPresetCards(currentIconType);
+        updateCustomPanelVisibility(currentIconType);
+        updateLivePreview(currentIconType, currentCustomUrl);
+
+        // Lắng nghe dropdown
+        $('#kaiz-app-icon-select').on('change', function (this: HTMLSelectElement) {
+            selectAppIcon(this.value as AppIconType);
+        });
+
+        // Test spin preview button
+        $('#kaiz-icon-test-spin-btn').on('click', function (this: HTMLElement) {
+            const btn = $(this);
+            const previewIcon = $('#kaiz-icon-live-preview-btn .kaiz-app-icon');
+            if (btn.hasClass('spinning')) {
+                btn.removeClass('spinning');
+                previewIcon.removeClass('kaiz-icon-spin');
+                btn.html('<i class="fa-solid fa-rotate"></i> Xem thử hiệu ứng xoay');
+            } else {
+                btn.addClass('spinning');
+                previewIcon.addClass('kaiz-icon-spin');
+                btn.html('<i class="fa-solid fa-circle-stop"></i> Dừng quay');
+            }
+        });
+
+        // Custom icon upload
+        $('#kaiz-custom-icon-browse-btn').on('click', () => {
+            $('#kaiz-custom-icon-file-input').trigger('click');
+        });
+
+        $('#kaiz-custom-icon-file-input').on('change', function (this: HTMLInputElement) {
+            const file = this.files?.[0];
+            if (!file) return;
+
+            if (file.size > 3 * 1024 * 1024) {
+                toastr.warning('Ảnh tải lên quá lớn (tối đa 3MB). Vui lòng chọn ảnh nhỏ hơn!');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const dataUrl = e.target?.result as string;
+                if (!dataUrl) return;
+
+                settings.customIconUrl = dataUrl;
+                selectAppIcon('custom');
+                toastr.success('Đã tải lên và áp dụng biểu tượng tùy chỉnh!');
+            };
+            reader.readAsDataURL(file);
+            this.value = '';
+        });
+
+        $('#kaiz-custom-icon-delete-btn').on('click', () => {
+            if (confirm('Bạn có chắc muốn xóa ảnh tùy chỉnh và quay về biểu tượng Âm Dương mặc định?')) {
+                settings.customIconUrl = '';
+                selectAppIcon('default');
+                toastr.info('Đã xóa ảnh tùy chỉnh và đặt lại icon mặc định.');
+            }
         });
 
         // --- AGENT THINK DISPLAY MODE ---

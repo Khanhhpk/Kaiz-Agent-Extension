@@ -2,6 +2,7 @@ import { StateManager } from '../core/state';
 import { AutoTaskScheduler } from '../core/auto_task_scheduler';
 import { AutoTask } from '../core/db';
 import { ToolRegistry } from '../core/tool_registry';
+import { AppIconManager } from '../core/app_icon_manager';
 
 declare const $: any;
 declare const toastr: any;
@@ -464,7 +465,9 @@ export class AutoTaskModal {
                 }
 
                 const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-                const avatar = isUser ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-yin-yang"></i>';
+                const avatar = isUser
+                    ? '<i class="fa-solid fa-user"></i>'
+                    : AppIconManager.getInstance().getAvatarHtml();
                 const extraClass = isUser ? 'kaiz-msg-user' : 'kaiz-msg-agent';
 
                 const msgHtml = `

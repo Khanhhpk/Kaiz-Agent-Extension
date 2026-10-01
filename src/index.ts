@@ -20,6 +20,7 @@ import { ImageGalleryModal } from './ui/image_gallery_modal';
 import { PresetGitModal } from './ui/preset_git_modal';
 import { MvuDashboardModal } from './ui/mvu_dashboard_modal';
 import { MascotManager } from './core/mascot_manager';
+import { AppIconManager } from './core/app_icon_manager';
 import { DEFAULT_VIEW_SYSTEM_PROMPT } from './core/defaults';
 
 const EXT_NAME = 'kaiz_agent';
@@ -92,8 +93,16 @@ jQuery(async () => {
             viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
             cotDisplayMode: 'collapse_streaming',
             prefillAsSystem: false,
+            appIconType: 'default',
+            customIconUrl: '',
         };
     } else {
+        if (ctx.extensionSettings[EXT_NAME].appIconType === undefined) {
+            ctx.extensionSettings[EXT_NAME].appIconType = 'default';
+        }
+        if (ctx.extensionSettings[EXT_NAME].customIconUrl === undefined) {
+            ctx.extensionSettings[EXT_NAME].customIconUrl = '';
+        }
         if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
             ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
         }
@@ -211,6 +220,9 @@ jQuery(async () => {
 
             // 2. Nạp giao diện Settings (Cần DOM của kaiz_window có sẵn cho các Modal)
             await SettingsUI.init(extPath, EXT_NAME, registry);
+
+            // Khởi tạo App Icon cho Floating Button và Avatars
+            AppIconManager.getInstance().init(extPath);
 
             const stateManager = new StateManager();
             const loop = new AgentLoop(adapter, registry, stateManager);

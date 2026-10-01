@@ -23570,6 +23570,175 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       }
   }
 
+  /**
+   * App Icon Manager
+   * Quản lý biểu tượng của Extension (Bóng nổi Floating Button & Avatar Agent trong tin nhắn).
+   * Hỗ trợ icon Âm Dương mặc định, 4 biến thể Thạch Triskelion Slime Orbs, và ảnh tùy chỉnh người dùng tải lên.
+   */
+  const APP_ICON_PRESETS = [
+      {
+          id: 'default',
+          name: 'Âm Dương Cổ Điển',
+          subtitle: 'Thái Cực Đạo (FontAwesome)',
+          type: 'font-awesome',
+          faClass: 'fa-solid fa-yin-yang',
+          previewGlow: 'rgba(255, 255, 255, 0.35)',
+          badgeEmoji: '☯️',
+      },
+      {
+          id: 'orb_ocean_emerald',
+          name: 'Thạch Lam & Lục Bảo',
+          subtitle: 'Ocean & Emerald Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_ocean_emerald.png',
+          previewGlow: 'rgba(46, 204, 113, 0.45)',
+          badgeEmoji: '🌊',
+      },
+      {
+          id: 'orb_sunset_azure',
+          name: 'Thạch Hoàng Hôn & Lam Biển',
+          subtitle: 'Sunset & Azure Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_sunset_azure.png',
+          previewGlow: 'rgba(255, 118, 117, 0.45)',
+          badgeEmoji: '🌅',
+      },
+      {
+          id: 'orb_cosmic_gold',
+          name: 'Tinh Vân & Ánh Sao Vàng',
+          subtitle: 'Cosmic Astral & Gold Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_cosmic_gold.png',
+          previewGlow: 'rgba(241, 196, 15, 0.45)',
+          badgeEmoji: '✨',
+      },
+      {
+          id: 'orb_sakura_mint',
+          name: 'Hoa Anh Đào & Bạc Hà',
+          subtitle: 'Sakura & Mint Swirl',
+          type: 'image',
+          fileName: 'assets/icons/orb_sakura_mint.png',
+          previewGlow: 'rgba(253, 121, 168, 0.45)',
+          badgeEmoji: '🌸',
+      },
+      {
+          id: 'custom',
+          name: 'Ảnh Tùy Chỉnh',
+          subtitle: 'Tải lên từ thiết bị',
+          type: 'image',
+          previewGlow: 'rgba(155, 89, 182, 0.45)',
+          badgeEmoji: '📁',
+      },
+  ];
+  class AppIconManager {
+      static instance;
+      extPath = 'Kaiz-Agent-Extension';
+      listeners = [];
+      constructor() { }
+      static getInstance() {
+          if (!AppIconManager.instance) {
+              AppIconManager.instance = new AppIconManager();
+          }
+          return AppIconManager.instance;
+      }
+      init(extPath) {
+          this.extPath = extPath || this.extPath;
+          this.applyCurrentIcon();
+      }
+      getExtPath() {
+          return this.extPath;
+      }
+      getSettings() {
+          const ctx = window.SillyTavern?.getContext();
+          const extSettings = ctx?.extensionSettings?.['kaiz_agent'] || {};
+          return {
+              appIconType: extSettings.appIconType || 'default',
+              customIconUrl: extSettings.customIconUrl || '',
+          };
+      }
+      /**
+       * Lấy URL ảnh hoặc null (nếu là default fontawesome)
+       */
+      getIconUrl(type, customUrl) {
+          const current = this.getSettings();
+          const targetType = type || current.appIconType;
+          const targetCustom = customUrl !== undefined ? customUrl : current.customIconUrl;
+          if (targetType === 'default') {
+              return null;
+          }
+          if (targetType === 'custom') {
+              return targetCustom || null;
+          }
+          const preset = APP_ICON_PRESETS.find((p) => p.id === targetType);
+          if (preset && preset.fileName) {
+              return `/scripts/extensions/${this.extPath}/${preset.fileName}`;
+          }
+          return null;
+      }
+      /**
+       * Trả về HTML bên trong nút Floating Button
+       */
+      getFloatingBtnInnerHtml(type, customUrl) {
+          const imgUrl = this.getIconUrl(type, customUrl);
+          if (imgUrl) {
+              return `<img class="kaiz-app-icon" src="${imgUrl}" alt="Kaiz" draggable="false" />`;
+          }
+          return `<i class="fa-solid fa-yin-yang kaiz-app-icon"></i>`;
+      }
+      /**
+       * Trả về HTML avatar của Agent trong khung Chat
+       */
+      getAvatarHtml(type, customUrl) {
+          const imgUrl = this.getIconUrl(type, customUrl);
+          if (imgUrl) {
+              return `<img class="kaiz-app-icon kaiz-msg-avatar-img" src="${imgUrl}" alt="Kaiz" draggable="false" />`;
+          }
+          return `<i class="fa-solid fa-yin-yang kaiz-app-icon"></i>`;
+      }
+      /**
+       * Cập nhật ngay lập tức DOM của nút Floating Button và thông báo các thành phần giao diện
+       */
+      applyCurrentIcon() {
+          const $ = window.jQuery;
+          if (!$)
+              return;
+          const floatBtn = $('#kaiz-floating-btn');
+          if (floatBtn.length > 0) {
+              // Giữ lại trạng thái quay nếu đang chạy
+              const existingIcon = floatBtn.find('.kaiz-app-icon, i, img');
+              const isSpinning = existingIcon.hasClass('kaiz-icon-spin');
+              floatBtn.empty();
+              const newElement = $(this.getFloatingBtnInnerHtml());
+              if (isSpinning) {
+                  newElement.addClass('kaiz-icon-spin');
+              }
+              floatBtn.append(newElement);
+          }
+          // Cập nhật các avatar tin nhắn của Agent hiện có trên màn hình (nếu có)
+          const agentAvatars = $('.kaiz-msg-agent .kaiz-msg-avatar');
+          if (agentAvatars.length > 0) {
+              agentAvatars.each((_, el) => {
+                  $(el).html(this.getAvatarHtml());
+              });
+          }
+          // Kích hoạt listeners
+          this.listeners.forEach((fn) => {
+              try {
+                  fn();
+              }
+              catch (e) {
+                  console.error('[AppIconManager] Listener error:', e);
+              }
+          });
+      }
+      onIconChanged(listener) {
+          this.listeners.push(listener);
+          return () => {
+              this.listeners = this.listeners.filter((l) => l !== listener);
+          };
+      }
+  }
+
   const escapeHtml$4 = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   class SettingsUI {
       static async init(extPath, EXT_NAME, registry) {
@@ -23745,6 +23914,136 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           $('#kaiz-phone-mode, #kaiz-phone-mode-tab').prop('checked', !!settings.phoneMode);
           $('#kaiz-phone-mode, #kaiz-phone-mode-tab').on('change', function () {
               applyPhoneMode(!!this.checked);
+          });
+          // --- APP ICON CUSTOMIZATION ---
+          const iconManager = AppIconManager.getInstance();
+          iconManager.init(extPath);
+          const currentIconType = settings.appIconType || 'default';
+          const currentCustomUrl = settings.customIconUrl || '';
+          const updateCustomPanelVisibility = (type) => {
+              if (type === 'custom') {
+                  $('#kaiz-custom-icon-panel').slideDown(150);
+              }
+              else {
+                  $('#kaiz-custom-icon-panel').slideUp(150);
+              }
+          };
+          const updateLivePreview = (type, customUrl) => {
+              const previewBtn = $('#kaiz-icon-live-preview-btn');
+              previewBtn.empty();
+              const inner = $(iconManager.getFloatingBtnInnerHtml(type, customUrl));
+              if ($('#kaiz-icon-test-spin-btn').hasClass('spinning')) {
+                  inner.addClass('kaiz-icon-spin');
+              }
+              previewBtn.append(inner);
+              const preset = APP_ICON_PRESETS.find((p) => p.id === type);
+              const title = preset ? preset.name : 'Tùy chỉnh';
+              $('#kaiz-icon-preview-desc').text(`Đang chọn: ${title}`);
+              if (customUrl) {
+                  $('#kaiz-custom-icon-preview-box').html(`<img src="${customUrl}" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;" />`);
+              }
+              else {
+                  $('#kaiz-custom-icon-preview-box').html(`<i class="fa-solid fa-image" style="color: #888; font-size: 18px;"></i>`);
+              }
+          };
+          const renderIconPresetCards = (activeType) => {
+              const container = $('#kaiz-app-icon-cards');
+              container.empty();
+              APP_ICON_PRESETS.forEach((p) => {
+                  const isActive = p.id === activeType;
+                  let thumbHtml = '';
+                  if (p.type === 'font-awesome') {
+                      thumbHtml = `<i class="${p.faClass}"></i>`;
+                  }
+                  else if (p.id === 'custom') {
+                      if (settings.customIconUrl) {
+                          thumbHtml = `<img src="${settings.customIconUrl}" alt="${p.name}" />`;
+                      }
+                      else {
+                          thumbHtml = `<i class="fa-solid fa-cloud-arrow-up" style="color: #aaa; font-size: 20px;"></i>`;
+                      }
+                  }
+                  else if (p.fileName) {
+                      const src = `/scripts/extensions/${extPath}/${p.fileName}`;
+                      thumbHtml = `<img src="${src}" alt="${p.name}" />`;
+                  }
+                  const card = $(`
+                    <div class="kaiz-icon-preset-card interactable ${isActive ? 'active' : ''}" data-icon-id="${p.id}" title="${p.subtitle}">
+                        <div class="kaiz-icon-preset-thumb" style="${isActive ? `box-shadow: 0 0 12px ${p.previewGlow}` : ''}">
+                            ${thumbHtml}
+                        </div>
+                        <div class="kaiz-icon-preset-title">${p.name}</div>
+                    </div>
+                `);
+                  card.on('click', () => {
+                      selectAppIcon(p.id);
+                  });
+                  container.append(card);
+              });
+          };
+          const selectAppIcon = (type) => {
+              settings.appIconType = type;
+              ctx.saveSettingsDebounced();
+              $('#kaiz-app-icon-select').val(type);
+              renderIconPresetCards(type);
+              updateCustomPanelVisibility(type);
+              updateLivePreview(type, settings.customIconUrl);
+              iconManager.applyCurrentIcon();
+          };
+          // Gán giá trị ban đầu lên UI
+          $('#kaiz-app-icon-select').val(currentIconType);
+          renderIconPresetCards(currentIconType);
+          updateCustomPanelVisibility(currentIconType);
+          updateLivePreview(currentIconType, currentCustomUrl);
+          // Lắng nghe dropdown
+          $('#kaiz-app-icon-select').on('change', function () {
+              selectAppIcon(this.value);
+          });
+          // Test spin preview button
+          $('#kaiz-icon-test-spin-btn').on('click', function () {
+              const btn = $(this);
+              const previewIcon = $('#kaiz-icon-live-preview-btn .kaiz-app-icon');
+              if (btn.hasClass('spinning')) {
+                  btn.removeClass('spinning');
+                  previewIcon.removeClass('kaiz-icon-spin');
+                  btn.html('<i class="fa-solid fa-rotate"></i> Xem thử hiệu ứng xoay');
+              }
+              else {
+                  btn.addClass('spinning');
+                  previewIcon.addClass('kaiz-icon-spin');
+                  btn.html('<i class="fa-solid fa-circle-stop"></i> Dừng quay');
+              }
+          });
+          // Custom icon upload
+          $('#kaiz-custom-icon-browse-btn').on('click', () => {
+              $('#kaiz-custom-icon-file-input').trigger('click');
+          });
+          $('#kaiz-custom-icon-file-input').on('change', function () {
+              const file = this.files?.[0];
+              if (!file)
+                  return;
+              if (file.size > 3 * 1024 * 1024) {
+                  toastr.warning('Ảnh tải lên quá lớn (tối đa 3MB). Vui lòng chọn ảnh nhỏ hơn!');
+                  return;
+              }
+              const reader = new FileReader();
+              reader.onload = (e) => {
+                  const dataUrl = e.target?.result;
+                  if (!dataUrl)
+                      return;
+                  settings.customIconUrl = dataUrl;
+                  selectAppIcon('custom');
+                  toastr.success('Đã tải lên và áp dụng biểu tượng tùy chỉnh!');
+              };
+              reader.readAsDataURL(file);
+              this.value = '';
+          });
+          $('#kaiz-custom-icon-delete-btn').on('click', () => {
+              if (confirm('Bạn có chắc muốn xóa ảnh tùy chỉnh và quay về biểu tượng Âm Dương mặc định?')) {
+                  settings.customIconUrl = '';
+                  selectAppIcon('default');
+                  toastr.info('Đã xóa ảnh tùy chỉnh và đặt lại icon mặc định.');
+              }
           });
           // --- AGENT THINK DISPLAY MODE ---
           const currentCotMode = settings.cotDisplayMode || 'collapse_streaming';
@@ -26647,7 +26946,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const avatar = msg.role === 'user'
                       ? '<i class="fa-solid fa-user"></i>'
                       : msg.role === 'agent'
-                          ? '<i class="fa-solid fa-yin-yang"></i>'
+                          ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
                   const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                   const deleteBtnHtml = msg.id
@@ -26677,7 +26976,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           const addWelcomeMessage = () => {
               const welcomeHtml = `
             <div class="kaiz-msg kaiz-msg-agent kaiz-msg-welcome">
-                <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
+                <div class="kaiz-msg-avatar">${AppIconManager.getInstance().getAvatarHtml()}</div>
                 <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
               history.append(welcomeHtml);
@@ -26693,7 +26992,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   extraClass = 'kaiz-msg-user';
               }
               else if (role === 'agent') {
-                  avatar = '<i class="fa-solid fa-yin-yang"></i>';
+                  avatar = AppIconManager.getInstance().getAvatarHtml();
                   extraClass = 'kaiz-msg-agent';
               }
               else {
@@ -26828,7 +27127,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   });
               };
               await loop.run(historyMsgs, maxLoops, async (event) => {
-                  const btnIcon = $('#kaiz-floating-btn i');
+                  const btnIcon = $('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img');
                   const btnFloat = $('#kaiz-floating-btn');
                   if (event.type === 'step_start') {
                       btnIcon.addClass('kaiz-icon-spin');
@@ -26967,7 +27266,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   $(this).html(`<div style="color: #95a5a6; font-style: italic;"><i class="fa-solid fa-ban"></i> Đã hủy xác nhận công cụ (Tiến trình bị ngắt).</div>`);
                   $(this).removeClass('kaiz-safe-mode-pending');
               });
-              $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+              $('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img').removeClass('kaiz-icon-spin');
               $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
               if (!sendBtn.hasClass('kaiz-force-aborted')) {
                   sendBtn.find('i').removeClass('fa-stop').addClass('fa-paper-plane');
@@ -27476,7 +27775,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   // Update Floating UI Icon & Request Logs
                   if (event.type === 'step_start') {
                       turnRequests++;
-                      window.jQuery?.('#kaiz-floating-btn i').addClass('kaiz-icon-spin');
+                      window
+                          .jQuery?.('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img')
+                          .addClass('kaiz-icon-spin');
                       window.jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
                   }
                   else if (event.type === 'debug') {
@@ -27503,7 +27804,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }, false, // continueMode
               task.toolsConfig);
               // Stop UI spinning
-              window.jQuery?.('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+              window
+                  .jQuery?.('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img')
+                  .removeClass('kaiz-icon-spin');
               window.jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
               // Final result isn't needed here anymore since we saved in stream
               // Expiry logic
@@ -27923,7 +28226,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       }
                   }
                   const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-                  const avatar = isUser ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-yin-yang"></i>';
+                  const avatar = isUser
+                      ? '<i class="fa-solid fa-user"></i>'
+                      : AppIconManager.getInstance().getAvatarHtml();
                   const extraClass = isUser ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                   const msgHtml = `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}" style="margin-bottom: 15px; background: transparent; padding: 0; border: none;">
@@ -31465,9 +31770,17 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               viewSystemPrompt: DEFAULT_VIEW_SYSTEM_PROMPT,
               cotDisplayMode: 'collapse_streaming',
               prefillAsSystem: false,
+              appIconType: 'default',
+              customIconUrl: '',
           };
       }
       else {
+          if (ctx.extensionSettings[EXT_NAME].appIconType === undefined) {
+              ctx.extensionSettings[EXT_NAME].appIconType = 'default';
+          }
+          if (ctx.extensionSettings[EXT_NAME].customIconUrl === undefined) {
+              ctx.extensionSettings[EXT_NAME].customIconUrl = '';
+          }
           if (ctx.extensionSettings[EXT_NAME].prefillAsSystem === undefined) {
               ctx.extensionSettings[EXT_NAME].prefillAsSystem = false;
           }
@@ -31578,6 +31891,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               $('body').append(kaizWindowHtml);
               // 2. Nạp giao diện Settings (Cần DOM của kaiz_window có sẵn cho các Modal)
               await SettingsUI.init(extPath, EXT_NAME, registry);
+              // Khởi tạo App Icon cho Floating Button và Avatars
+              AppIconManager.getInstance().init(extPath);
               const stateManager = new StateManager();
               const loop = new AgentLoop(adapter, registry, stateManager);
               const autoTaskScheduler = new AutoTaskScheduler(loop, stateManager);

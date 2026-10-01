@@ -165,7 +165,9 @@ export class AutoTaskScheduler {
                     // Update Floating UI Icon & Request Logs
                     if (event.type === 'step_start') {
                         turnRequests++;
-                        (window as any).jQuery?.('#kaiz-floating-btn i').addClass('kaiz-icon-spin');
+                        (window as any)
+                            .jQuery?.('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img')
+                            .addClass('kaiz-icon-spin');
                         (window as any).jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
                     } else if (event.type === 'debug') {
                         ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
@@ -196,7 +198,9 @@ export class AutoTaskScheduler {
             );
 
             // Stop UI spinning
-            (window as any).jQuery?.('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+            (window as any)
+                .jQuery?.('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img')
+                .removeClass('kaiz-icon-spin');
             (window as any).jQuery?.('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
 
             // Final result isn't needed here anymore since we saved in stream

@@ -3,6 +3,7 @@ import { AgentLoop } from '../core/loop';
 import { StateManager } from '../core/state';
 import { ToolRegistry } from '../core/tool_registry';
 import { BackupModal } from './backup_modal';
+import { AppIconManager } from '../core/app_icon_manager';
 
 declare const jQuery: any;
 
@@ -1916,7 +1917,7 @@ export class ChatWindowUI {
                     msg.role === 'user'
                         ? '<i class="fa-solid fa-user"></i>'
                         : msg.role === 'agent'
-                          ? '<i class="fa-solid fa-yin-yang"></i>'
+                          ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
                 const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
                 const deleteBtnHtml = msg.id
@@ -1947,7 +1948,7 @@ export class ChatWindowUI {
         const addWelcomeMessage = () => {
             const welcomeHtml = `
             <div class="kaiz-msg kaiz-msg-agent kaiz-msg-welcome">
-                <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
+                <div class="kaiz-msg-avatar">${AppIconManager.getInstance().getAvatarHtml()}</div>
                 <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
             history.append(welcomeHtml);
@@ -1968,7 +1969,7 @@ export class ChatWindowUI {
                 avatar = '<i class="fa-solid fa-user"></i>';
                 extraClass = 'kaiz-msg-user';
             } else if (role === 'agent') {
-                avatar = '<i class="fa-solid fa-yin-yang"></i>';
+                avatar = AppIconManager.getInstance().getAvatarHtml();
                 extraClass = 'kaiz-msg-agent';
             } else {
                 avatar = '<i class="fa-solid fa-gear"></i>';
@@ -2120,7 +2121,9 @@ export class ChatWindowUI {
                 historyMsgs,
                 maxLoops,
                 async (event) => {
-                    const btnIcon = $('#kaiz-floating-btn i');
+                    const btnIcon = $(
+                        '#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img',
+                    );
                     const btnFloat = $('#kaiz-floating-btn');
 
                     if (event.type === 'step_start') {
@@ -2274,7 +2277,9 @@ export class ChatWindowUI {
                 $(this).removeClass('kaiz-safe-mode-pending');
             });
 
-            $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+            $('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img').removeClass(
+                'kaiz-icon-spin',
+            );
             $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
 
             if (!sendBtn.hasClass('kaiz-force-aborted')) {

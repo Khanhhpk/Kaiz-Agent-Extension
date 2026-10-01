@@ -938,6 +938,198 @@
 
                 <!-- ================= TAB 6: UI (GIAO DIỆN) ================= -->
                 <div id="kaiz-pane-ui" class="kaiz-tab-pane" role="tabpanel">
+                    <!-- App Icon Customization Card -->
+                    <div class="kaiz-settings-card">
+                        <div class="kaiz-card-header">
+                            <div class="kaiz-card-title">
+                                <i class="fa-solid fa-icons"></i> Biểu tượng Extension (App Icon)
+                            </div>
+                        </div>
+
+                        <div class="kaiz-card-body">
+                            <p class="kaiz-card-desc">
+                                Tùy biến biểu tượng nút bóng nổi (Floating Button) và Avatar tin nhắn của Kaiz Agent.
+                            </p>
+
+                            <!-- Dropdown Selector -->
+                            <div class="kaiz-form-group">
+                                <label for="kaiz-app-icon-select" class="kaiz-field-label">Lựa chọn biểu tượng</label>
+                                <div class="kaiz-input-wrapper">
+                                    <i class="fa-solid fa-wand-magic-sparkles kaiz-input-icon"></i>
+                                    <select id="kaiz-app-icon-select" class="text_pole kaiz-input">
+                                        <option value="default">☯️ Biểu tượng Âm Dương (Mặc định)</option>
+                                        <option value="orb_ocean_emerald">
+                                            🌊 Thạch Lam & Lục Bảo (Ocean & Emerald)
+                                        </option>
+                                        <option value="orb_sunset_azure">
+                                            🌅 Thạch Hoàng Hôn & Lam Biển (Sunset & Azure)
+                                        </option>
+                                        <option value="orb_cosmic_gold">
+                                            ✨ Tinh Vân & Ánh Sao Vàng (Cosmic & Astral Gold)
+                                        </option>
+                                        <option value="orb_sakura_mint">🌸 Hoa Anh Đào & Bạc Hà (Sakura & Mint)</option>
+                                        <option value="custom">📁 Tải ảnh tùy chỉnh từ máy (Custom Upload)...</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Carousel / Slide Grid Preset Picker -->
+                            <div class="kaiz-icon-picker-slide" id="kaiz-app-icon-cards">
+                                <!-- Cards injected dynamically via JS -->
+                            </div>
+
+                            <!-- Custom Upload Area (visible when 'custom' is selected) -->
+                            <div
+                                id="kaiz-custom-icon-panel"
+                                style="
+                                    display: none;
+                                    margin-top: 14px;
+                                    padding: 12px 14px;
+                                    background: rgba(0, 0, 0, 0.25);
+                                    border-radius: 10px;
+                                    border: 1px dashed rgba(255, 255, 255, 0.18);
+                                "
+                            >
+                                <div
+                                    style="
+                                        display: flex;
+                                        align-items: center;
+                                        justify-content: space-between;
+                                        gap: 12px;
+                                        flex-wrap: wrap;
+                                    "
+                                >
+                                    <div style="display: flex; align-items: center; gap: 12px">
+                                        <div
+                                            id="kaiz-custom-icon-preview-box"
+                                            style="
+                                                width: 44px;
+                                                height: 44px;
+                                                border-radius: 50%;
+                                                background: rgba(255, 255, 255, 0.05);
+                                                border: 1px solid rgba(255, 255, 255, 0.2);
+                                                display: flex;
+                                                align-items: center;
+                                                justify-content: center;
+                                                overflow: hidden;
+                                            "
+                                        >
+                                            <i class="fa-solid fa-image" style="color: #888; font-size: 18px"></i>
+                                        </div>
+                                        <div>
+                                            <div style="font-size: 13px; font-weight: 600; color: #fff">
+                                                Ảnh biểu tượng cá nhân
+                                            </div>
+                                            <div style="font-size: 11px; color: #aaa">
+                                                Hỗ trợ PNG, JPG, WEBP, GIF (Khuyên dùng ảnh vuông hoặc tròn)
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; gap: 8px">
+                                        <input
+                                            type="file"
+                                            id="kaiz-custom-icon-file-input"
+                                            accept="image/*"
+                                            style="display: none"
+                                        />
+                                        <button
+                                            type="button"
+                                            id="kaiz-custom-icon-browse-btn"
+                                            class="menu_button interactable"
+                                            style="
+                                                display: inline-flex;
+                                                align-items: center;
+                                                gap: 6px;
+                                                font-size: 12px;
+                                                padding: 6px 12px;
+                                            "
+                                        >
+                                            <i class="fa-solid fa-cloud-arrow-up"></i> Chọn ảnh...
+                                        </button>
+                                        <button
+                                            type="button"
+                                            id="kaiz-custom-icon-delete-btn"
+                                            class="menu_button interactable"
+                                            style="
+                                                display: inline-flex;
+                                                align-items: center;
+                                                gap: 6px;
+                                                font-size: 12px;
+                                                padding: 6px 12px;
+                                                color: #ff7675;
+                                            "
+                                        >
+                                            <i class="fa-solid fa-trash"></i> Xóa ảnh
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Live Floating Button Preview Banner -->
+                            <div
+                                class="kaiz-icon-preview-banner"
+                                style="
+                                    margin-top: 16px;
+                                    padding: 12px 14px;
+                                    background: linear-gradient(
+                                        135deg,
+                                        rgba(255, 255, 255, 0.03) 0%,
+                                        rgba(0, 0, 0, 0.3) 100%
+                                    );
+                                    border-radius: 10px;
+                                    border: 1px solid rgba(255, 255, 255, 0.08);
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-between;
+                                    flex-wrap: wrap;
+                                    gap: 12px;
+                                "
+                            >
+                                <div style="display: flex; align-items: center; gap: 14px">
+                                    <div class="kaiz-preview-btn-wrapper" style="position: relative">
+                                        <div
+                                            id="kaiz-icon-live-preview-btn"
+                                            class="kaiz-floating-btn"
+                                            style="
+                                                position: static;
+                                                width: 44px;
+                                                height: 44px;
+                                                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+                                                pointer-events: none;
+                                            "
+                                        >
+                                            <i class="fa-solid fa-yin-yang kaiz-app-icon"></i>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 13px; font-weight: 600; color: #fff">
+                                            Xem trước biểu tượng
+                                        </div>
+                                        <div id="kaiz-icon-preview-desc" style="font-size: 11px; color: #aaa">
+                                            Đang chọn: Âm Dương Cổ Điển
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <button
+                                        type="button"
+                                        id="kaiz-icon-test-spin-btn"
+                                        class="menu_button interactable"
+                                        style="
+                                            display: inline-flex;
+                                            align-items: center;
+                                            gap: 6px;
+                                            font-size: 12px;
+                                            padding: 6px 12px;
+                                        "
+                                    >
+                                        <i class="fa-solid fa-rotate"></i> Xem thử hiệu ứng xoay
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Agent Think (CoT) Display Mode Card -->
                     <div class="kaiz-settings-card">
                         <div class="kaiz-card-header">
@@ -1007,11 +1199,7 @@
                         </div>
 
                         <div class="kaiz-card-body">
-                            <p class="kaiz-card-desc">
-                                Trợ lý thạch tinh thể pha lê đồng hành lơ lửng trên màn hình, tự động biểu cảm theo
-                                trạng thái của Agent (Suy nghĩ, Chạy tool, Ăn mừng, Ngủ...). Bạn có thể kéo thả tự do
-                                hoặc chạm vào để tương tác!
-                            </p>
+                            <p class="kaiz-card-desc">Bé Slime tới đây! Bạn cho phép bé xuất hiện rồi đó nha!</p>
 
                             <label class="kaiz-switch-row" style="margin-top: 8px">
                                 <span class="kaiz-switch-label">
