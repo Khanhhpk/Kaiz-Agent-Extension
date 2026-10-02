@@ -5,13 +5,14 @@ export const scanUITool: ITool = {
         name: 'scan_ui',
         description:
             'Quét toàn bộ giao diện hiện tại để tìm các phần tử có thể tương tác. Trả về cây DOM thu gọn chứa các id/class của cấu trúc trang và các nút bấm được đánh dấu [kX].',
+        userDescription: 'Quét cấu trúc giao diện và các phần tử có thể tương tác trên màn hình SillyTavern.',
         parameters: {
             type: 'object',
             properties: {},
             required: [],
         },
     },
-    execute: async (args: any) => {
+    execute: async (_args: any) => {
         try {
             const interactables = document.querySelectorAll(
                 'button, a, input, select, textarea, .interactable, [title], .menu_button, .drawer-toggle, .fa-solid, .fa-regular',
@@ -85,7 +86,6 @@ export const scanUITool: ITool = {
                         el.getAttribute('data-title')?.trim() ||
                         '';
                     const ariaLabel = el.getAttribute('aria-label')?.trim() || '';
-                    const value = (el as HTMLInputElement).value || ''; // Không trim để giữ khoảng trắng hợp lệ
                     let description = text || title || ariaLabel;
 
                     if (!description && el.tagName === 'INPUT') {

@@ -1,7 +1,9 @@
 import { marked } from 'marked';
 import { AgentLoop } from '../core/loop';
 import { StateManager } from '../core/state';
+import { ToolRegistry } from '../core/tool_registry';
 import { BackupModal } from './backup_modal';
+import { AppIconManager } from '../core/app_icon_manager';
 
 declare const jQuery: any;
 
@@ -12,23 +14,60 @@ const escapeHtml = (s: string): string =>
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
+declare const SillyTavern: any;
+declare const toastr: any;
 
 export class ChatWindowUI {
     private static currentAttachments: import('../core/db').ChatAttachment[] = [];
+    public static lastLogSent: string = 'No data yet.';
+    public static lastLogRecv: string = 'No data yet.';
 
-    public static init(loop: AgentLoop, stateManager: StateManager) {
+    public static init(loop: AgentLoop, stateManager: StateManager, registry: ToolRegistry) {
         const $ = jQuery;
         const btn = $('#kaiz-floating-btn');
         const win = $('#kaiz-chat-window');
         const closeBtn = $('#kaiz-chat-close');
+        const toolsBtn = $('#kaiz-chat-tools-btn');
+        const toolsMenu = $('#kaiz-chat-tools-menu');
+        const ctx = SillyTavern.getContext();
+        const settings = ctx.extensionSettings['kaiz_agent'] || {};
+        if (settings.enableBrowser === false) {
+            $('#kaiz-chat-browser-btn').hide();
+        }
 
-        // --- Bổ sung nút và khung Log Request ---
-        closeBtn.before(
-            '<i id="kaiz-chat-backup-btn" class="fa-solid fa-save interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="Backup Manager"></i>',
-        );
-        closeBtn.before(
-            '<i id="kaiz-chat-log-btn" class="fa-solid fa-scroll interactable" style="font-size:16px; margin-right:15px; cursor:pointer;" title="View Request Logs"></i>',
-        );
+        // --- Tools Menu Logic ---
+        toolsBtn.on('click', (e: any) => {
+            e.stopPropagation();
+            toolsMenu.toggle();
+            toolsBtn.toggleClass('active', toolsMenu.is(':visible'));
+        });
+
+        $(document)
+            .off('click.kaiz_tools_menu')
+            .on('click.kaiz_tools_menu', (e: any) => {
+                if (
+                    !$(e.target).closest('#kaiz-chat-tools-btn').length &&
+                    !$(e.target).closest('#kaiz-chat-tools-menu').length
+                ) {
+                    toolsMenu.hide();
+                    toolsBtn.removeClass('active');
+                }
+            });
+
+        toolsMenu.on('click', '.kaiz-menu-item', () => {
+            toolsMenu.hide();
+            toolsBtn.removeClass('active');
+        });
+
+        $(document)
+            .off('keydown.kaiz_tools_menu')
+            .on('keydown.kaiz_tools_menu', (e: any) => {
+                if (e.key === 'Escape' && toolsMenu.is(':visible')) {
+                    toolsMenu.hide();
+                    toolsBtn.removeClass('active');
+                }
+            });
+
         const logBtn = $('#kaiz-chat-log-btn');
         const backupBtn = $('#kaiz-chat-backup-btn');
 
@@ -53,9 +92,6 @@ export class ChatWindowUI {
             `);
         }
 
-        let lastLogSent = 'No data yet.';
-        let lastLogRecv = 'No data yet.';
-
         $('#kaiz-log-close').on('click', () => {
             ($('#kaiz-log-modal')[0] as HTMLDialogElement).close();
         });
@@ -76,8 +112,8 @@ export class ChatWindowUI {
         });
 
         logBtn.on('click', () => {
-            $('#kaiz-log-sent').text(lastLogSent);
-            $('#kaiz-log-recv').text(lastLogRecv);
+            $('#kaiz-log-sent').text(ChatWindowUI.lastLogSent);
+            $('#kaiz-log-recv').text(ChatWindowUI.lastLogRecv);
             const dialog = $('#kaiz-log-modal')[0] as HTMLDialogElement;
             if (!dialog.open) {
                 dialog.showModal();
@@ -136,6 +172,7 @@ export class ChatWindowUI {
 
         quickPromptBtn.on('click', (e: any) => {
             e.stopPropagation();
+            quickToolMenu.hide();
             if (quickPromptMenu.is(':visible')) {
                 quickPromptMenu.hide();
             } else {
@@ -152,6 +189,116 @@ export class ChatWindowUI {
             ) {
                 quickPromptMenu.hide();
             }
+            if (
+                !$(e.target).closest('#kaiz-quick-tool-btn').length &&
+                !$(e.target).closest('#kaiz-quick-tool-menu').length
+            ) {
+                quickToolMenu.hide();
+            }
+        });
+        // ------------------------------------
+
+        // --- Quick Tools Reference Logic ---
+        const quickToolBtn = $('#kaiz-quick-tool-btn');
+        const quickToolMenu = $('#kaiz-quick-tool-menu');
+        const quickToolSearch = $('#kaiz-quick-tool-search');
+        const quickToolList = $('#kaiz-quick-tool-list');
+
+        function getActiveToolsForCurrentSpace() {
+            const allSchemas = registry.getAllSchemas();
+            const currentWs = stateManager.currentWorkspace;
+            if (stateManager.currentWorkspaceId && currentWs) {
+                const wsConfig = currentWs.toolsConfig || {};
+                return allSchemas.filter((s) => wsConfig[s.name] === true);
+            } else {
+                const liveSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                const disabled = liveSettings.disabledTools || {};
+                return allSchemas.filter((s) => !disabled[s.name]);
+            }
+        }
+
+        function insertToolNameToInput(toolName: string) {
+            const inputEl = input[0] as HTMLTextAreaElement;
+            const insertStr = toolName + ' ';
+            if (!inputEl) {
+                const val = String(input.val() || '');
+                input.val((val ? val + (val.endsWith(' ') ? '' : ' ') : '') + insertStr).trigger('input');
+                input.focus();
+                return;
+            }
+
+            const start = inputEl.selectionStart ?? inputEl.value.length;
+            const end = inputEl.selectionEnd ?? inputEl.value.length;
+            const text = inputEl.value;
+            const before = text.substring(0, start);
+            const after = text.substring(end);
+
+            const prefixSpace = before.length > 0 && !before.endsWith(' ') && !before.endsWith('\n') ? ' ' : '';
+            const newText = before + prefixSpace + insertStr + after;
+            const newCursorPos = start + prefixSpace.length + insertStr.length;
+
+            input.val(newText).trigger('input');
+            inputEl.focus();
+            inputEl.setSelectionRange(newCursorPos, newCursorPos);
+        }
+
+        quickToolList.on('click', '.kaiz-quick-tool-item', function (this: HTMLElement) {
+            const toolName = $(this).data('tool-name');
+            if (toolName) {
+                insertToolNameToInput(String(toolName));
+                quickToolMenu.hide();
+            }
+        });
+
+        function populateQuickTools(filterText = '') {
+            quickToolList.empty();
+            const available = getActiveToolsForCurrentSpace();
+            const q = filterText.trim().toLowerCase();
+            const matches = q
+                ? available.filter(
+                      (s) =>
+                          s.name.toLowerCase().includes(q) ||
+                          (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
+                          (s.description && s.description.toLowerCase().includes(q)),
+                  )
+                : available;
+
+            if (matches.length === 0) {
+                quickToolList.append(
+                    '<div style="padding: 14px; color: #888; text-align: center; font-size: 12px;">Không có công cụ nào khả dụng trong không gian hiện tại.</div>',
+                );
+                return;
+            }
+
+            const itemsHtml = matches
+                .map((schema) => {
+                    const desc = schema.userDescription || schema.description || '';
+                    return `
+                    <div class="kaiz-quick-tool-item" data-tool-name="${escapeHtml(schema.name)}">
+                        <div class="kaiz-quick-tool-item-name">${escapeHtml(schema.name)}</div>
+                        ${desc ? `<div class="kaiz-quick-tool-item-desc">${escapeHtml(desc)}</div>` : ''}
+                    </div>
+                `;
+                })
+                .join('');
+            quickToolList.html(itemsHtml);
+        }
+
+        quickToolBtn.on('click', (e: any) => {
+            e.stopPropagation();
+            if (quickToolMenu.is(':visible')) {
+                quickToolMenu.hide();
+            } else {
+                quickPromptMenu.hide();
+                quickToolSearch.val('');
+                populateQuickTools('');
+                quickToolMenu.css('display', 'flex');
+                setTimeout(() => quickToolSearch.focus(), 50);
+            }
+        });
+
+        quickToolSearch.on('input', function (this: HTMLInputElement) {
+            populateQuickTools(this.value);
         });
         // ------------------------------------
 
@@ -269,8 +416,729 @@ export class ChatWindowUI {
         });
         // ------------------------------------
 
+        const continueBtn = $('#kaiz-chat-continue');
         const sendBtn = $('#kaiz-chat-send');
         const history = $('#kaiz-chat-history');
+
+        const updateContinueBtnVisibility = () => {
+            if (loop.isRunning) {
+                continueBtn.hide();
+                return;
+            }
+            const lastMsgRow = history.find('.kaiz-msg').last();
+            if (
+                lastMsgRow.length > 0 &&
+                lastMsgRow.hasClass('kaiz-msg-agent') &&
+                !lastMsgRow.hasClass('kaiz-msg-welcome')
+            ) {
+                continueBtn.css('display', 'inline-flex');
+            } else {
+                continueBtn.hide();
+            }
+        };
+
+        // ==========================================
+        // --- REFINED MILESTONE SCROLLBAR RAIL LOGIC (PC/MOBILE) ---
+        // ==========================================
+        const milestoneRail = $('#kaiz-milestone-rail');
+        const milestoneTrack = $('#kaiz-milestone-track');
+        const milestoneTooltip = $('#kaiz-milestone-tooltip');
+        const milestoneBtnTop = $('#kaiz-milestone-btn-top');
+        const milestoneBtnBottom = $('#kaiz-milestone-btn-bottom');
+        const milestoneActiveThumb = $('#kaiz-milestone-active-thumb');
+
+        interface MilestoneData {
+            index: number;
+            msgEl: HTMLElement;
+            relativeTop: number;
+            posPercent: number;
+            excerpt: string;
+        }
+
+        let currentMilestones: MilestoneData[] = [];
+        let currentMarkerEls: HTMLElement[] = [];
+        let milestoneDebounceTimer: any = null;
+        let isScrubbingMilestones = false;
+        let activeMilestoneIndex = -1;
+        let scrollTrackerRafId: number | null = null;
+        let hudHideTimeout: any = null;
+        let cachedTrackRect: DOMRect | null = null;
+        let cachedRailRect: DOMRect | null = null;
+
+        // Quick Jump buttons
+        milestoneBtnTop.on('click', (e: any) => {
+            e.stopPropagation();
+            history[0]?.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        milestoneBtnBottom.on('click', (e: any) => {
+            e.stopPropagation();
+            const hEl = history[0];
+            if (hEl) {
+                hEl.scrollTo({ top: hEl.scrollHeight, behavior: 'smooth' });
+            }
+        });
+
+        // Hàm hiển thị HUD Preview
+        const showMilestoneHUD = (item: MilestoneData, clientY?: number) => {
+            clearTimeout(hudHideTimeout);
+            const total = currentMilestones.length;
+            milestoneTooltip.html(`
+                <div class="kaiz-milestone-tt-header">
+                    <span class="kaiz-milestone-tt-badge"><i class="fa-solid fa-user"></i> LƯỢT #${item.index + 1} / ${total}</span>
+                    <span class="kaiz-milestone-tt-percent">${Math.round(item.posPercent)}%</span>
+                </div>
+                <div class="kaiz-milestone-tt-body">${escapeHtml(item.excerpt)}</div>
+                <div class="kaiz-milestone-tt-hint"><i class="fa-solid fa-mouse-pointer"></i> Nhấp để chuyển đến lượt chat</div>
+            `);
+
+            const trackRect = cachedTrackRect || milestoneTrack[0]?.getBoundingClientRect();
+            const railRect = cachedRailRect || milestoneRail[0]?.getBoundingClientRect();
+            if (!trackRect || !railRect) return;
+
+            let targetY: number;
+            if (clientY !== undefined) {
+                targetY = clientY - railRect.top;
+            } else {
+                targetY = trackRect.top - railRect.top + trackRect.height * (item.posPercent / 100);
+            }
+
+            const clampedY = Math.max(25, Math.min(railRect.height - 25, targetY));
+            milestoneTooltip.css({
+                top: `${clampedY}px`,
+                display: 'block',
+            });
+        };
+
+        const hideMilestoneHUD = (delay: number = 0) => {
+            clearTimeout(hudHideTimeout);
+            if (delay > 0) {
+                hudHideTimeout = setTimeout(() => {
+                    milestoneTooltip.hide();
+                }, delay);
+            } else {
+                milestoneTooltip.hide();
+            }
+        };
+
+        // Hàm cuộn tới tin nhắn của milestone (sử dụng offsetTop được cache sẵn, KHÔNG layout thrash)
+        const scrollToMilestone = (item: MilestoneData, smooth: boolean = true) => {
+            const hEl = history[0];
+            if (!hEl) return;
+            const targetTop = item.relativeTop - 16;
+            hEl.scrollTo({
+                top: Math.max(0, targetTop),
+                behavior: smooth ? 'smooth' : 'instant',
+            });
+        };
+
+        // Hàm cập nhật trạng thái milestone đang hiển thị trong viewport
+        const updateActiveMilestone = () => {
+            const hEl = history[0];
+            if (!hEl) return;
+
+            const currentScroll = hEl.scrollTop;
+            const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
+            const scrollPercent = Math.max(0, Math.min(100, (currentScroll / maxScroll) * 100));
+
+            // Cập nhật vị trí thumb theo tỉ lệ cuộn thực tế của viewport
+            milestoneActiveThumb.css({
+                top: `${scrollPercent.toFixed(2)}%`,
+                display: 'block',
+            });
+
+            if (currentMilestones.length === 0) return;
+
+            let bestIndex = 0;
+            let minDiff = Infinity;
+            for (let i = 0; i < currentMilestones.length; i++) {
+                const targetScroll = Math.max(0, currentMilestones[i].relativeTop - 16);
+                const diff = Math.abs(currentScroll - targetScroll);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex !== activeMilestoneIndex) {
+                if (activeMilestoneIndex >= 0 && currentMarkerEls[activeMilestoneIndex]) {
+                    currentMarkerEls[activeMilestoneIndex].classList.remove('is-active');
+                }
+                if (currentMarkerEls[bestIndex]) {
+                    currentMarkerEls[bestIndex].classList.add('is-active');
+                }
+                activeMilestoneIndex = bestIndex;
+            }
+        };
+
+        const requestUpdateActiveMilestone = () => {
+            if (scrollTrackerRafId !== null) return;
+            scrollTrackerRafId = requestAnimationFrame(() => {
+                scrollTrackerRafId = null;
+                updateActiveMilestone();
+            });
+        };
+
+        // Lắng nghe scroll trên history để cập nhật indicator
+        history.off('scroll.kaiz_milestones').on('scroll.kaiz_milestones', requestUpdateActiveMilestone);
+
+        const updateMilestones = () => {
+            if (!history[0] || !milestoneTrack[0]) return;
+            const userMsgs = history
+                .find('.kaiz-msg-user')
+                .filter((_: any, el: HTMLElement) => {
+                    const $el = $(el);
+                    if ($el.find('.kaiz-system-result-block').length > 0) return false;
+                    const text = $el.find('.kaiz-msg-content').text().trim();
+                    return !text.startsWith('[Tool Result');
+                })
+                .toArray();
+
+            if (userMsgs.length === 0) {
+                currentMilestones = [];
+                currentMarkerEls = [];
+                activeMilestoneIndex = -1;
+                milestoneTrack.find('.kaiz-milestone-marker').remove();
+                milestoneActiveThumb.hide();
+                milestoneRail.css('opacity', '0.2');
+                hideMilestoneHUD();
+                return;
+            }
+
+            milestoneRail.css('opacity', '1');
+            const historyEl = history[0];
+            const maxScroll = Math.max(1, historyEl.scrollHeight - historyEl.clientHeight);
+
+            currentMilestones = userMsgs.map((msgEl: HTMLElement, index: number) => {
+                const relativeTop = msgEl.offsetTop;
+                const targetScroll = Math.max(0, Math.min(maxScroll, relativeTop - 16));
+                const posPercent = maxScroll > 0 ? Math.max(0, Math.min(100, (targetScroll / maxScroll) * 100)) : 0;
+                const userContentEl = $(msgEl).find('.kaiz-user-content-text');
+                const rawText = (
+                    userContentEl.length ? userContentEl.text() : $(msgEl).find('.kaiz-msg-content').text()
+                ).trim();
+                const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
+                return {
+                    index,
+                    msgEl,
+                    relativeTop,
+                    posPercent,
+                    excerpt,
+                };
+            });
+
+            // Giữ lại activeThumb, xóa các markers cũ
+            milestoneTrack.find('.kaiz-milestone-marker').remove();
+            currentMarkerEls = [];
+
+            const frag = document.createDocumentFragment();
+            for (let i = 0; i < currentMilestones.length; i++) {
+                const item = currentMilestones[i];
+                const marker = document.createElement('div');
+                marker.className = 'kaiz-milestone-marker';
+                marker.style.top = `${item.posPercent.toFixed(2)}%`;
+                marker.setAttribute('data-index', String(item.index));
+                frag.appendChild(marker);
+                currentMarkerEls.push(marker);
+            }
+            milestoneTrack[0]?.appendChild(frag);
+
+            updateActiveMilestone();
+        };
+
+        const requestUpdateMilestones = () => {
+            const chatWinEl = win[0] as HTMLDialogElement;
+            if (!chatWinEl || !chatWinEl.open) return;
+            clearTimeout(milestoneDebounceTimer);
+            milestoneDebounceTimer = setTimeout(updateMilestones, 120);
+        };
+
+        // --- CƠ CHẾ CUỘN VÀ KÉO TRƯỢT THEO TỈ LỆ (CHUẨN SCROLLBAR) ---
+        let dragStartY = 0;
+        let hasMovedDrag = false;
+        let clickedMarkerIndex: number | null = null;
+
+        const performScrollToRatio = (clientY: number) => {
+            const hEl = history[0];
+            const trackEl = milestoneTrack[0];
+            if (!hEl || !trackEl) return;
+
+            const trackRect = cachedTrackRect || trackEl.getBoundingClientRect();
+            const clickY = clientY - trackRect.top;
+            const ratio = Math.max(0, Math.min(1, clickY / Math.max(trackRect.height, 1)));
+            const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
+
+            hEl.scrollTop = ratio * maxScroll;
+            milestoneActiveThumb.css({
+                top: `${(ratio * 100).toFixed(2)}%`,
+                display: 'block',
+            });
+        };
+
+        const handleScrubMove = (clientY: number) => {
+            if (!hasMovedDrag) {
+                if (Math.abs(clientY - dragStartY) > 3) {
+                    hasMovedDrag = true;
+                    isScrubbingMilestones = true;
+                    milestoneRail.addClass('is-scrubbing');
+                    hideMilestoneHUD();
+                } else {
+                    return;
+                }
+            }
+
+            performScrollToRatio(clientY);
+        };
+
+        const handleScrubEnd = (clientY: number) => {
+            $(document).off('.kaiz_milestone_scrub');
+            cachedTrackRect = null;
+            cachedRailRect = null;
+            milestoneRail.removeClass('is-scrubbing');
+
+            const wasDragging = hasMovedDrag;
+            isScrubbingMilestones = false;
+            hasMovedDrag = false;
+
+            if (wasDragging) {
+                // Đang kéo như thanh cuộn bình thường: KHÔNG tự dính vào milestone nào
+                requestUpdateActiveMilestone();
+                return;
+            }
+
+            // Nếu là click (không kéo):
+            if (clickedMarkerIndex !== null && currentMilestones[clickedMarkerIndex]) {
+                // Nhấp trực tiếp vào milestone -> Dịch chuyển tới milestone đó + nhấp nháy highlight
+                const target = currentMilestones[clickedMarkerIndex];
+                scrollToMilestone(target, true);
+                $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
+                void target.msgEl.offsetWidth;
+                $(target.msgEl).addClass('kaiz-msg-highlight-pulse');
+                setTimeout(() => {
+                    $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
+                }, 1500);
+            } else {
+                // Nhấp vào track trống -> Dịch chuyển tỉ lệ theo vị trí click
+                performScrollToRatio(clientY);
+            }
+
+            clickedMarkerIndex = null;
+            requestUpdateActiveMilestone();
+        };
+
+        const startScrubbing = (e: any) => {
+            if (e.type === 'mousedown' && e.button !== 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const clientY = e.type.startsWith('touch') ? e.originalEvent.touches[0].clientY : e.clientY;
+            dragStartY = clientY;
+            hasMovedDrag = false;
+            isScrubbingMilestones = false;
+
+            cachedTrackRect = milestoneTrack[0]?.getBoundingClientRect() || null;
+            cachedRailRect = milestoneRail[0]?.getBoundingClientRect() || null;
+
+            // Kiểm tra xem vị trí mousedown/touchstart có nằm trên marker không
+            const targetEl = e.target as HTMLElement;
+            const markerEl = targetEl?.closest?.('.kaiz-milestone-marker') as HTMLElement;
+            if (markerEl) {
+                const idx = parseInt(markerEl.getAttribute('data-index') || '-1', 10);
+                clickedMarkerIndex = idx >= 0 ? idx : null;
+            } else {
+                clickedMarkerIndex = null;
+            }
+
+            $(document)
+                .off('.kaiz_milestone_scrub')
+                .on('mousemove.kaiz_milestone_scrub', (moveEv: any) => {
+                    handleScrubMove(moveEv.clientY);
+                })
+                .on('touchmove.kaiz_milestone_scrub', (moveEv: any) => {
+                    if (!moveEv.originalEvent.touches[0]) return;
+                    handleScrubMove(moveEv.originalEvent.touches[0].clientY);
+                })
+                .on('mouseup.kaiz_milestone_scrub', (upEv: any) => {
+                    handleScrubEnd(upEv.clientY);
+                })
+                .on('touchend.kaiz_milestone_scrub touchcancel.kaiz_milestone_scrub', (upEv: any) => {
+                    const endY = upEv.originalEvent.changedTouches?.[0]?.clientY || clientY;
+                    handleScrubEnd(endY);
+                });
+        };
+
+        // Gắn sự kiện mousedown và touchstart lên toàn bộ milestoneTrack
+        milestoneTrack.on('mousedown', (e: any) => {
+            startScrubbing(e);
+        });
+
+        milestoneTrack.on('touchstart', (e: any) => {
+            startScrubbing(e);
+        });
+
+        // Event delegation trên milestoneTrack cho hover hiển thị HUD
+        milestoneTrack
+            .on('mouseenter', '.kaiz-milestone-marker', function (this: HTMLElement) {
+                if (isScrubbingMilestones) return;
+                const idx = parseInt(this.getAttribute('data-index') || '-1', 10);
+                const item = currentMilestones[idx];
+                if (item) showMilestoneHUD(item);
+            })
+            .on('mouseleave', '.kaiz-milestone-marker', function () {
+                if (isScrubbingMilestones) return;
+                hideMilestoneHUD();
+            });
+
+        // ==========================================
+        // --- IN-CHAT SEARCH BAR LOGIC ---
+        // ==========================================
+        const searchToggleBtn = $('#kaiz-chat-search-toggle-btn');
+        const searchBar = $('#kaiz-chat-search-bar');
+        const searchInput = $('#kaiz-search-input');
+        const searchCounter = $('#kaiz-search-counter');
+        const searchPrevBtn = $('#kaiz-search-prev-btn');
+        const searchNextBtn = $('#kaiz-search-next-btn');
+        const searchCloseBtn = $('#kaiz-search-close-btn');
+
+        let currentSearchMatches: HTMLElement[] = [];
+        let activeMatchIndex = -1;
+        let searchDebounceTimer: any = null;
+
+        const clearSearchHighlights = () => {
+            if (currentSearchMatches.length === 0) return;
+            const parentsToNormalize = new Set<Node>();
+            for (const mark of currentSearchMatches) {
+                const parent = mark.parentNode;
+                if (parent) {
+                    parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+                    parentsToNormalize.add(parent);
+                }
+            }
+            for (const p of parentsToNormalize) {
+                p.normalize();
+            }
+            currentSearchMatches = [];
+            activeMatchIndex = -1;
+        };
+
+        const highlightCurrentMatch = (hitCap: boolean = false) => {
+            currentSearchMatches.forEach((m) => m.classList.remove('kaiz-search-mark-active'));
+            if (activeMatchIndex >= 0 && activeMatchIndex < currentSearchMatches.length) {
+                const currentEl = currentSearchMatches[activeMatchIndex];
+                currentEl.classList.add('kaiz-search-mark-active');
+
+                // Nếu match nằm trong một user message đang bị thu gọn, tự động mở rộng nó ra
+                const collapsed = currentEl.closest('.kaiz-user-collapsible.is-collapsed');
+                if (collapsed) {
+                    $(collapsed).removeClass('is-collapsed').addClass('is-expanded');
+                    $(collapsed).find('.kaiz-user-toggle-text').text('Thu gọn');
+                    $(collapsed)
+                        .find('.kaiz-user-toggle-icon')
+                        .removeClass('fa-chevron-down')
+                        .addClass('fa-chevron-up');
+                    $(collapsed).find('.kaiz-user-msg-dots').hide();
+                }
+
+                const suffix = hitCap ? '+' : '';
+                searchCounter.text(`${activeMatchIndex + 1}/${currentSearchMatches.length}${suffix}`);
+
+                const historyEl = history[0];
+                if (historyEl) {
+                    const targetRect = currentEl.getBoundingClientRect();
+                    const historyRect = historyEl.getBoundingClientRect();
+                    const targetTop =
+                        targetRect.top -
+                        historyRect.top +
+                        historyEl.scrollTop -
+                        historyRect.height / 2 +
+                        targetRect.height / 2;
+
+                    historyEl.scrollTo({
+                        top: Math.max(0, targetTop),
+                        behavior: 'smooth',
+                    });
+                }
+            }
+        };
+
+        const performSearch = (query: string) => {
+            clearSearchHighlights();
+            const cleanQuery = query.trim();
+            if (!cleanQuery) {
+                searchCounter.text('0/0');
+                searchPrevBtn.prop('disabled', true);
+                searchNextBtn.prop('disabled', true);
+                return;
+            }
+
+            const matches: HTMLElement[] = [];
+            const queryLower = cleanQuery.toLowerCase();
+            // Capped highlights để giữ DOM luôn nhẹ, tránh giật lag khi query ngắn
+            const MAX_MATCHES = cleanQuery.length < 2 ? 100 : 250;
+            let hitCap = false;
+
+            const historyEl = history[0];
+            if (!historyEl) return;
+            // Dùng getElementsByClassName nguyên bản nhanh hơn nhiều so với jQuery find
+            const msgContents = historyEl.getElementsByClassName('kaiz-msg-content');
+
+            for (let i = 0; i < msgContents.length; i++) {
+                const contentEl = msgContents[i] as HTMLElement;
+                const textContent = contentEl.textContent || '';
+                // SPEED BOOSTER: Nếu tin nhắn không chứa từ khóa, bỏ qua ngay lập tức!
+                if (!textContent.toLowerCase().includes(queryLower)) {
+                    continue;
+                }
+
+                const walker = document.createTreeWalker(contentEl, 4 /* NodeFilter.SHOW_TEXT */, {
+                    acceptNode: (node: Node) => {
+                        if (node.parentElement?.tagName === 'MARK') return 2; /* NodeFilter.FILTER_REJECT */
+                        return 1; /* NodeFilter.FILTER_ACCEPT */
+                    },
+                });
+
+                const textNodes: Text[] = [];
+                let currentNode = walker.nextNode();
+                while (currentNode) {
+                    textNodes.push(currentNode as Text);
+                    currentNode = walker.nextNode();
+                }
+
+                for (const textNode of textNodes) {
+                    const text = textNode.nodeValue || '';
+                    const textLower = text.toLowerCase();
+                    let matchIndex = textLower.indexOf(queryLower);
+
+                    if (matchIndex === -1) continue;
+
+                    const frag = document.createDocumentFragment();
+                    let lastIdx = 0;
+
+                    while (matchIndex !== -1) {
+                        if (matchIndex > lastIdx) {
+                            frag.appendChild(document.createTextNode(text.substring(lastIdx, matchIndex)));
+                        }
+                        const mark = document.createElement('mark');
+                        mark.className = 'kaiz-search-mark';
+                        mark.textContent = text.substring(matchIndex, matchIndex + cleanQuery.length);
+                        frag.appendChild(mark);
+                        matches.push(mark);
+
+                        if (matches.length >= MAX_MATCHES) {
+                            hitCap = true;
+                            break;
+                        }
+
+                        lastIdx = matchIndex + cleanQuery.length;
+                        matchIndex = textLower.indexOf(queryLower, lastIdx);
+                    }
+
+                    if (lastIdx < text.length) {
+                        frag.appendChild(document.createTextNode(text.substring(lastIdx)));
+                    }
+
+                    textNode.parentNode?.replaceChild(frag, textNode);
+                    if (hitCap) break;
+                }
+
+                if (hitCap) break;
+            }
+
+            currentSearchMatches = matches;
+            if (matches.length > 0) {
+                activeMatchIndex = 0;
+                highlightCurrentMatch(hitCap);
+                searchPrevBtn.prop('disabled', false);
+                searchNextBtn.prop('disabled', false);
+            } else {
+                activeMatchIndex = -1;
+                searchCounter.text('0/0');
+                searchPrevBtn.prop('disabled', true);
+                searchNextBtn.prop('disabled', true);
+            }
+        };
+
+        const openSearch = () => {
+            searchBar.slideDown(150, () => {
+                searchInput.focus().select();
+            });
+            searchToggleBtn.addClass('active');
+            const q = String(searchInput.val() || '');
+            if (q) performSearch(q);
+        };
+
+        const closeSearch = () => {
+            searchBar.slideUp(150);
+            searchToggleBtn.removeClass('active');
+            clearSearchHighlights();
+            searchCounter.text('0/0');
+            searchPrevBtn.prop('disabled', true);
+            searchNextBtn.prop('disabled', true);
+        };
+
+        searchToggleBtn.on('click', (e: any) => {
+            e.stopPropagation();
+            if (searchBar.is(':visible')) {
+                closeSearch();
+            } else {
+                openSearch();
+            }
+        });
+
+        searchCloseBtn.on('click', () => {
+            closeSearch();
+        });
+
+        searchInput.on('input', function (this: HTMLInputElement) {
+            clearTimeout(searchDebounceTimer);
+            const val = this.value;
+            // Debounce 220ms: Độ trễ tối ưu cho phản hồi gõ bàn phím mượt mà
+            searchDebounceTimer = setTimeout(() => {
+                performSearch(val);
+            }, 220);
+        });
+
+        const nextSearchMatch = () => {
+            if (currentSearchMatches.length === 0) return;
+            activeMatchIndex = (activeMatchIndex + 1) % currentSearchMatches.length;
+            highlightCurrentMatch();
+        };
+
+        const prevSearchMatch = () => {
+            if (currentSearchMatches.length === 0) return;
+            activeMatchIndex = (activeMatchIndex - 1 + currentSearchMatches.length) % currentSearchMatches.length;
+            highlightCurrentMatch();
+        };
+
+        searchNextBtn.on('click', nextSearchMatch);
+        searchPrevBtn.on('click', prevSearchMatch);
+
+        searchInput.on('keydown', (e: any) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (searchDebounceTimer) {
+                    clearTimeout(searchDebounceTimer);
+                    searchDebounceTimer = null;
+                    performSearch(String(searchInput.val() || ''));
+                } else if (e.shiftKey) {
+                    prevSearchMatch();
+                } else {
+                    nextSearchMatch();
+                }
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeSearch();
+            }
+        });
+
+        // Phím tắt Ctrl+F / Cmd+F: CHỈ kích hoạt khi con trỏ hoặc focus đang ở trong Kaiz chat window
+        $(document).on('keydown.kaiz_search_shortcut', (e: any) => {
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+                const chatWinEl = win[0] as HTMLDialogElement;
+                if (!chatWinEl || !chatWinEl.open) return;
+
+                // Tuyệt đối không cướp Ctrl+F của SillyTavern nếu người dùng không tương tác trong Kaiz
+                const isInsideKaiz = $(e.target).closest('#kaiz-chat-window').length > 0;
+                if (!isInsideKaiz) return;
+
+                e.preventDefault();
+                e.stopPropagation();
+                if (!searchBar.is(':visible')) {
+                    openSearch();
+                } else {
+                    searchInput.focus().select();
+                }
+            }
+        });
+
+        // --- XỬ LÝ CUỘN CHAT BẰNG PHÍM MŨI TÊN (ARROW KEYS) KHI ĐANG TRONG AGENT CHAT ---
+        let isHoveringKaizWin = false;
+        win.off('mouseenter.kaiz_hover mouseleave.kaiz_hover')
+            .on('mouseenter.kaiz_hover', () => {
+                isHoveringKaizWin = true;
+            })
+            .on('mouseleave.kaiz_hover', () => {
+                isHoveringKaizWin = false;
+            });
+
+        $(document)
+            .off('keydown.kaiz_arrow_scroll')
+            .on('keydown.kaiz_arrow_scroll', (e: any) => {
+                const chatWinEl = win[0] as HTMLDialogElement;
+                if (!chatWinEl || !chatWinEl.open || win.hasClass('kaiz-hidden')) return;
+
+                const activeEl = document.activeElement;
+                const isFocusedInsideKaiz = activeEl ? win[0].contains(activeEl) : false;
+                const isTargetInsideKaiz = $(e.target).closest('#kaiz-chat-window').length > 0;
+
+                // Chỉ xử lý nếu chuột đang hover trong Kaiz window hoặc focus đang nằm trong Kaiz window
+                if (!isHoveringKaizWin && !isFocusedInsideKaiz && !isTargetInsideKaiz) return;
+
+                const navKeys = ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'];
+                if (!navKeys.includes(e.key)) return;
+
+                const target = e.target as HTMLElement;
+                const isInput =
+                    target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+
+                if (isInput) {
+                    // Nếu đang focus ở ô nhập chat chính (input textarea)
+                    if (target === input[0]) {
+                        const isTextAreaEmpty = ((input.val() as string) || '').length === 0;
+                        const isModifierScroll = e.altKey || e.ctrlKey;
+
+                        // Cho phép cuộn nếu:
+                        // 1. Phím PageUp/PageDown
+                        // 2. Phím Home/End kết hợp Ctrl (Ctrl+Home / Ctrl+End)
+                        // 3. Phím ArrowUp/ArrowDown khi ô chat đang trống hoặc đang giữ phím Alt/Ctrl
+                        const shouldScroll =
+                            e.key === 'PageUp' ||
+                            e.key === 'PageDown' ||
+                            (isModifierScroll &&
+                                (e.key === 'Home' ||
+                                    e.key === 'End' ||
+                                    e.key === 'ArrowUp' ||
+                                    e.key === 'ArrowDown')) ||
+                            (!isModifierScroll &&
+                                !e.shiftKey &&
+                                isTextAreaEmpty &&
+                                (e.key === 'ArrowUp' || e.key === 'ArrowDown'));
+
+                        if (!shouldScroll) return;
+                    } else {
+                        // Các input khác (như search box, settings) chỉ cuộn khi bấm PageUp/PageDown
+                        if (e.key !== 'PageUp' && e.key !== 'PageDown') return;
+                    }
+                }
+
+                const hEl = history[0];
+                if (!hEl) return;
+
+                const scrollStep = 80;
+                const pageStep = Math.max(hEl.clientHeight * 0.8, 120);
+
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    hEl.scrollBy({ top: -scrollStep, behavior: 'auto' });
+                } else if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    hEl.scrollBy({ top: scrollStep, behavior: 'auto' });
+                } else if (e.key === 'PageUp') {
+                    e.preventDefault();
+                    hEl.scrollBy({ top: -pageStep, behavior: 'smooth' });
+                } else if (e.key === 'PageDown') {
+                    e.preventDefault();
+                    hEl.scrollBy({ top: pageStep, behavior: 'smooth' });
+                } else if (e.key === 'Home') {
+                    e.preventDefault();
+                    hEl.scrollTo({ top: 0, behavior: 'smooth' });
+                } else if (e.key === 'End') {
+                    e.preventDefault();
+                    hEl.scrollTo({ top: hEl.scrollHeight, behavior: 'smooth' });
+                }
+            });
+
+        $(window).on('resize.kaiz_milestones', requestUpdateMilestones);
 
         // --- Drag Logic ---
         const ensureInBounds = (el: any) => {
@@ -315,7 +1183,9 @@ export class ChatWindowUI {
                     try {
                         const parsed = JSON.parse(savedPos);
                         el.css({ right: 'auto', bottom: 'auto', left: parsed.left + 'px', top: parsed.top + 'px' });
-                    } catch (e) {}
+                    } catch {
+                        // ignore error
+                    }
                 }
 
                 el.draggable({
@@ -366,6 +1236,82 @@ export class ChatWindowUI {
                     }
                 }, 100);
             });
+
+        // --- Floating Window Resize Logic ---
+        const resizer = $('#kaiz-window-resizer');
+
+        const restoreSavedWinSize = () => {
+            if (win.hasClass('kaiz-phone-mode') || win.hasClass('kaiz-browser-mode')) return;
+            const savedSize = localStorage.getItem('kaiz_win_size');
+            if (savedSize) {
+                try {
+                    const parsed = JSON.parse(savedSize);
+                    if (parsed.width && parsed.height) {
+                        const clampedW = Math.max(360, Math.min(parsed.width, window.innerWidth - 20));
+                        const clampedH = Math.max(420, Math.min(parsed.height, window.innerHeight - 20));
+                        win.css({ width: `${clampedW}px`, height: `${clampedH}px` });
+                    }
+                } catch {
+                    // ignore
+                }
+            }
+        };
+
+        restoreSavedWinSize();
+
+        let isResizingWin = false;
+        resizer.on('mousedown', (e: any) => {
+            if (win.hasClass('kaiz-phone-mode') || win.hasClass('kaiz-browser-mode')) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            isResizingWin = true;
+            resizer.addClass('resizing');
+            $('body').css({ 'user-select': 'none', cursor: 'se-resize' });
+
+            const rect = win[0].getBoundingClientRect();
+            // Anchor left and top explicitly so resizing bottom-right expands outwards smoothly
+            win.css({
+                left: `${rect.left}px`,
+                top: `${rect.top}px`,
+                right: 'auto',
+                bottom: 'auto',
+            });
+
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startWidth = rect.width;
+            const startHeight = rect.height;
+
+            $(document)
+                .off('.kaiz_resizing')
+                .on('mousemove.kaiz_resizing', (ev: any) => {
+                    if (!isResizingWin) return;
+                    const minWidth = 360;
+                    const minHeight = 420;
+                    const maxWidth = Math.max(minWidth, window.innerWidth - rect.left - 10);
+                    const maxHeight = Math.max(minHeight, window.innerHeight - rect.top - 10);
+
+                    const newWidth = Math.max(minWidth, Math.min(startWidth + (ev.clientX - startX), maxWidth));
+                    const newHeight = Math.max(minHeight, Math.min(startHeight + (ev.clientY - startY), maxHeight));
+
+                    win.css({ width: `${newWidth}px`, height: `${newHeight}px` });
+                })
+                .on('mouseup.kaiz_resizing', () => {
+                    if (!isResizingWin) return;
+                    isResizingWin = false;
+                    resizer.removeClass('resizing');
+                    $('body').css({ 'user-select': '', cursor: '' });
+                    $(document).off('.kaiz_resizing');
+
+                    const finalWidth = Math.round(win.outerWidth() || 550);
+                    const finalHeight = Math.round(win.outerHeight() || 600);
+                    localStorage.setItem('kaiz_win_size', JSON.stringify({ width: finalWidth, height: finalHeight }));
+
+                    const pos = ensureInBounds(win);
+                    if (pos) localStorage.setItem('kaiz_win_pos', JSON.stringify(pos));
+                });
+        });
         // ------------------
 
         // Sidebar elements
@@ -373,9 +1319,253 @@ export class ChatWindowUI {
         const sidebar = $('#kaiz-chat-sidebar');
         const newChatBtn = $('#kaiz-new-chat-btn');
         const chatList = $('#kaiz-chat-list');
-        const chatTitle = $('#kaiz-chat-title');
 
         let isSidebarOpen = false;
+
+        // --- Workspace UI Logic ---
+        const wsSelect = $('#kaiz-workspace-select');
+        const wsSettingsBtn = $('#kaiz-workspace-settings-btn');
+        const wsAddBtn = $('#kaiz-workspace-add-btn');
+
+        stateManager.onWorkspacesListUpdated = (workspaces) => {
+            wsSelect.empty();
+            wsSelect.append('<option value="default">Default</option>');
+            for (const ws of workspaces) {
+                wsSelect.append(`<option value="${ws.id}">${escapeHtml(ws.name)}</option>`);
+            }
+            if (stateManager.currentWorkspaceId) {
+                wsSelect.val(stateManager.currentWorkspaceId.toString());
+            } else {
+                wsSelect.val('default');
+            }
+        };
+
+        stateManager.onWorkspaceSwitched = (ws) => {
+            if (ws) {
+                wsSelect.val(ws.id!.toString());
+                wsSettingsBtn.show();
+            } else {
+                wsSelect.val('default');
+                wsSettingsBtn.hide();
+            }
+        };
+
+        wsSelect.on('change', () => {
+            if (loop.isRunning) {
+                wsSelect.val(stateManager.currentWorkspaceId ? stateManager.currentWorkspaceId.toString() : 'default');
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi thao tác!', 'Agent');
+                return;
+            }
+            const val = wsSelect.val();
+            if (val === 'default') {
+                stateManager.switchWorkspace(null);
+            } else {
+                stateManager.switchWorkspace(parseInt(val as string, 10));
+            }
+        });
+
+        wsAddBtn.on('click', async () => {
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo Workspace!', 'Agent');
+                return;
+            }
+            const name = prompt('Nhập tên Workspace mới:');
+            if (name && name.trim()) {
+                await stateManager.createWorkspace(name.trim());
+            }
+        });
+
+        wsSettingsBtn.on('click', () => {
+            const ws = stateManager.currentWorkspace;
+            if (!ws) return;
+            $('#kaiz-ws-name').val(ws.name);
+            $('#kaiz-ws-prompt').val(ws.systemPrompt || '');
+
+            const delBtn = $('#kaiz-ws-delete-btn');
+            if (ws.systemId) {
+                delBtn.html('<i class="fa-solid fa-rotate-left"></i> Khôi phục mặc định');
+                delBtn.css({ color: '#f39c12', borderColor: 'rgba(243, 156, 18, 0.3)' });
+            } else {
+                delBtn.html('<i class="fa-solid fa-trash"></i> Xóa Workspace');
+                delBtn.css({ color: '#ff6b6b', borderColor: 'rgba(255, 107, 107, 0.3)' });
+            }
+
+            renderWsToolsUI(ws.toolsConfig || {});
+
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).showModal();
+        });
+
+        function renderWsToolsUI(toolsConfig: Record<string, boolean>) {
+            const toolsList = $('#kaiz-ws-tools-list');
+            toolsList.empty();
+
+            const allSchemas = registry.getAllSchemas();
+
+            // --- Chips (tools đang được bật) ---
+            const chipsContainer = $(
+                '<div style="display:flex; flex-wrap:wrap; gap:5px; min-height:28px; margin-bottom:8px; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.07);"></div>',
+            );
+
+            // --- Ô search ---
+            const searchInput = $(
+                `<input type="text" class="text_pole" placeholder="Tìm tool theo tên hoặc mô tả..." style="width:100%; box-sizing:border-box; padding:5px; margin-bottom:5px;">`,
+            );
+
+            // --- Result list (luôn hiện, mặc định = tất cả) ---
+            const resultList = $(
+                `<div style="max-height:200px; overflow-y:auto; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:rgba(0,0,0,0.2);"></div>`,
+            );
+
+            toolsList.append(chipsContainer, searchInput, resultList);
+            toolsList.data('toolsConfig', toolsConfig);
+
+            function refreshChips() {
+                chipsContainer.empty();
+                const enabled = allSchemas.filter((s) => toolsConfig[s.name] === true);
+                if (enabled.length === 0) {
+                    chipsContainer.append(
+                        '<span style="color:#666; font-size:12px; line-height:28px;">Chưa có tool nào được thêm.</span>',
+                    );
+                    return;
+                }
+                enabled.forEach((schema) => {
+                    const chipDesc = schema.userDescription || schema.description || '';
+                    const chip = $(`
+                        <span class="kaiz-ws-tool-chip" data-tool="${escapeHtml(schema.name)}" title="${escapeHtml(chipDesc)}" style="
+                            display:inline-flex; align-items:center; gap:4px; padding:3px 8px;
+                            background:rgba(0,201,255,0.15); border:1px solid rgba(0,201,255,0.3);
+                            border-radius:12px; font-size:12px; color:#00c9ff; cursor:default;
+                        ">
+                            ${escapeHtml(schema.name)}
+                            <i class="fa-solid fa-xmark kaiz-ws-tool-remove" data-tool="${escapeHtml(schema.name)}" style="cursor:pointer; opacity:0.7;"></i>
+                        </span>
+                    `);
+                    chipsContainer.append(chip);
+                });
+            }
+
+            function refreshResults(query: string) {
+                resultList.empty();
+                const available = allSchemas.filter((s) => toolsConfig[s.name] !== true);
+                const q = query.trim().toLowerCase();
+                const matches = q
+                    ? available.filter(
+                          (s) =>
+                              s.name.toLowerCase().includes(q) ||
+                              (s.userDescription && s.userDescription.toLowerCase().includes(q)) ||
+                              (s.description && s.description.toLowerCase().includes(q)),
+                      )
+                    : available;
+
+                if (matches.length === 0) {
+                    resultList.append(
+                        '<div style="padding:8px; color:#666; font-size:12px; text-align:center;">Không tìm thấy tool nào.</div>',
+                    );
+                    return;
+                }
+                matches.forEach((schema) => {
+                    const descText = schema.userDescription || schema.description || '';
+                    const item = $(`
+                        <div class="kaiz-ws-tool-result" data-tool="${escapeHtml(schema.name)}" style="
+                            padding:7px 10px; cursor:pointer; font-size:13px; color:#ddd;
+                            border-bottom:1px solid rgba(255,255,255,0.05);
+                        ">
+                            <div style="color:#fff; font-weight:500;">${escapeHtml(schema.name)}</div>
+                            ${descText ? `<div style="color:#aaa; font-size:11px; margin-top:2px; line-height:1.35;">${escapeHtml(descText)}</div>` : ''}
+                        </div>
+                    `);
+                    item.on('mouseenter', function (this: any) {
+                        $(this).css('background', 'rgba(255,255,255,0.07)');
+                    });
+                    item.on('mouseleave', function (this: any) {
+                        $(this).css('background', '');
+                    });
+                    item.on('click', () => {
+                        toolsConfig[schema.name] = true;
+                        toolsList.data('toolsConfig', toolsConfig);
+                        refreshChips();
+                        // Giữ nguyên filter hiện tại, chỉ refresh results
+                        refreshResults(String(searchInput.val() || ''));
+                    });
+                    resultList.append(item);
+                });
+            }
+
+            // Chip remove — dùng event delegation trên chipsContainer
+            chipsContainer.on('click', '.kaiz-ws-tool-remove', function (this: any) {
+                const toolName = $(this).attr('data-tool');
+                if (toolName) {
+                    delete toolsConfig[toolName];
+                    toolsList.data('toolsConfig', toolsConfig);
+                    refreshChips();
+                    refreshResults(String(searchInput.val() || ''));
+                }
+            });
+
+            searchInput.on('input', function (this: any) {
+                refreshResults(String($(this).val() || ''));
+            });
+
+            // Render lần đầu
+            refreshChips();
+            refreshResults('');
+        }
+
+        $('#kaiz-workspace-settings-close').on('click', () => {
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+        });
+
+        $('#kaiz-ws-save-btn').on('click', async () => {
+            if (!stateManager.currentWorkspaceId) return;
+            const newName = String($('#kaiz-ws-name').val() || '').trim();
+            const newPrompt = String($('#kaiz-ws-prompt').val() || '');
+
+            // Lấy toolsConfig từ data đã được cập nhật bởi renderWsToolsUI
+            const toolsConfig: Record<string, boolean> = $('#kaiz-ws-tools-list').data('toolsConfig') || {};
+
+            if (newName) {
+                await stateManager.updateWorkspace(stateManager.currentWorkspaceId, {
+                    name: newName,
+                    systemPrompt: newPrompt,
+                    toolsConfig: toolsConfig,
+                });
+            }
+            ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+        });
+
+        $('#kaiz-ws-delete-btn').on('click', async () => {
+            if (!stateManager.currentWorkspaceId) return;
+            const ws = stateManager.currentWorkspace;
+            if (!ws) return;
+            const wsName = ws.name || 'này';
+
+            if (ws.systemId) {
+                if (
+                    confirm(
+                        `Khôi phục Workspace "${wsName}" về trạng thái mặc định gốc?\n\nTên, Prompt và Danh sách Tools sẽ bị reset. (Lịch sử chat VẪN ĐƯỢC GIỮ NGUYÊN).`,
+                    )
+                ) {
+                    await stateManager.db.resetSystemWorkspace(stateManager.currentWorkspaceId);
+                    const workspaces = await stateManager.db.getAllWorkspaces();
+                    if (stateManager.onWorkspacesListUpdated) stateManager.onWorkspacesListUpdated(workspaces);
+                    stateManager.currentWorkspace =
+                        workspaces.find((w) => w.id === stateManager.currentWorkspaceId) || null;
+                    if (stateManager.onWorkspaceSwitched)
+                        stateManager.onWorkspaceSwitched(stateManager.currentWorkspace);
+                    ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+                }
+            } else {
+                if (
+                    confirm(
+                        `Xóa Workspace "${wsName}"?\n\nTất cả các đoạn chat bên trong cũng sẽ bị xóa vĩnh viễn và không thể khôi phục.`,
+                    )
+                ) {
+                    await stateManager.deleteWorkspace(stateManager.currentWorkspaceId);
+                    ($('#kaiz-workspace-settings-modal')[0] as HTMLDialogElement).close();
+                }
+            }
+        });
+        // --------------------------
 
         // Toggle cửa sổ
         btn.on('click', (e: any) => {
@@ -402,8 +1592,12 @@ export class ChatWindowUI {
                 }
                 // Refresh list khi mở
                 stateManager.loadChatList().then(renderChatList);
+                setTimeout(requestUpdateMilestones, 150);
             } else {
                 dialogEl.close();
+                toolsMenu.hide();
+                toolsBtn.removeClass('active');
+                closeSearch();
                 if (isSidebarOpen) toggleSidebar();
             }
         });
@@ -411,6 +1605,9 @@ export class ChatWindowUI {
         closeBtn.on('click', () => {
             const dialogEl = win[0] as HTMLDialogElement;
             dialogEl.close();
+            toolsMenu.hide();
+            toolsBtn.removeClass('active');
+            closeSearch();
             if (isSidebarOpen) toggleSidebar(); // Đóng luôn sidebar
         });
 
@@ -430,6 +1627,7 @@ export class ChatWindowUI {
                 if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
                     win.draggable('enable');
                 }
+                restoreSavedWinSize();
             }
         };
 
@@ -451,11 +1649,16 @@ export class ChatWindowUI {
 
         // New Chat
         newChatBtn.on('click', async () => {
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi tạo chat mới!', 'Agent');
+                return;
+            }
             history.empty();
             // Đặt stateManager về null để tin nhắn đầu tiên sẽ tạo chat mới
             stateManager.currentChatId = null;
-            chatTitle.text('New Chat');
             addWelcomeMessage();
+            closeSearch();
+            requestUpdateMilestones();
 
             // Xóa background selected ở chat list
             $('.kaiz-chat-item').css('background', 'transparent');
@@ -465,16 +1668,23 @@ export class ChatWindowUI {
         // Cài đặt Event Delegation cho danh sách chat (chỉ gán 1 lần duy nhất)
         chatList.on('click', '.kaiz-chat-item', function (this: HTMLElement, e: any) {
             if ($(e.target).hasClass('kaiz-chat-delete') || $(e.target).hasClass('kaiz-chat-edit')) return; // Bỏ qua nếu click nút xóa hoặc sửa
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi chuyển chat!', 'Agent');
+                return;
+            }
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 stateManager.switchChat(id);
-                chatTitle.text($(this).find('span').text());
                 toggleSidebar();
             }
         });
 
         chatList.on('click', '.kaiz-chat-delete', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng đợi Agent chạy xong trước khi xóa chat!', 'Agent');
+                return;
+            }
             const id = parseInt($(this).attr('data-id') || '0', 10);
             if (id) {
                 if (confirm('Delete this chat?')) {
@@ -604,24 +1814,49 @@ export class ChatWindowUI {
         const formatMessage = (text: string, isFinal: boolean): string => {
             let html = text || '';
 
-            const detailsTag = isFinal ? '<details class="kaiz-cot-block">' : '<details open class="kaiz-cot-block">';
+            const ctx = (window as any).SillyTavern?.getContext?.();
+            const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'collapse_streaming';
 
-            const closeIndex = html.indexOf('</agent_cot>');
+            let closeTag = '';
+            let closeIndex = html.indexOf('</agent_cot>');
             if (closeIndex !== -1) {
-                const cotContent = html.substring(0, closeIndex).replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                let restContent = html.substring(closeIndex + '</agent_cot>'.length).trim();
+                closeTag = '</agent_cot>';
+            } else {
+                closeIndex = html.indexOf('</think>');
+                if (closeIndex !== -1) {
+                    closeTag = '</think>';
+                } else {
+                    closeIndex = html.indexOf('</thinking>');
+                    if (closeIndex !== -1) {
+                        closeTag = '</thinking>';
+                    }
+                }
+            }
+
+            if (closeIndex !== -1) {
+                let cotContent = html.substring(0, closeIndex);
+                cotContent = cotContent.replace(/<agent_cot>|<think>|<thinking>/gi, '').trim();
+                cotContent = cotContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                let restContent = html.substring(closeIndex + closeTag.length).trim();
 
                 restContent = parseToolCallsToHtml(restContent, !isFinal);
 
-                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                const shouldOpen = cotMode === 'always_expanded';
+                const detailsTag = `<details class="kaiz-cot-block"${shouldOpen ? ' open' : ''}>`;
+
+                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
                 if (restContent) {
                     const parsedMarkdown = isFinal ? marked.parse(restContent) : restContent;
                     html += `<div style="margin-top: 8px;" class="kaiz-markdown-body">${parsedMarkdown}</div>`;
                 }
             } else if (!isFinal) {
-                // Đang stream và chưa thấy thẻ đóng -> do có prefill nên chắc chắn đây là CoT
-                const cotContent = html.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
-                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Kaiz Agent Thoughts</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
+                // Đang stream và chưa thấy thẻ đóng
+                const shouldOpen = cotMode === 'auto_collapse' || cotMode === 'always_expanded';
+                const detailsTag = `<details class="kaiz-cot-block"${shouldOpen ? ' open' : ''}>`;
+
+                let cotContent = html.replace(/<agent_cot>|<think>|<thinking>/gi, '').trim();
+                cotContent = cotContent.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                html = `${detailsTag}<summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${cotContent}</div></details>`;
             } else {
                 // Message đã load xong không có thẻ đóng (lịch sử cũ hoặc LLM quên đóng thẻ)
                 const parsedContent = parseToolCallsToHtml(html.trim(), false);
@@ -656,6 +1891,25 @@ export class ChatWindowUI {
 <summary class="kaiz-system-summary" style="color: ${color};"><i class="fa-solid ${icon}"></i> System: Tool Result</summary>
 <div class="kaiz-system-content" style="font-family: monospace; white-space: pre-wrap; word-break: break-all;">${escapedText}</div>
 </details>`;
+            } else {
+                // Kiểm tra nếu tin nhắn user siêu dài (ví dụ: > 280 ký tự hoặc từ 5 dòng trở lên)
+                const lineCount = (safeText.match(/\n/g) || []).length + 1;
+                const isSuperLong = safeText.length > 280 || lineCount >= 5;
+
+                if (isSuperLong) {
+                    finalHtml = `
+                        <div class="kaiz-user-collapsible is-collapsed">
+                            <div class="kaiz-user-content-text">${escapedText}</div>
+                            <div class="kaiz-user-collapsible-toggle" title="Bấm để mở rộng hoặc thu gọn nội dung">
+                                <span class="kaiz-user-msg-dots">...</span>
+                                <span class="kaiz-user-toggle-btn">
+                                    <span class="kaiz-user-toggle-text">Xem thêm</span>
+                                    <i class="fa-solid fa-chevron-down kaiz-user-toggle-icon"></i>
+                                </span>
+                            </div>
+                        </div>
+                    `;
+                }
             }
 
             if (attachments && attachments.length > 0) {
@@ -674,21 +1928,101 @@ export class ChatWindowUI {
             return finalHtml;
         };
 
+        // Hàm tiện ích đếm token
+        const refreshTokens = async () => {
+            try {
+                const counterSpan = $('#kaiz-chat-token-val');
+                const counterContainer = $('#kaiz-chat-token-counter');
+
+                if (!stateManager.currentChatId || stateManager.currentChatId === -1) {
+                    counterContainer.hide();
+                    return;
+                }
+
+                const msgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                const truncatedMsgs = await loop.applyTokenSafeLimit(msgs);
+                let fullText = '';
+                truncatedMsgs.forEach((m: any) => {
+                    let content = m.content || '';
+                    if (m.role === 'agent' || m.role === 'assistant') {
+                        content = loop.stripCotAndPrefill(content) || '[Đã xử lý suy luận CoT]';
+                    }
+                    fullText += content + ' ';
+                });
+
+                if (!fullText.trim()) {
+                    counterContainer.hide();
+                    return;
+                }
+
+                let count = 0;
+                if (typeof (window as any).getTokenCountAsync === 'function') {
+                    count = await (window as any).getTokenCountAsync(fullText);
+                } else if (typeof (window as any).getTokenCount === 'function') {
+                    count = (window as any).getTokenCount(fullText);
+                } else {
+                    count = Math.ceil(fullText.split(/\s+/).length * 1.3);
+                }
+
+                const ctx = (window as any).SillyTavern.getContext();
+                const settings = ctx.extensionSettings?.kaiz_agent || {};
+                const maxLoops = settings.maxAgentLoops || 5;
+                const baseTokens = await loop.getBaseTokens(maxLoops);
+                count += baseTokens;
+
+                counterSpan.text(count.toLocaleString());
+                counterContainer.css('display', 'inline-block');
+            } catch (e) {
+                console.warn('Kaiz Agent: Failed to refresh tokens', e);
+            }
+        };
+
+        const calcTokenCount = async (text: string): Promise<number> => {
+            if (!text) return 0;
+            let count: number;
+            if (typeof (window as any).getTokenCountAsync === 'function') {
+                count = await (window as any).getTokenCountAsync(text);
+            } else if (typeof (window as any).getTokenCount === 'function') {
+                count = (window as any).getTokenCount(text);
+            } else {
+                count = Math.ceil(text.split(/\s+/).length * 1.3);
+            }
+            return count;
+        };
+
+        const generateMsgMetaHtml = (
+            role: 'user' | 'agent' | 'system',
+            timestamp: number,
+            tokenCount?: number,
+            genTime?: number,
+        ): string => {
+            const timeStr = new Date(timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+            });
+            let html = `<div class="kaiz-msg-meta" style="font-size: 11px; color: #888; margin-bottom: 4px; display: flex; gap: 8px; align-items: center; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; width: 100%;">`;
+            html += `<span title="Time started"><i class="fa-solid fa-clock"></i> ${timeStr}</span>`;
+            if (tokenCount) html += `<span title="Tokens"><i class="fa-solid fa-coins"></i> ${tokenCount}</span>`;
+            if (role === 'agent' && genTime) {
+                html += `<span title="Generation time"><i class="fa-solid fa-bolt"></i> ${(genTime / 1000).toFixed(1)}s</span>`;
+            }
+            html += `</div>`;
+            return html;
+        };
+
         // Lắng nghe StateManager
         stateManager.onChatsListUpdated = (chats) => {
             renderChatList(chats);
         };
 
-        stateManager.onChatRenamed = (id, newName) => {
-            if (id === stateManager.currentChatId) {
-                chatTitle.text(newName);
-            }
+        stateManager.onChatRenamed = (_id, _newName) => {
+            // Do nothing
         };
 
         stateManager.onChatSwitched = (chatId, messages) => {
             history.empty();
             if (messages.length === 0 && chatId === -1) {
-                chatTitle.text('Kaiz Agent');
                 addWelcomeMessage();
             } else if (messages.length === 0) {
                 addWelcomeMessage();
@@ -705,16 +2039,42 @@ export class ChatWindowUI {
 
                 const avatar =
                     msg.role === 'user'
-                        ? '<i class="fa-solid fa-user"></i>'
+                        ? AppIconManager.getInstance().getUserAvatarHtml()
                         : msg.role === 'agent'
-                          ? '<i class="fa-solid fa-yin-yang"></i>'
+                          ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
                 const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
+                const actionsHtml = msg.id
+                    ? `
+                    <div class="kaiz-msg-actions" style="display: flex; gap: 8px; justify-content: ${msg.role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" data-msg-id="${msg.id}" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" data-msg-id="${msg.id}" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" data-msg-id="${msg.id}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                    `
+                    : `
+                    <div class="kaiz-msg-actions" style="display: none; gap: 8px; justify-content: ${msg.role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" style="display:none;" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" style="display:none;" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                    `;
+
+                const metaHtml = generateMsgMetaHtml(
+                    msg.role,
+                    msg.timestamp || Date.now(),
+                    msg.tokenCount,
+                    msg.genTime,
+                );
 
                 htmlBuffer += `
-                    <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
+                    <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${msg.id || ''}">
                         <div class="kaiz-msg-avatar">${avatar}</div>
-                        <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                        <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px); width: 100%;">
+                            ${metaHtml}
+                            <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                            ${actionsHtml}
+                        </div>
                     </div>
                 `;
             }
@@ -722,30 +2082,42 @@ export class ChatWindowUI {
                 history.append(htmlBuffer);
                 history.scrollTop(history[0].scrollHeight);
             }
+            updateContinueBtnVisibility();
+            refreshTokens();
+            requestUpdateMilestones();
+            if (searchBar.is(':visible')) {
+                const q = String(searchInput.val() || '');
+                if (q) performSearch(q);
+            }
         };
 
         const addWelcomeMessage = () => {
             const welcomeHtml = `
-            <div class="kaiz-msg kaiz-msg-agent">
-                <div class="kaiz-msg-avatar"><i class="fa-solid fa-yin-yang"></i></div>
-                <div class="kaiz-msg-content">Xin chào! Tôi là <b>Kaiz Agent</b>. Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
+            <div class="kaiz-msg kaiz-msg-agent kaiz-msg-welcome">
+                <div class="kaiz-msg-avatar">${AppIconManager.getInstance().getAvatarHtml()}</div>
+                <div class="kaiz-msg-content">Xin chào! Hãy ra lệnh cho tôi để thao tác với SillyTavern!</div>
             </div>`;
             history.append(welcomeHtml);
+            updateContinueBtnVisibility();
+            requestUpdateMilestones();
         };
 
-        // Hàm tiện ích thêm tin nhắn DOM (không save DB)
         const addMessageToDOM = (
             role: 'user' | 'agent' | 'system',
             htmlContent: string,
             animate: boolean = true,
+            dbMessageId?: number,
+            timestamp?: number,
+            tokenCount?: number,
+            genTime?: number,
         ): string => {
             let avatar: string;
             let extraClass: string;
             if (role === 'user') {
-                avatar = '<i class="fa-solid fa-user"></i>';
+                avatar = AppIconManager.getInstance().getUserAvatarHtml();
                 extraClass = 'kaiz-msg-user';
             } else if (role === 'agent') {
-                avatar = '<i class="fa-solid fa-yin-yang"></i>';
+                avatar = AppIconManager.getInstance().getAvatarHtml();
                 extraClass = 'kaiz-msg-agent';
             } else {
                 avatar = '<i class="fa-solid fa-gear"></i>';
@@ -753,46 +2125,267 @@ export class ChatWindowUI {
             }
 
             const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
+            const actionsHtml = dbMessageId
+                ? `
+                <div class="kaiz-msg-actions" style="display: flex; gap: 8px; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" data-msg-id="${dbMessageId}" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" data-msg-id="${dbMessageId}" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" data-msg-id="${dbMessageId}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                `
+                : `
+                <div class="kaiz-msg-actions" style="display: none; gap: 8px; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" style="display:none;" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" style="display:none;" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                `;
+
+            const metaHtml = generateMsgMetaHtml(role, timestamp || Date.now(), tokenCount, genTime);
+
             history.append(`
-                <div class="kaiz-msg ${extraClass}" id="container-${msgId}">
+                <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${dbMessageId || ''}">
                     <div class="kaiz-msg-avatar">${avatar}</div>
-                    <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
+                    <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px); width: 100%;">
+                        ${metaHtml}
+                        <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
+                        ${actionsHtml}
+                    </div>
                 </div>
             `);
             if (animate) {
                 history.scrollTop(history[0].scrollHeight);
             }
+            updateContinueBtnVisibility();
+            requestUpdateMilestones();
+            if (searchBar.is(':visible')) {
+                const q = String(searchInput.val() || '');
+                if (q) performSearch(q);
+            }
             return msgId;
         };
 
-        // Xử lý gửi tin nhắn UI
-        const sendMessage = async () => {
-            if (sendBtn.prop('disabled')) return;
-            const text = String(input.val()).trim();
-            const attachmentsToSend = [...ChatWindowUI.currentAttachments];
+        // Lắng nghe sự kiện xóa tin nhắn
+        history.on('click', '.kaiz-msg-delete-btn', async function (this: HTMLElement, e: any) {
+            e.stopPropagation();
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng chờ Agent hoàn thành trước khi xóa.', 'Agent');
+                return;
+            }
+            const btn = $(this);
+            const container = btn.closest('.kaiz-msg');
+            const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+            const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
 
-            if (!text && attachmentsToSend.length === 0) return;
-
-            sendBtn.prop('disabled', true);
-            input.val('');
-            ChatWindowUI.currentAttachments = [];
-            renderAttachmentsPreview();
-
-            // Lưu vào DB trước
-            await stateManager.addMessage('user', text, attachmentsToSend);
-            // In ra UI
-            const formattedUI = formatUserMessage(text, attachmentsToSend);
-            addMessageToDOM('user', formattedUI);
-
-            // Nếu là tin nhắn đầu tiên của đoạn chat mới, cập nhật Title
-            if (chatTitle.text() === 'New Chat') {
-                const titleText = text || 'File đính kèm';
-                chatTitle.text(titleText.substring(0, 30) + (titleText.length > 30 ? '...' : ''));
+            if (msgId && !isNaN(msgId)) {
+                try {
+                    await stateManager.deleteMessage(msgId);
+                } catch (err) {
+                    console.error('[KaizAgent] Failed to delete message from DB:', err);
+                }
             }
 
+            container.fadeOut(200, function () {
+                container.remove();
+                refreshTokens();
+                updateContinueBtnVisibility();
+                if (history.children('.kaiz-msg').length === 0) {
+                    addWelcomeMessage();
+                }
+                requestUpdateMilestones();
+                if (searchBar.is(':visible')) {
+                    const q = String(searchInput.val() || '');
+                    if (q) performSearch(q);
+                }
+            });
+
+            toastr.info('Đã xóa tin nhắn', 'Agent');
+        });
+
+        // Lắng nghe sự kiện sao chép tin nhắn
+        history.on('click', '.kaiz-msg-copy-btn', async function (this: HTMLElement, e: any) {
+            e.stopPropagation();
+            const btn = $(this);
+            const container = btn.closest('.kaiz-msg');
+            const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+            const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
+
+            if (msgId && !isNaN(msgId) && stateManager.currentChatId !== null) {
+                try {
+                    const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                    const msg = historyMsgs.find((m) => m.id === msgId);
+                    if (msg) {
+                        try {
+                            if (navigator.clipboard && navigator.clipboard.writeText) {
+                                await navigator.clipboard.writeText(msg.content);
+                            } else {
+                                const textArea = document.createElement('textarea');
+                                textArea.value = msg.content;
+                                textArea.style.position = 'fixed';
+                                textArea.style.opacity = '0';
+                                document.body.appendChild(textArea);
+                                textArea.focus();
+                                textArea.select();
+                                document.execCommand('copy');
+                                document.body.removeChild(textArea);
+                            }
+                            toastr.success('Đã sao chép vào khay nhớ tạm', 'Agent');
+                        } catch (copyErr) {
+                            console.error('[KaizAgent] Failed to copy message:', copyErr);
+                            toastr.error('Không thể sao chép vào khay nhớ tạm', 'Agent');
+                        }
+                    }
+                } catch (err) {
+                    console.error('[KaizAgent] Failed to fetch message for copy:', err);
+                }
+            }
+        });
+
+        // Lắng nghe sự kiện chỉnh sửa tin nhắn
+        history.on('click', '.kaiz-msg-edit-btn', async function (this: HTMLElement, e: any) {
+            e.stopPropagation();
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng chờ Agent hoàn thành trước khi chỉnh sửa.', 'Agent');
+                return;
+            }
+            const btn = $(this);
+            const container = btn.closest('.kaiz-msg');
+            const contentBox = container.find('.kaiz-msg-content');
+            const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+            const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
+            const isUser = container.hasClass('kaiz-msg-user');
+
+            if (msgId && !isNaN(msgId) && stateManager.currentChatId !== null && !contentBox.hasClass('kaiz-editing')) {
+                try {
+                    const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                    const msg = historyMsgs.find((m) => m.id === msgId);
+                    if (msg) {
+                        container.addClass('kaiz-msg-is-editing');
+                        contentBox.addClass('kaiz-editing');
+                        const originalHtml = contentBox.html();
+                        const rawContent = msg.content;
+
+                        const editHtml = `
+                            <div class="kaiz-edit-box">
+                                <textarea class="kaiz-edit-textarea" placeholder="Nhập nội dung tin nhắn...">${escapeHtml(rawContent)}</textarea>
+                                <div class="kaiz-edit-actions">
+                                    <button type="button" class="kaiz-edit-btn kaiz-edit-cancel-btn"><i class="fa-solid fa-xmark"></i> Hủy</button>
+                                    <button type="button" class="kaiz-edit-btn kaiz-edit-save-btn"><i class="fa-solid fa-check"></i> Lưu</button>
+                                </div>
+                            </div>
+                        `;
+                        contentBox.html(editHtml);
+
+                        const actionsBox = container.find('.kaiz-msg-actions');
+                        actionsBox.hide(); // Hide actions while editing
+
+                        const cancelBtn = contentBox.find('.kaiz-edit-cancel-btn');
+                        const saveBtn = contentBox.find('.kaiz-edit-save-btn');
+                        const textarea = contentBox.find('.kaiz-edit-textarea');
+                        const textareaEl = textarea[0] as HTMLTextAreaElement;
+
+                        if (textareaEl) {
+                            // Tự động căn chỉnh chiều cao khớp với nội dung
+                            const adjustHeight = () => {
+                                textareaEl.style.height = 'auto';
+                                textareaEl.style.height =
+                                    Math.min(Math.max(textareaEl.scrollHeight + 4, 100), 450) + 'px';
+                            };
+                            adjustHeight();
+                            textarea.on('input', adjustHeight);
+                            textarea.focus();
+                            // Đặt con trỏ ở cuối văn bản
+                            textareaEl.setSelectionRange(textareaEl.value.length, textareaEl.value.length);
+                        }
+
+                        cancelBtn.on('click', () => {
+                            container.removeClass('kaiz-msg-is-editing');
+                            contentBox.removeClass('kaiz-editing');
+                            contentBox.html(originalHtml);
+                            actionsBox.css('display', 'flex'); // Show actions again
+                        });
+
+                        saveBtn.on('click', async () => {
+                            const newText = String(textarea.val()).trim();
+                            if (!newText) {
+                                toastr.warning('Nội dung không được để trống', 'Agent');
+                                return;
+                            }
+
+                            // update DB
+                            await stateManager.updateMessage(msgId, newText);
+
+                            // update DOM
+                            container.removeClass('kaiz-msg-is-editing');
+                            contentBox.removeClass('kaiz-editing');
+                            const formatted = isUser
+                                ? formatUserMessage(newText, msg.attachments)
+                                : formatMessage(newText, true);
+                            contentBox.html(formatted);
+                            if (!isUser) {
+                                renderMermaid();
+                            }
+
+                            const tokenCount = await calcTokenCount(newText);
+                            const newMetaHtml = generateMsgMetaHtml(
+                                isUser ? 'user' : 'agent',
+                                msg.timestamp || Date.now(),
+                                tokenCount,
+                                msg.genTime,
+                            );
+                            container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
+
+                            actionsBox.css('display', 'flex'); // Show actions again
+                            refreshTokens();
+
+                            toastr.success('Đã lưu thay đổi', 'Agent');
+                        });
+                    }
+                } catch (err) {
+                    console.error('[KaizAgent] Failed to edit message:', err);
+                }
+            }
+        });
+
+        // Lắng nghe sự kiện mở rộng / thu gọn tin nhắn User siêu dài
+        history.on('click', '.kaiz-user-collapsible', function (this: HTMLElement, e: any) {
+            const $target = $(e.target);
+            const collapsible = $(this);
+            const isCollapsed = collapsible.hasClass('is-collapsed');
+            const isToggleBar = $target.closest('.kaiz-user-collapsible-toggle').length > 0;
+
+            // Nếu đang mở rộng (expanded): CHỈ thu gọn khi click vào thanh toggle / nút "Thu gọn",
+            // tránh việc người dùng click vào nội dung để đọc hoặc bôi đen copy mà bị đóng đột ngột.
+            if (!isCollapsed && !isToggleBar) {
+                return;
+            }
+
+            // Nếu người dùng vừa bôi đen chọn chữ thì không toggle
+            const selection = window.getSelection()?.toString();
+            if (selection && selection.length > 0) return;
+
+            e.stopPropagation();
+
+            if (isCollapsed) {
+                collapsible.removeClass('is-collapsed').addClass('is-expanded');
+                collapsible.find('.kaiz-user-toggle-text').text('Thu gọn');
+                collapsible.find('.kaiz-user-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+                collapsible.find('.kaiz-user-msg-dots').hide();
+            } else {
+                collapsible.removeClass('is-expanded').addClass('is-collapsed');
+                collapsible.find('.kaiz-user-toggle-text').text('Xem thêm');
+                collapsible.find('.kaiz-user-toggle-icon').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+                collapsible.find('.kaiz-user-msg-dots').show();
+            }
+
+            requestUpdateMilestones();
+        });
+
+        const startAgent = async (continueMode: boolean = false) => {
             sendBtn.find('i').removeClass('fa-paper-plane').addClass('fa-stop');
             sendBtn.prop('disabled', false); // Bật lại ngay để cho phép click Stop
             sendBtn.addClass('kaiz-stop-mode');
+            updateContinueBtnVisibility();
 
             const ctx = (window as any).SillyTavern.getContext();
             const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
@@ -806,6 +2399,7 @@ export class ChatWindowUI {
             let agentMsgId = '';
             let agentContentBox: any = null;
             let currentStepResponse = '';
+            let agentStartTime = Date.now();
 
             let streamUpdatePending = false;
             let lastStreamEvent: any = null;
@@ -816,9 +2410,15 @@ export class ChatWindowUI {
                     return;
                 }
                 const event = lastStreamEvent;
-                let htmlToRender = event.text ? formatMessage(event.text, false) : '';
+                // event.text already includes the old text from loop.ts if continueMode && step === 1
+                const fullText = event.text || '';
+                let htmlToRender = fullText ? formatMessage(fullText, false) : '';
                 if (event.reasoning && !event.text) {
-                    htmlToRender += `<div style="color:#aaa; font-style:italic; font-size:12px; margin-bottom:5px;"><i class="fa-solid fa-brain"></i> Thinking...</div>`;
+                    const ctx = (window as any).SillyTavern?.getContext?.();
+                    const cotMode = ctx?.extensionSettings?.kaiz_agent?.cotDisplayMode || 'collapse_streaming';
+                    const shouldOpen = cotMode === 'auto_collapse' || cotMode === 'always_expanded';
+                    const escapedReasoning = event.reasoning.replace(/</g, '&lt;').replace(/>/g, '&gt;').trim();
+                    htmlToRender += `<details class="kaiz-cot-block"${shouldOpen ? ' open' : ''}><summary class="kaiz-cot-summary"><i class="fa-solid fa-brain"></i> Thinking...</summary><div class="kaiz-cot-content">${escapedReasoning}</div></details>`;
                 }
                 if (!htmlToRender) {
                     htmlToRender = `<div class="kaiz-spinner" style="font-size:12px;"><i class="fa-solid fa-circle-notch"></i> Generating...</div>`;
@@ -832,50 +2432,101 @@ export class ChatWindowUI {
                 });
             };
 
-            await loop.run(historyMsgs, maxLoops, async (event) => {
-                const btnIcon = $('#kaiz-floating-btn i');
-                const btnFloat = $('#kaiz-floating-btn');
-
-                if (event.type === 'step_start') {
-                    btnIcon.addClass('kaiz-icon-spin');
-                    btnFloat.removeClass('kaiz-btn-blink');
-                    agentMsgId = addMessageToDOM(
-                        'agent',
-                        '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>',
+            await loop.run(
+                historyMsgs,
+                maxLoops,
+                async (event) => {
+                    const btnIcon = $(
+                        '#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img',
                     );
-                    agentContentBox = $(`#${agentMsgId}`);
-                    currentStepResponse = '';
-                } else if (event.type === 'stream_chunk') {
-                    if (!agentContentBox) return;
-                    lastStreamEvent = event;
-                    if (!streamUpdatePending) {
-                        streamUpdatePending = true;
-                        requestAnimationFrame(flushStreamUpdate);
-                    }
-                } else if (event.type === 'step_end') {
-                    lastStreamEvent = null;
-                    streamUpdatePending = false;
-                    if (!agentContentBox) return;
-                    agentContentBox.html(formatMessage(event.text || '', true));
-                    // Gọi render biểu đồ Mermaid
-                    renderMermaid();
+                    const btnFloat = $('#kaiz-floating-btn');
 
-                    currentStepResponse = event.text || '';
-                    await stateManager.addMessage('agent', currentStepResponse);
-                    agentContentBox = null;
-                } else if (event.type === 'tool_result') {
-                    const formatted = formatUserMessage(event.text || '');
-                    addMessageToDOM('user', formatted);
-                    await stateManager.addMessage('user', event.text || '');
-                } else if (event.type === 'tool_confirm') {
-                    btnIcon.removeClass('kaiz-icon-spin');
-                    btnFloat.addClass('kaiz-btn-blink');
+                    if (event.type === 'step_start') {
+                        btnIcon.addClass('kaiz-icon-spin');
+                        btnFloat.removeClass('kaiz-btn-blink');
+                        agentStartTime = Date.now();
+                        if (event.data?.isContinue) {
+                            const agentMsgs = history.find('.kaiz-msg-agent .kaiz-msg-content');
+                            agentContentBox = agentMsgs.last();
+                            currentStepResponse =
+                                historyMsgs.length > 0 ? historyMsgs[historyMsgs.length - 1].content : '';
+                        } else {
+                            agentMsgId = addMessageToDOM(
+                                'agent',
+                                '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>',
+                                true,
+                                undefined,
+                                agentStartTime,
+                            );
+                            agentContentBox = $(`#${agentMsgId}`);
+                            currentStepResponse = '';
+                        }
+                    } else if (event.type === 'stream_chunk') {
+                        if (!agentContentBox) return;
+                        lastStreamEvent = event;
+                        if (!streamUpdatePending) {
+                            streamUpdatePending = true;
+                            requestAnimationFrame(flushStreamUpdate);
+                        }
+                    } else if (event.type === 'step_end') {
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
+                        if (!agentContentBox) return;
+                        agentContentBox.html(formatMessage(event.text || '', true));
+                        // Gọi render biểu đồ Mermaid
+                        renderMermaid();
 
-                    const call = event.data.call;
-                    const resolveFn = event.data.resolve;
+                        currentStepResponse = event.text || '';
 
-                    const confirmId = Date.now() + Math.floor(Math.random() * 1000);
-                    const html = `
+                        const genTime = Date.now() - agentStartTime;
+                        const tokenCount = await calcTokenCount(currentStepResponse);
+
+                        if (event.data?.isContinue) {
+                            const lastMsg = historyMsgs[historyMsgs.length - 1];
+                            if (lastMsg && lastMsg.id) {
+                                await stateManager.updateMessage(lastMsg.id, currentStepResponse);
+                            }
+                        } else {
+                            const newAgentMsgId = await stateManager.addMessage(
+                                'agent',
+                                currentStepResponse,
+                                undefined,
+                                tokenCount,
+                                genTime,
+                            );
+                            if (agentMsgId) {
+                                const container = $(`#container-${agentMsgId}`);
+                                container.attr('data-msg-id', newAgentMsgId);
+                                container.find('.kaiz-msg-action-btn').attr('data-msg-id', newAgentMsgId).show();
+                                container.find('.kaiz-msg-actions').css('display', 'flex');
+
+                                const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, tokenCount, genTime);
+                                container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
+                            }
+                        }
+                        refreshTokens();
+                        agentContentBox = null;
+                        requestUpdateMilestones();
+                    } else if (event.type === 'tool_result') {
+                        const tokenCount = await calcTokenCount(event.text || '');
+                        const toolMsgId = await stateManager.addMessage(
+                            'user',
+                            event.text || '',
+                            undefined,
+                            tokenCount,
+                        );
+                        const formatted = formatUserMessage(event.text || '');
+                        addMessageToDOM('user', formatted, true, toolMsgId, Date.now(), tokenCount);
+                        refreshTokens();
+                    } else if (event.type === 'tool_confirm') {
+                        btnIcon.removeClass('kaiz-icon-spin');
+                        btnFloat.addClass('kaiz-btn-blink');
+
+                        const call = event.data.call;
+                        const resolveFn = event.data.resolve;
+
+                        const confirmId = Date.now() + Math.floor(Math.random() * 1000);
+                        const html = `
                         <div class="kaiz-safe-mode-pending" style="border-left: 3px solid #f39c12; padding: 10px; background: rgba(243,156,18,0.1); border-radius: 5px;">
                             <div style="color: #f39c12; font-weight: bold; margin-bottom: 5px;"><i class="fa-solid fa-triangle-exclamation"></i> Safe Mode Warning</div>
                             <div style="font-size: 13px;">Agent muốn tự động chạy công cụ: <b style="color:#fff;">${escapeHtml(call.name)}</b> nhưng công cụ này nằm trong Blacklist. Bạn có cho phép không?</div>
@@ -886,65 +2537,91 @@ export class ChatWindowUI {
                         </div>
                     `;
 
-                    const domId = addMessageToDOM('agent', html);
+                        const domId = addMessageToDOM('agent', html);
 
-                    $(`#kaiz-allow-${confirmId}`).on('click', () => {
-                        if (!loop.isRunning) return;
-                        $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                        $(`#${domId}`).html(
-                            `<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml(call.name)}</div>`,
-                        );
-                        btnIcon.addClass('kaiz-icon-spin');
-                        btnFloat.removeClass('kaiz-btn-blink');
-                        resolveFn(true);
-                    });
+                        $(`#kaiz-allow-${confirmId}`).on('click', () => {
+                            if (!loop.isRunning) return;
+                            $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
+                            $(`#${domId}`).html(
+                                `<div style="color: #2ecc71; font-style: italic;"><i class="fa-solid fa-check"></i> Đã cho phép chạy công cụ: ${escapeHtml(call.name)}</div>`,
+                            );
+                            btnIcon.addClass('kaiz-icon-spin');
+                            btnFloat.removeClass('kaiz-btn-blink');
+                            resolveFn(true);
+                        });
 
-                    $(`#kaiz-deny-${confirmId}`).on('click', () => {
-                        if (!loop.isRunning) return;
-                        $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
-                        $(`#${domId}`).html(
-                            `<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml(call.name)}</div>`,
-                        );
-                        btnIcon.removeClass('kaiz-icon-spin');
-                        btnFloat.removeClass('kaiz-btn-blink');
-                        resolveFn(false);
-                    });
-                } else if (event.type === 'retry') {
-                    lastStreamEvent = null;
-                    streamUpdatePending = false;
-                    if (agentContentBox) {
-                        agentContentBox.html(
-                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
-                        );
-                    } else {
-                        agentMsgId = addMessageToDOM(
+                        $(`#kaiz-deny-${confirmId}`).on('click', () => {
+                            if (!loop.isRunning) return;
+                            $(`#${domId}`).find('.kaiz-safe-mode-pending').removeClass('kaiz-safe-mode-pending');
+                            $(`#${domId}`).html(
+                                `<div style="color: #e74c3c; font-style: italic;"><i class="fa-solid fa-xmark"></i> Đã từ chối công cụ: ${escapeHtml(call.name)}</div>`,
+                            );
+                            btnIcon.removeClass('kaiz-icon-spin');
+                            btnFloat.removeClass('kaiz-btn-blink');
+                            resolveFn(false);
+                        });
+                    } else if (event.type === 'retry') {
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
+                        if (agentContentBox) {
+                            agentContentBox.append(
+                                `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic; margin-top: 10px;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                        } else {
+                            agentMsgId = addMessageToDOM(
+                                'agent',
+                                `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                            agentContentBox = $(`#${agentMsgId}`);
+                        }
+                    } else if (event.type === 'error') {
+                        lastStreamEvent = null;
+                        streamUpdatePending = false;
+
+                        let errDomId: string | null = null;
+                        if (agentContentBox) {
+                            agentContentBox.append(
+                                `<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                            agentContentBox = null;
+                        } else {
+                            errDomId = addMessageToDOM(
+                                'agent',
+                                `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
+                            );
+                        }
+                        const genTime = Date.now() - agentStartTime;
+                        const errMsgId = await stateManager.addMessage(
                             'agent',
-                            `<div class="kaiz-spinner" style="color: #f39c12; font-style: italic;"><i class="fa-solid fa-circle-notch fa-spin"></i> ${escapeHtml(event.text || '')}</div>`,
+                            `[Error] ${event.text}`,
+                            undefined,
+                            0,
+                            genTime,
                         );
-                        agentContentBox = $(`#${agentMsgId}`);
-                    }
-                } else if (event.type === 'error') {
-                    // Ng\u1eaft stream render ngay l\u1eadp t\u1ee9c \u0111\u1ec3 kh\u00f4ng b\u1ecb \u0111\u00e8 l\u00ean th\u00f4ng b\u00e1o l\u1ed7i
-                    lastStreamEvent = null;
-                    streamUpdatePending = false;
+                        if (errDomId) {
+                            const container = $(`#container-${errDomId}`);
+                            container.attr('data-msg-id', errMsgId);
+                            container.find('.kaiz-msg-action-btn').attr('data-msg-id', errMsgId).show();
+                            container.find('.kaiz-msg-actions').css('display', 'flex');
 
-                    if (agentContentBox) {
-                        agentContentBox.append(
-                            `<div style="margin-top: 10px; color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
-                        );
-                        agentContentBox = null; // Ng\u0103n b\u1ea5t k\u1ef3 callback n\u00e0o c\u00f2n s\u00f3t ghi \u0111\u00e8
-                    } else {
-                        addMessageToDOM(
-                            'agent',
-                            `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
-                        );
+                            const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
+                            container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
+                        } else if (agentMsgId) {
+                            const container = $(`#container-${agentMsgId}`);
+                            container.attr('data-msg-id', errMsgId);
+                            container.find('.kaiz-msg-action-btn').attr('data-msg-id', errMsgId).show();
+                            container.find('.kaiz-msg-actions').css('display', 'flex');
+
+                            const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
+                            container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
+                        }
+                    } else if (event.type === 'debug') {
+                        ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
+                        ChatWindowUI.lastLogRecv = event.data.responseText;
                     }
-                    await stateManager.addMessage('agent', `[Error] ${event.text}`);
-                } else if (event.type === 'debug') {
-                    lastLogSent = JSON.stringify(event.data.messages, null, 2);
-                    lastLogRecv = event.data.responseText;
-                }
-            });
+                },
+                continueMode,
+            );
 
             // Dọn dẹp tất cả các hộp thoại safe mode bị treo (do abort hoặc lỗi)
             $('.kaiz-safe-mode-pending').each(function (this: any) {
@@ -954,7 +2631,9 @@ export class ChatWindowUI {
                 $(this).removeClass('kaiz-safe-mode-pending');
             });
 
-            $('#kaiz-floating-btn i').removeClass('kaiz-icon-spin');
+            $('#kaiz-floating-btn .kaiz-app-icon, #kaiz-floating-btn i, #kaiz-floating-btn img').removeClass(
+                'kaiz-icon-spin',
+            );
             $('#kaiz-floating-btn').removeClass('kaiz-btn-blink');
 
             if (!sendBtn.hasClass('kaiz-force-aborted')) {
@@ -963,7 +2642,205 @@ export class ChatWindowUI {
             sendBtn.removeClass('kaiz-stop-mode');
             sendBtn.prop('disabled', false);
             input.focus();
+            updateContinueBtnVisibility();
+            requestUpdateMilestones();
         };
+
+        // --- XỬ LÝ KÉO THẢ CO GIÃN CHIỀU CAO THANH INPUT ---
+        const inputResizer = $('#kaiz-input-resizer');
+        const chatBodyWrapper = $('#kaiz-chat-body-wrapper');
+        const DEFAULT_INPUT_HEIGHT = 44;
+        const savedInputHeight = localStorage.getItem('kaiz_chat_input_height');
+        if (savedInputHeight) {
+            const h = parseInt(savedInputHeight, 10);
+            if (!isNaN(h) && h >= DEFAULT_INPUT_HEIGHT) {
+                input.css({ height: `${h}px`, maxHeight: 'none' });
+            }
+        }
+
+        let isResizingInput = false;
+        let startY = 0;
+        let startHeight = 0;
+
+        const onResizeMove = (clientY: number) => {
+            if (!isResizingInput) return;
+            const deltaY = startY - clientY; // Kéo lên trên -> tăng chiều cao
+            let newHeight = startHeight + deltaY;
+            const minHeight = DEFAULT_INPUT_HEIGHT;
+            const maxHeight = Math.max(200, (chatBodyWrapper.height() || 500) * 0.7);
+
+            if (newHeight < minHeight) newHeight = minHeight;
+            if (newHeight > maxHeight) newHeight = maxHeight;
+
+            input.css({ height: `${newHeight}px`, maxHeight: 'none' });
+        };
+
+        const onResizeEnd = () => {
+            if (!isResizingInput) return;
+            isResizingInput = false;
+            inputResizer.removeClass('resizing');
+            $(document).off('.kaizInputResize');
+            const currentH = input.height();
+            if (currentH && currentH >= DEFAULT_INPUT_HEIGHT) {
+                localStorage.setItem('kaiz_chat_input_height', Math.round(currentH).toString());
+            }
+            requestUpdateMilestones();
+        };
+
+        inputResizer.on('mousedown', (e: any) => {
+            if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) return;
+            e.preventDefault();
+            isResizingInput = true;
+            startY = e.clientY;
+            startHeight = input.height() || DEFAULT_INPUT_HEIGHT;
+            inputResizer.addClass('resizing');
+
+            $(document).on('mousemove.kaizInputResize', (moveEvent: any) => {
+                onResizeMove(moveEvent.clientY);
+            });
+            $(document).on('mouseup.kaizInputResize', () => {
+                onResizeEnd();
+            });
+        });
+
+        inputResizer.on('touchstart', (e: any) => {
+            if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) return;
+            if (e.originalEvent && e.originalEvent.touches && e.originalEvent.touches.length > 0) {
+                isResizingInput = true;
+                startY = e.originalEvent.touches[0].clientY;
+                startHeight = input.height() || DEFAULT_INPUT_HEIGHT;
+                inputResizer.addClass('resizing');
+
+                $(document).on('touchmove.kaizInputResize', (moveEvent: any) => {
+                    if (moveEvent.originalEvent && moveEvent.originalEvent.touches) {
+                        onResizeMove(moveEvent.originalEvent.touches[0].clientY);
+                    }
+                });
+                $(document).on('touchend.kaizInputResize touchcancel.kaizInputResize', () => {
+                    onResizeEnd();
+                });
+            }
+        });
+
+        // Nhấp đúp vào thanh resizer để reset chiều cao về mặc định
+        inputResizer.on('dblclick', () => {
+            if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) return;
+            localStorage.removeItem('kaiz_chat_input_height');
+            input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
+            toastr.info('Đã khôi phục kích thước khung input về mặc định', 'Agent');
+        });
+
+        // --- XỬ LÝ CHẾ ĐỘ MỞ FULL THANH INPUT (FULLSCREEN) ---
+        const fullscreenBtn = $('#kaiz-input-fullscreen-btn');
+        const exitFullscreenBtn = $('#kaiz-input-exit-fullscreen-btn');
+        const fullscreenHeader = $('#kaiz-input-fullscreen-header');
+        const charCounter = $('#kaiz-input-char-counter');
+
+        let preFullscreenHeight: string | null = null;
+
+        const updateCharCount = () => {
+            const val = String(input.val() || '');
+            charCounter.text(`${val.length.toLocaleString()} ký tự`);
+        };
+
+        const enterFullscreen = () => {
+            preFullscreenHeight = input[0]?.style.height || '';
+            chatBodyWrapper.addClass('kaiz-input-fullscreen');
+            fullscreenHeader.show();
+            fullscreenBtn.find('i').removeClass('fa-expand').addClass('fa-compress');
+            fullscreenBtn.attr('title', 'Thu nhỏ (Thoát Fullscreen)');
+            updateCharCount();
+            input.focus();
+        };
+
+        const exitFullscreen = () => {
+            chatBodyWrapper.removeClass('kaiz-input-fullscreen');
+            fullscreenHeader.hide();
+            fullscreenBtn.find('i').removeClass('fa-compress').addClass('fa-expand');
+            fullscreenBtn.attr('title', 'Phóng to khung soạn thảo (Fullscreen)');
+
+            if (preFullscreenHeight !== null) {
+                if (preFullscreenHeight) {
+                    input.css({ height: preFullscreenHeight, maxHeight: 'none' });
+                } else {
+                    input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
+                }
+            } else {
+                const savedH = localStorage.getItem('kaiz_chat_input_height');
+                if (savedH) {
+                    const h = parseInt(savedH, 10);
+                    if (!isNaN(h) && h >= DEFAULT_INPUT_HEIGHT) {
+                        input.css({ height: `${h}px`, maxHeight: 'none' });
+                    } else {
+                        input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
+                    }
+                } else {
+                    input.css({ height: `${DEFAULT_INPUT_HEIGHT}px`, maxHeight: '140px' });
+                }
+            }
+            preFullscreenHeight = null;
+            input.focus();
+        };
+
+        fullscreenBtn.on('click', () => {
+            if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                exitFullscreen();
+            } else {
+                enterFullscreen();
+            }
+        });
+
+        exitFullscreenBtn.on('click', () => {
+            exitFullscreen();
+        });
+
+        input.on('input', () => {
+            if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                updateCharCount();
+            }
+        });
+
+        // Xử lý gửi tin nhắn UI
+        const sendMessage = async () => {
+            if (sendBtn.prop('disabled')) return;
+            const text = String(input.val()).trim();
+            const attachmentsToSend = [...ChatWindowUI.currentAttachments];
+
+            if (!text && attachmentsToSend.length === 0) return;
+
+            if (chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                exitFullscreen();
+            }
+
+            sendBtn.prop('disabled', true);
+            input.val('');
+            ChatWindowUI.currentAttachments = [];
+            renderAttachmentsPreview();
+
+            // Lưu vào DB trước
+            const tokenCount = await calcTokenCount(text);
+            const userMsgId = await stateManager.addMessage('user', text, attachmentsToSend, tokenCount);
+            refreshTokens();
+            // In ra UI
+            const formattedUI = formatUserMessage(text, attachmentsToSend);
+            addMessageToDOM('user', formattedUI, true, userMsgId, Date.now(), tokenCount);
+
+            // Title updates are removed
+
+            startAgent(false);
+        };
+
+        continueBtn.on('click', async () => {
+            if (loop.isRunning) return;
+            const historyMsgs = stateManager.currentChatId
+                ? await stateManager.db.getMessages(stateManager.currentChatId)
+                : [];
+            if (historyMsgs.length === 0 || historyMsgs[historyMsgs.length - 1].role !== 'agent') {
+                toastr.warning('Tin nhắn cuối cùng không phải của Agent!', 'Agent');
+                return;
+            }
+            startAgent(true);
+        });
 
         let forceAbortTimer: any = null;
 
@@ -1005,7 +2882,19 @@ export class ChatWindowUI {
             sendMessage();
         });
         input.on('keydown', (e: any) => {
+            if (e.key === 'Escape' && chatBodyWrapper.hasClass('kaiz-input-fullscreen')) {
+                e.preventDefault();
+                exitFullscreen();
+                return;
+            }
             if (e.key === 'Enter' && !e.shiftKey) {
+                // Trong phone mode hoặc fullscreen, Enter dùng để xuống dòng
+                if (
+                    $('#kaiz-chat-window').hasClass('kaiz-phone-mode') ||
+                    chatBodyWrapper.hasClass('kaiz-input-fullscreen')
+                ) {
+                    return;
+                }
                 e.preventDefault();
                 sendMessage();
             }

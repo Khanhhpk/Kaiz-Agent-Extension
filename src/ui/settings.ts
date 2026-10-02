@@ -3,6 +3,18 @@ declare const SillyTavern: any;
 declare const toastr: any;
 
 import { ToolRegistry } from '../core/tool_registry';
+import { BrowserWindowUI } from './browser_window';
+import { WebImageBridge } from '../core/web_image_bridge';
+import { MascotManager } from '../core/mascot_manager';
+import { AppIconManager, APP_ICON_PRESETS, AVATAR_BG_PRESETS, AppIconType } from '../core/app_icon_manager';
+import { AvatarCropperModal } from './avatar_cropper';
+import {
+    DEFAULT_CORE_IDENTITY,
+    DEFAULT_CORE_BEHAVIOR,
+    DEFAULT_CORE_PREFILL,
+    DEFAULT_CORE_COT_PROMPT,
+    DEFAULT_VIEW_SYSTEM_PROMPT,
+} from '../core/defaults';
 
 const escapeHtml = (s: string): string =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -25,7 +37,7 @@ export class SettingsUI {
                 }
             } catch (e) {
                 console.error('[KaizAgent] Failed to load settings template via renderExtensionTemplateAsync:', e);
-                toastr.error('Kaiz Agent: Failed to load UI settings.');
+                toastr.error('Agent: Failed to load UI settings.');
                 return;
             }
         } else {
@@ -35,34 +47,89 @@ export class SettingsUI {
 
         const settings = ctx.extensionSettings[EXT_NAME];
 
-        // Gán giá trị mặc định lên UI
-        $('#kaiz-use-custom-endpoint').prop('checked', settings.useCustomEndpoint);
-        $('#kaiz-custom-url').val(settings.customUrl);
-        $('#kaiz-custom-key').val(settings.customKey);
-        $('#kaiz-custom-model-text').val(settings.customModel);
-
-        if (settings.useCustomEndpoint) {
-            $('#kaiz-custom-endpoint-group').show();
-        }
-
-        // Lắng nghe sự kiện đổi Checkbox
-        $('#kaiz-use-custom-endpoint').on('change', function (this: HTMLInputElement) {
-            settings.useCustomEndpoint = !!this.checked;
-            ctx.saveSettingsDebounced();
-            if (settings.useCustomEndpoint) {
-                $('#kaiz-custom-endpoint-group').slideDown();
-            } else {
-                $('#kaiz-custom-endpoint-group').slideUp();
+        // --- TAB SWITCHING CONTROLLER ---
+        const savedTab = localStorage.getItem('kaiz_active_settings_tab') || 'model';
+        const switchTab = (tabName: string) => {
+            $('.kaiz-tab-btn').removeClass('active');
+            $(`.kaiz-tab-btn[data-tab="${tabName}"]`).addClass('active');
+            $('.kaiz-tab-pane').removeClass('active');
+            $(`#kaiz-pane-${tabName}`).addClass('active');
+            localStorage.setItem('kaiz_active_settings_tab', tabName);
+            if ((window as any).lucide) {
+                (window as any).lucide.createIcons();
             }
+        };
+
+        $('.kaiz-tab-btn').on('click', function (this: HTMLElement) {
+            const tab = $(this).data('tab');
+            if (tab) switchTab(tab);
         });
 
+        switchTab(savedTab);
+
+        // Gán giá trị mặc định lên UI
+        $('#kaiz-custom-url').val(settings.customUrl || '');
+        $('#kaiz-custom-key').val(settings.customKey || '');
+        $('#kaiz-custom-model-text').val(settings.customModel || '');
+        $('#kaiz-max-tokens').val(settings.maxTokens ?? 65000);
+        $('#kaiz-temperature').val(settings.temperature ?? 1);
+        $('#kaiz-top-p').val(settings.topP ?? 0.95);
+        $('#kaiz-top-k').val(settings.topK ?? 64);
+
         // Lắng nghe thay đổi input và lưu tự động
-        $('#kaiz-custom-url, #kaiz-custom-key, #kaiz-custom-model-text').on('input', function (this: HTMLInputElement) {
+        $(
+            '#kaiz-custom-url, #kaiz-custom-key, #kaiz-custom-model-text, #kaiz-max-tokens, #kaiz-temperature, #kaiz-top-p, #kaiz-top-k',
+        ).on('input', function (this: HTMLInputElement) {
             const id = this.id;
             if (id === 'kaiz-custom-url') settings.customUrl = this.value;
             if (id === 'kaiz-custom-key') settings.customKey = this.value;
             if (id === 'kaiz-custom-model-text') settings.customModel = this.value;
+            if (id === 'kaiz-max-tokens') settings.maxTokens = parseInt(this.value, 10) || 65000;
+            if (id === 'kaiz-temperature')
+                settings.temperature = parseFloat(this.value) >= 0 ? parseFloat(this.value) : 1;
+            if (id === 'kaiz-top-p') settings.topP = parseFloat(this.value) >= 0 ? parseFloat(this.value) : 0.95;
+            if (id === 'kaiz-top-k') settings.topK = parseInt(this.value, 10) >= 0 ? parseInt(this.value, 10) : 64;
             ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-core-identity').val(settings.coreIdentity || DEFAULT_CORE_IDENTITY);
+        $('#kaiz-core-behavior').val(settings.coreBehavior || DEFAULT_CORE_BEHAVIOR);
+        $('#kaiz-core-prefill').val(settings.corePrefill || DEFAULT_CORE_PREFILL);
+        $('#kaiz-core-cot-prompt').val(settings.coreCotPrompt || DEFAULT_CORE_COT_PROMPT);
+        $('#kaiz-prefill-as-system').prop('checked', !!settings.prefillAsSystem);
+
+        $('#kaiz-prefill-as-system').on('change', function (this: HTMLInputElement) {
+            settings.prefillAsSystem = this.checked;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-core-identity, #kaiz-core-behavior, #kaiz-core-prefill, #kaiz-core-cot-prompt').on(
+            'input',
+            function (this: HTMLTextAreaElement) {
+                const id = this.id;
+                if (id === 'kaiz-core-identity') settings.coreIdentity = this.value;
+                if (id === 'kaiz-core-behavior') settings.coreBehavior = this.value;
+                if (id === 'kaiz-core-prefill') settings.corePrefill = this.value;
+                if (id === 'kaiz-core-cot-prompt') settings.coreCotPrompt = this.value;
+                ctx.saveSettingsDebounced();
+            },
+        );
+
+        $('#kaiz-reset-core-prompts').on('click', () => {
+            if (confirm('Khôi phục Core Prompts về mặc định?')) {
+                $('#kaiz-core-identity').val(DEFAULT_CORE_IDENTITY);
+                $('#kaiz-core-behavior').val(DEFAULT_CORE_BEHAVIOR);
+                $('#kaiz-core-prefill').val(DEFAULT_CORE_PREFILL);
+                $('#kaiz-core-cot-prompt').val(DEFAULT_CORE_COT_PROMPT);
+                $('#kaiz-prefill-as-system').prop('checked', false);
+                settings.coreIdentity = DEFAULT_CORE_IDENTITY;
+                settings.coreBehavior = DEFAULT_CORE_BEHAVIOR;
+                settings.corePrefill = DEFAULT_CORE_PREFILL;
+                settings.coreCotPrompt = DEFAULT_CORE_COT_PROMPT;
+                settings.prefillAsSystem = false;
+                ctx.saveSettingsDebounced();
+                toastr.success('Đã khôi phục Core Prompts');
+            }
         });
 
         $('#kaiz-max-loops').val(settings.maxAgentLoops || 5);
@@ -84,9 +151,10 @@ export class SettingsUI {
         });
 
         // --- UI SETTINGS LOGIC ---
-        $('#kaiz-phone-mode').prop('checked', !!settings.phoneMode);
-        $('#kaiz-phone-mode').on('change', function (this: HTMLInputElement) {
-            settings.phoneMode = !!this.checked;
+        const applyPhoneMode = (enabled: boolean) => {
+            settings.phoneMode = enabled;
+            $('#kaiz-phone-mode').prop('checked', enabled);
+            $('#kaiz-phone-mode-tab').prop('checked', enabled);
             ctx.saveSettingsDebounced();
 
             const win = $('#kaiz-chat-window');
@@ -107,10 +175,363 @@ export class SettingsUI {
                 if (typeof ($.fn as any).draggable === 'function' && win.hasClass('ui-draggable')) {
                     win.draggable('enable');
                 }
+                const savedSize = localStorage.getItem('kaiz_win_size');
+                if (savedSize) {
+                    try {
+                        const parsed = JSON.parse(savedSize);
+                        if (parsed.width && parsed.height) {
+                            const clampedW = Math.max(360, Math.min(parsed.width, window.innerWidth - 20));
+                            const clampedH = Math.max(420, Math.min(parsed.height, window.innerHeight - 20));
+                            win.css({ width: `${clampedW}px`, height: `${clampedH}px` });
+                        }
+                    } catch {
+                        // ignore
+                    }
+                }
                 if (isOpen) {
                     dialogEl.close();
                     dialogEl.show();
                 }
+            }
+        };
+
+        $('#kaiz-phone-mode, #kaiz-phone-mode-tab').prop('checked', !!settings.phoneMode);
+        $('#kaiz-phone-mode, #kaiz-phone-mode-tab').on('change', function (this: HTMLInputElement) {
+            applyPhoneMode(!!this.checked);
+        });
+
+        // --- APP ICON CUSTOMIZATION ---
+        const iconManager = AppIconManager.getInstance();
+        iconManager.init(extPath);
+
+        const currentIconType: AppIconType = settings.appIconType || 'default';
+        const currentCustomUrl: string = settings.customIconUrl || '';
+
+        const updateCustomPanelVisibility = (type: AppIconType) => {
+            if (type === 'custom') {
+                $('#kaiz-custom-icon-panel').slideDown(150);
+            } else {
+                $('#kaiz-custom-icon-panel').slideUp(150);
+            }
+        };
+
+        const updateLivePreview = (type: AppIconType, customUrl?: string) => {
+            const previewBtn = $('#kaiz-icon-live-preview-btn');
+            previewBtn.empty();
+            const inner = $(iconManager.getFloatingBtnInnerHtml(type, customUrl));
+            if ($('#kaiz-icon-test-spin-btn').hasClass('spinning')) {
+                inner.addClass('kaiz-icon-spin');
+            }
+            previewBtn.append(inner);
+
+            const preset = APP_ICON_PRESETS.find((p) => p.id === type);
+            const title = preset ? preset.name : 'Tùy chỉnh';
+            $('#kaiz-icon-preview-desc').text(`Đang chọn: ${title}`);
+
+            if (customUrl) {
+                $('#kaiz-custom-icon-preview-box').html(
+                    `<img src="${customUrl}" style="width: 100%; height: 100%; object-fit: contain; border-radius: 50%;" />`,
+                );
+            } else {
+                $('#kaiz-custom-icon-preview-box').html(
+                    `<i class="fa-solid fa-image" style="color: #888; font-size: 18px;"></i>`,
+                );
+            }
+        };
+
+        const renderIconPresetCards = (activeType: AppIconType) => {
+            const container = $('#kaiz-app-icon-cards');
+            container.empty();
+
+            APP_ICON_PRESETS.forEach((p) => {
+                const isActive = p.id === activeType;
+                let thumbHtml = '';
+                if (p.type === 'font-awesome') {
+                    thumbHtml = `<i class="${p.faClass}"></i>`;
+                } else if (p.id === 'custom') {
+                    if (settings.customIconUrl) {
+                        thumbHtml = `<img src="${settings.customIconUrl}" alt="${p.name}" />`;
+                    } else {
+                        thumbHtml = `<i class="fa-solid fa-cloud-arrow-up" style="color: #aaa; font-size: 20px;"></i>`;
+                    }
+                } else if (p.fileName) {
+                    const src = `/scripts/extensions/${extPath}/${p.fileName}`;
+                    thumbHtml = `<img src="${src}" alt="${p.name}" />`;
+                }
+
+                const card = $(`
+                    <div class="kaiz-icon-preset-card interactable ${isActive ? 'active' : ''}" data-icon-id="${p.id}" title="${p.subtitle}">
+                        <div class="kaiz-icon-preset-thumb" style="${isActive ? `box-shadow: 0 0 12px ${p.previewGlow}` : ''}">
+                            ${thumbHtml}
+                        </div>
+                        <div class="kaiz-icon-preset-title">${p.name}</div>
+                    </div>
+                `);
+
+                card.on('click', () => {
+                    selectAppIcon(p.id);
+                });
+
+                container.append(card);
+            });
+        };
+
+        const selectAppIcon = (type: AppIconType) => {
+            settings.appIconType = type;
+            ctx.saveSettingsDebounced();
+
+            renderIconPresetCards(type);
+            updateCustomPanelVisibility(type);
+            updateLivePreview(type, settings.customIconUrl);
+            iconManager.applyCurrentIcon();
+        };
+
+        // Gán giá trị ban đầu lên UI
+        renderIconPresetCards(currentIconType);
+        updateCustomPanelVisibility(currentIconType);
+        updateLivePreview(currentIconType, currentCustomUrl);
+
+        // Test spin preview button
+        $('#kaiz-icon-test-spin-btn').on('click', function (this: HTMLElement) {
+            const btn = $(this);
+            const previewIcon = $('#kaiz-icon-live-preview-btn .kaiz-app-icon');
+            if (btn.hasClass('spinning')) {
+                btn.removeClass('spinning');
+                previewIcon.removeClass('kaiz-icon-spin');
+                btn.html('<i class="fa-solid fa-rotate"></i> Xem thử hiệu ứng xoay');
+            } else {
+                btn.addClass('spinning');
+                previewIcon.addClass('kaiz-icon-spin');
+                btn.html('<i class="fa-solid fa-circle-stop"></i> Dừng quay');
+            }
+        });
+
+        // Custom icon upload & Cropper
+        $('#kaiz-custom-icon-browse-btn, #kaiz-custom-icon-crop-btn').on('click', () => {
+            $('#kaiz-custom-icon-file-input').trigger('click');
+        });
+
+        $('#kaiz-custom-icon-file-input').on('change', function (this: HTMLInputElement) {
+            const file = this.files?.[0];
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
+                return;
+            }
+
+            // Mở công cụ cắt ảnh tròn trực quan
+            AvatarCropperModal.getInstance().open(
+                file,
+                (croppedDataUrl: string) => {
+                    settings.customIconUrl = croppedDataUrl;
+                    selectAppIcon('custom');
+                    toastr.success('Đã cắt và áp dụng biểu tượng tùy chỉnh!');
+                },
+                'Cắt Biểu Tượng Extension',
+            );
+            this.value = '';
+        });
+
+        $('#kaiz-custom-icon-delete-btn').on('click', () => {
+            if (confirm('Bạn có chắc muốn xóa ảnh tùy chỉnh và quay về biểu tượng Âm Dương mặc định?')) {
+                settings.customIconUrl = '';
+                selectAppIcon('default');
+                toastr.info('Đã xóa ảnh tùy chỉnh và đặt lại icon mặc định.');
+            }
+        });
+
+        // --- AVATAR BACKGROUND COLOR PALETTE ---
+        const currentBgType = settings.avatarBgType || 'dark';
+        const currentBgVal = settings.avatarBgValue || 'linear-gradient(135deg, #2b2b2b 0%, #000000 100%)';
+
+        const updateAvatarBgUI = (type: string, bgVal: string) => {
+            $('#kaiz-avatar-bg-swatches .kaiz-bg-swatch').removeClass('active');
+            $(`#kaiz-avatar-bg-swatches .kaiz-bg-swatch[data-bg-id="${type}"]`).addClass('active');
+
+            const preset = AVATAR_BG_PRESETS.find((p) => p.id === type);
+            $('#kaiz-avatar-bg-name').text(preset ? preset.name : 'Tùy chọn');
+
+            if (type === 'custom') {
+                $('#kaiz-avatar-bg-custom-box').css('display', 'flex');
+                $('#kaiz-avatar-bg-custom-input').val(bgVal);
+                if (bgVal.startsWith('#') && (bgVal.length === 7 || bgVal.length === 4)) {
+                    $('#kaiz-avatar-bg-color-picker').val(bgVal);
+                }
+            } else {
+                $('#kaiz-avatar-bg-custom-box').hide();
+            }
+        };
+
+        const selectAvatarBg = (type: string, bgVal: string) => {
+            settings.avatarBgType = type;
+            settings.avatarBgValue = bgVal;
+            ctx.saveSettingsDebounced();
+
+            updateAvatarBgUI(type, bgVal);
+            iconManager.applyAvatarBg(bgVal);
+        };
+
+        const renderAvatarBgSwatches = () => {
+            const container = $('#kaiz-avatar-bg-swatches');
+            container.empty();
+
+            AVATAR_BG_PRESETS.forEach((p) => {
+                const isActive = p.id === (settings.avatarBgType || 'dark');
+                const isChecker = p.id === 'transparent';
+                const swatch = $(`
+                    <div class="kaiz-bg-swatch interactable ${isActive ? 'active' : ''} ${isChecker ? 'kaiz-bg-swatch-checker' : ''}"
+                         data-bg-id="${p.id}"
+                         style="${!isChecker ? `background: ${p.previewColor};` : ''}"
+                         title="${p.name}">
+                    </div>
+                `);
+
+                swatch.on('click', () => {
+                    selectAvatarBg(p.id, p.bgValue);
+                });
+
+                container.append(swatch);
+            });
+        };
+
+        renderAvatarBgSwatches();
+        updateAvatarBgUI(currentBgType, currentBgVal);
+        iconManager.applyAvatarBg(currentBgVal);
+
+        // Custom Color Picker input
+        $('#kaiz-avatar-bg-color-picker').on('input', function (this: HTMLInputElement) {
+            const hex = this.value;
+            $('#kaiz-avatar-bg-custom-input').val(hex);
+            selectAvatarBg('custom', hex);
+        });
+
+        $('#kaiz-avatar-bg-custom-apply').on('click', () => {
+            const val = ($('#kaiz-avatar-bg-custom-input').val() as string)?.trim();
+            if (val) {
+                selectAvatarBg('custom', val);
+                toastr.success('Đã áp dụng màu nền tùy chọn!');
+            }
+        });
+
+        // --- USER CHAT AVATAR CUSTOMIZATION ---
+        const updateUserAvatarPreview = () => {
+            const previewBox = $('#kaiz-user-avatar-preview-box');
+            const statusText = $('#kaiz-user-avatar-status-text');
+            const userAvatarUrl = settings.userAvatarUrl || '';
+
+            if (userAvatarUrl) {
+                previewBox.html(`<img src="${userAvatarUrl}" class="kaiz-user-avatar-img" alt="User" />`);
+                statusText.text('Đang dùng ảnh đại diện tùy chỉnh');
+            } else {
+                previewBox.html(`<i class="fa-solid fa-user" style="font-size: 20px; color: #fff;"></i>`);
+                statusText.text('Đang dùng biểu tượng mặc định');
+            }
+        };
+
+        updateUserAvatarPreview();
+        iconManager.applyUserAvatar();
+
+        $('#kaiz-user-avatar-browse-btn').on('click', () => {
+            $('#kaiz-user-avatar-file-input').trigger('click');
+        });
+
+        $('#kaiz-user-avatar-file-input').on('change', function (this: HTMLInputElement) {
+            const file = this.files?.[0];
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                toastr.warning('Ảnh tải lên quá lớn (tối đa 5MB). Vui lòng chọn ảnh nhỏ hơn!');
+                return;
+            }
+
+            AvatarCropperModal.getInstance().open(
+                file,
+                (croppedDataUrl: string) => {
+                    settings.userAvatarUrl = croppedDataUrl;
+                    ctx.saveSettingsDebounced();
+                    updateUserAvatarPreview();
+                    iconManager.applyUserAvatar();
+                    toastr.success('Đã lưu và áp dụng Avatar Người dùng trong Chat!');
+                },
+                'Cắt Avatar Người Dùng',
+            );
+            this.value = '';
+        });
+
+        $('#kaiz-user-avatar-delete-btn').on('click', () => {
+            if (!settings.userAvatarUrl) {
+                toastr.info('Hiện tại đang dùng avatar mặc định rồi.');
+                return;
+            }
+            if (confirm('Bạn có chắc muốn xóa avatar cá nhân và quay về biểu tượng mặc định?')) {
+                settings.userAvatarUrl = '';
+                ctx.saveSettingsDebounced();
+                updateUserAvatarPreview();
+                iconManager.applyUserAvatar();
+                toastr.info('Đã xóa avatar và đặt lại mặc định!');
+            }
+        });
+
+        // --- AGENT THINK DISPLAY MODE ---
+        const currentCotMode = settings.cotDisplayMode || 'collapse_streaming';
+        $('#kaiz-cot-display-mode').val(currentCotMode);
+        $('#kaiz-cot-display-mode').on('change', function (this: HTMLSelectElement) {
+            settings.cotDisplayMode = this.value;
+            ctx.saveSettingsDebounced();
+        });
+
+        // --- VIRTUAL ASSISTANCE PET (MASCOT) ---
+        const mascot = MascotManager.getInstance();
+        const petConfig = mascot.getConfig();
+
+        $('#kaiz-pet-enabled').prop('checked', !!petConfig.enabled);
+        $('#kaiz-pet-bubble-enabled').prop('checked', !!petConfig.bubbleEnabled);
+        $('#kaiz-pet-roaming-enabled').prop('checked', petConfig.roamingEnabled !== false);
+        $('#kaiz-pet-scale').val(petConfig.scale || 96);
+        $('#kaiz-pet-scale-val').text(`${petConfig.scale || 96}px`);
+        $('#kaiz-pet-opacity').val(petConfig.opacity ?? 100);
+        $('#kaiz-pet-opacity-val').text(`${petConfig.opacity ?? 100}%`);
+
+        $('#kaiz-pet-enabled').on('change', function (this: HTMLInputElement) {
+            mascot.updateConfig({ enabled: !!this.checked });
+        });
+
+        $('#kaiz-pet-bubble-enabled').on('change', function (this: HTMLInputElement) {
+            mascot.updateConfig({ bubbleEnabled: !!this.checked });
+        });
+
+        $('#kaiz-pet-roaming-enabled').on('change', function (this: HTMLInputElement) {
+            mascot.updateConfig({ roamingEnabled: !!this.checked });
+        });
+
+        $('#kaiz-pet-scale').on('input change', function (this: HTMLInputElement) {
+            const val = parseInt(this.value, 10) || 96;
+            $('#kaiz-pet-scale-val').text(`${val}px`);
+            mascot.updateConfig({ scale: val });
+        });
+
+        $('#kaiz-pet-opacity').on('input change', function (this: HTMLInputElement) {
+            const val = parseInt(this.value, 10) ?? 100;
+            $('#kaiz-pet-opacity-val').text(`${val}%`);
+            mascot.updateConfig({ opacity: val });
+        });
+
+        $('#kaiz-pet-poke-btn').on('click', function () {
+            mascot.poke();
+        });
+
+        $('#kaiz-pet-reset-pos').on('click', function () {
+            mascot.resetPosition();
+            toastr.info('Đã đặt lại vị trí Bé Pet về góc dưới phải!');
+        });
+
+        $('#kaiz-pet-debug-viewport-btn').on('click', function () {
+            const isOpen = mascot.toggleViewportDebugger();
+            if (isOpen) {
+                toastr.info('Đang soi vùng Viewport an toàn của Bé Slime! (Tự đóng sau 10s hoặc bấm nút để tắt)');
+            } else {
+                toastr.info('Đã tắt chế độ soi Viewport.');
             }
         });
 
@@ -138,12 +559,13 @@ export class SettingsUI {
 
             tools.forEach((tool) => {
                 const name = escapeHtml(tool.schema.name);
-                const desc = escapeHtml(tool.schema.description);
+                const desc = escapeHtml(tool.schema.userDescription || tool.schema.description);
+                const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
 
                 if (
                     lowerFilter &&
                     !name.toLowerCase().includes(lowerFilter) &&
-                    !desc.toLowerCase().includes(lowerFilter)
+                    !rawDesc.toLowerCase().includes(lowerFilter)
                 ) {
                     return;
                 }
@@ -151,12 +573,18 @@ export class SettingsUI {
                 const isBlacklisted = !!settings.safeModeBlacklist[name];
 
                 const $toolItem = $(`
-                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-                        <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} style="margin-top: 3px;" />
-                        <div style="flex: 1;">
-                            <label for="kaiz-safe-tool-${name}" style="font-weight: bold; cursor: pointer; color: ${isBlacklisted ? '#e74c3c' : '#888'}; display: block;">${name}</label>
-                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                    <div class="kaiz-tool-card">
+                        <div class="kaiz-tool-info">
+                            <div class="kaiz-tool-header">
+                                <label for="kaiz-safe-tool-${name}" class="kaiz-tool-name" style="cursor: pointer;">${name}</label>
+                                ${isBlacklisted ? '<span class="kaiz-tool-blacklist-tag">Blacklisted</span>' : ''}
+                            </div>
+                            <div class="kaiz-tool-desc">${desc}</div>
                         </div>
+                        <label class="kaiz-switch">
+                            <input type="checkbox" id="kaiz-safe-tool-${name}" class="kaiz-safe-tool-toggle" data-tool="${name}" ${isBlacklisted ? 'checked' : ''} />
+                            <span class="kaiz-slider"></span>
+                        </label>
                     </div>
                 `);
 
@@ -173,9 +601,7 @@ export class SettingsUI {
                     delete settings.safeModeBlacklist[toolName];
                 }
                 ctx.saveSettingsDebounced();
-
-                const $label = $(`label[for="kaiz-safe-tool-${toolName}"]`);
-                $label.css('color', isChecked ? '#e74c3c' : '#888');
+                renderSafeTools(String($('#kaiz-safe-tools-search').val() || ''));
             });
         }
         renderSafeTools();
@@ -318,20 +744,20 @@ export class SettingsUI {
                 }
 
                 const $item = $(`
-                    <div class="kaiz-qp-item" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <button class="menu_button interactable kaiz-qp-icon-btn" data-index="${index}" style="width: 32px; height: 32px; padding: 0; display: flex; justify-content: center; align-items: center;" title="Choose Icon">
+                    <div class="kaiz-qp-card">
+                        <div class="kaiz-qp-header">
+                            <button class="kaiz-qp-icon-btn interactable" data-index="${index}" title="Choose Icon">
                                 <i data-lucide="${qp.icon}"></i>
                             </button>
-                            <input type="text" class="text_pole kaiz-qp-name" data-index="${index}" value="${escapeHtml(qp.name || '')}" placeholder="Name (e.g. Analyze)" style="flex: 1;">
-                            <div style="display: flex; gap: 5px;">
-                                <button class="menu_button interactable kaiz-qp-up" data-index="${index}" style="padding: 5px 10px;" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
-                                <button class="menu_button interactable kaiz-qp-down" data-index="${index}" style="padding: 5px 10px;" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
-                                <button class="menu_button interactable kaiz-qp-del" data-index="${index}" style="padding: 5px 10px; color: #e74c3c;" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            <input type="text" class="text_pole kaiz-input kaiz-qp-name" data-index="${index}" value="${escapeHtml(qp.name || '')}" placeholder="Name (e.g. Analyze)">
+                            <div class="kaiz-qp-actions">
+                                <button class="kaiz-qp-act-btn interactable kaiz-qp-up" data-index="${index}" title="Move Up"><i class="fa-solid fa-arrow-up"></i></button>
+                                <button class="kaiz-qp-act-btn interactable kaiz-qp-down" data-index="${index}" title="Move Down"><i class="fa-solid fa-arrow-down"></i></button>
+                                <button class="kaiz-qp-act-btn interactable del kaiz-qp-del" data-index="${index}" title="Delete"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
                         <div>
-                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here..." style="resize: vertical; width: 100%; box-sizing: border-box;">${escapeHtml(qp.prompt || '')}</textarea>
+                            <textarea class="text_pole kaiz-qp-text" data-index="${index}" rows="2" placeholder="Enter prompt text here...">${escapeHtml(qp.prompt || '')}</textarea>
                         </div>
                     </div>
                 `);
@@ -438,7 +864,8 @@ export class SettingsUI {
             const content = String($('#kaiz-manual-memory-input').val() || '').trim();
             if (key && content) {
                 if (editingMemoryIndex !== -1) {
-                    settings.memories[editingMemoryIndex] = { key, content };
+                    const currentEnabled = settings.memories[editingMemoryIndex]?.enabled !== false;
+                    settings.memories[editingMemoryIndex] = { key, content, enabled: currentEnabled };
                     editingMemoryIndex = -1;
                     $('#kaiz-add-manual-memory-btn').html('<i class="fa-solid fa-save"></i> Lưu Memory');
                 } else {
@@ -450,7 +877,7 @@ export class SettingsUI {
                         alert(`Key "${key}" đã tồn tại. Vui lòng chọn tên khác hoặc ấn Edit ở item tương ứng.`);
                         return;
                     }
-                    settings.memories.push({ key, content });
+                    settings.memories.push({ key, content, enabled: true });
                 }
                 $('#kaiz-manual-memory-key-input').val('');
                 $('#kaiz-manual-memory-input').val('');
@@ -485,21 +912,37 @@ export class SettingsUI {
 
             let htmlStr = '';
             settings.memories.forEach((mem: any, index: number) => {
+                const isEnabled = mem.enabled !== false;
                 const keyEscaped = mem.key.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const memEscaped = mem.content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const isLongContent = mem.content.length > 100 || mem.content.split('\n').length > 2;
 
+                const cardStyle = isEnabled
+                    ? 'background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;'
+                    : 'background: rgba(0,0,0,0.15); border: 1px dashed rgba(255,255,255,0.15); opacity: 0.55; border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;';
+
+                const keyStyle = isEnabled
+                    ? 'font-weight: bold; color: #8bc34a;'
+                    : 'font-weight: bold; color: #888; text-decoration: line-through;';
+                const toggleTitle = isEnabled ? 'Tạm tắt memory này' : 'Bật lại memory này';
+                const toggleIconClass = isEnabled ? 'fa-solid fa-toggle-on' : 'fa-solid fa-toggle-off';
+                const toggleBtnStyle = isEnabled ? 'color: #8bc34a;' : 'color: #888;';
+
                 htmlStr += `
-                    <div class="kaiz-memory-item" data-index="${index}" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 5px; padding: 8px; display: flex; gap: 10px; align-items: flex-start;">
+                    <div class="kaiz-memory-item ${isEnabled ? 'is-enabled' : 'is-disabled'}" data-index="${index}" style="${cardStyle}">
                         <div class="kaiz-memory-drag-handle" style="cursor: grab; color: #888; padding-top: 2px;">
                             <i class="fa-solid fa-grip-vertical"></i>
                         </div>
                         <div style="flex: 1; font-size: 13px; color: #ddd; word-break: break-word;">
-                            <span style="font-weight: bold; color: #8bc34a;">[${keyEscaped}]</span> 
+                            <span style="${keyStyle}">[${keyEscaped}]</span>
+                            ${!isEnabled ? '<span style="font-size: 10px; padding: 1px 5px; border-radius: 3px; background: rgba(255,255,255,0.1); color: #aaa; margin-left: 4px; vertical-align: middle;">Đã tắt</span>' : ''} 
                             <span class="kaiz-memory-text" style="white-space: pre-wrap; ${isLongContent ? 'display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;' : ''}">${memEscaped}</span>
                             ${isLongContent ? `<button class="kaiz-memory-expand-btn interactable" style="background: none; border: none; color: #888; cursor: pointer; padding: 2px 0; font-size: 11px;"><i class="fa-solid fa-chevron-down"></i> Hiển thị thêm</button>` : ''}
                         </div>
-                        <div style="display: flex; gap: 4px;">
+                        <div style="display: flex; gap: 4px; align-items: center;">
+                            <button class="menu_button interactable kaiz-memory-toggle-btn" data-index="${index}" style="padding: 2px 6px; font-size: 13px; height: auto; ${toggleBtnStyle}" title="${toggleTitle}">
+                                <i class="${toggleIconClass}"></i>
+                            </button>
                             <button class="menu_button interactable kaiz-memory-edit-btn" data-index="${index}" style="padding: 2px 6px; font-size: 11px; height: auto;" title="Edit">
                                 <i class="fa-solid fa-pen"></i>
                             </button>
@@ -542,6 +985,16 @@ export class SettingsUI {
         renderMemories();
 
         // --- Event Delegation cho Memory List (Chỉ bind 1 lần) ---
+        $memoryList.on('click', '.kaiz-memory-toggle-btn', function (this: HTMLElement) {
+            const idx = Number($(this).data('index'));
+            if (!isNaN(idx) && settings.memories[idx]) {
+                const current = settings.memories[idx].enabled !== false;
+                settings.memories[idx].enabled = !current;
+                ctx.saveSettingsDebounced();
+                renderMemories();
+            }
+        });
+
         $memoryList.on('click', '.kaiz-memory-expand-btn', function (this: HTMLElement) {
             const $text = $(this).siblings('.kaiz-memory-text');
             if ($text.css('-webkit-line-clamp') === '2') {
@@ -589,8 +1042,67 @@ export class SettingsUI {
         document.addEventListener('kaiz_memory_updated', renderMemories);
         // --- END PERSONA & MEMORY LOGIC ---
 
+        // --- TOKEN MANAGEMENT LOGIC ---
+        if (typeof settings.tokenSafeLimit !== 'number') settings.tokenSafeLimit = 600000;
+        if (typeof settings.trimAgent !== 'boolean') settings.trimAgent = false;
+        if (typeof settings.trimUser !== 'boolean') settings.trimUser = false;
+        if (typeof settings.trimTool !== 'boolean') settings.trimTool = false;
+
+        const $tokenLimitInput = $('#kaiz-token-safe-limit');
+        const $trimAgent = $('#kaiz-trim-agent');
+        const $trimUser = $('#kaiz-trim-user');
+        const $trimTool = $('#kaiz-trim-tool');
+
+        $tokenLimitInput.val(settings.tokenSafeLimit);
+        $trimAgent.prop('checked', settings.trimAgent);
+        $trimUser.prop('checked', settings.trimUser);
+        $trimTool.prop('checked', settings.trimTool);
+
+        $tokenLimitInput.on('input', function (this: HTMLInputElement) {
+            settings.tokenSafeLimit = parseInt(this.value, 10) || 0;
+            ctx.saveSettingsDebounced();
+        });
+
+        $trimAgent.on('change', function (this: HTMLInputElement) {
+            settings.trimAgent = !!this.checked;
+            ctx.saveSettingsDebounced();
+        });
+
+        $trimUser.on('change', function (this: HTMLInputElement) {
+            settings.trimUser = !!this.checked;
+            ctx.saveSettingsDebounced();
+        });
+
+        $trimTool.on('change', function (this: HTMLInputElement) {
+            settings.trimTool = !!this.checked;
+            ctx.saveSettingsDebounced();
+        });
+        // --- END TOKEN MANAGEMENT LOGIC ---
+
         // --- TOOLS MANAGER LOGIC ---
         const $toolsList = $('#kaiz-tools-list');
+
+        function updateToolsCount() {
+            const total = tools.length;
+            const active = tools.filter((t) => !settings.disabledTools[t.schema.name]).length;
+            $('#kaiz-tools-count-text').text(`${active}/${total}`);
+            if (active === 0) {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#ef4444',
+                    boxShadow: '0 0 6px rgba(239, 68, 68, 0.6)',
+                });
+            } else if (active < total) {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#f59e0b',
+                    boxShadow: '0 0 6px rgba(245, 158, 11, 0.6)',
+                });
+            } else {
+                $('#kaiz-tools-status-dot').css({
+                    background: '#10b981',
+                    boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)',
+                });
+            }
+        }
 
         function renderTools(filterText = '') {
             $toolsList.empty();
@@ -598,12 +1110,13 @@ export class SettingsUI {
 
             tools.forEach((tool) => {
                 const name = escapeHtml(tool.schema.name);
-                const desc = escapeHtml(tool.schema.description);
+                const desc = escapeHtml(tool.schema.userDescription || tool.schema.description);
+                const rawDesc = (tool.schema.userDescription || '') + ' ' + (tool.schema.description || '');
 
                 if (
                     lowerFilter &&
                     !name.toLowerCase().includes(lowerFilter) &&
-                    !desc.toLowerCase().includes(lowerFilter)
+                    !rawDesc.toLowerCase().includes(lowerFilter)
                 ) {
                     return; // Bỏ qua nếu không khớp filter
                 }
@@ -611,12 +1124,17 @@ export class SettingsUI {
                 const isEnabled = !settings.disabledTools[name];
 
                 const $toolItem = $(`
-                    <div style="display: flex; align-items: flex-start; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 5px;">
-                        <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} style="margin-top: 3px;" />
-                        <div style="flex: 1;">
-                            <label for="kaiz-tool-toggle-${name}" style="font-weight: bold; cursor: pointer; color: ${isEnabled ? '#fff' : '#888'}; display: block;">${name}</label>
-                            <div style="font-size: 11px; color: #aaa; margin-top: 2px;">${desc}</div>
+                    <div class="kaiz-tool-card">
+                        <div class="kaiz-tool-info">
+                            <div class="kaiz-tool-header">
+                                <label for="kaiz-tool-toggle-${name}" class="kaiz-tool-name" style="cursor: pointer;">${name}</label>
+                            </div>
+                            <div class="kaiz-tool-desc">${desc}</div>
                         </div>
+                        <label class="kaiz-switch">
+                            <input type="checkbox" id="kaiz-tool-toggle-${name}" class="kaiz-tool-toggle" data-tool="${name}" ${isEnabled ? 'checked' : ''} />
+                            <span class="kaiz-slider"></span>
+                        </label>
                     </div>
                 `);
 
@@ -634,11 +1152,10 @@ export class SettingsUI {
                     settings.disabledTools[toolName] = true;
                 }
                 ctx.saveSettingsDebounced();
-
-                // Đổi màu nhãn
-                const $label = $(`label[for="kaiz-tool-toggle-${toolName}"]`);
-                $label.css('color', isChecked ? '#fff' : '#888');
+                updateToolsCount();
             });
+
+            updateToolsCount();
         }
 
         // Render lần đầu
@@ -649,6 +1166,206 @@ export class SettingsUI {
             renderTools(this.value);
         });
         // --- END TOOLS MANAGER LOGIC ---
+
+        // --- BROWSER SETUP LOGIC ---
+        $('#kaiz-enable-browser').prop('checked', settings.enableBrowser);
+        $('#kaiz-enable-browser').on('change', function (this: HTMLInputElement) {
+            settings.enableBrowser = !!this.checked;
+            ctx.saveSettingsDebounced();
+
+            const $browserBtn = $('#kaiz-chat-browser-btn');
+
+            if (settings.enableBrowser) {
+                $browserBtn.show();
+                delete settings.disabledTools['browser_tools_manage'];
+            } else {
+                $browserBtn.hide();
+                settings.disabledTools['browser_tools_manage'] = true;
+                $('#kaiz-chat-window').removeClass('kaiz-browser-mode');
+                BrowserWindowUI.destroyAll(); // Clear iframe to free memory
+            }
+            renderTools();
+        });
+
+        $('#kaiz-check-browser-reqs').on('click', async () => {
+            const $results = $('#kaiz-browser-check-results');
+            const $corsCheck = $('#kaiz-check-cors');
+            const $scriptCheck = $('#kaiz-check-script');
+            const $xframeCheck = $('#kaiz-check-xframe');
+
+            $results.slideDown();
+            $corsCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+            $xframeCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+            $scriptCheck.html('<i class="fa-solid fa-circle-notch fa-spin"></i> Checking...').css('color', '#f1c40f');
+
+            try {
+                const res = await fetch('https://www.google.com');
+                if (res.ok) {
+                    $corsCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                } else {
+                    $corsCheck.html('<i class="fa-solid fa-xmark"></i> Failed').css('color', '#e74c3c');
+                }
+            } catch {
+                $corsCheck.html('<i class="fa-solid fa-xmark"></i> Blocked (Need Extension)').css('color', '#e74c3c');
+            }
+
+            let scriptDetected = false;
+            let xframeDetected = false;
+
+            const checkIframe1 = document.createElement('iframe');
+            checkIframe1.src = 'https://example.com';
+            checkIframe1.style.display = 'none';
+            document.body.appendChild(checkIframe1);
+
+            const checkIframe2 = document.createElement('iframe');
+            checkIframe2.src = 'https://www.google.com/';
+            checkIframe2.style.display = 'none';
+            document.body.appendChild(checkIframe2);
+
+            const onMessage = (e: MessageEvent) => {
+                if (e.data && e.data.type === 'KAIZ_IFRAME_URL') {
+                    if (e.data.url.includes('example.com')) {
+                        scriptDetected = true;
+                    }
+                    if (e.data.url.includes('google.com')) {
+                        xframeDetected = true;
+                    }
+                }
+            };
+            window.addEventListener('message', onMessage);
+
+            setTimeout(() => {
+                window.removeEventListener('message', onMessage);
+                document.body.removeChild(checkIframe1);
+                document.body.removeChild(checkIframe2);
+
+                if (scriptDetected) {
+                    $scriptCheck.html('<i class="fa-solid fa-check"></i> Installed').css('color', '#2ecc71');
+                } else {
+                    $scriptCheck.html('<i class="fa-solid fa-xmark"></i> Not Installed').css('color', '#e74c3c');
+                }
+
+                if (xframeDetected) {
+                    $xframeCheck.html('<i class="fa-solid fa-check"></i> OK').css('color', '#2ecc71');
+                } else {
+                    if (!scriptDetected) {
+                        $xframeCheck
+                            .html('<i class="fa-solid fa-circle-exclamation"></i> Need Script to test')
+                            .css('color', '#e67e22');
+                    } else {
+                        $xframeCheck
+                            .html('<i class="fa-solid fa-xmark"></i> Blocked (Need Ext)')
+                            .css('color', '#e74c3c');
+                    }
+                }
+            }, 2000);
+        });
+        // --- END BROWSER SETUP LOGIC ---
+
+        // --- WEB IMAGE BRIDGE LOGIC ---
+        $('#kaiz-enable-web-image-bridge').prop('checked', !!settings.webImageBridgeEnabled);
+        $('#kaiz-enable-web-image-bridge').on('change', function (this: HTMLInputElement) {
+            settings.webImageBridgeEnabled = !!this.checked;
+            ctx.saveSettingsDebounced();
+            if (settings.webImageBridgeEnabled) {
+                delete settings.disabledTools['generate_web_image'];
+            } else {
+                settings.disabledTools['generate_web_image'] = true;
+            }
+            renderTools();
+        });
+
+        $('#kaiz-web-image-provider').val(settings.webImageProvider || 'auto');
+        $('#kaiz-web-image-provider').on('change', function (this: HTMLSelectElement) {
+            settings.webImageProvider = this.value || 'auto';
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-custom-prefix').val(settings.customImagePrefix || '');
+        $('#kaiz-web-image-custom-prefix').on('input', function (this: HTMLTextAreaElement) {
+            settings.customImagePrefix = this.value;
+            delete settings.customImagePrompt;
+            delete settings.customImagePromptPosition;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-custom-suffix').val(settings.customImageSuffix || '');
+        $('#kaiz-web-image-custom-suffix').on('input', function (this: HTMLTextAreaElement) {
+            settings.customImageSuffix = this.value;
+            delete settings.customImagePrompt;
+            delete settings.customImagePromptPosition;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-view-depth').val(settings.viewContextDepth ?? 5);
+        $('#kaiz-web-image-view-depth').on('input change', function (this: HTMLInputElement) {
+            const val = parseInt(this.value, 10);
+            settings.viewContextDepth = !isNaN(val) && val > 0 ? val : 5;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-web-image-view-prompt').val(settings.viewSystemPrompt || DEFAULT_VIEW_SYSTEM_PROMPT);
+        $('#kaiz-web-image-view-prompt').on('input', function (this: HTMLTextAreaElement) {
+            settings.viewSystemPrompt = this.value;
+            ctx.saveSettingsDebounced();
+        });
+
+        $('#kaiz-reset-view-prompt').on('click', () => {
+            $('#kaiz-web-image-view-prompt').val(DEFAULT_VIEW_SYSTEM_PROMPT);
+            settings.viewSystemPrompt = DEFAULT_VIEW_SYSTEM_PROMPT;
+            ctx.saveSettingsDebounced();
+            if (typeof toastr !== 'undefined') {
+                toastr.success('Đã khôi phục prompt lõi của lệnh /view về mặc định.');
+            }
+        });
+
+        const updateBridgeStatusUI = () => {
+            const status = WebImageBridge.getStatus();
+            const $userScriptStatus = $('#kaiz-bridge-status-userscript');
+            const $geminiStatus = $('#kaiz-bridge-status-gemini');
+            const $chatgptStatus = $('#kaiz-bridge-status-chatgpt');
+
+            if (status.userscriptInstalled) {
+                $userScriptStatus
+                    .removeClass('badge-neutral badge-danger')
+                    .addClass('badge-success')
+                    .html('<i class="fa-solid fa-circle-check"></i> Đã cài đặt');
+            } else {
+                $userScriptStatus
+                    .removeClass('badge-success')
+                    .addClass('badge-neutral')
+                    .html('<i class="fa-solid fa-circle-question"></i> Đang kiểm tra...');
+            }
+
+            if (status.geminiOnline) {
+                $geminiStatus
+                    .removeClass('badge-danger')
+                    .addClass('badge-success')
+                    .html('<i class="fa-solid fa-circle"></i> Sẵn sàng');
+            } else {
+                $geminiStatus
+                    .removeClass('badge-success')
+                    .addClass('badge-danger')
+                    .html('<i class="fa-solid fa-circle"></i> Chưa mở tab');
+            }
+
+            if (status.chatgptOnline) {
+                $chatgptStatus
+                    .removeClass('badge-danger')
+                    .addClass('badge-success')
+                    .html('<i class="fa-solid fa-circle"></i> Sẵn sàng');
+            } else {
+                $chatgptStatus
+                    .removeClass('badge-success')
+                    .addClass('badge-danger')
+                    .html('<i class="fa-solid fa-circle"></i> Chưa mở tab');
+            }
+        };
+
+        setInterval(updateBridgeStatusUI, 2500);
+        window.postMessage({ type: 'KAIZ_BRIDGE_PING' }, '*');
+        updateBridgeStatusUI();
+        // --- END WEB IMAGE BRIDGE LOGIC ---
 
         // Lắng nghe chọn từ Dropdown -> Cập nhật Input
         $('#kaiz-custom-model').on('change', function (this: HTMLSelectElement) {
@@ -663,7 +1380,7 @@ export class SettingsUI {
             const key = String($('#kaiz-custom-key').val()).trim();
 
             if (!url) {
-                toastr.error('Please enter an API URL first.', 'Kaiz Agent');
+                toastr.error('Please enter an API URL first.', 'Agent');
                 return;
             }
 
@@ -689,13 +1406,13 @@ export class SettingsUI {
                         const id = m.id || m.name || m;
                         select.append(`<option value="${id}">${id}</option>`);
                     });
-                    toastr.success(`Found ${models.length} models.`, 'Kaiz Agent');
+                    toastr.success(`Found ${models.length} models.`, 'Agent');
                 } else {
                     throw new Error('Invalid models response format.');
                 }
             } catch (e: any) {
                 console.error('[KaizAgent] Fetch models error:', e);
-                toastr.error('Failed to fetch models: ' + e.message, 'Kaiz Agent');
+                toastr.error('Failed to fetch models: ' + e.message, 'Agent');
             } finally {
                 $('#kaiz-fetch-models').find('i').removeClass('fa-spin');
             }

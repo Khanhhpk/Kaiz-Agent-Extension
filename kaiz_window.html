@@ -1,122 +1,495 @@
 <!-- Bóng nổi -->
-<div id="kaiz-floating-btn" class="kaiz-floating-btn interactable" title="Toggle Kaiz Agent">
-    <i class="fa-solid fa-yin-yang"></i>
+<div id="kaiz-floating-btn" class="kaiz-floating-btn interactable" title="Toggle Agent">
+    <i class="fa-solid fa-yin-yang kaiz-app-icon"></i>
 </div>
 
 <!-- Khung chat -->
 <dialog id="kaiz-chat-window" class="kaiz-chat-window">
-    <div class="kaiz-chat-header" id="kaiz-chat-header">
-        <div class="kaiz-header-title">
-            <i
-                class="fa-solid fa-bars interactable"
-                id="kaiz-chat-menu-btn"
-                style="margin-right: 8px; cursor: pointer"
-            ></i>
-            <i class="fa-solid fa-wand-magic-sparkles"></i> <span id="kaiz-chat-title">Kaiz Agent</span>
-        </div>
-        <div class="kaiz-header-actions">
-            <i
-                id="kaiz-chat-settings-btn"
-                class="fa-solid fa-gear interactable"
-                style="cursor: pointer; margin-right: 8px"
-                title="Persona & Memory"
-            ></i>
-            <i id="kaiz-chat-close" class="fa-solid fa-xmark interactable" style="cursor: pointer"></i>
-        </div>
-    </div>
-
-    <!-- Sidebar Chat List -->
     <div
-        id="kaiz-chat-sidebar"
-        class="kaiz-chat-sidebar kaiz-hidden-sidebar"
+        id="kaiz-browser-container"
+        class="kaiz-browser-container"
         style="
             display: none;
-            position: absolute;
-            top: 54px;
-            left: 0;
-            width: 200px;
-            bottom: 0;
-            background: rgba(20, 25, 35, 0.95);
-            border-right: 1px solid rgba(255, 255, 255, 0.1);
-            z-index: 10002;
             flex-direction: column;
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            position: relative;
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
         "
     >
-        <div style="padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1)">
-            <button id="kaiz-new-chat-btn" class="menu_button interactable" style="width: 100%">
-                <i class="fa-solid fa-plus"></i> New Chat
-            </button>
-        </div>
         <div
-            id="kaiz-chat-list"
-            style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px"
-        >
-            <!-- Danh sách chat -->
-        </div>
-    </div>
-
-    <div id="kaiz-chat-history" class="kaiz-chat-history">
-        <!-- Tin nhắn sẽ được nhúng vào đây -->
-    </div>
-
-    <div class="kaiz-chat-input-area" style="position: relative">
-        <!-- Attachment Preview Area -->
-        <div id="kaiz-attachments-preview" style="display: flex; gap: 8px; flex-wrap: wrap"></div>
-        <input type="file" id="kaiz-file-upload" accept="image/*,.txt,.md" multiple style="display: none" />
-
-        <!-- Quick Prompts Menu -->
-        <div
-            id="kaiz-quick-prompt-menu"
-            class="kaiz-quick-prompt-menu"
+            class="kaiz-browser-tabs-container"
             style="
-                display: none;
-                position: absolute;
-                bottom: 100%;
-                left: 16px;
-                margin-bottom: 10px;
-                background: rgba(20, 25, 35, 0.95);
-                backdrop-filter: blur(10px);
-                border: 1px solid rgba(255, 255, 255, 0.1);
-                border-radius: 8px;
-                width: 250px;
-                max-height: 200px;
-                overflow-y: auto;
-                z-index: 10003;
-                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
                 display: flex;
-                flex-direction: column;
+                background: rgba(10, 15, 20, 0.95);
+                padding: 5px 5px 0 5px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+                gap: 2px;
+                overflow-x: auto;
             "
         >
+            <div id="kaiz-browser-tabs-list" style="display: flex; flex: 1; gap: 2px">
+                <!-- Tabs will be injected here -->
+            </div>
+            <div
+                id="kaiz-browser-new-tab"
+                class="interactable"
+                title="New Tab"
+                style="
+                    width: 32px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border-radius: 6px 6px 0 0;
+                    background: rgba(255, 255, 255, 0.05);
+                    color: #aaa;
+                    cursor: pointer;
+                "
+            >
+                <i class="fa-solid fa-plus"></i>
+            </div>
+        </div>
+        <div class="kaiz-browser-header" style="height: 50px; flex-shrink: 0; z-index: 10">
+            <div class="kaiz-browser-nav">
+                <i class="fa-solid fa-arrow-left interactable" id="kaiz-browser-back" title="Back"></i>
+                <i class="fa-solid fa-arrow-right interactable" id="kaiz-browser-forward" title="Forward"></i>
+                <i class="fa-solid fa-rotate-right interactable" id="kaiz-browser-reload" title="Reload"></i>
+                <i class="fa-solid fa-moon interactable" id="kaiz-browser-darkmode" title="Toggle Dark Mode"></i>
+                <i class="fa-solid fa-house interactable" id="kaiz-browser-home" title="Trang chủ"></i>
+                <i class="fa-solid fa-clock-rotate-left interactable" id="kaiz-browser-history-btn" title="Lịch sử"></i>
+            </div>
+
+            <div class="kaiz-browser-address-container">
+                <input
+                    type="text"
+                    id="kaiz-browser-address"
+                    class="kaiz-browser-address text_pole"
+                    placeholder="Nhập URL (vd: google.com) và ấn Enter"
+                />
+                <i class="fa-solid fa-share-nodes interactable" id="kaiz-browser-share" title="Share link to Agent"></i>
+            </div>
+
+            <div class="kaiz-browser-actions">
+                <i class="fa-solid fa-arrow-right-to-bracket interactable" id="kaiz-browser-go" title="Go"></i>
+                <i class="fa-solid fa-xmark interactable" id="kaiz-browser-close" title="Đóng"></i>
+            </div>
+        </div>
+
+        <div
+            class="kaiz-browser-content"
+            id="kaiz-browser-iframe-container"
+            style="
+                flex: 1;
+                min-height: 0;
+                width: 100%;
+                background-color: transparent;
+                color-scheme: light dark;
+                position: relative;
+            "
+        >
+            <!-- Iframe sẽ được tạo bằng JS để tránh bị SillyTavern filter -->
+        </div>
+    </div>
+    <div id="kaiz-split-resizer" class="kaiz-split-resizer"></div>
+    <div
+        id="kaiz-chat-container"
+        class="kaiz-chat-container"
+        style="display: flex; flex-direction: column; flex: 1; min-width: 0; position: relative; height: 100%"
+    >
+        <div class="kaiz-chat-header" id="kaiz-chat-header">
+            <div class="kaiz-header-title">
+                <i
+                    class="fa-solid fa-bars interactable"
+                    id="kaiz-chat-menu-btn"
+                    style="margin-right: 8px; cursor: pointer"
+                ></i>
+                <i class="fa-solid fa-wand-magic-sparkles"></i> <span id="kaiz-chat-title">Agent</span>
+                <span
+                    id="kaiz-chat-token-counter"
+                    style="
+                        margin-left: 10px;
+                        font-size: 11px;
+                        background: rgba(0, 0, 0, 0.3);
+                        padding: 2px 6px;
+                        border-radius: 8px;
+                        color: #aaa;
+                        display: none;
+                    "
+                    title="Current Chat Tokens (Estimated)"
+                    ><i class="fa-solid fa-coins" style="font-size: 10px; margin-right: 3px"></i
+                    ><span id="kaiz-chat-token-val">0</span></span
+                >
+            </div>
+            <div class="kaiz-header-actions">
+                <button
+                    type="button"
+                    id="kaiz-chat-search-toggle-btn"
+                    class="kaiz-header-btn interactable"
+                    title="Tìm kiếm tin nhắn (Ctrl+F)"
+                >
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                </button>
+                <button
+                    type="button"
+                    id="kaiz-chat-tools-btn"
+                    class="kaiz-header-btn interactable"
+                    title="Menu tiện ích"
+                >
+                    <i class="fa-solid fa-ellipsis-vertical"></i>
+                </button>
+                <button
+                    type="button"
+                    id="kaiz-chat-close"
+                    class="kaiz-header-btn kaiz-close-btn interactable"
+                    title="Đóng cửa sổ"
+                >
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+
+                <!-- Tools Dropdown Menu -->
+                <div id="kaiz-chat-tools-menu" class="kaiz-header-menu-dropdown" style="display: none">
+                    <div id="kaiz-chat-browser-btn" class="kaiz-menu-item interactable" title="Mở trình duyệt">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-globe"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Trình duyệt web</span>
+                            <span class="kaiz-menu-item-desc">Mở chế độ split-screen</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-chat-settings-btn" class="kaiz-menu-item interactable" title="Persona & Memory">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-gear"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Persona & Bộ nhớ</span>
+                            <span class="kaiz-menu-item-desc">Cấu hình prompt và memory</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-auto-task-btn" class="kaiz-menu-item interactable" title="Quản lý Auto Tasks">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Tác vụ tự động</span>
+                            <span class="kaiz-menu-item-desc">Lập lịch trình chạy định kỳ</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-chat-ui-custom-btn" class="kaiz-menu-item interactable" title="Tùy biến Giao diện">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-palette"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Tùy biến Giao diện</span>
+                            <span class="kaiz-menu-item-desc">Tùy chỉnh CSS/DOM & phục hồi</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-chat-gallery-btn" class="kaiz-menu-item interactable" title="Thư viện ảnh">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-images"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Thư viện ảnh</span>
+                            <span class="kaiz-menu-item-desc">Bộ sưu tập ảnh AI đã tạo</span>
+                        </div>
+                    </div>
+                    <div
+                        id="kaiz-chat-preset-git-btn"
+                        class="kaiz-menu-item interactable"
+                        title="Preset Git Version Control"
+                    >
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-code-branch"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Preset Git & Versions</span>
+                            <span class="kaiz-menu-item-desc">Lịch sử commit, diff & rollback</span>
+                        </div>
+                    </div>
+                    <div
+                        id="kaiz-mvu-dashboard-btn"
+                        class="kaiz-menu-item interactable"
+                        title="Chỉ số & Quản lý MVU Zod"
+                    >
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-chart-pie"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Chỉ số MVU & Zod</span>
+                            <span class="kaiz-menu-item-desc">Xem, sửa & modding biến runtime</span>
+                        </div>
+                    </div>
+                    <div class="kaiz-menu-divider"></div>
+                    <div id="kaiz-chat-backup-btn" class="kaiz-menu-item interactable" title="Backup Manager">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-floppy-disk"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Sao lưu & Khôi phục</span>
+                            <span class="kaiz-menu-item-desc">Quản lý backup dữ liệu Agent</span>
+                        </div>
+                    </div>
+                    <div id="kaiz-chat-log-btn" class="kaiz-menu-item interactable" title="Request Logs">
+                        <div class="kaiz-menu-item-icon"><i class="fa-solid fa-scroll"></i></div>
+                        <div class="kaiz-menu-item-content">
+                            <span class="kaiz-menu-item-title">Nhật ký Request</span>
+                            <span class="kaiz-menu-item-desc">Xem payload gửi và nhận</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- In-Chat Search Bar -->
+        <div id="kaiz-chat-search-bar" class="kaiz-chat-search-bar" style="display: none">
+            <div class="kaiz-search-input-wrapper">
+                <i class="fa-solid fa-magnifying-glass kaiz-search-icon"></i>
+                <input
+                    type="text"
+                    id="kaiz-search-input"
+                    class="kaiz-search-input text_pole"
+                    placeholder="Tìm kiếm trong cuộc trò chuyện..."
+                    autocomplete="off"
+                    spellcheck="false"
+                />
+                <span id="kaiz-search-counter" class="kaiz-search-counter">0/0</span>
+            </div>
+            <div class="kaiz-search-actions">
+                <button
+                    type="button"
+                    id="kaiz-search-prev-btn"
+                    class="kaiz-search-nav-btn interactable"
+                    title="Kết quả trước (Shift+Enter / ▲)"
+                    disabled
+                >
+                    <i class="fa-solid fa-chevron-up"></i>
+                </button>
+                <button
+                    type="button"
+                    id="kaiz-search-next-btn"
+                    class="kaiz-search-nav-btn interactable"
+                    title="Kết quả tiếp theo (Enter / ▼)"
+                    disabled
+                >
+                    <i class="fa-solid fa-chevron-down"></i>
+                </button>
+                <button
+                    type="button"
+                    id="kaiz-search-close-btn"
+                    class="kaiz-search-nav-btn kaiz-search-close-btn interactable"
+                    title="Đóng tìm kiếm (Esc)"
+                >
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+        </div>
+
+        <div
+            id="kaiz-chat-body-wrapper"
+            style="position: relative; display: flex; flex-direction: column; flex: 1; min-height: 0"
+        >
+            <!-- Sidebar Chat List -->
+            <div
+                id="kaiz-chat-sidebar"
+                class="kaiz-chat-sidebar kaiz-hidden-sidebar"
+                style="
+                    display: none;
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 200px;
+                    bottom: 0;
+                    background: rgba(20, 25, 35, 0.95);
+                    border-right: 1px solid rgba(255, 255, 255, 0.1);
+                    z-index: 10002;
+                    flex-direction: column;
+                "
+            >
+                <!-- Workspace Selector -->
+                <div
+                    style="
+                        padding: 10px;
+                        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                        display: flex;
+                        flex-direction: column;
+                        gap: 5px;
+                    "
+                >
+                    <div style="font-size: 0.8em; color: #aaa; font-weight: bold">WORKSPACE</div>
+                    <div style="display: flex; gap: 5px; align-items: center">
+                        <select
+                            id="kaiz-workspace-select"
+                            class="text_pole"
+                            style="flex: 1; padding: 5px; border-radius: 4px; min-width: 0"
+                        >
+                            <option value="default">Default</option>
+                        </select>
+                        <button
+                            id="kaiz-workspace-settings-btn"
+                            class="menu_button interactable"
+                            style="padding: 5px 8px; display: none"
+                            title="Cài đặt Workspace"
+                        >
+                            <i class="fa-solid fa-gear"></i>
+                        </button>
+                        <button
+                            id="kaiz-workspace-add-btn"
+                            class="menu_button interactable"
+                            style="padding: 5px 8px"
+                            title="Tạo Workspace mới"
+                        >
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div style="padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1)">
+                    <button id="kaiz-new-chat-btn" class="menu_button interactable" style="width: 100%">
+                        <i class="fa-solid fa-plus"></i> New Chat
+                    </button>
+                </div>
+                <div
+                    id="kaiz-chat-list"
+                    style="flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 5px"
+                >
+                    <!-- Danh sách chat -->
+                </div>
+            </div>
+
+            <div id="kaiz-chat-history-wrap" class="kaiz-chat-history-wrap">
+                <div id="kaiz-chat-history" class="kaiz-chat-history">
+                    <!-- Tin nhắn sẽ được nhúng vào đây -->
+                </div>
+                <div id="kaiz-milestone-rail" class="kaiz-milestone-rail">
+                    <button
+                        type="button"
+                        id="kaiz-milestone-btn-top"
+                        class="kaiz-milestone-quick-btn kaiz-milestone-btn-top interactable"
+                        title="Cuộn lên đầu chat"
+                    >
+                        <i class="fa-solid fa-chevron-up"></i>
+                    </button>
+                    <div id="kaiz-milestone-track" class="kaiz-milestone-track">
+                        <div
+                            id="kaiz-milestone-active-thumb"
+                            class="kaiz-milestone-active-thumb"
+                            style="display: none"
+                        ></div>
+                    </div>
+                    <button
+                        type="button"
+                        id="kaiz-milestone-btn-bottom"
+                        class="kaiz-milestone-quick-btn kaiz-milestone-btn-bottom interactable"
+                        title="Cuộn xuống tin mới nhất"
+                    >
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                    <div id="kaiz-milestone-tooltip" class="kaiz-milestone-tooltip" style="display: none"></div>
+                </div>
+            </div>
+
+            <div class="kaiz-chat-input-area" id="kaiz-chat-input-area">
+                <!-- Input Resizer Handle -->
+                <div
+                    id="kaiz-input-resizer"
+                    class="kaiz-input-resizer-handle interactable"
+                    title="Kéo để thay đổi chiều cao thanh nhập liệu (Nhấp đúp để đặt lại mặc định)"
+                >
+                    <span class="kaiz-input-resizer-bar"></span>
+                </div>
+
+                <!-- Fullscreen Header Banner -->
+                <div id="kaiz-input-fullscreen-header" class="kaiz-input-fullscreen-header" style="display: none">
+                    <div class="kaiz-input-fullscreen-title">
+                        <i class="fa-solid fa-pen-to-square"></i> Soạn thảo tin nhắn
+                    </div>
+                    <div class="kaiz-input-fullscreen-actions">
+                        <span id="kaiz-input-char-counter" class="kaiz-input-char-counter">0 ký tự</span>
+                        <button
+                            type="button"
+                            id="kaiz-input-exit-fullscreen-btn"
+                            class="kaiz-fullscreen-exit-btn interactable"
+                            title="Thu nhỏ (Thoát Fullscreen)"
+                        >
+                            <i class="fa-solid fa-compress"></i> Thu nhỏ
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Attachment Preview Area -->
+                <div id="kaiz-attachments-preview" style="display: flex; gap: 8px; flex-wrap: wrap"></div>
+                <input type="file" id="kaiz-file-upload" accept="image/*,.txt,.md" multiple style="display: none" />
+
+                <div class="kaiz-chat-input-box" id="kaiz-chat-input-box">
+                    <textarea
+                        id="kaiz-chat-input"
+                        class="kaiz-chat-input"
+                        placeholder="Nhập yêu cầu hoặc Paste/Kéo thả file..."
+                        rows="1"
+                    ></textarea>
+
+                    <div class="kaiz-chat-input-bottom-bar">
+                        <div class="kaiz-chat-input-actions-left">
+                            <button
+                                type="button"
+                                id="kaiz-quick-prompt-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Quick Prompts"
+                            >
+                                <i class="fa-solid fa-fan"></i>
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-quick-tool-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Chèn nhanh công cụ (Quick Tools)"
+                            >
+                                <i class="fa-solid fa-screwdriver-wrench"></i>
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-attach-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Đính kèm file (Ảnh, TXT, MD)"
+                            >
+                                <i class="fa-solid fa-paperclip"></i>
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-input-fullscreen-btn"
+                                class="kaiz-input-action-btn interactable"
+                                title="Phóng to khung soạn thảo (Fullscreen)"
+                            >
+                                <i class="fa-solid fa-expand"></i>
+                            </button>
+                        </div>
+
+                        <div class="kaiz-chat-input-actions-right">
+                            <button
+                                type="button"
+                                id="kaiz-chat-continue"
+                                class="kaiz-continue-btn interactable"
+                                style="display: none"
+                                title="Tiếp tục (Continue)"
+                            >
+                                <i class="fa-solid fa-forward-step"></i> Tiếp tục
+                            </button>
+                            <button
+                                type="button"
+                                id="kaiz-chat-send"
+                                class="kaiz-send-btn interactable"
+                                title="Gửi tin nhắn"
+                            >
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Menus (Mounted directly to #kaiz-chat-container as window-level popups) -->
+        <div id="kaiz-quick-prompt-menu" class="kaiz-quick-prompt-menu" style="display: none">
             <!-- Menu items will be injected here -->
         </div>
 
-        <div style="display: flex; align-items: flex-end; gap: 8px; width: 100%">
-            <button
-                id="kaiz-quick-prompt-btn"
-                class="kaiz-chat-send"
-                style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-                title="Quick Prompts"
-            >
-                <i class="fa-solid fa-fan"></i>
-            </button>
-            <button
-                id="kaiz-attach-btn"
-                class="kaiz-chat-send"
-                style="background: rgba(255, 255, 255, 0.1); color: #e0e0e0"
-                title="Đính kèm file (Ảnh, TXT, MD)"
-            >
-                <i class="fa-solid fa-paperclip"></i>
-            </button>
-            <textarea
-                id="kaiz-chat-input"
-                class="kaiz-chat-input"
-                placeholder="Nhập yêu cầu (Shift+Enter xuống dòng) hoặc Paste/Kéo thả file..."
-                rows="1"
-            ></textarea>
-            <button id="kaiz-chat-send" class="kaiz-chat-send">
-                <i class="fa-solid fa-paper-plane"></i>
-            </button>
+        <div id="kaiz-quick-tool-menu" class="kaiz-quick-tool-menu" style="display: none">
+            <div class="kaiz-quick-tool-search-wrap">
+                <input type="text" id="kaiz-quick-tool-search" class="text_pole" placeholder="Tìm tool nhanh..." />
+            </div>
+            <div id="kaiz-quick-tool-list" class="kaiz-quick-tool-list"></div>
         </div>
+    </div>
+    <!-- Resizer handle cho floating window -->
+    <div id="kaiz-window-resizer" class="kaiz-window-resizer interactable" title="Kéo để thay đổi kích cỡ">
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 2L2 8M9 5L5 9M9 8L8 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
     </div>
 </dialog>
 
@@ -211,5 +584,1393 @@
         style="display: flex; flex-direction: column; gap: 8px; max-height: 200px; overflow-y: auto; padding-right: 5px"
     >
         <!-- Memory items will be injected here -->
+    </div>
+</dialog>
+
+<!-- Web History Modal -->
+<dialog
+    id="kaiz-web-history-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(20, 25, 35, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #ddd;
+        padding: 15px;
+        width: 500px;
+        max-width: 90vw;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        "
+    >
+        <h3 style="margin: 0; font-size: 16px"><i class="fa-solid fa-clock-rotate-left"></i> Lịch sử duyệt web</h3>
+        <i
+            id="kaiz-web-history-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px"
+        ></i>
+    </div>
+
+    <div style="margin-bottom: 15px; display: flex; justify-content: flex-end">
+        <button
+            id="kaiz-web-history-clear-all"
+            class="menu_button interactable"
+            style="padding: 4px 8px; font-size: 11px; height: auto"
+        >
+            <i class="fa-solid fa-trash"></i> Xóa lịch sử
+        </button>
+    </div>
+
+    <div
+        id="kaiz-web-history-list"
+        style="display: flex; flex-direction: column; gap: 4px; max-height: 400px; overflow-y: auto; padding-right: 5px"
+    >
+        <!-- History items will be injected here -->
+    </div>
+</dialog>
+
+<!-- Workspace Settings Modal -->
+<dialog
+    id="kaiz-workspace-settings-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(20, 25, 35, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #ddd;
+        padding: 15px;
+        width: 500px;
+        max-width: 90vw;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        "
+    >
+        <h3 style="margin: 0; font-size: 16px"><i class="fa-solid fa-briefcase"></i> Workspace Settings</h3>
+        <i
+            id="kaiz-workspace-settings-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px"
+        ></i>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+        <div>
+            <label style="font-size: 12px; color: #aaa; margin-bottom: 4px; display: block">Tên Workspace:</label>
+            <input type="text" id="kaiz-ws-name" class="text_pole" style="width: 100%; box-sizing: border-box" />
+        </div>
+        <div>
+            <label style="font-size: 12px; color: #aaa; margin-bottom: 4px; display: block"
+                >Custom System Prompt (Chỉ áp dụng trong Workspace này):</label
+            >
+            <textarea
+                id="kaiz-ws-prompt"
+                class="text_pole"
+                style="width: 100%; height: 100px; resize: vertical; box-sizing: border-box"
+                placeholder="Nhập hướng dẫn riêng, luật lệ riêng cho workspace này..."
+            ></textarea>
+        </div>
+        <div>
+            <label style="font-size: 12px; color: #aaa; margin-bottom: 4px; display: block"
+                >Công cụ cho phép (Enabled Tools):</label
+            >
+            <div
+                id="kaiz-ws-tools-list"
+                style="
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    padding: 8px;
+                    border-radius: 4px;
+                    background: rgba(0, 0, 0, 0.2);
+                "
+            >
+                <!-- Checkboxes tools will be injected here -->
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; margin-top: 10px">
+            <button
+                id="kaiz-ws-delete-btn"
+                class="menu_button interactable"
+                style="color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)"
+            >
+                <i class="fa-solid fa-trash"></i> Xóa Workspace
+            </button>
+            <button id="kaiz-ws-save-btn" class="menu_button interactable">
+                <i class="fa-solid fa-save"></i> Lưu cài đặt
+            </button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Auto Tasks Manager Modal -->
+<dialog
+    id="kaiz-auto-task-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(20, 25, 35, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #ddd;
+        padding: 15px;
+        width: 600px;
+        max-width: 90vw;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        "
+    >
+        <h3 style="margin: 0; font-size: 16px"><i class="fa-solid fa-bolt"></i> Auto Tasks Manager</h3>
+        <i
+            id="kaiz-auto-task-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px"
+        ></i>
+    </div>
+
+    <!-- Nút tạo mới -->
+    <button id="kaiz-auto-task-add-btn" class="menu_button interactable" style="width: 100%; margin-bottom: 15px">
+        <i class="fa-solid fa-plus"></i> Tạo Task mới
+    </button>
+
+    <!-- Danh sách Task -->
+    <div
+        id="kaiz-auto-task-list"
+        style="
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 250px;
+            overflow-y: auto;
+            padding-right: 5px;
+            margin-bottom: 15px;
+        "
+    >
+        <!-- Auto Task Items sẽ được inject vào đây -->
+    </div>
+
+    <!-- Form sửa/tạo -->
+    <div
+        id="kaiz-auto-task-form-container"
+        style="
+            display: none;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.2);
+        "
+    >
+        <input type="hidden" id="kaiz-auto-task-id" />
+
+        <div style="margin-bottom: 8px">
+            <label style="font-size: 12px; color: #aaa; display: block">Tên task:</label>
+            <input
+                type="text"
+                id="kaiz-auto-task-name"
+                class="text_pole"
+                style="width: 100%; box-sizing: border-box"
+                placeholder="Nhập tên task (vd: Tóm tắt)"
+            />
+        </div>
+
+        <div style="margin-bottom: 8px">
+            <label style="font-size: 12px; color: #aaa; display: block">Prompt (Yêu cầu Agent):</label>
+            <textarea
+                id="kaiz-auto-task-prompt"
+                class="text_pole"
+                style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical"
+            ></textarea>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 8px">
+            <div style="flex: 1">
+                <label style="font-size: 12px; color: #aaa; display: block">Trigger Mode:</label>
+                <select id="kaiz-auto-task-trigger-mode" class="text_pole" style="width: 100%">
+                    <option value="time">Thời gian (giây)</option>
+                    <option value="turn">Lượt chat (turn)</option>
+                </select>
+            </div>
+            <div style="flex: 1">
+                <label id="kaiz-auto-task-trigger-label" style="font-size: 12px; color: #aaa; display: block"
+                    >Giá trị (giây):</label
+                >
+                <input
+                    type="number"
+                    id="kaiz-auto-task-trigger-value"
+                    class="text_pole"
+                    style="width: 100%; box-sizing: border-box"
+                    min="1"
+                />
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 8px">
+            <div style="flex: 1">
+                <label style="font-size: 12px; color: #aaa; display: block">Số lần chạy tối đa (0 = vĩnh viễn):</label>
+                <input
+                    type="number"
+                    id="kaiz-auto-task-max-runs"
+                    class="text_pole"
+                    style="width: 100%; box-sizing: border-box"
+                    min="0"
+                    value="0"
+                />
+            </div>
+            <div style="flex: 1">
+                <label style="font-size: 12px; color: #aaa; display: block">Execution Mode:</label>
+                <select id="kaiz-auto-task-exec-mode" class="text_pole" style="width: 100%">
+                    <option value="fresh">Fresh (Không lưu History)</option>
+                    <option value="persist">Persist (Có History riêng)</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tool Configuration (giống workspace) -->
+        <div style="margin-bottom: 10px">
+            <label style="font-size: 12px; color: #aaa; margin-bottom: 4px; display: block"
+                >Tools cho phép (Để trống = Agent không thể gọi Tool):</label
+            >
+            <div
+                id="kaiz-auto-task-tools-list"
+                style="
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    padding: 8px;
+                    border-radius: 4px;
+                    background: rgba(0, 0, 0, 0.2);
+                "
+            >
+                <!-- Tools config UI injected here -->
+            </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px">
+            <button
+                id="kaiz-auto-task-cancel-btn"
+                class="menu_button interactable"
+                style="background: rgba(255, 255, 255, 0.1)"
+            >
+                Hủy
+            </button>
+            <button
+                id="kaiz-auto-task-save-btn"
+                class="menu_button interactable"
+                style="background: rgba(0, 201, 255, 0.2)"
+            >
+                <i class="fa-solid fa-save"></i> Lưu Task
+            </button>
+        </div>
+    </div>
+</dialog>
+
+<!-- Modal xem lịch sử của 1 Auto Task -->
+<dialog
+    id="kaiz-auto-task-history-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(20, 25, 35, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #ddd;
+        padding: 15px;
+        width: 600px;
+        max-width: 90vw;
+        height: 70vh;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        flex-direction: column;
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        "
+    >
+        <h3 style="margin: 0; font-size: 16px">
+            <i class="fa-solid fa-clock-rotate-left"></i> History: <span id="kaiz-auto-task-history-title">...</span>
+        </h3>
+        <i
+            id="kaiz-auto-task-history-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px"
+        ></i>
+    </div>
+    <div id="kaiz-auto-task-history-content" class="kaiz-chat-history" style="flex: 1; overflow-y: auto">
+        <!-- Lịch sử (read only) -->
+    </div>
+</dialog>
+
+<!-- UI Snapshot Modal -->
+<dialog
+    id="kaiz-ui-snapshot-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(20, 25, 35, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #ddd;
+        padding: 15px;
+        width: 600px;
+        max-width: 90vw;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        "
+    >
+        <h3 style="margin: 0; font-size: 16px">
+            <i class="fa-solid fa-clock-rotate-left"></i> Lịch sử thay đổi giao diện (Rollback)
+        </h3>
+        <i
+            id="kaiz-ui-snapshot-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px"
+        ></i>
+    </div>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 15px">
+        <button
+            id="kaiz-ui-rollback-all-btn"
+            class="menu_button interactable"
+            style="flex: 1; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)"
+        >
+            <i class="fa-solid fa-rotate-left"></i> Rollback Tất Cả
+        </button>
+        <button
+            id="kaiz-ui-remove-all-btn"
+            class="menu_button interactable"
+            style="flex: 1; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)"
+        >
+            <i class="fa-solid fa-trash-can"></i> Xóa Hết
+        </button>
+        <button
+            id="kaiz-ui-theme-lib-btn"
+            class="menu_button interactable"
+            style="flex: 1; background: rgba(0, 201, 255, 0.2)"
+        >
+            <i class="fa-solid fa-book"></i> Thư viện Theme
+        </button>
+    </div>
+
+    <div
+        id="kaiz-ui-snapshot-list"
+        style="
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding-right: 5px;
+        "
+    >
+        <!-- Snapshot Items sẽ được inject vào đây -->
+    </div>
+</dialog>
+
+<!-- Theme Library Modal -->
+<dialog
+    id="kaiz-theme-library-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(20, 25, 35, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        color: #ddd;
+        padding: 15px;
+        width: 600px;
+        max-width: 90vw;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    "
+>
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+        "
+    >
+        <h3 style="margin: 0; font-size: 16px"><i class="fa-solid fa-book-open"></i> Thư viện Theme</h3>
+        <i
+            id="kaiz-theme-library-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px"
+        ></i>
+    </div>
+
+    <label style="font-size: 12px; color: #aaa; display: block; margin-bottom: 15px">
+        Các Theme mẫu được nạp sẵn. AI có thể tham khảo để học cách tuỳ biến giao diện SillyTavern. Bạn có thể thêm hoặc
+        xóa bớt.
+    </label>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 15px">
+        <input type="file" id="kaiz-theme-upload-input" accept=".json" style="display: none" />
+        <button
+            id="kaiz-theme-upload-btn"
+            class="menu_button interactable"
+            style="flex: 1; background: rgba(0, 201, 255, 0.2)"
+        >
+            <i class="fa-solid fa-upload"></i> Tải lên Theme JSON
+        </button>
+        <button
+            id="kaiz-theme-reset-btn"
+            class="menu_button interactable"
+            style="flex: 1; color: #ff6b6b; border-color: rgba(255, 107, 107, 0.3)"
+        >
+            <i class="fa-solid fa-rotate-left"></i> Khôi phục Default
+        </button>
+    </div>
+
+    <div
+        id="kaiz-theme-library-list"
+        style="
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 350px;
+            overflow-y: auto;
+            padding-right: 5px;
+        "
+    >
+        <!-- Theme Items sẽ được inject vào đây -->
+    </div>
+</dialog>
+
+<!-- Image Gallery Modal -->
+<dialog
+    id="kaiz-gallery-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(18, 22, 32, 0.96);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 12px;
+        color: #e0e0e0;
+        padding: 16px;
+        width: 820px;
+        max-width: 95vw;
+        max-height: 88vh;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
+        flex-direction: column;
+        box-sizing: border-box;
+    "
+>
+    <!-- Header -->
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 10px;
+            flex-shrink: 0;
+        "
+    >
+        <div style="display: flex; align-items: center; gap: 8px">
+            <h3 style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px">
+                <i class="fa-solid fa-images" style="color: #00c9ff"></i> Thư viện ảnh (Image Gallery)
+            </h3>
+            <span
+                id="kaiz-gallery-total-badge"
+                class="kaiz-status-pill badge-neutral"
+                style="font-size: 11px; padding: 2px 8px"
+            >
+                0 ảnh
+            </span>
+        </div>
+        <i
+            id="kaiz-gallery-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 18px; opacity: 0.8"
+            title="Đóng"
+        ></i>
+    </div>
+
+    <!-- Toolbar / Actions Bar -->
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        "
+    >
+        <!-- Left: Search & Select controls -->
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 200px">
+            <div style="position: relative; flex: 1; max-width: 280px">
+                <i
+                    class="fa-solid fa-magnifying-glass"
+                    style="
+                        position: absolute;
+                        left: 10px;
+                        top: 50%;
+                        transform: translateY(-50%);
+                        font-size: 12px;
+                        opacity: 0.5;
+                    "
+                ></i>
+                <input
+                    type="text"
+                    id="kaiz-gallery-search"
+                    class="text_pole interactable"
+                    placeholder="Tìm theo prompt..."
+                    style="
+                        width: 100%;
+                        box-sizing: border-box;
+                        padding-left: 28px;
+                        padding-top: 5px;
+                        padding-bottom: 5px;
+                        font-size: 12px;
+                        border-radius: 6px;
+                        background: rgba(0, 0, 0, 0.3);
+                    "
+                />
+            </div>
+            <button
+                id="kaiz-gallery-select-all-btn"
+                class="menu_button interactable"
+                style="font-size: 12px; padding: 5px 10px; white-space: nowrap"
+            >
+                <i class="fa-regular fa-square-check"></i> Chọn tất cả
+            </button>
+        </div>
+
+        <!-- Right: Action Buttons -->
+        <div style="display: flex; align-items: center; gap: 8px">
+            <button
+                id="kaiz-gallery-delete-selected-btn"
+                class="menu_button interactable"
+                style="
+                    font-size: 12px;
+                    padding: 5px 12px;
+                    color: #ff6b6b;
+                    border-color: rgba(255, 107, 107, 0.4);
+                    display: none;
+                "
+                title="Xóa các ảnh đã chọn"
+            >
+                <i class="fa-solid fa-trash-can"></i> Xóa đã chọn (<span id="kaiz-gallery-selected-count">0</span>)
+            </button>
+            <button
+                id="kaiz-gallery-delete-all-btn"
+                class="menu_button interactable"
+                style="font-size: 12px; padding: 5px 10px; opacity: 0.75"
+                title="Xóa toàn bộ thư viện ảnh"
+            >
+                <i class="fa-solid fa-fire"></i> Xóa tất cả
+            </button>
+        </div>
+    </div>
+
+    <!-- Gallery Grid Container -->
+    <div
+        id="kaiz-gallery-grid-wrapper"
+        style="flex: 1; min-height: 250px; max-height: 60vh; overflow-y: auto; padding-right: 4px"
+    >
+        <div id="kaiz-gallery-grid" class="kaiz-gallery-grid">
+            <!-- Dynamic Gallery Cards rendered here -->
+        </div>
+        <div id="kaiz-gallery-empty" style="display: none; text-align: center; padding: 50px 20px; opacity: 0.6">
+            <i
+                class="fa-regular fa-images"
+                style="font-size: 42px; margin-bottom: 12px; display: block; opacity: 0.4"
+            ></i>
+            <div style="font-size: 14px">Chưa có bức ảnh nào trong thư viện.</div>
+            <div style="font-size: 12px; margin-top: 4px; opacity: 0.8">
+                Hãy dùng lệnh <code>/draw &lt;mô tả&gt;</code>, <code>/view</code> (tự vẽ tin nhắn mới nhất) hoặc để
+                Agent vẽ ảnh minh họa!
+            </div>
+        </div>
+    </div>
+</dialog>
+
+<!-- Image Lightbox Preview Modal -->
+<dialog
+    id="kaiz-gallery-preview-modal"
+    class="kaiz-modal"
+    style="
+        background: rgba(14, 18, 26, 0.98);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        color: #eee;
+        padding: 16px;
+        width: 720px;
+        max-width: 95vw;
+        max-height: 92vh;
+        backdrop-filter: blur(16px);
+        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8);
+        flex-direction: column;
+        box-sizing: border-box;
+    "
+>
+    <!-- Preview Header -->
+    <div
+        style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            flex-shrink: 0;
+        "
+    >
+        <div style="display: flex; align-items: center; gap: 8px">
+            <span id="kaiz-preview-provider-badge" class="kaiz-status-pill badge-neutral" style="font-size: 11px"
+                >PROVIDER</span
+            >
+            <span
+                id="kaiz-preview-duration-badge"
+                class="kaiz-status-pill badge-neutral"
+                style="font-size: 11px; display: none"
+                ><i class="fa-solid fa-stopwatch"></i> <span id="kaiz-preview-duration-text"></span
+            ></span>
+            <span id="kaiz-preview-date" style="font-size: 12px; opacity: 0.7"></span>
+        </div>
+        <i
+            id="kaiz-gallery-preview-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 18px"
+            title="Đóng"
+        ></i>
+    </div>
+
+    <!-- Image View -->
+    <div
+        style="
+            flex: 1;
+            min-height: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        "
+    >
+        <img
+            id="kaiz-preview-img"
+            src=""
+            alt="Preview"
+            style="
+                max-width: 100%;
+                max-height: 55vh;
+                object-fit: contain;
+                border-radius: 6px;
+                box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+            "
+        />
+    </div>
+
+    <!-- Prompt Box -->
+    <div
+        style="
+            background: rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 12px;
+            flex-shrink: 0;
+        "
+    >
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px">
+            <span
+                style="
+                    font-size: 11px;
+                    font-weight: 600;
+                    text-transform: uppercase;
+                    letter-spacing: 0.5px;
+                    opacity: 0.7;
+                "
+            >
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Prompt tạo ảnh:
+            </span>
+            <button
+                id="kaiz-preview-copy-prompt-btn"
+                class="menu_button interactable"
+                style="font-size: 11px; padding: 3px 8px"
+            >
+                <i class="fa-regular fa-copy"></i> Sao chép
+            </button>
+        </div>
+        <div
+            id="kaiz-preview-prompt-text"
+            style="
+                font-size: 13px;
+                line-height: 1.45;
+                word-break: break-word;
+                max-height: 100px;
+                overflow-y: auto;
+                user-select: text;
+                white-space: pre-wrap;
+            "
+        ></div>
+    </div>
+
+    <!-- Preview Footer Actions -->
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0">
+        <button
+            id="kaiz-preview-delete-btn"
+            class="menu_button interactable"
+            style="color: #ff6b6b; border-color: rgba(255, 107, 107, 0.4); font-size: 12px; padding: 6px 12px"
+        >
+            <i class="fa-solid fa-trash-can"></i> Xóa ảnh này
+        </button>
+        <div style="display: flex; gap: 8px">
+            <button
+                id="kaiz-preview-download-btn"
+                class="menu_button interactable"
+                style="font-size: 12px; padding: 6px 14px; background: rgba(0, 201, 255, 0.15); border-color: #00c9ff"
+            >
+                <i class="fa-solid fa-download"></i> Tải ảnh về máy
+            </button>
+            <button
+                id="kaiz-preview-close-btn"
+                class="menu_button interactable"
+                style="font-size: 12px; padding: 6px 14px"
+            >
+                Đóng
+            </button>
+        </div>
+    </div>
+</dialog>
+
+<!-- ================= PRESET GIT & VERSION CONTROL MODAL ================= -->
+<dialog id="kaiz-preset-git-modal" class="kaiz-modal kaiz-pg-dialog">
+    <!-- Modal Header -->
+    <div class="kaiz-pg-header">
+        <div class="kaiz-pg-header-left">
+            <div class="kaiz-pg-header-icon">
+                <i class="fa-solid fa-code-branch"></i>
+            </div>
+            <div class="kaiz-pg-header-titles">
+                <h3 class="kaiz-pg-header-title">
+                    Phiên Bản AI Preset
+                    <span id="kaiz-pg-active-badge" class="kaiz-status-pill badge-success">Live Active</span>
+                </h3>
+                <div class="kaiz-pg-header-subtitle">Lịch sử khôi phục, so sánh thay đổi & tối ưu bộ nhớ</div>
+            </div>
+        </div>
+
+        <div class="kaiz-pg-header-controls">
+            <!-- Preset Selector -->
+            <select id="kaiz-pg-preset-select" class="text_pole" title="Chọn Preset để xem lịch sử phiên bản">
+                <option value="">Đang tải danh sách...</option>
+            </select>
+
+            <button id="kaiz-pg-refresh-btn" class="menu_button interactable" title="Làm mới dữ liệu">
+                <i class="fa-solid fa-rotate-right"></i>
+            </button>
+        </div>
+
+        <i id="kaiz-pg-close-btn" class="fa-solid fa-xmark interactable kaiz-pg-header-close" title="Đóng cửa sổ"></i>
+    </div>
+
+    <!-- Modal Scrollable Body -->
+    <div class="kaiz-pg-body">
+        <!-- 1. Sleek Metrics & Maintenance Ribbon -->
+        <div class="kaiz-pg-ribbon">
+            <div class="kaiz-pg-ribbon-stats">
+                <div class="kaiz-pg-chip" title="Dung lượng bộ nhớ IndexedDB đang sử dụng">
+                    <i class="fa-solid fa-hard-drive" style="color: #38bdf8"></i>
+                    <span id="kaiz-pg-stat-memory" class="kaiz-pg-stat-val" style="color: #38bdf8">0 KB</span>
+                </div>
+                <div class="kaiz-pg-chip" title="Tổng số mốc lưu">
+                    <i class="fa-solid fa-box-archive" style="color: #a78bfa"></i>
+                    <span id="kaiz-pg-stat-commits" class="kaiz-pg-stat-val">0</span>
+                    <span class="kaiz-pg-chip-unit">bản lưu</span>
+                </div>
+                <div class="kaiz-pg-chip" title="Phiên bản đang kích hoạt trên SillyTavern">
+                    <i class="fa-solid fa-circle-check" style="color: #34d399"></i>
+                    <span class="kaiz-pg-chip-label">Bản hiện tại:</span>
+                    <span id="kaiz-pg-stat-head" class="kaiz-pg-stat-val kaiz-pg-mono" style="color: #34d399"
+                        >none</span
+                    >
+                </div>
+                <span id="kaiz-pg-stat-presets" style="display: none">0</span>
+            </div>
+
+            <div class="kaiz-pg-ribbon-actions">
+                <button
+                    id="kaiz-pg-prune-btn"
+                    class="menu_button interactable kaiz-pg-btn-sm"
+                    title="Chỉ giữ lại 30 mốc gần nhất, dọn bớt các mốc cũ hơn để giải phóng bộ nhớ"
+                >
+                    <i class="fa-solid fa-broom" style="color: #fbbf24"></i>
+                    <span class="kaiz-pg-btn-text">Dọn bớt</span>
+                </button>
+                <button
+                    id="kaiz-pg-clear-history-btn"
+                    class="menu_button interactable kaiz-pg-btn-sm"
+                    title="Xóa toàn bộ lịch sử commit của preset này để làm mới từ đầu"
+                >
+                    <i class="fa-solid fa-trash-can" style="color: #f87171"></i>
+                    <span class="kaiz-pg-btn-text">Xóa Lịch Sử</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 2. Staging Sandbox & Manual Operations Card -->
+        <div id="kaiz-pg-staging-card" class="kaiz-pg-staging-box">
+            <div class="kaiz-pg-staging-header">
+                <div class="kaiz-pg-staging-title">
+                    <i class="fa-solid fa-pen-ruler" style="color: #fbbf24"></i>
+                    <span>Khu Vực Lưu & Nháp</span>
+                    <span id="kaiz-pg-staging-badge" class="kaiz-status-pill badge-neutral">Đồng bộ</span>
+                </div>
+                <div id="kaiz-pg-staging-actions" class="kaiz-pg-staging-btns" style="display: none">
+                    <button
+                        id="kaiz-pg-view-staged-diff-btn"
+                        class="menu_button interactable kaiz-pg-btn-sm"
+                        style="color: #38bdf8; border-color: rgba(56, 189, 248, 0.3)"
+                        title="Xem so sánh giữa các thay đổi đang nháp và bản lưu hiện tại"
+                    >
+                        <i class="fa-solid fa-code-compare"></i> Xem Thay Đổi
+                    </button>
+                    <button
+                        id="kaiz-pg-discard-staged-btn"
+                        class="menu_button interactable kaiz-pg-btn-sm"
+                        style="color: #f87171; border-color: rgba(248, 113, 113, 0.3)"
+                        title="Hủy toàn bộ nháp để quay về bản hiện tại"
+                    >
+                        <i class="fa-solid fa-xmark"></i> Hủy Nháp
+                    </button>
+                </div>
+            </div>
+
+            <!-- Staging summary / dirty explanation -->
+            <div id="kaiz-pg-staging-summary" class="kaiz-pg-staging-desc">
+                Trạng thái đồng bộ — Preset đang ở phiên bản mới nhất, không có chỉnh sửa dở dang.
+            </div>
+
+            <!-- Staged items list (if dirty) -->
+            <div id="kaiz-pg-staged-list" class="kaiz-pg-staged-items" style="display: none"></div>
+
+            <!-- Manual Commit Form (Tiết kiệm API) -->
+            <div id="kaiz-pg-manual-commit-container" class="kaiz-pg-commit-form">
+                <div class="kaiz-pg-commit-inputs">
+                    <input
+                        id="kaiz-pg-commit-msg-input"
+                        type="text"
+                        class="text_pole kaiz-pg-input-msg"
+                        placeholder="Đặt tên cho mốc này (VD: Tối ưu prompt NSFW, Chỉnh lại Greeting)..."
+                    />
+                    <input
+                        id="kaiz-pg-commit-tag-input"
+                        type="text"
+                        class="text_pole kaiz-pg-input-tag"
+                        placeholder="Nhãn (v1.0)"
+                    />
+                </div>
+                <button
+                    id="kaiz-pg-manual-commit-btn"
+                    class="menu_button interactable kaiz-pg-btn-commit"
+                    title="Lưu trạng thái hiện tại thành một mốc khôi phục mới mà không cần gọi LLM"
+                >
+                    <i class="fa-solid fa-floppy-disk"></i> <span>Lưu phiên bản</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 3. Commit History Timeline Card -->
+        <div class="kaiz-pg-timeline-card">
+            <div class="kaiz-pg-timeline-header">
+                <div class="kaiz-pg-timeline-title">
+                    <i class="fa-solid fa-timeline" style="color: #a78bfa"></i> Lịch Sử Phiên Bản (Timeline)
+                </div>
+                <input
+                    id="kaiz-pg-timeline-search"
+                    type="text"
+                    class="text_pole kaiz-pg-search-input"
+                    placeholder="Tìm theo tên mốc, tag, mã hash..."
+                />
+            </div>
+
+            <!-- Timeline List Container -->
+            <div id="kaiz-pg-commit-list" class="kaiz-pg-timeline-container">
+                <!-- Rendered dynamically via JS -->
+            </div>
+        </div>
+    </div>
+</dialog>
+
+<!-- ================= DIFF PREVIEW MODAL ================= -->
+<dialog id="kaiz-preset-diff-modal" class="kaiz-modal kaiz-pg-diff-dialog">
+    <div class="kaiz-pg-diff-header">
+        <div class="kaiz-pg-diff-title">
+            <i class="fa-solid fa-code-compare" style="color: #38bdf8"></i>
+            <span id="kaiz-pg-diff-modal-title">So sánh thay đổi (Diff Viewer)</span>
+        </div>
+        <i
+            id="kaiz-pg-diff-close"
+            class="fa-solid fa-xmark interactable"
+            style="cursor: pointer; font-size: 16px; opacity: 0.7; padding: 4px"
+        ></i>
+    </div>
+
+    <div id="kaiz-pg-diff-body" class="kaiz-pg-diff-body">
+        <!-- Diff content rendered here -->
+    </div>
+</dialog>
+
+<!-- ================= MVU & ZOD 4 DASHBOARD MODAL ================= -->
+<dialog id="kaiz-mvu-dashboard-modal" class="kaiz-modal kaiz-mvu-dialog">
+    <!-- Header -->
+    <div class="kaiz-mvu-header">
+        <div class="kaiz-mvu-header-top">
+            <div class="kaiz-mvu-header-left">
+                <div class="kaiz-mvu-header-icon">
+                    <i class="fa-solid fa-chart-pie"></i>
+                </div>
+                <div class="kaiz-mvu-header-titles">
+                    <h3 class="kaiz-mvu-header-title">
+                        Bảng Chỉ Số & Quản Lý MVU
+                        <span id="kaiz-mvu-status-badge" class="kaiz-status-pill badge-neutral">Đang tải...</span>
+                    </h3>
+                    <div id="kaiz-mvu-subtitle" class="kaiz-mvu-header-subtitle">
+                        Hệ thống biến trạng thái thời gian thực & Zod 4 Schema
+                    </div>
+                </div>
+            </div>
+
+            <div class="kaiz-mvu-header-actions">
+                <button
+                    type="button"
+                    id="kaiz-mvu-refresh-btn"
+                    class="menu_button interactable"
+                    title="Đồng bộ lại biến"
+                >
+                    <i class="fa-solid fa-rotate-right"></i>
+                </button>
+                <i
+                    id="kaiz-mvu-close-btn"
+                    class="fa-solid fa-xmark interactable kaiz-mvu-header-close"
+                    title="Đóng cửa sổ"
+                ></i>
+            </div>
+        </div>
+
+        <div class="kaiz-mvu-header-controls">
+            <!-- Tabs -->
+            <div class="kaiz-mvu-tabs">
+                <button type="button" class="kaiz-mvu-tab active" data-tab="stats" title="Chỉ số trực quan">
+                    <i class="fa-solid fa-gauge-high"></i> <span>Chỉ số</span>
+                </button>
+                <button
+                    type="button"
+                    class="kaiz-mvu-tab"
+                    data-tab="activity"
+                    title="Kiểm tra hệ thống & Bảng hoạt động Lorebook MVU"
+                >
+                    <i class="fa-solid fa-clipboard-check"></i> <span>Bảng hoạt động</span>
+                </button>
+                <button type="button" class="kaiz-mvu-tab" data-tab="schema" title="Quản lý cấu trúc Zod">
+                    <i class="fa-solid fa-sitemap"></i> <span>Cấu trúc</span>
+                </button>
+                <button type="button" class="kaiz-mvu-tab" data-tab="raw" title="Xem mã nguồn & JSON">
+                    <i class="fa-solid fa-code"></i> <span>Raw / YAML</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="kaiz-mvu-body">
+        <!-- 1. Flexible Substrate Setup Banner if character has no MVU -->
+        <div id="kaiz-mvu-empty-container" class="kaiz-mvu-empty-state" style="display: none">
+            <div class="kaiz-mvu-empty-icon"><i class="fa-solid fa-cube"></i></div>
+            <h4 class="kaiz-mvu-empty-title">Khởi Tạo Sàn Hạ Tầng MVU Zod 4</h4>
+            <p class="kaiz-mvu-empty-desc">
+                Nhân vật này chưa kích hoạt hệ thống biến. Hệ thống cung cấp sàn kỹ thuật MVU linh hoạt tuyệt đối —
+                không mẫu cố định, không giới hạn. Bạn có thể yêu cầu AI tự tạo biến theo cốt truyện, tạo trực quan từng
+                biến, hoặc dán mã Zod tùy ý.
+            </p>
+
+            <div class="kaiz-mvu-scaffold-modes">
+                <!-- Mode Switcher Tabs -->
+                <div class="kaiz-mvu-scaffold-tabs">
+                    <button type="button" class="kaiz-mvu-scaffold-tab active" data-mode="ai">
+                        <i class="fa-solid fa-robot"></i> <span>AI Tự Thiết Kế</span>
+                    </button>
+                    <button type="button" class="kaiz-mvu-scaffold-tab" data-mode="builder">
+                        <i class="fa-solid fa-sliders"></i> <span>Tạo Biến Trực Quan</span>
+                    </button>
+                    <button type="button" class="kaiz-mvu-scaffold-tab" data-mode="raw">
+                        <i class="fa-solid fa-code"></i> <span>Nạp Zod / YAML Trực Tiếp</span>
+                    </button>
+                </div>
+
+                <!-- Mode 1: AI Auto Design -->
+                <div class="kaiz-mvu-scaffold-pane active" id="kaiz-scaffold-pane-ai">
+                    <div class="kaiz-mvu-ai-box">
+                        <label for="kaiz-mvu-ai-prompt" class="kaiz-mvu-label"
+                            >Yêu cầu hệ thống biến (Lore, Game rules, Trạng thái):</label
+                        >
+                        <textarea
+                            id="kaiz-mvu-ai-prompt"
+                            class="text_pole"
+                            rows="3"
+                            placeholder="Nhập định hướng hệ thống biến cho nhân vật này (hoặc để trống để AI tự đọc Lore & Worldbook nhân vật hiện tại rồi thiết kế hệ sinh thái biến phù hợp nhất)..."
+                        ></textarea>
+                        <div class="kaiz-mvu-ai-actions">
+                            <button
+                                type="button"
+                                id="kaiz-mvu-ai-scaffold-btn"
+                                class="menu_button interactable btn-primary-accent"
+                            >
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> AI Phân Tích & Khởi Tạo
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode 2: Quick Builder -->
+                <div class="kaiz-mvu-scaffold-pane" id="kaiz-scaffold-pane-builder" style="display: none">
+                    <div class="kaiz-mvu-builder-box">
+                        <div class="kaiz-mvu-builder-form">
+                            <div class="kaiz-mvu-form-row">
+                                <input
+                                    type="text"
+                                    id="kaiz-builder-path"
+                                    class="text_pole"
+                                    placeholder="Đường dẫn biến (VD: HP, Thể_lực, Nhân_vật.Tâm_trạng)"
+                                />
+                                <select id="kaiz-builder-type" class="text_pole">
+                                    <option value="number">Số (number)</option>
+                                    <option value="string">Chuỗi (string)</option>
+                                    <option value="boolean">Logic (boolean)</option>
+                                    <option value="array">Mảng (array)</option>
+                                    <option value="object">Đối tượng (object)</option>
+                                </select>
+                            </div>
+                            <div class="kaiz-mvu-form-row kaiz-builder-num-row">
+                                <input type="number" id="kaiz-builder-min" class="text_pole" placeholder="Min" />
+                                <input type="number" id="kaiz-builder-max" class="text_pole" placeholder="Max" />
+                                <input
+                                    type="text"
+                                    id="kaiz-builder-default"
+                                    class="text_pole"
+                                    placeholder="Giá trị khởi tạo"
+                                />
+                            </div>
+                            <div class="kaiz-mvu-form-row">
+                                <input
+                                    type="text"
+                                    id="kaiz-builder-rule"
+                                    class="text_pole"
+                                    placeholder="Quy tắc thay đổi (Ví dụ: Giảm khi bị thương, hồi phục khi nghỉ ngơi)"
+                                />
+                                <button type="button" id="kaiz-builder-add-row-btn" class="menu_button interactable">
+                                    <i class="fa-solid fa-plus"></i> Thêm Vào Danh Sách
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="kaiz-mvu-builder-list" id="kaiz-builder-items-list">
+                            <div class="kaiz-mvu-empty-badge" id="kaiz-builder-list-empty">
+                                Chưa có biến nào trong danh sách. Hãy điền thông tin bên trên và bấm "Thêm Vào Danh
+                                Sách".
+                            </div>
+                        </div>
+
+                        <div class="kaiz-mvu-builder-actions">
+                            <button
+                                type="button"
+                                id="kaiz-mvu-builder-submit-btn"
+                                class="menu_button interactable btn-primary-accent"
+                            >
+                                <i class="fa-solid fa-rocket"></i> Khởi Tạo Hạ Tầng MVU Với Các Biến Đã Chọn
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mode 3: Raw Zod / YAML Injection -->
+                <div class="kaiz-mvu-scaffold-pane" id="kaiz-scaffold-pane-raw" style="display: none">
+                    <div class="kaiz-mvu-raw-scaffold-box">
+                        <label for="kaiz-raw-zod-input" class="kaiz-mvu-label"
+                            >Mã Zod 4 Schema tùy chỉnh (Export Schema = z.object hoặc các trường):</label
+                        >
+                        <textarea
+                            id="kaiz-raw-zod-input"
+                            class="text_pole code-font"
+                            rows="5"
+                            placeholder="// Nhập code Zod 4 Schema tùy chỉnh tại đây...
+'Chỉ_số': z.object({
+  'Máu': z.coerce.number().transform(v => _.clamp(v, 0, 100)).prefault(100),
+}),"
+                        ></textarea>
+
+                        <label for="kaiz-raw-initvar-input" class="kaiz-mvu-label" style="margin-top: 10px"
+                            >YAML [InitVar] Khởi tạo (Tùy chọn):</label
+                        >
+                        <textarea
+                            id="kaiz-raw-initvar-input"
+                            class="text_pole code-font"
+                            rows="3"
+                            placeholder="# Khởi tạo biến YAML tùy chọn (nếu để trống hệ thống sẽ tự suy từ Schema)"
+                        ></textarea>
+
+                        <div class="kaiz-mvu-raw-actions" style="margin-top: 12px">
+                            <button
+                                type="button"
+                                id="kaiz-mvu-raw-submit-btn"
+                                class="menu_button interactable btn-primary-accent"
+                            >
+                                <i class="fa-solid fa-check"></i> Nạp Schema Trực Tiếp Vào Card
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Active MVU Content -->
+        <div id="kaiz-mvu-active-container" class="kaiz-mvu-active-content">
+            <!-- Summary Ribbon -->
+            <div class="kaiz-mvu-ribbon">
+                <div class="kaiz-mvu-ribbon-stats">
+                    <div class="kaiz-mvu-chip">
+                        <i class="fa-solid fa-cubes" style="color: #38bdf8"></i>
+                        <span id="kaiz-mvu-stat-count" class="kaiz-mvu-stat-val">0</span>
+                        <span class="kaiz-mvu-chip-unit">biến</span>
+                    </div>
+                    <div class="kaiz-mvu-chip">
+                        <i class="fa-solid fa-scroll" style="color: #a78bfa"></i>
+                        <span id="kaiz-mvu-zod-name" class="kaiz-mvu-stat-val">Zod Schema</span>
+                    </div>
+                    <div
+                        id="kaiz-mvu-initvar-pill"
+                        class="kaiz-status-pill badge-neutral interactable"
+                        style="cursor: pointer"
+                        title="Nhấn để mở Bảng hoạt động Lorebook"
+                    >
+                        InitVar: ?
+                    </div>
+                    <div
+                        id="kaiz-mvu-rules-pill"
+                        class="kaiz-status-pill badge-neutral interactable"
+                        style="cursor: pointer"
+                        title="Nhấn để mở Bảng hoạt động Lorebook"
+                    >
+                        Quy tắc: ?
+                    </div>
+                    <div
+                        id="kaiz-mvu-format-pill"
+                        class="kaiz-status-pill badge-neutral interactable"
+                        style="cursor: pointer"
+                        title="Nhấn để mở Bảng hoạt động Lorebook"
+                    >
+                        Định dạng: ?
+                    </div>
+                    <div
+                        id="kaiz-mvu-varlist-pill"
+                        class="kaiz-status-pill badge-neutral interactable"
+                        style="cursor: pointer"
+                        title="Nhấn để mở Bảng hoạt động Lorebook"
+                    >
+                        Danh sách: ?
+                    </div>
+                    <div
+                        id="kaiz-mvu-ejs-pill"
+                        class="kaiz-status-pill badge-neutral interactable"
+                        style="display: none; cursor: pointer"
+                        title="Nhấn để mở Bảng hoạt động Lorebook"
+                    >
+                        EJS: ?
+                    </div>
+                </div>
+
+                <div class="kaiz-mvu-ribbon-actions">
+                    <div class="kaiz-mvu-floor-control">
+                        <label for="kaiz-mvu-floor-select" class="kaiz-mvu-floor-label">
+                            <i class="fa-solid fa-layer-group"></i> Lượt chat:
+                        </label>
+                        <select id="kaiz-mvu-floor-select" class="kaiz-mvu-floor-select">
+                            <option value="">Lượt mới nhất (Tự động)</option>
+                        </select>
+                    </div>
+                    <button
+                        type="button"
+                        id="kaiz-mvu-toggle-add-btn"
+                        class="menu_button interactable kaiz-mvu-toggle-add-btn"
+                    >
+                        <i class="fa-solid fa-plus"></i> Thêm Biến
+                    </button>
+                </div>
+            </div>
+
+            <!-- Warnings / Inconsistencies container -->
+            <div id="kaiz-mvu-warnings-container" class="kaiz-mvu-warnings" style="display: none"></div>
+
+            <!-- Add Variable Drawer / Panel -->
+            <div id="kaiz-mvu-add-panel" class="kaiz-mvu-add-panel" style="display: none">
+                <div class="kaiz-mvu-panel-header">
+                    <h4><i class="fa-solid fa-circle-plus"></i> Thêm Biến Mới vào Schema & Worldbook</h4>
+                    <i id="kaiz-mvu-close-add-panel" class="fa-solid fa-xmark interactable" style="cursor: pointer"></i>
+                </div>
+                <div class="kaiz-mvu-panel-grid">
+                    <div class="kaiz-mvu-field">
+                        <label>Đường dẫn biến (Tên hoặc Cha.Con):</label>
+                        <input
+                            type="text"
+                            id="kaiz-mvu-input-path"
+                            class="text_pole"
+                            placeholder="VD: Thể_lực hoặc Tu_vi.Linh_căn"
+                        />
+                    </div>
+                    <div class="kaiz-mvu-field">
+                        <label>Kiểu dữ liệu:</label>
+                        <select id="kaiz-mvu-select-type" class="text_pole">
+                            <option value="number">Số (Number - Hỗ trợ clamp min/max)</option>
+                            <option value="string">Chuỗi chữ (String)</option>
+                            <option value="boolean">Đúng / Sai (Boolean)</option>
+                            <option value="array">Danh sách (Array of String)</option>
+                        </select>
+                    </div>
+                    <div class="kaiz-mvu-field kaiz-mvu-num-field">
+                        <label>Giới hạn Nhỏ nhất (Min):</label>
+                        <input type="number" id="kaiz-mvu-input-min" class="text_pole" placeholder="0" />
+                    </div>
+                    <div class="kaiz-mvu-field kaiz-mvu-num-field">
+                        <label>Giới hạn Lớn nhất (Max):</label>
+                        <input type="number" id="kaiz-mvu-input-max" class="text_pole" placeholder="100" />
+                    </div>
+                    <div class="kaiz-mvu-field">
+                        <label>Giá trị khởi tạo (Default):</label>
+                        <input
+                            type="text"
+                            id="kaiz-mvu-input-default"
+                            class="text_pole"
+                            placeholder="VD: 100 hoặc Bình thường"
+                        />
+                    </div>
+                    <div class="kaiz-mvu-field full-width">
+                        <label>Quy tắc AI suy luận (Hướng dẫn AI khi nào thay đổi biến này):</label>
+                        <input
+                            type="text"
+                            id="kaiz-mvu-input-rule"
+                            class="text_pole"
+                            placeholder="VD: Tăng khi chạy thể dục, giảm khi bị trúng đòn"
+                        />
+                    </div>
+                </div>
+                <div class="kaiz-mvu-panel-actions">
+                    <button
+                        type="button"
+                        id="kaiz-mvu-submit-add-btn"
+                        class="menu_button menu_button_primary interactable"
+                    >
+                        <i class="fa-solid fa-floppy-disk"></i> Lưu & Lan Truyền Vào Card
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tab 1: Stats Visual Cards -->
+            <div id="kaiz-mvu-tab-stats" class="kaiz-mvu-tab-content active">
+                <div id="kaiz-mvu-stats-grid" class="kaiz-mvu-categories-container">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Tab: Activity / Lorebook MVU Health Table -->
+            <div id="kaiz-mvu-tab-activity" class="kaiz-mvu-tab-content">
+                <div id="kaiz-mvu-activity-container" class="kaiz-mvu-activity-view">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Tab 2: Schema Management -->
+            <div id="kaiz-mvu-tab-schema" class="kaiz-mvu-tab-content">
+                <div id="kaiz-mvu-schema-table-container">
+                    <!-- Rendered by JS -->
+                </div>
+            </div>
+
+            <!-- Tab 3: Raw / YAML Code Inspector -->
+            <div id="kaiz-mvu-tab-raw" class="kaiz-mvu-tab-content">
+                <div class="kaiz-mvu-raw-panes">
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-code"></i> Live stat_data (JSON)</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-live" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-file-code"></i> Zod Schema Script</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-zod" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-book"></i> Worldbook [InitVar] (YAML)</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-initvar" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane">
+                        <div class="kaiz-mvu-raw-header">
+                            <span><i class="fa-solid fa-compass"></i> Worldbook [mvu_update] (YAML)</span>
+                        </div>
+                        <pre id="kaiz-mvu-raw-rules" class="kaiz-mvu-pre"></pre>
+                    </div>
+                    <div class="kaiz-mvu-raw-pane kaiz-mvu-raw-pane-full">
+                        <div class="kaiz-mvu-raw-header">
+                            <span
+                                ><i class="fa-solid fa-layer-group"></i> Toàn bộ biến tin nhắn (Message Variables
+                                Wrapper)</span
+                            >
+                        </div>
+                        <pre id="kaiz-mvu-raw-wrapper" class="kaiz-mvu-pre"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </dialog>

@@ -1,5 +1,16 @@
+export interface Workspace {
+    id?: number;
+    systemId?: string;
+    name: string;
+    systemPrompt: string;
+    toolsConfig: Record<string, boolean>;
+    createdAt: number;
+    updatedAt: number;
+}
+
 export interface ChatSession {
     id?: number;
+    workspaceId?: number | null;
     name: string;
     createdAt: number;
     updatedAt: number;
@@ -18,6 +29,8 @@ export interface ChatMessage {
     content: string;
     attachments?: ChatAttachment[];
     timestamp: number;
+    tokenCount?: number;
+    genTime?: number;
 }
 
 export interface BackupEntry {
@@ -28,10 +41,104 @@ export interface BackupEntry {
     timestamp: number;
 }
 
+export interface AutoTask {
+    id?: number;
+    name: string;
+    prompt: string;
+    triggerMode: 'turn' | 'time';
+    triggerValue: number;
+    maxRuns: number;
+    runCount: number;
+    executionMode: 'fresh' | 'persist';
+    chatId?: number;
+    lastTurnRequests?: number;
+    totalRequests?: number;
+    toolsConfig: Record<string, boolean>;
+    enabled: boolean;
+    createdAt: number;
+}
+
+export interface UISnapshot {
+    id?: number;
+    snapshotId: string;
+    timestamp: number;
+    label: string;
+    type: 'css' | 'element' | 'theme';
+    cssData?: {
+        styleId: string;
+        previousContent: string | null;
+    };
+    elementData?: {
+        elementId: string;
+        previousOuterHTML: string | null;
+        parentSelector: string;
+        position: string;
+    };
+    themeData?: {
+        previousValues: Record<string, string>;
+    };
+    applied: boolean;
+}
+
+export interface ThemeReference {
+    id?: number;
+    name: string;
+    themeJson: string;
+    isDefault: boolean;
+    addedAt: number;
+}
+
+export interface GalleryImage {
+    id?: number;
+    prompt: string;
+    base64: string;
+    timestamp: number;
+    provider: string;
+    durationMs?: number;
+}
+
+export interface PresetCommitEntry {
+    id?: number;
+    hash: string;
+    parentHash: string | null;
+    presetName: string;
+    message: string;
+    author: 'agent' | 'user';
+    timestamp: number;
+    tag?: string;
+    tree: {
+        prompts: any[];
+        prompt_order: any[];
+    };
+    stats: {
+        added: number;
+        modified: number;
+        deleted: number;
+        totalBlocks: number;
+    };
+    diffSummary: string;
+    diffItems?: any[];
+}
+
 export class KaizDB {
+    private static instance: KaizDB | null = null;
+
+    public static getInstance(): KaizDB {
+        if (!KaizDB.instance) {
+            KaizDB.instance = new KaizDB();
+        }
+        return KaizDB.instance;
+    }
+
     private dbName = 'KaizAgentDB';
-    private dbVersion = 2;
+    private dbVersion = 7;
     private db: IDBDatabase | null = null;
+
+    constructor() {
+        if (!KaizDB.instance) {
+            KaizDB.instance = this;
+        }
+    }
 
     public async init(): Promise<void> {
         return new Promise((resolve, reject) => {
@@ -40,9 +147,21 @@ export class KaizDB {
             request.onupgradeneeded = (event: IDBVersionChangeEvent) => {
                 const db = (event.target as IDBOpenDBRequest).result;
 
+                if (!db.objectStoreNames.contains('workspaces')) {
+                    const wsStore = db.createObjectStore('workspaces', { keyPath: 'id', autoIncrement: true });
+                    wsStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                }
+
                 if (!db.objectStoreNames.contains('chats')) {
                     const chatStore = db.createObjectStore('chats', { keyPath: 'id', autoIncrement: true });
                     chatStore.createIndex('updatedAt', 'updatedAt', { unique: false });
+                    chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                } else if (event.oldVersion < 3) {
+                    const txn = (event.target as IDBOpenDBRequest).transaction;
+                    const chatStore = txn!.objectStore('chats');
+                    if (!chatStore.indexNames.contains('workspaceId')) {
+                        chatStore.createIndex('workspaceId', 'workspaceId', { unique: false });
+                    }
                 }
 
                 if (!db.objectStoreNames.contains('messages')) {
@@ -56,10 +175,54 @@ export class KaizDB {
                     backupStore.createIndex('type', 'type', { unique: false });
                     backupStore.createIndex('timestamp', 'timestamp', { unique: false });
                 }
+
+                // --- AUTO TASKS (DB v4) ---
+                if (!db.objectStoreNames.contains('autoTasks')) {
+                    db.createObjectStore('autoTasks', { keyPath: 'id', autoIncrement: true });
+                }
+
+                // --- UI CUSTOMIZATION (DB v5) ---
+                if (!db.objectStoreNames.contains('kaiz_ui_snapshots')) {
+                    const snapStore = db.createObjectStore('kaiz_ui_snapshots', { keyPath: 'id', autoIncrement: true });
+                    snapStore.createIndex('snapshotId', 'snapshotId', { unique: true });
+                    snapStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    snapStore.createIndex('applied', 'applied', { unique: false });
+                }
+
+                if (!db.objectStoreNames.contains('kaiz_theme_library')) {
+                    const themeStore = db.createObjectStore('kaiz_theme_library', {
+                        keyPath: 'id',
+                        autoIncrement: true,
+                    });
+                    themeStore.createIndex('name', 'name', { unique: false });
+                }
+
+                // --- GALLERY IMAGES (DB v6) ---
+                if (!db.objectStoreNames.contains('gallery_images')) {
+                    const galleryStore = db.createObjectStore('gallery_images', {
+                        keyPath: 'id',
+                        autoIncrement: true,
+                    });
+                    galleryStore.createIndex('timestamp', 'timestamp', { unique: false });
+                }
+
+                // --- PRESET COMMITS (DB v7) ---
+                if (!db.objectStoreNames.contains('preset_commits')) {
+                    const commitStore = db.createObjectStore('preset_commits', {
+                        keyPath: 'id',
+                        autoIncrement: true,
+                    });
+                    commitStore.createIndex('hash', 'hash', { unique: true });
+                    commitStore.createIndex('presetName', 'presetName', { unique: false });
+                    commitStore.createIndex('timestamp', 'timestamp', { unique: false });
+                    commitStore.createIndex('parentHash', 'parentHash', { unique: false });
+                    commitStore.createIndex('tag', 'tag', { unique: false });
+                }
             };
 
-            request.onsuccess = (event: Event) => {
+            request.onsuccess = async (event: Event) => {
                 this.db = (event.target as IDBOpenDBRequest).result;
+                await this.ensureSystemWorkspaces();
                 resolve();
             };
 
@@ -70,15 +233,240 @@ export class KaizDB {
         });
     }
 
+    private async ensureSystemWorkspaces(): Promise<void> {
+        const workspaces = await this.getAllWorkspaces();
+
+        const roleplayWs = workspaces.find((w) => w.systemId === 'roleplay');
+        const roleplayPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
+        const roleplayTools = [
+            'get_char_info',
+            'get_chat_history',
+            'get_lorebook_info',
+            'get_user_persona',
+            'manage_user_input',
+        ];
+        if (!roleplayWs) {
+            await this.createSystemWorkspace('roleplay', 'Roleplay & Story', roleplayPrompt, roleplayTools);
+        }
+
+        const modderWs = workspaces.find((w) => w.systemId === 'modder');
+        const modderPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
+        const modderTools = [
+            'get_chat_history',
+            'get_char_info',
+            'list_characters',
+            'edit_character_card',
+            'get_lorebook_info',
+            'manage_lorebook_entry',
+            'manage_worldbook',
+            'get_regex_list',
+            'get_regex_info',
+            'manage_regex',
+            'get_tavern_helper_scripts',
+            'get_tavern_helper_script_info',
+            'manage_tavern_helper_script',
+            'get_user_persona',
+            'edit_user_persona',
+            'manage_chat_text',
+            'manage_backup',
+        ];
+        if (!modderWs) {
+            await this.createSystemWorkspace('modder', 'Modding & Editor', modderPrompt, modderTools);
+        }
+
+        const uiDesignerWs = workspaces.find((w) => w.systemId === 'ui_designer');
+        const uiDesignerPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+        const uiDesignerTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
+        if (!uiDesignerWs) {
+            await this.createSystemWorkspace('ui_designer', 'UI & Theme Designer', uiDesignerPrompt, uiDesignerTools);
+        }
+    }
+
+    private async createSystemWorkspace(
+        systemId: string,
+        name: string,
+        systemPrompt: string,
+        toolNames: string[],
+    ): Promise<void> {
+        const toolsConfig: Record<string, boolean> = {};
+        toolNames.forEach((t) => (toolsConfig[t] = true));
+
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readwrite');
+            const store = transaction.objectStore('workspaces');
+
+            const now = Date.now();
+            const ws: Workspace = {
+                systemId,
+                name,
+                systemPrompt,
+                toolsConfig,
+                createdAt: now,
+                updatedAt: now,
+            };
+
+            const request = store.add(ws);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- WORKSPACES ---
+
+    public async createWorkspace(name: string): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readwrite');
+            const store = transaction.objectStore('workspaces');
+            const now = Date.now();
+            const ws: Workspace = { name, systemPrompt: '', toolsConfig: {}, createdAt: now, updatedAt: now };
+
+            const request = store.add(ws);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async updateWorkspace(id: number, data: Partial<Workspace>): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readwrite');
+            const store = transaction.objectStore('workspaces');
+
+            const getReq = store.get(id);
+            getReq.onsuccess = () => {
+                const ws = getReq.result as Workspace;
+                if (!ws) return reject(new Error('Workspace not found'));
+                Object.assign(ws, data);
+                ws.updatedAt = Date.now();
+                const putReq = store.put(ws);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
+            };
+            getReq.onerror = () => reject(getReq.error);
+        });
+    }
+
+    public async getAllWorkspaces(): Promise<Workspace[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readonly');
+            const store = transaction.objectStore('workspaces');
+            const index = store.index('updatedAt');
+
+            const workspaces: Workspace[] = [];
+            const request = index.openCursor(null, 'prev');
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    workspaces.push(cursor.value as Workspace);
+                    cursor.continue();
+                } else {
+                    resolve(workspaces);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteWorkspace(id: number): Promise<void> {
+        if (!this.db) throw new Error('DB not initialized');
+
+        // Check if it's a system workspace
+        const workspaces = await this.getAllWorkspaces();
+        const ws = workspaces.find((w) => w.id === id);
+        if (ws && ws.systemId) {
+            throw new Error('Cannot delete a system workspace');
+        }
+
+        // Bước 1: Lấy danh sách chat trong workspace này
+        const chatsToDelete = await this.getAllChats(id);
+
+        // Bước 2: Xóa từng chat (và messages đi kèm)
+        for (const chat of chatsToDelete) {
+            if (chat.id) {
+                await this.deleteChat(chat.id).catch(console.error);
+            }
+        }
+
+        // Bước 3: Xóa bản ghi workspace trong db
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['workspaces'], 'readwrite');
+            const store = transaction.objectStore('workspaces');
+            const req = store.delete(id);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    public async resetSystemWorkspace(id: number): Promise<void> {
+        const workspaces = await this.getAllWorkspaces();
+        const ws = workspaces.find((w) => w.id === id);
+        if (!ws || !ws.systemId) return;
+
+        let defaultName = '';
+        let defaultPrompt = '';
+        let defaultTools: string[] = [];
+
+        if (ws.systemId === 'roleplay') {
+            defaultName = 'Roleplay & Story';
+            defaultPrompt = `Bạn hiện đang ở trong Workspace "Roleplay & Story". Nhiệm vụ chính của bạn là hỗ trợ người dùng đọc, phân tích và tham gia vào câu chuyện Roleplay (RP) trong SillyTavern. Bạn sẽ hành xử như một Co-writer (Người đồng sáng tác) hoặc một người dẫn truyện (Dungeon Master) tận tâm.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. ĐỌC HIỂU BỐI CẢNH: Khi bắt đầu, hãy ưu tiên dùng các tool để đọc bối cảnh: get_char_info (nhân vật), get_user_persona (người dùng), get_chat_history (diễn biến truyện), và get_lorebook_info (thế giới quan).\n2. SÁNG TÁC: Khi người dùng yêu cầu tiếp tục câu chuyện hoặc viết tin nhắn thay họ, hãy phân tích kỹ tính cách nhân vật và bối cảnh. Sử dụng văn phong mượt mà, đậm chất văn học và phù hợp với tone truyện.\n3. THAO TÁC TRỰC TIẾP: Sử dụng tool manage_user_input để điền hoặc nối chữ trực tiếp vào khung chat của người dùng khi được nhờ.\n4. CỘNG SỰ SÁNG TẠO: Nếu cốt truyện có nhiều hướng rẽ, hãy đề xuất các phương án và hỏi ý kiến người dùng để cùng phát triển, không nên tự tiện áp đặt kết cục.`;
+            defaultTools = [
+                'get_char_info',
+                'get_chat_history',
+                'get_lorebook_info',
+                'get_user_persona',
+                'manage_user_input',
+            ];
+        } else if (ws.systemId === 'modder') {
+            defaultName = 'Modding & Editor';
+            defaultPrompt = `Bạn hiện đang ở trong Workspace "Modding & Editor". Nhiệm vụ chính của bạn là hỗ trợ kỹ thuật, tùy biến (mod) và sửa đổi cấu trúc dữ liệu của SillyTavern (Character Cards, Lorebooks, Regex, Helper Scripts).\n\nLuồng hoạt động (Flow) bắt buộc:\n1. AN TOÀN TRƯỚC TIÊN: Trước khi thực hiện bất kỳ lệnh sửa đổi (edit) nào lên các file quan trọng, BẮT BUỘC phải cân nhắc dùng tool manage_backup để tạo bản sao lưu nếu thấy rủi ro cao.\n2. NGUYÊN TẮC "ĐỌC RỒI MỚI SỬA": Luôn gọi các hàm get_* (get_char_info, get_lorebook_info, get_regex_info...) để nắm cấu trúc hiện tại trước khi gọi các hàm edit_* hoặc manage_* tương ứng. Tuyệt đối không đoán mò dữ liệu.\n3. CHUẨN XÁC KỸ THUẬT: Khi sửa đổi Regex hoặc Script, hãy đảm bảo code chuẩn xác, không có lỗi cú pháp, và giải thích ngắn gọn nguyên lý hoạt động.\n4. BẢO TOÀN DỮ LIỆU: Khi chỉnh sửa Thẻ nhân vật (Character Card) hoặc Lorebook, hãy bảo toàn định dạng cũ, chỉ thay đổi hoặc bổ sung đúng những phần người dùng yêu cầu.`;
+            defaultTools = [
+                'get_chat_history',
+                'get_char_info',
+                'list_characters',
+                'edit_character_card',
+                'get_lorebook_info',
+                'manage_lorebook_entry',
+                'manage_worldbook',
+                'get_regex_list',
+                'get_regex_info',
+                'manage_regex',
+                'get_tavern_helper_scripts',
+                'get_tavern_helper_script_info',
+                'manage_tavern_helper_script',
+                'get_user_persona',
+                'edit_user_persona',
+                'manage_chat_text',
+                'manage_backup',
+            ];
+        } else if (ws.systemId === 'ui_designer') {
+            defaultName = 'UI & Theme Designer';
+            defaultPrompt = `Bạn hiện đang ở trong Workspace "UI & Theme Designer". Nhiệm vụ chính của bạn là hỗ trợ thiết kế, tùy chỉnh giao diện (UI) và theme của SillyTavern.\n\nLuồng hoạt động (Flow) bắt buộc:\n1. TÙY BIẾN GIAO DIỆN (UI Customization): Khi người dùng muốn thay đổi giao diện SillyTavern, hãy dùng st_theme_manager (đọc/đổi theme, CSS variables), st_css_manager (inject CSS tùy chỉnh), và st_inject_element (chèn/gỡ phần tử HTML).\n2. KHẢO SÁT TRƯỚC KHI LÀM: Trước khi thay đổi lớn, hãy dùng st_theme_manager action "get_current_theme" để khảo sát theme hiện tại, và action "get_reference_themes" để xem các theme mẫu.\n3. AN TOÀN VÀ ROLLBACK: Mọi thay đổi qua các tools này đều được tự động snapshot để người dùng có thể rollback. Đừng ngại thử nghiệm, nhưng hãy đảm bảo code CSS/HTML chuẩn xác. Tuyệt đối KHÔNG tự ý giả mạo dữ liệu hay sửa file hệ thống nếu không được yêu cầu.`;
+            defaultTools = ['st_theme_manager', 'st_css_manager', 'st_inject_element'];
+        }
+
+        const toolsConfig: Record<string, boolean> = {};
+        defaultTools.forEach((t) => (toolsConfig[t] = true));
+
+        return this.updateWorkspace(id, {
+            name: defaultName,
+            systemPrompt: defaultPrompt,
+            toolsConfig,
+        });
+    }
+
     // --- CHATS ---
 
-    public async createChat(name: string): Promise<number> {
+    public async createChat(name: string, workspaceId: number | null = null): Promise<number> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['chats'], 'readwrite');
             const store = transaction.objectStore('chats');
             const now = Date.now();
-            const chat: ChatSession = { name, createdAt: now, updatedAt: now };
+            const chat: ChatSession = { name, workspaceId, createdAt: now, updatedAt: now };
 
             const request = store.add(chat);
             request.onsuccess = () => resolve(request.result as number);
@@ -125,7 +513,7 @@ export class KaizDB {
         });
     }
 
-    public async getAllChats(): Promise<ChatSession[]> {
+    public async getAllChats(workspaceId: number | null = null): Promise<ChatSession[]> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['chats'], 'readonly');
@@ -137,7 +525,11 @@ export class KaizDB {
             request.onsuccess = (e) => {
                 const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
                 if (cursor) {
-                    chats.push(cursor.value as ChatSession);
+                    const chat = cursor.value as ChatSession;
+                    const cWorkspaceId = chat.workspaceId ?? null;
+                    if (cWorkspaceId === workspaceId) {
+                        chats.push(chat);
+                    }
                     cursor.continue();
                 } else {
                     resolve(chats);
@@ -173,6 +565,28 @@ export class KaizDB {
         });
     }
 
+    public async clearMessages(chatId: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['messages'], 'readwrite');
+            const msgStore = transaction.objectStore('messages');
+
+            const msgIndex = msgStore.index('chatId');
+            const req = msgIndex.openCursor(IDBKeyRange.only(chatId));
+            req.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    cursor.delete();
+                    cursor.continue();
+                }
+            };
+            req.onerror = () => reject(req.error);
+
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
     // --- MESSAGES ---
 
     public async addMessage(
@@ -180,6 +594,8 @@ export class KaizDB {
         role: 'user' | 'agent' | 'system',
         content: string,
         attachments?: ChatAttachment[],
+        tokenCount?: number,
+        genTime?: number,
     ): Promise<number> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
@@ -189,12 +605,46 @@ export class KaizDB {
             if (attachments && attachments.length > 0) {
                 msg.attachments = attachments;
             }
+            if (tokenCount !== undefined) msg.tokenCount = tokenCount;
+            if (genTime !== undefined) msg.genTime = genTime;
 
             const request = store.add(msg);
             request.onsuccess = async () => {
                 await this.updateChatTimestamp(chatId).catch(console.error);
                 resolve(request.result as number);
             };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async updateMessageText(id: number, content: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['messages'], 'readwrite');
+            const store = transaction.objectStore('messages');
+
+            const request = store.get(id);
+            request.onsuccess = () => {
+                const msg = request.result;
+                if (!msg) {
+                    return reject(new Error('Message not found'));
+                }
+                msg.content = content;
+                const updateReq = store.put(msg);
+                updateReq.onsuccess = () => resolve();
+                updateReq.onerror = () => reject(updateReq.error);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteMessage(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['messages'], 'readwrite');
+            const store = transaction.objectStore('messages');
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
     }
@@ -264,6 +714,526 @@ export class KaizDB {
 
             const request = store.delete(id);
             request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- AUTO TASKS ---
+
+    public async createAutoTask(task: Omit<AutoTask, 'id'>): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+            const store = transaction.objectStore('autoTasks');
+
+            const request = store.add(task);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllAutoTasks(): Promise<AutoTask[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readonly');
+            const store = transaction.objectStore('autoTasks');
+
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result as AutoTask[]);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async updateAutoTask(id: number, data: Partial<AutoTask>): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+            const store = transaction.objectStore('autoTasks');
+
+            const getReq = store.get(id);
+            getReq.onsuccess = () => {
+                const task = getReq.result as AutoTask;
+                if (!task) return reject(new Error('AutoTask not found'));
+                Object.assign(task, data);
+                const putReq = store.put(task);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
+            };
+            getReq.onerror = () => reject(getReq.error);
+        });
+    }
+
+    public async deleteAutoTask(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['autoTasks'], 'readwrite');
+            const store = transaction.objectStore('autoTasks');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- UI SNAPSHOTS ---
+
+    public async addSnapshot(snapshot: UISnapshot): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.add(snapshot);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllSnapshots(): Promise<UISnapshot[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+            const index = store.index('timestamp');
+
+            const snapshots: UISnapshot[] = [];
+            const request = index.openCursor(null, 'prev');
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    snapshots.push(cursor.value as UISnapshot);
+                    cursor.continue();
+                } else {
+                    resolve(snapshots);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+    public async getSnapshotById(snapshotId: string): Promise<UISnapshot | null> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readonly');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+            const index = store.index('snapshotId');
+
+            const req = index.get(snapshotId);
+            req.onsuccess = () => {
+                resolve((req.result as UISnapshot) || null);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    public async getActiveSnapshots(): Promise<UISnapshot[]> {
+        const all = await this.getAllSnapshots();
+        return all.filter((s) => s.applied === true);
+    }
+
+    public async markSnapshotRolledBack(snapshotId: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+            const index = store.index('snapshotId');
+
+            const req = index.get(snapshotId);
+            req.onsuccess = () => {
+                const snap = req.result as UISnapshot;
+                if (!snap) return resolve();
+                snap.applied = false;
+                const putReq = store.put(snap);
+                putReq.onsuccess = () => resolve();
+                putReq.onerror = () => reject(putReq.error);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+
+    public async markAllSnapshotsRolledBack(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.openCursor();
+            request.onsuccess = (e) => {
+                const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+                if (cursor) {
+                    const snap = cursor.value as UISnapshot;
+                    if (snap.applied) {
+                        snap.applied = false;
+                        cursor.update(snap);
+                    }
+                    cursor.continue();
+                }
+            };
+            request.onerror = () => reject(request.error);
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
+    public async deleteSnapshot(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async clearAllSnapshots(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_ui_snapshots'], 'readwrite');
+            const store = transaction.objectStore('kaiz_ui_snapshots');
+
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- THEME LIBRARY ---
+
+    public async addThemeReference(theme: ThemeReference): Promise<number> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.add(theme);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllThemeReferences(): Promise<ThemeReference[]> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readonly');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.getAll();
+            request.onsuccess = () => resolve(request.result as ThemeReference[]);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteThemeReference(id: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async clearThemeLibrary(): Promise<void> {
+        return new Promise((resolve, reject) => {
+            if (!this.db) return reject(new Error('DB not initialized'));
+            const transaction = this.db.transaction(['kaiz_theme_library'], 'readwrite');
+            const store = transaction.objectStore('kaiz_theme_library');
+
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // --- IMAGE GALLERY (DB v6) ---
+
+    public async addGalleryImage(image: Omit<GalleryImage, 'id'>): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
+
+            const request = store.add(image);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getAllGalleryImages(): Promise<GalleryImage[]> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readonly');
+            const store = transaction.objectStore('gallery_images');
+
+            const request = store.getAll();
+            request.onsuccess = () => {
+                const results = (request.result as GalleryImage[]) || [];
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteGalleryImage(id: number): Promise<void> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
+
+            const request = store.delete(id);
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deleteMultipleGalleryImages(ids: number[]): Promise<void> {
+        if (!ids || ids.length === 0) return;
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
+
+            ids.forEach((id) => store.delete(id));
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
+    public async clearAllGalleryImages(): Promise<void> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['gallery_images'], 'readwrite');
+            const store = transaction.objectStore('gallery_images');
+
+            const request = store.clear();
+            request.onsuccess = () => resolve();
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // =========================================================================
+    // PRESET COMMITS (GIT CONTROL VERSION)
+    // =========================================================================
+
+    public async addPresetCommit(commit: PresetCommitEntry): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+
+            const request = store.add(commit);
+            request.onsuccess = () => resolve(request.result as number);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetCommits(presetName: string, limit: number = 30): Promise<PresetCommitEntry[]> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const request = index.getAll(presetName);
+            request.onsuccess = () => {
+                const results = (request.result as PresetCommitEntry[]) || [];
+                // Sort newest first
+                results.sort((a, b) => b.timestamp - a.timestamp);
+                resolve(results.slice(0, limit));
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetCommitByHash(hash: string): Promise<PresetCommitEntry | null> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('hash');
+
+            const request = index.get(hash);
+            request.onsuccess = () => {
+                resolve((request.result as PresetCommitEntry) || null);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetCommitByTag(presetName: string, tag: string): Promise<PresetCommitEntry | null> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const request = index.getAll(presetName);
+            request.onsuccess = () => {
+                const results = (request.result as PresetCommitEntry[]) || [];
+                const found = results.find((c) => c.tag === tag);
+                resolve(found || null);
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deletePresetCommits(presetName: string): Promise<void> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    cursor.delete();
+                    cursor.continue();
+                } else {
+                    resolve();
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async deletePresetCommitsAfter(presetName: string, timestamp: number): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            let deletedCount = 0;
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    const entry = cursor.value as PresetCommitEntry;
+                    if (entry.timestamp > timestamp) {
+                        cursor.delete();
+                        deletedCount++;
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(deletedCount);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async prunePresetCommits(presetName: string, keepCount: number = 30): Promise<number> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        const allCommits = await this.getPresetCommits(presetName, 1000);
+        if (allCommits.length <= keepCount) return 0;
+
+        const toDeleteHashes = new Set(allCommits.slice(keepCount).map((c) => c.hash));
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readwrite');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            let deletedCount = 0;
+            const request = index.openCursor(IDBKeyRange.only(presetName));
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    const entry = cursor.value as PresetCommitEntry;
+                    if (toDeleteHashes.has(entry.hash)) {
+                        cursor.delete();
+                        deletedCount++;
+                    }
+                    cursor.continue();
+                } else {
+                    resolve(deletedCount);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getDistinctPresetNames(): Promise<string[]> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+            const index = store.index('presetName');
+
+            const names = new Set<string>();
+            const request = index.openKeyCursor();
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursor;
+                if (cursor) {
+                    names.add(cursor.key as string);
+                    cursor.continue();
+                } else {
+                    resolve(Array.from(names));
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    public async getPresetStorageStats(): Promise<{
+        totalCommits: number;
+        totalBytes: number;
+        presetCount: number;
+        byPreset: Record<string, { commits: number; bytes: number }>;
+    }> {
+        if (!this.db) await this.init();
+        if (!this.db) throw new Error('DB not initialized');
+        return new Promise((resolve, reject) => {
+            const transaction = this.db!.transaction(['preset_commits'], 'readonly');
+            const store = transaction.objectStore('preset_commits');
+
+            let totalCommits = 0;
+            let totalBytes = 0;
+            const byPreset: Record<string, { commits: number; bytes: number }> = {};
+
+            const request = store.openCursor();
+            request.onsuccess = (event: Event) => {
+                const cursor = (event.target as IDBRequest).result as IDBCursorWithValue;
+                if (cursor) {
+                    totalCommits++;
+                    const entry = cursor.value as PresetCommitEntry;
+                    const pName = entry.presetName || 'unknown';
+                    const str = JSON.stringify(entry);
+                    const bytes = str.length * 2; // rough UTF-16 bytes in memory
+                    totalBytes += bytes;
+
+                    if (!byPreset[pName]) byPreset[pName] = { commits: 0, bytes: 0 };
+                    byPreset[pName].commits++;
+                    byPreset[pName].bytes += bytes;
+
+                    cursor.continue();
+                } else {
+                    resolve({
+                        totalCommits,
+                        totalBytes,
+                        presetCount: Object.keys(byPreset).length,
+                        byPreset,
+                    });
+                }
+            };
             request.onerror = () => reject(request.error);
         });
     }

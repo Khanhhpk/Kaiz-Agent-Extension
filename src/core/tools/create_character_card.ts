@@ -5,6 +5,7 @@ export const createCharacterCardTool: ITool = {
     schema: {
         name: 'create_character_card',
         description: 'Tạo một thẻ nhân vật mới hoàn toàn. Cần truyền vào tên và các thông tin cơ bản.',
+        userDescription: 'Tạo một thẻ nhân vật mới với các thông tin cơ bản.',
         parameters: {
             type: 'object',
             properties: {

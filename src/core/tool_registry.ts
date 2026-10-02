@@ -4,14 +4,21 @@
  * Lấy cảm hứng từ kiến trúc Tool của LumiAgent nhưng tối giản hoá (không dùng Zod) để phù hợp extension Client-side.
  */
 
-export interface ToolParameterProperty {
-    type: string;
+interface ToolParameterProperty {
+    type?: string;
     description: string;
     enum?: string[];
-    items?: { type: string };
+    items?:
+        | {
+              type: string;
+              properties?: Record<string, ToolParameterProperty>;
+              required?: string[];
+          }
+        | any;
+    properties?: Record<string, ToolParameterProperty>;
 }
 
-export interface ToolParameters {
+interface ToolParameters {
     type: 'object';
     properties: Record<string, ToolParameterProperty>;
     required?: string[];
@@ -20,6 +27,7 @@ export interface ToolParameters {
 export interface ToolSchema {
     name: string;
     description: string;
+    userDescription?: string;
     parameters: ToolParameters;
 }
 

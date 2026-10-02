@@ -6,6 +6,7 @@ export const getTavernHelperScriptInfoTool: ITool = {
         name: 'get_tavern_helper_script_info',
         description:
             'Đọc chi tiết (full info) của một Tavern Helper Script dựa vào ID. Trả về cấu trúc JSON đầy đủ gồm cả code content.',
+        userDescription: 'Xem chi tiết cấu hình và mã nguồn của một Tavern Helper Script.',
         parameters: {
             type: 'object',
             properties: {
@@ -17,7 +18,7 @@ export const getTavernHelperScriptInfoTool: ITool = {
             required: ['id'],
         },
     },
-    execute: async (args: any, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (args: any, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const th = (window as any).TavernHelper;
             if (!th) {
@@ -60,7 +61,9 @@ export const getTavernHelperScriptInfoTool: ITool = {
                         foundScope = scope;
                         break;
                     }
-                } catch (e) {}
+                } catch {
+                    /* ignore */
+                }
             }
 
             if (!foundScript) {

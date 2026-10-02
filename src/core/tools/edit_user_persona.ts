@@ -6,6 +6,7 @@ export const editUserPersonaTool: ITool = {
         name: 'edit_user_persona',
         description:
             'Chỉnh sửa và cập nhật hồ sơ (Persona) của người dùng hiện tại, bao gồm Tên và Mô tả tính cách/ngoại hình.',
+        userDescription: 'Cập nhật thông tin Persona của người dùng (tên và mô tả cá nhân).',
         parameters: {
             type: 'object',
             properties: {

@@ -6,6 +6,7 @@ export const manageWorldbookTool: ITool = {
         name: 'manage_worldbook',
         description:
             'Quản lý cấp độ TỔNG THỂ của các cuốn Sổ tay thế giới (Worldbook/Lorebook). Sử dụng để: Xem danh sách tất cả các cuốn sách trong hệ thống và xem cuốn nào đang Bật/Tắt (list_all); Bật hoặc Tắt nguyên một cuốn sách (toggle); Tạo một cuốn sách mới tinh (create).',
+        userDescription: 'Xem danh sách, bật/tắt liên kết hoặc tạo mới một cuốn Worldbook.',
         parameters: {
             type: 'object',
             properties: {

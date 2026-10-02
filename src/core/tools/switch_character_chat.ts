@@ -6,6 +6,7 @@ export const switchCharacterChatTool: ITool = {
         name: 'switch_character_chat',
         description:
             'Chuyển sang màn hình chat của một nhân vật khác. Cần cung cấp chính xác tên nhân vật (lấy từ kết quả list_characters).',
+        userDescription: 'Chuyển đổi phiên trò chuyện sang một nhân vật khác theo tên.',
         parameters: {
             type: 'object',
             properties: {

@@ -43,202 +43,131 @@ export class SillyTavernAdapter {
         const abort = new AbortController();
         const effectiveSignal = signal || abort.signal;
 
-        // 1. Nếu bật tính năng Custom Endpoint, ta gọi trực tiếp (bypass ST)
-        if (settings.useCustomEndpoint && settings.customUrl) {
-            console.log('[KaizAgent] Using Custom Endpoint:', settings.customUrl);
-            let text = '';
-            let reasoning: string | null = null;
-            let isMaxTokens = false;
+        // Bắt buộc cấu hình Custom Endpoint
+        const customUrl = (settings.customUrl || '').trim();
+        if (!customUrl) {
+            throw new Error(
+                'Chưa cấu hình API URL! Vui lòng vào Kaiz-Agent Settings -> LLM Connection để nhập Custom API URL và Model.',
+            );
+        }
 
-            try {
-                let url = settings.customUrl;
-                if (!url.endsWith('/chat/completions')) {
-                    url = url.replace(/\/$/, '') + '/chat/completions';
-                }
+        console.log('[KaizAgent] Using Custom Endpoint:', customUrl);
+        let text = '';
+        let reasoning: string | null = null;
+        let isMaxTokens = false;
 
-                const headers: any = { 'Content-Type': 'application/json' };
-                if (settings.customKey) headers['Authorization'] = `Bearer ${settings.customKey}`;
+        try {
+            let url = customUrl;
+            if (!url.endsWith('/chat/completions')) {
+                url = url.replace(/\/$/, '') + '/chat/completions';
+            }
 
-                const payload = {
-                    model: settings.customModel || 'gpt-3.5-turbo',
-                    messages: messages,
-                    max_tokens: maxTokens,
-                    stream: stream,
-                };
+            const headers: any = { 'Content-Type': 'application/json' };
+            if (settings.customKey && settings.customKey.trim()) {
+                headers['Authorization'] = `Bearer ${settings.customKey.trim()}`;
+            }
 
-                const res = await fetch(url, {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify(payload),
-                    signal: effectiveSignal,
-                });
+            const effMaxTokens =
+                typeof maxTokens === 'number' && maxTokens > 0
+                    ? maxTokens
+                    : typeof settings.maxTokens === 'number' && settings.maxTokens > 0
+                      ? settings.maxTokens
+                      : 65000;
 
-                if (!res.ok) {
-                    const errText = await res.text().catch(() => res.statusText);
-                    throw new Error(`Custom API Error ${res.status}: ${errText}`);
-                }
+            const payload: any = {
+                model: (settings.customModel && settings.customModel.trim()) || 'gpt-3.5-turbo',
+                messages: messages,
+                max_tokens: effMaxTokens,
+                stream: stream,
+            };
 
-                if (stream) {
-                    const reader = res.body?.getReader();
-                    const decoder = new TextDecoder('utf-8');
-                    let buffer = '';
+            // Temperature (Mặc định: 1)
+            if (typeof settings.temperature === 'number') {
+                payload.temperature = settings.temperature;
+            } else {
+                payload.temperature = 1;
+            }
 
-                    if (reader) {
-                        while (true) {
-                            const { done, value } = await reader.read();
-                            if (done) break;
+            // Top P (Mặc định: 0.95)
+            if (typeof settings.topP === 'number') {
+                payload.top_p = settings.topP;
+            } else {
+                payload.top_p = 0.95;
+            }
 
-                            buffer += decoder.decode(value, { stream: true });
-                            const lines = buffer.split('\n');
-                            buffer = lines.pop() || '';
+            // Top K (Mặc định: 64, bỏ qua nếu <= 0)
+            if (typeof settings.topK === 'number' && settings.topK > 0) {
+                payload.top_k = settings.topK;
+            }
 
-                            for (const line of lines) {
-                                const l = line.trim();
-                                if (!l || l.startsWith(':') || l === 'data: [DONE]') continue;
-                                if (l.startsWith('data: ')) {
-                                    try {
-                                        const data = JSON.parse(l.slice(6));
+            const res = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(payload),
+                signal: effectiveSignal,
+            });
 
-                                        const finish = data.choices?.[0]?.finish_reason;
-                                        if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
+            if (!res.ok) {
+                const errText = await res.text().catch(() => res.statusText);
+                throw new Error(`Custom API Error ${res.status}: ${errText}`);
+            }
 
-                                        const delta = data.choices?.[0]?.delta || {};
-                                        if (delta.content) text += delta.content;
-                                        if (delta.reasoning || delta.reasoning_content) {
-                                            reasoning =
-                                                (reasoning || '') + (delta.reasoning || delta.reasoning_content);
-                                        }
-                                        if (data.thinking) reasoning = (reasoning || '') + data.thinking;
+            if (stream) {
+                const reader = res.body?.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let buffer = '';
 
-                                        if (onUpdate) onUpdate(text, reasoning);
-                                    } catch (e) {}
+                if (reader) {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop() || '';
+
+                        for (const line of lines) {
+                            const l = line.trim();
+                            if (!l || l.startsWith(':') || l === 'data: [DONE]') continue;
+                            if (l.startsWith('data: ')) {
+                                try {
+                                    const data = JSON.parse(l.slice(6));
+
+                                    const finish = data.choices?.[0]?.finish_reason;
+                                    if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
+
+                                    const delta = data.choices?.[0]?.delta || {};
+                                    if (delta.content) text += delta.content;
+                                    if (delta.reasoning || delta.reasoning_content) {
+                                        reasoning = (reasoning || '') + (delta.reasoning || delta.reasoning_content);
+                                    }
+                                    if (data.thinking) reasoning = (reasoning || '') + data.thinking;
+
+                                    if (onUpdate) onUpdate(text, reasoning);
+                                } catch {
+                                    /* ignore non-json SSE */
                                 }
                             }
                         }
                     }
-                } else {
-                    const data = await res.json();
-                    const finish = data.choices?.[0]?.finish_reason;
-                    if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
-
-                    const msg = data.choices?.[0]?.message || {};
-                    text = msg.content || '';
-                    if (msg.reasoning || msg.reasoning_content) {
-                        reasoning = msg.reasoning || msg.reasoning_content;
-                    }
-                    if (data.thinking) reasoning = (reasoning || '') + data.thinking;
-                    if (onUpdate) onUpdate(text, reasoning);
                 }
-
-                return { text: text.trim(), reasoning, isMaxTokens };
-            } catch (e) {
-                console.error('[KaizAgent] Custom Endpoint error:', e);
-                throw e;
-            }
-        }
-
-        // 2. Nếu không bật Custom Endpoint, sử dụng ConnectionManager mặc định của SillyTavern
-        const service = ctx.ConnectionManagerRequestService;
-        let asyncGeneratorFn: any;
-
-        try {
-            const profileId =
-                ctx.extensionSettings?.connectionManager?.selectedProfile ||
-                document.getElementById('connection_profiles')?.value;
-
-            if (profileId && service && typeof service.sendRequest === 'function') {
-                asyncGeneratorFn = await service.sendRequest(profileId, messages, maxTokens, {
-                    stream: stream,
-                    signal: effectiveSignal,
-                    extractData: false,
-                    includePreset: true,
-                });
             } else {
-                const mainApi = window.main_api || ctx.main_api;
-                if (mainApi === 'openai' && ctx.ChatCompletionService) {
-                    const oaiSettings = window.oai_settings || ctx.oai_settings || {};
-                    asyncGeneratorFn = await ctx.ChatCompletionService.processRequest(
-                        {
-                            messages: messages,
-                            max_tokens: maxTokens,
-                            stream: stream,
-                        },
-                        { presetName: oaiSettings.preset_settings_openai },
-                        false,
-                        abort.signal,
-                    );
-                } else if (mainApi === 'textgenerationwebui' && ctx.TextCompletionService) {
-                    const textGenSettings =
-                        window.textgenerationwebui_settings || ctx.textgenerationwebui_settings || {};
-                    asyncGeneratorFn = await ctx.TextCompletionService.processRequest(
-                        {
-                            prompt: messages,
-                            max_tokens: maxTokens,
-                            stream: stream,
-                        },
-                        { presetName: textGenSettings.preset_settings_textgenerationwebui },
-                        false,
-                        abort.signal,
-                    );
-                } else {
-                    throw new Error('No active API connection found in SillyTavern. Please configure LLM settings.');
+                const data = await res.json();
+                const finish = data.choices?.[0]?.finish_reason;
+                if (finish === 'length' || finish === 'max_tokens') isMaxTokens = true;
+
+                const msg = data.choices?.[0]?.message || {};
+                text = msg.content || '';
+                if (msg.reasoning || msg.reasoning_content) {
+                    reasoning = msg.reasoning || msg.reasoning_content;
                 }
-            }
-
-            let text = '';
-            let reasoning = null;
-
-            const isGen =
-                typeof asyncGeneratorFn === 'function' ||
-                (asyncGeneratorFn != null && typeof asyncGeneratorFn[Symbol.asyncIterator] === 'function') ||
-                (asyncGeneratorFn != null && typeof asyncGeneratorFn.next === 'function');
-
-            let lastValue: any = null;
-
-            if (!isGen) {
-                const value = asyncGeneratorFn;
-                if (typeof value === 'string') {
-                    text = value.trim();
-                } else {
-                    text =
-                        value?.text ||
-                        value?.content ||
-                        value?.message?.content ||
-                        value?.choices?.[0]?.message?.content ||
-                        '';
-                }
-                const finishReason =
-                    lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
-                const isMaxTokens =
-                    finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
-                if (onUpdate) onUpdate(text, reasoning);
-                return { text: text.trim(), reasoning, isMaxTokens };
-            }
-
-            const gen = typeof asyncGeneratorFn === 'function' ? asyncGeneratorFn() : asyncGeneratorFn;
-            while (true) {
-                const { value, done } = await gen.next();
-                if (done) {
-                    if (value) lastValue = value;
-                    break;
-                }
-                lastValue = value;
-
-                const chunkText = value?.text || value?.content || value?.choices?.[0]?.delta?.content || '';
-                if (value?.thinking) reasoning = (reasoning || '') + value.thinking;
-
-                if (chunkText) text += chunkText;
-
+                if (data.thinking) reasoning = (reasoning || '') + data.thinking;
                 if (onUpdate) onUpdate(text, reasoning);
             }
-
-            const finishReason = lastValue?.finish_reason || lastValue?.state?.finish_reason || lastValue?.stop_reason;
-            const isMaxTokens =
-                finishReason === 'length' || finishReason === 'max_tokens' || finishReason === 'stop_limit';
 
             return { text: text.trim(), reasoning, isMaxTokens };
         } catch (e) {
-            console.error('[KaizAgent] generateCompletion error:', e);
+            console.error('[KaizAgent] Custom Endpoint error:', e);
             throw e;
         }
     }
@@ -331,29 +260,100 @@ export class SillyTavernAdapter {
     }
 
     /**
-     * Lấy lịch sử đoạn chat hiện tại (bỏ qua những tin nhắn ẩn)
+     * Lấy lịch sử đoạn chat hiện tại (bỏ qua những tin nhắn ẩn, tin hệ thống, và kết quả vẽ ảnh)
+     * Duyệt ngược từ cuối mảng để đảm bảo luôn lấy đủ `depth` tin nhắn hội thoại thật
      */
     public getChatContext(depth: number = 20) {
-        const ctx = SillyTavern.getContext();
-        if (!ctx.chat) return [];
+        const liveCtx =
+            typeof (globalThis as any).SillyTavern !== 'undefined'
+                ? (globalThis as any).SillyTavern.getContext()
+                : (globalThis as any).window?.SillyTavern?.getContext?.() || null;
 
-        const total = ctx.chat.length;
-        const startIndex = Math.max(0, total - depth);
-        const slice = ctx.chat.slice(startIndex);
+        const chatArray = liveCtx?.chat || (window as any).chat;
+        const char = liveCtx?.characters?.[liveCtx?.characterId];
+        const charName =
+            char?.name ||
+            char?.data?.name ||
+            (liveCtx?.name2 && liveCtx.name2 !== 'SillyTavern System' ? liveCtx.name2 : '') ||
+            'Character';
+        const userName = liveCtx?.name1 || 'User';
 
-        // H3: Track raw index trong slice (không phải filtered index) để chatIndex chính xác
         const result: any[] = [];
-        for (let i = 0; i < slice.length; i++) {
-            const m = slice[i];
-            if (m.is_system || m.is_hidden || (m.extra && m.extra.is_hidden)) continue;
-            result.push({
-                role: m.is_user ? 'user' : 'assistant',
-                name: m.is_user ? ctx.name1 || 'User' : m.name || ctx.name2 || 'Character',
-                content: typeof m.mes === 'string' ? m.mes : '',
-                chatIndex: startIndex + i, // index thật trong ctx.chat, không bị lệch bởi filter
-            });
+
+        if (Array.isArray(chatArray) && chatArray.length > 0) {
+            // Duyệt ngược từ tin nhắn mới nhất về trước để không bị nghẽn bởi các tin hệ thống ở cuối
+            for (let i = chatArray.length - 1; i >= 0 && result.length < depth; i--) {
+                const m = chatArray[i];
+                if (!m) continue;
+
+                // Bỏ qua tin nhắn hệ thống, tin ẩn
+                if (m.is_system || m.is_hidden || (m.extra && m.extra.is_hidden)) continue;
+
+                const rawMes = typeof m.mes === 'string' ? m.mes : '';
+                // Bỏ qua nếu tin nhắn chỉ chứa card ảnh kaiz hoặc HTML/ảnh rỗng
+                const stripped = rawMes
+                    .replace(/<div class="kaiz-draw-result"[\s\S]*?<\/div>\s*<\/div>/gi, '')
+                    .replace(/<img[^>]*>/gi, '')
+                    .replace(/!\[.*?\]\(.*?\)/gi, '')
+                    .trim();
+
+                if (!stripped) continue;
+
+                // Bỏ qua tin nhắn nếu chỉ là lệnh slash command
+                if (stripped.startsWith('/') && stripped.length < 100 && !stripped.includes('\n')) continue;
+
+                const msgName = m.is_user ? userName : m.name || charName;
+
+                result.push({
+                    role: m.is_user ? 'user' : 'assistant',
+                    name: msgName,
+                    content: stripped,
+                    chatIndex: i,
+                });
+            }
         }
-        return result;
+
+        // Fallback DOM: Nếu mảng trong bộ nhớ không có nhưng trên giao diện chat SillyTavern đang hiển thị tin nhắn
+        if (result.length === 0) {
+            const $ = (window as any).$;
+            if ($) {
+                const $messages = $('#chat .mes');
+                if ($messages && $messages.length > 0) {
+                    for (let i = $messages.length - 1; i >= 0 && result.length < depth; i--) {
+                        const $el = $($messages[i]);
+                        if ($el.attr('is_system') === 'true' || $el.hasClass('system_mes')) continue;
+                        if (
+                            $el.find('.kaiz-draw-result').length &&
+                            !$el
+                                .find('.mes_text')
+                                .text()
+                                .replace(/🎨\s*PROMPT[\s\S]*/, '')
+                                .trim()
+                        )
+                            continue;
+
+                        const isUser = $el.attr('is_user') === 'true';
+                        const msgName = $el.attr('ch_name') || (isUser ? userName : charName);
+
+                        const textEl = $el.find('.mes_text').clone();
+                        textEl.find('.kaiz-draw-result').remove();
+                        const cleanText = textEl.text().trim();
+                        if (!cleanText) continue;
+                        if (cleanText.startsWith('/') && cleanText.length < 100 && !cleanText.includes('\n')) continue;
+
+                        result.push({
+                            role: isUser ? 'user' : 'assistant',
+                            name: msgName,
+                            content: cleanText,
+                            chatIndex: i,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Đảo ngược lại để trả về mảng theo thứ tự thời gian từ cũ đến mới
+        return result.reverse();
     }
 
     /**
@@ -916,13 +916,149 @@ export class SillyTavernAdapter {
         const ctx = SillyTavern.getContext();
         try {
             if (type === 'character') {
+                if (typeof (ctx as any).unshallowCharacter === 'function' && ctx.characterId !== undefined) {
+                    try {
+                        await (ctx as any).unshallowCharacter(ctx.characterId);
+                    } catch (unshallowErr) {
+                        console.warn(
+                            '[KaizAgent] unshallowCharacter failed, proceeding with current in-memory state:',
+                            unshallowErr,
+                        );
+                    }
+                }
+
                 const char = ctx.characters?.[ctx.characterId];
                 if (!char) throw new Error('No active character found');
                 const charName = char.name || 'Unknown_Character';
-                const charData = char.data || char;
+                const rawData = char.data || {};
+
+                // 1. Đồng bộ các trường V2 Spec cốt lõi (ưu tiên char.data, fallback về root char)
+                const name = rawData.name ?? char.name ?? 'Unknown';
+                const description = rawData.description ?? char.description ?? '';
+                const personality = rawData.personality ?? char.personality ?? '';
+                const scenario = rawData.scenario ?? char.scenario ?? '';
+                const first_mes = rawData.first_mes ?? char.first_mes ?? '';
+                const mes_example = rawData.mes_example ?? char.mes_example ?? '';
+                const creator_notes = rawData.creator_notes ?? char.creatorcomment ?? '';
+                const system_prompt = rawData.system_prompt ?? char.system_prompt ?? '';
+                const post_history_instructions =
+                    rawData.post_history_instructions ?? char.post_history_instructions ?? '';
+                const alternate_greetings = Array.isArray(rawData.alternate_greetings)
+                    ? rawData.alternate_greetings
+                    : Array.isArray(char.alternate_greetings)
+                      ? char.alternate_greetings
+                      : [];
+                const creator = rawData.creator ?? char.creator ?? '';
+                const character_version = rawData.character_version ?? char.character_version ?? '';
+
+                // 2. Thu thập Tags đầy đủ
+                let tags =
+                    Array.isArray(rawData.tags) && rawData.tags.length > 0
+                        ? [...rawData.tags]
+                        : Array.isArray(char.tags) && char.tags.length > 0
+                          ? [...char.tags]
+                          : [];
+                if (tags.length === 0 && ctx.tagMap && ctx.tags && char.avatar) {
+                    const currentTagIds = ctx.tagMap[char.avatar] || [];
+                    tags = currentTagIds
+                        .map((id: string) => ctx.tags.find((t: any) => t.id === id)?.name)
+                        .filter(Boolean);
+                }
+
+                // 3. Đóng gói Extensions (bảo toàn tavern_helper, regex_scripts, talkativeness, fav, world, v.v.)
+                const extensions: Record<string, any> = {
+                    ...(rawData.extensions || {}),
+                };
+                if (char.talkativeness !== undefined && extensions.talkativeness === undefined) {
+                    extensions.talkativeness = char.talkativeness;
+                }
+                if (char.fav !== undefined && extensions.fav === undefined) {
+                    extensions.fav = char.fav;
+                }
+                const linkedWorldName = extensions.world || char.world || null;
+                if (linkedWorldName && !extensions.world) {
+                    extensions.world = linkedWorldName;
+                }
+
+                // 4. Thu thập Lorebook (Embedded hoặc đóng gói từ Linked Worldbook)
+                let characterBook = rawData.character_book ? JSON.parse(JSON.stringify(rawData.character_book)) : null;
+                if (
+                    (!characterBook || !characterBook.entries || characterBook.entries.length === 0) &&
+                    linkedWorldName
+                ) {
+                    try {
+                        let worldData: any = null;
+                        if (typeof ctx.loadWorldInfo === 'function') {
+                            worldData = await ctx.loadWorldInfo(linkedWorldName);
+                        } else {
+                            const res = await fetch('/api/worldinfo/get', {
+                                method: 'POST',
+                                headers: {
+                                    ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                                    'Content-Type': 'application/json',
+                                },
+                                body: JSON.stringify({ name: linkedWorldName }),
+                            });
+                            if (res.ok) worldData = await res.json();
+                        }
+                        if (worldData && worldData.entries) {
+                            const entriesArray = Array.isArray(worldData.entries)
+                                ? worldData.entries
+                                : Object.values(worldData.entries);
+                            characterBook = {
+                                name: linkedWorldName,
+                                description: `Tự động đóng gói từ Worldbook liên kết [${linkedWorldName}] vào bản sao lưu thẻ.`,
+                                extensions: worldData.extensions ?? {},
+                                entries: entriesArray,
+                            };
+                            if (worldData.scan_depth !== undefined && worldData.scan_depth !== null) {
+                                characterBook.scan_depth = worldData.scan_depth;
+                            }
+                            if (worldData.token_budget !== undefined && worldData.token_budget !== null) {
+                                characterBook.token_budget = worldData.token_budget;
+                            }
+                            if (worldData.recursive_scanning !== undefined && worldData.recursive_scanning !== null) {
+                                characterBook.recursive_scanning = worldData.recursive_scanning;
+                            }
+                        }
+                    } catch (wbErr) {
+                        console.warn('[KaizAgent] Không thể nhúng linked worldbook vào bản sao lưu thẻ:', wbErr);
+                    }
+                }
+
+                const fullCharData: Record<string, any> = {
+                    name,
+                    description,
+                    personality,
+                    scenario,
+                    first_mes,
+                    mes_example,
+                    creator_notes,
+                    system_prompt,
+                    post_history_instructions,
+                    alternate_greetings,
+                    character_book: characterBook,
+                    tags,
+                    creator,
+                    character_version,
+                    extensions,
+                };
+
+                const cardPayload = {
+                    spec: 'chara_card_v2',
+                    spec_version: '2.0',
+                    data: fullCharData,
+                    metadata: {
+                        avatar: char.avatar || '',
+                        exportDate: new Date().toISOString(),
+                        source: 'KaizAgent_FullCardBackup',
+                        linkedWorld: linkedWorldName,
+                    },
+                };
+
                 return {
                     name: charName,
-                    data: JSON.stringify({ spec: 'chara_card_v2', spec_version: '2.0', data: charData }, null, 2),
+                    data: JSON.stringify(cardPayload, null, 2),
                 };
             }
             if (type === 'chat') {
@@ -993,7 +1129,7 @@ export class SillyTavernAdapter {
             let ST_WorldInfo: any = null;
             try {
                 ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
-            } catch (e) {
+            } catch {
                 console.warn('[KaizAgent] Could not dynamically import world-info.js');
             }
 
@@ -1253,7 +1389,7 @@ export class SillyTavernAdapter {
             let ST_WorldInfo: any = null;
             try {
                 ST_WorldInfo = await new Function("return import('/scripts/world-info.js')")();
-            } catch (e) {
+            } catch {
                 return '[KaizAgent] Lỗi: Không thể import world-info.js (ST version unsupported).';
             }
 
@@ -1449,7 +1585,9 @@ export class SillyTavernAdapter {
                         if (ctx.eventSource && ctx.eventTypes) {
                             ctx.eventSource.emit(ctx.eventTypes.WORLDINFO_SETTINGS_UPDATED);
                         }
-                    } catch (_) {}
+                    } catch {
+                        /* ignore */
+                    }
                 }
 
                 if (state === 'enable') {

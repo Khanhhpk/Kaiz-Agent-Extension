@@ -6,6 +6,7 @@ export const deleteLastMessageTool: ITool = {
         name: 'delete_last_message',
         description:
             'Xóa tin nhắn cuối cùng trong đoạn chat hiện tại. Rất hữu ích khi tin nhắn cuối cùng bị lỗi hoặc người dùng yêu cầu xóa.',
+        userDescription: 'Xóa tin nhắn cuối cùng trong cuộc trò chuyện hiện tại.',
         parameters: {
             type: 'object',
             properties: {}, // Không yêu cầu tham số

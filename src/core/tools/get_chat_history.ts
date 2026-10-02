@@ -6,6 +6,7 @@ export const getChatHistoryTool: ITool = {
         name: 'get_chat_history',
         description:
             'Lấy lịch sử đoạn chat gần nhất giữa người dùng và nhân vật. TRICKS: Bạn có thể gọi công cụ này với depth = 0 để kiểm tra tổng số lượng tin nhắn (total_messages) hiện có trong chat mà không cần lấy nội dung chi tiết. Giúp bạn nắm được độ dài chat một cách tiết kiệm nhất.',
+        userDescription: 'Lấy lịch sử các tin nhắn gần đây giữa người dùng và nhân vật.',
         parameters: {
             type: 'object',
             properties: {

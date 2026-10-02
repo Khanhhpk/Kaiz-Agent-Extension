@@ -4,13 +4,14 @@ export const toggleVirtualCursorTool: ITool = {
     schema: {
         name: 'toggle_virtual_cursor',
         description: 'Bật hoặc tắt con trỏ chuột ảo trên màn hình. Dùng khi người dùng yêu cầu bật/tắt con trỏ ảo.',
+        userDescription: 'Bật hoặc tắt con trỏ chuột ảo mô phỏng hành vi trên màn hình.',
         parameters: {
             type: 'object',
             properties: {},
             required: [],
         },
     },
-    execute: async (args: any) => {
+    execute: async (_args: any) => {
         let cursor = document.getElementById('kaiz-virtual-cursor');
         if (cursor) {
             cursor.remove();
@@ -40,7 +41,9 @@ export const toggleVirtualCursorTool: ITool = {
                         }
                     }
                 }
-            } catch (e) {}
+            } catch {
+                /* ignore */
+            }
 
             // Spawn mới
             cursor = document.createElement('div');

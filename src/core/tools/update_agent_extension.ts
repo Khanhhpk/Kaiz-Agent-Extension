@@ -1,11 +1,12 @@
 import { ITool, ToolResult } from '../tool_registry';
 import { SillyTavernAdapter } from '../../adapters/st_adapter';
 
-export const updateKaizExtensionTool: ITool = {
+export const updateAgentExtensionTool: ITool = {
     schema: {
-        name: 'update_kaiz_extension',
+        name: 'update_agent_extension',
         description:
-            'Kiểm tra thông báo update của Kaiz-Agent-Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+            'Kiểm tra thông báo update của Agent Extension từ Extension Manager. Nếu có bản cập nhật mới, tự động click để update.',
+        userDescription: 'Kiểm tra và tự động cập nhật Agent Extension khi có phiên bản mới.',
         parameters: {
             type: 'object',
             properties: {},
@@ -15,7 +16,7 @@ export const updateKaizExtensionTool: ITool = {
     validate: () => {
         return; // Luôn dùng được trên trình duyệt có jQuery
     },
-    execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (_args: Record<string, any>, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             const reqHeaders: Record<string, string> = {
                 'Content-Type': 'application/json',
@@ -37,7 +38,9 @@ export const updateKaizExtensionTool: ITool = {
                     }
                     if (token) reqHeaders['X-CSRF-Token'] = token;
                 }
-            } catch (e) {}
+            } catch {
+                /* ignore */
+            }
 
             let namesToTry = ['Kaiz-Agent-Extension', 'Kaiz-Agent', 'kaiz-agent-extension', '/Kaiz-Agent-Extension'];
 
@@ -105,7 +108,9 @@ export const updateKaizExtensionTool: ITool = {
                                 break;
                             }
                         }
-                    } catch (e) {}
+                    } catch {
+                        /* ignore */
+                    }
                 }
                 if (updateFound) break;
             }
@@ -131,7 +136,7 @@ export const updateKaizExtensionTool: ITool = {
             };
         } catch (e: any) {
             return {
-                content: `Lỗi khi chạy công cụ update_kaiz_extension: ${e.message}`,
+                content: `Lỗi khi chạy công cụ update_agent_extension: ${e.message}`,
                 isError: true,
             };
         }

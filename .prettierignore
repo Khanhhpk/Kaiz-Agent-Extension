@@ -2,3 +2,4 @@ dist
 build
 node_modules
 index.js
+_references

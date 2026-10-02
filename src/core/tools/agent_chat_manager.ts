@@ -5,14 +5,16 @@ export const renameAgentChatTool: ITool = {
     schema: {
         name: 'rename_agent_chat',
         description:
-            "Rename a specific INTERNAL Kaiz agent chat session by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            'Đổi tên một phiên chat NỘI BỘ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Hoạt động trong phạm vi Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Đổi tên phiên chat riêng với Agent.',
         parameters: {
             type: 'object',
             properties: {
-                newName: { type: 'string', description: 'The new name for the chat.' },
+                newName: { type: 'string', description: 'Tên mới cho đoạn chat.' },
                 chatId: {
                     type: 'number',
-                    description: 'Optional. The ID of the chat to rename. If not provided, renames the current chat.',
+                    description:
+                        'Tùy chọn. ID của đoạn chat cần đổi tên. Nếu không cung cấp, sẽ đổi tên đoạn chat hiện tại.',
                 },
             },
             required: ['newName'],
@@ -41,7 +43,8 @@ export const openNewAgentChatTool: ITool = {
     schema: {
         name: 'open_new_agent_chat',
         description:
-            "Closes the current internal Kaiz agent chat and opens a new blank internal chat session. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            'Đóng phiên chat nội bộ hiện tại của agent và mở một phiên chat nội bộ trống mới trong Workspace đang kích hoạt (hoặc Default nếu không có). (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Mở một phiên chat mới riêng biệt với Agent.',
         parameters: {
             type: 'object',
             properties: {},
@@ -70,7 +73,8 @@ export const listAgentChatsTool: ITool = {
     schema: {
         name: 'list_agent_chats',
         description:
-            "List all existing internal Kaiz agent chat sessions (ID, Name, Created At, Updated At). (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            'Liệt kê tất cả các phiên chat nội bộ của agent (ID, Tên, Ngày tạo, Ngày cập nhật) TRONG PHẠM VI Workspace đang kích hoạt. Nếu ở chế độ Default, sẽ liệt kê toàn bộ các đoạn chat global. Sử dụng list_agent_workspaces trước để hiểu cấu trúc workspace. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Liệt kê danh sách các phiên chat riêng với Agent.',
         parameters: {
             type: 'object',
             properties: {},
@@ -88,7 +92,7 @@ export const listAgentChatsTool: ITool = {
                 .map((c) => `ID: ${c.id} | Name: "${c.name}" | Updated: ${new Date(c.updatedAt).toLocaleString()}`)
                 .join('\n');
             return {
-                content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'}`,
+                content: `Found ${chats.length} chat(s):\n${listStr}\n\nCurrent active Chat ID: ${stateManager.currentChatId || 'None (New Blank Chat)'} | Active Workspace: ${stateManager.currentWorkspaceId ? `ID ${stateManager.currentWorkspaceId} ("${stateManager.currentWorkspace?.name}")` : 'Default (global)'}`,
             };
         } catch (e: any) {
             return { content: `Error listing chats: ${e.message}`, isError: true };
@@ -100,13 +104,14 @@ export const deleteAgentChatTool: ITool = {
     schema: {
         name: 'delete_agent_chat',
         description:
-            "Delete a specific internal Kaiz agent chat by ID, or the current active internal chat if no ID is provided. (NOTE: This only affects the Agent's own memory, NOT the main SillyTavern character chat).",
+            'Xóa một đoạn chat nội bộ của agent theo ID, hoặc chat nội bộ đang hoạt động hiện tại nếu không cung cấp ID. Chỉ xóa các đoạn chat nằm trong phạm vi Workspace đang kích hoạt. (LƯU Ý: Lệnh này chỉ ảnh hưởng đến bộ nhớ riêng của Agent, KHÔNG ảnh hưởng đến chat chính của nhân vật trong SillyTavern).',
+        userDescription: 'Xóa một phiên chat riêng với Agent.',
         parameters: {
             type: 'object',
             properties: {
                 chatId: {
                     type: 'number',
-                    description: 'Optional. The ID of the chat to delete. If not provided, deletes the current chat.',
+                    description: 'Tùy chọn. ID của đoạn chat cần xóa. Nếu không cung cấp, sẽ xóa đoạn chat hiện tại.',
                 },
             },
         },

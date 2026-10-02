@@ -6,6 +6,7 @@ export const manageLorebookEntryTool: ITool = {
         name: 'manage_lorebook_entry',
         description:
             "Quản lý cấp độ CHI TIẾT (Tạo mới, Sửa, hoặc Xóa) các mục lục nhỏ (Entry) nằm bên trong một cuốn Sổ tay thế giới (Lorebook) đã có. Bạn có thể cập nhật nội dung (content), từ khóa kích hoạt (keys), hoặc dùng tham số 'disable' để Bật/Tắt riêng lẻ một entry mà không cần tắt cả cuốn sách.",
+        userDescription: 'Tạo mới, chỉnh sửa nội dung/từ khóa hoặc xóa mục trong Lorebook.',
         parameters: {
             type: 'object',
             properties: {

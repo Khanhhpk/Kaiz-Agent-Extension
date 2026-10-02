@@ -6,12 +6,13 @@ export const getRegexListTool: ITool = {
         name: 'get_regex_list',
         description:
             'Lấy danh sách các Regex Scripts hiện có trong SillyTavern. Bao gồm tên, ID (uuid), phạm vi áp dụng (Global, Scoped, Preset), thứ tự và trạng thái Bật/Tắt (disabled).',
+        userDescription: 'Liệt kê danh sách các bộ lọc Regex Script đang có trong hệ thống.',
         parameters: {
             type: 'object',
             properties: {},
         },
     },
-    execute: async (args: any, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (_args: any, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             // Sử dụng Function để bypass trình biên dịch TypeScript không nhận dạng được đường dẫn module tương đối của máy chủ
             const regexEngine = await new Function('return import("/scripts/extensions/regex/engine.js")')();

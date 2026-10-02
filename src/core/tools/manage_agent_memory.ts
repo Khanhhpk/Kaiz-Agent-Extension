@@ -4,7 +4,8 @@ export const manageAgentMemory: ITool = {
     schema: {
         name: 'manage_agent_memory',
         description:
-            'Công cụ giúp Kaiz Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
+            'Công cụ giúp Agent tự động thêm, sửa, hoặc xóa các ghi nhớ (memories) về người dùng. Sử dụng khi người dùng yêu cầu "hãy nhớ...", "từ nay...", hoặc thay đổi thói quen/luật lệ. Ghi nhớ được lưu trữ vĩnh viễn và tiêm vào system prompt.',
+        userDescription: 'Thêm, sửa, xóa các thông tin ghi nhớ dài hạn của Agent về người dùng.',
         parameters: {
             type: 'object',
             properties: {
@@ -43,7 +44,7 @@ export const manageAgentMemory: ITool = {
             const ctx = (window as any).SillyTavern.getContext();
 
             if (!ctx?.extensionSettings?.kaiz_agent) {
-                return { content: 'Error: Kaiz Agent settings not initialized.', isError: true };
+                return { content: 'Error: Agent settings not initialized.', isError: true };
             }
             const settings = ctx.extensionSettings.kaiz_agent;
 
@@ -77,7 +78,7 @@ export const manageAgentMemory: ITool = {
                         content: `Memory với key "${key}" đã tồn tại. Hãy sử dụng action "edit" để sửa đổi.`,
                     };
                 }
-                settings.memories.push({ key, content });
+                settings.memories.push({ key, content, enabled: true });
                 ctx.saveSettingsDebounced();
                 document.dispatchEvent(new CustomEvent('kaiz_memory_updated'));
                 return {

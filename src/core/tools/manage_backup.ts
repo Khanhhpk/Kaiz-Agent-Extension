@@ -6,7 +6,8 @@ export const manageBackupTool: ITool = {
     schema: {
         name: 'manage_backup',
         description:
-            'Tạo bản sao lưu (backup) an toàn cho thẻ nhân vật, chat, hoặc worldbook hiện tại vào cơ sở dữ liệu IndexedDB của Kaiz Agent. LUÔN LUÔN gọi công cụ này trước khi sử dụng các công cụ thay đổi dữ liệu nguy hiểm như edit_character_card hoặc xoá tin nhắn.',
+            'Tạo bản sao lưu (backup) an toàn cho thẻ nhân vật, chat, hoặc worldbook hiện tại vào cơ sở dữ liệu IndexedDB của Agent. LUÔN LUÔN gọi công cụ này trước khi sử dụng các công cụ thay đổi dữ liệu nguy hiểm như edit_character_card hoặc xoá tin nhắn.',
+        userDescription: 'Tạo điểm sao lưu an toàn cho dữ liệu nhân vật, đoạn chat hoặc worldbook.',
         parameters: {
             type: 'object',
             properties: {

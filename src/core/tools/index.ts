@@ -31,10 +31,24 @@ import { manageAgentMemory } from './manage_agent_memory';
 import { getRegexListTool } from './get_regex_list';
 import { getRegexInfoTool } from './get_regex_info';
 import { manageRegexTool } from './manage_regex';
-import { updateKaizExtensionTool } from './update_kaiz_extension';
+import { updateAgentExtensionTool } from './update_agent_extension';
 import { getTavernHelperScriptsTool } from './get_tavern_helper_scripts';
 import { getTavernHelperScriptInfoTool } from './get_tavern_helper_script_info';
 import { manageTavernHelperScriptTool } from './manage_tavern_helper_script';
+import { browser_tools_manage } from './browser_tools_manage';
+import { listWorkspacesTool, switchWorkspaceTool, createWorkspaceTool } from './workspace_manager';
+import { stThemeManagerTool } from './st_theme_manager';
+import { stCSSManagerTool } from './st_css_manager';
+import { stInjectElementTool } from './st_inject_element';
+import { generateWebImageTool } from './generate_web_image';
+import { getPresetInfoTool } from './get_preset_info';
+import { getPromptBlockTool } from './get_prompt_block';
+import { managePresetPromptTool } from './manage_preset_prompt';
+import { inspectMvuTool } from './inspect_mvu';
+import { setMvuVariableTool } from './set_mvu_variable';
+import { mutateMvuSchemaTool } from './mutate_mvu_schema';
+import { scaffoldMvuCardTool } from './scaffold_mvu_card';
+import { mvuInstructTool } from './mvu_instruct';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -72,8 +86,26 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(getRegexListTool);
     registry.registerTool(getRegexInfoTool);
     registry.registerTool(manageRegexTool);
-    registry.registerTool(updateKaizExtensionTool);
+    registry.registerTool(updateAgentExtensionTool);
     registry.registerTool(getTavernHelperScriptsTool);
     registry.registerTool(getTavernHelperScriptInfoTool);
     registry.registerTool(manageTavernHelperScriptTool);
+    registry.registerTool(browser_tools_manage);
+    registry.registerTool(listWorkspacesTool);
+    registry.registerTool(switchWorkspaceTool);
+    registry.registerTool(createWorkspaceTool);
+    registry.registerTool(stThemeManagerTool);
+    registry.registerTool(stCSSManagerTool);
+    registry.registerTool(stInjectElementTool);
+    registry.registerTool(generateWebImageTool);
+    registry.registerTool(getPresetInfoTool);
+    registry.registerTool(getPromptBlockTool);
+    registry.registerTool(managePresetPromptTool);
+    registry.registerTool(inspectMvuTool);
+    registry.registerTool(setMvuVariableTool);
+    registry.registerTool(mutateMvuSchemaTool);
+    registry.registerTool(scaffoldMvuCardTool);
+    registry.registerTool(mvuInstructTool);
 }
+
+export { inspectMvuTool, setMvuVariableTool, mutateMvuSchemaTool, scaffoldMvuCardTool, mvuInstructTool };

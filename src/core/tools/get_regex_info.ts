@@ -5,6 +5,7 @@ export const getRegexInfoTool: ITool = {
     schema: {
         name: 'get_regex_info',
         description: 'Lấy thông tin chi tiết đầy đủ của một Regex Script cụ thể bằng ID (uuid).',
+        userDescription: 'Xem thông tin chi tiết và quy tắc lọc của một Regex Script theo ID.',
         parameters: {
             type: 'object',
             properties: {
@@ -16,7 +17,7 @@ export const getRegexInfoTool: ITool = {
             required: ['id'],
         },
     },
-    execute: async (args: Record<string, any>, context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
+    execute: async (args: Record<string, any>, _context: { adapter: SillyTavernAdapter }): Promise<ToolResult> => {
         try {
             if (!args.id) {
                 return { isError: true, content: 'Thiếu tham số bắt buộc: id' };

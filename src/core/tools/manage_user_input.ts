@@ -4,6 +4,7 @@ export const manageUserInputTool: ITool = {
     schema: {
         name: 'manage_user_input',
         description: `Thao tác trực tiếp với khung nhập liệu (chat box) của người dùng trong SillyTavern. Bạn có thể tự động điền chữ, nối tiếp chữ, và tuỳ chọn nhấn nút Gửi (Send) thay cho người dùng.`,
+        userDescription: 'Điền chữ, chỉnh sửa văn bản hoặc gửi tin nhắn trên khung chat của người dùng.',
         parameters: {
             type: 'object',
             properties: {

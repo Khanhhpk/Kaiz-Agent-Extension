@@ -6,6 +6,7 @@ export const manageChatTextTool: ITool = {
         name: 'manage_chat_text',
         description:
             'Tìm kiếm, bôi sáng (highlight) hoặc thay thế (replace) văn bản hàng loạt trong chính đoạn chat hiện tại của SillyTavern. Tool này tác động TRỰC TIẾP lên mảng chat của SillyTavern và giao diện hiển thị. Mẹo: Bạn có thể đọc lịch sử bằng get_chat_history trước để lấy chính xác câu văn cần sửa rồi truyền vào tool này.',
+        userDescription: 'Tìm kiếm, bôi sáng hoặc thay thế nội dung văn bản trong phòng chat SillyTavern.',
         parameters: {
             type: 'object',
             properties: {
