@@ -26325,21 +26325,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               if (currentMilestones.length === 0)
                   return;
               let bestIndex = 0;
-              if (currentScroll >= maxScroll - 30) {
-                  bestIndex = currentMilestones.length - 1;
-              }
-              else if (currentScroll <= 30) {
-                  bestIndex = 0;
-              }
-              else {
-                  const thresholdY = currentScroll + hEl.clientHeight * 0.25;
-                  for (let i = 0; i < currentMilestones.length; i++) {
-                      if (currentMilestones[i].relativeTop <= thresholdY) {
-                          bestIndex = i;
-                      }
-                      else {
-                          break;
-                      }
+              let minDiff = Infinity;
+              for (let i = 0; i < currentMilestones.length; i++) {
+                  const targetScroll = Math.max(0, currentMilestones[i].relativeTop - 16);
+                  const diff = Math.abs(currentScroll - targetScroll);
+                  if (diff < minDiff) {
+                      minDiff = diff;
+                      bestIndex = i;
                   }
               }
               if (bestIndex !== activeMilestoneIndex) {
@@ -26387,10 +26379,11 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               }
               milestoneRail.css('opacity', '1');
               const historyEl = history[0];
-              const scrollHeight = Math.max(historyEl.scrollHeight, 1);
+              const maxScroll = Math.max(1, historyEl.scrollHeight - historyEl.clientHeight);
               currentMilestones = userMsgs.map((msgEl, index) => {
                   const relativeTop = msgEl.offsetTop;
-                  const posPercent = Math.max(0, Math.min(100, (relativeTop / scrollHeight) * 100));
+                  const targetScroll = Math.max(0, Math.min(maxScroll, relativeTop - 16));
+                  const posPercent = maxScroll > 0 ? Math.max(0, Math.min(100, (targetScroll / maxScroll) * 100)) : 0;
                   const userContentEl = $(msgEl).find('.kaiz-user-content-text');
                   const rawText = (userContentEl.length ? userContentEl.text() : $(msgEl).find('.kaiz-msg-content').text()).trim();
                   const excerpt = rawText.length > 70 ? rawText.substring(0, 67) + '...' : rawText || '(Tin nhắn trống)';
