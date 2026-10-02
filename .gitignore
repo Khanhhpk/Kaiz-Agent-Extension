@@ -6,15 +6,19 @@ eslint-report.json
 # Test files and dumps
 *_test*.html
 tools_dump.txt
+*context_dump*.txt
 *.cjs
 .agents/
 
-# Reference repos & external code
+# Assets raw frame dumps
+*_frames/
+
+# Documentation & Reference repos
+docs/
 _references/
 
 # Generated source maps (build artifacts)
 *.map
 
 # Temporary plans & scratch files
-docs/superpowers/
 superpowers/
