@@ -1889,7 +1889,7 @@ export class ChatWindowUI {
 
         const calcTokenCount = async (text: string): Promise<number> => {
             if (!text) return 0;
-            let count = 0;
+            let count: number;
             if (typeof (window as any).getTokenCountAsync === 'function') {
                 count = await (window as any).getTokenCountAsync(text);
             } else if (typeof (window as any).getTokenCount === 'function') {
@@ -2153,16 +2153,17 @@ export class ChatWindowUI {
                     const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
                     const msg = historyMsgs.find((m) => m.id === msgId);
                     if (msg) {
+                        container.addClass('kaiz-msg-is-editing');
                         contentBox.addClass('kaiz-editing');
                         const originalHtml = contentBox.html();
                         const rawContent = msg.content;
 
                         const editHtml = `
-                            <div class="kaiz-edit-box" style="display: flex; flex-direction: column; gap: 8px;">
-                                <textarea class="kaiz-edit-textarea" style="width: 100%; min-height: 80px; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; font-family: inherit; resize: vertical;">${escapeHtml(rawContent)}</textarea>
-                                <div style="display: flex; gap: 8px; justify-content: flex-end;">
-                                    <button type="button" class="kaiz-edit-cancel-btn" style="padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer; background: #555; color: #fff;">Hủy</button>
-                                    <button type="button" class="kaiz-edit-save-btn" style="padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer; background: #00c9ff; color: #000; font-weight: bold;">Lưu</button>
+                            <div class="kaiz-edit-box">
+                                <textarea class="kaiz-edit-textarea" placeholder="Nhập nội dung tin nhắn...">${escapeHtml(rawContent)}</textarea>
+                                <div class="kaiz-edit-actions">
+                                    <button type="button" class="kaiz-edit-btn kaiz-edit-cancel-btn"><i class="fa-solid fa-xmark"></i> Hủy</button>
+                                    <button type="button" class="kaiz-edit-btn kaiz-edit-save-btn"><i class="fa-solid fa-check"></i> Lưu</button>
                                 </div>
                             </div>
                         `;
@@ -2174,10 +2175,24 @@ export class ChatWindowUI {
                         const cancelBtn = contentBox.find('.kaiz-edit-cancel-btn');
                         const saveBtn = contentBox.find('.kaiz-edit-save-btn');
                         const textarea = contentBox.find('.kaiz-edit-textarea');
+                        const textareaEl = textarea[0] as HTMLTextAreaElement;
 
-                        textarea.focus();
+                        if (textareaEl) {
+                            // Tự động căn chỉnh chiều cao khớp với nội dung
+                            const adjustHeight = () => {
+                                textareaEl.style.height = 'auto';
+                                textareaEl.style.height =
+                                    Math.min(Math.max(textareaEl.scrollHeight + 4, 100), 450) + 'px';
+                            };
+                            adjustHeight();
+                            textarea.on('input', adjustHeight);
+                            textarea.focus();
+                            // Đặt con trỏ ở cuối văn bản
+                            textareaEl.setSelectionRange(textareaEl.value.length, textareaEl.value.length);
+                        }
 
                         cancelBtn.on('click', () => {
+                            container.removeClass('kaiz-msg-is-editing');
                             contentBox.removeClass('kaiz-editing');
                             contentBox.html(originalHtml);
                             actionsBox.css('display', 'flex'); // Show actions again
@@ -2194,12 +2209,27 @@ export class ChatWindowUI {
                             await stateManager.updateMessage(msgId, newText);
 
                             // update DOM
+                            container.removeClass('kaiz-msg-is-editing');
                             contentBox.removeClass('kaiz-editing');
                             const formatted = isUser
                                 ? formatUserMessage(newText, msg.attachments)
                                 : formatMessage(newText, true);
                             contentBox.html(formatted);
+                            if (!isUser) {
+                                renderMermaid();
+                            }
+
+                            const tokenCount = await calcTokenCount(newText);
+                            const newMetaHtml = generateMsgMetaHtml(
+                                isUser ? 'user' : 'agent',
+                                msg.timestamp || Date.now(),
+                                tokenCount,
+                                msg.genTime,
+                            );
+                            container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
+
                             actionsBox.css('display', 'flex'); // Show actions again
+                            refreshTokens();
 
                             toastr.success('Đã lưu thay đổi', 'Agent');
                         });
