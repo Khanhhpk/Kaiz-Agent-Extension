@@ -63,6 +63,8 @@ export class StateManager {
         role: 'user' | 'agent' | 'system',
         content: string,
         attachments?: import('./db').ChatAttachment[],
+        tokenCount?: number,
+        genTime?: number,
     ): Promise<number> {
         let chatId = this.currentChatId;
 
@@ -82,7 +84,7 @@ export class StateManager {
             }
         }
 
-        const msgId = await this.db.addMessage(chatId, role, content, attachments);
+        const msgId = await this.db.addMessage(chatId, role, content, attachments, tokenCount, genTime);
 
         // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
         const chats = await this.db.getAllChats(this.currentWorkspaceId);

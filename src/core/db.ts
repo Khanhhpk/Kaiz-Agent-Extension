@@ -29,6 +29,8 @@ export interface ChatMessage {
     content: string;
     attachments?: ChatAttachment[];
     timestamp: number;
+    tokenCount?: number;
+    genTime?: number;
 }
 
 export interface BackupEntry {
@@ -592,6 +594,8 @@ export class KaizDB {
         role: 'user' | 'agent' | 'system',
         content: string,
         attachments?: ChatAttachment[],
+        tokenCount?: number,
+        genTime?: number,
     ): Promise<number> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
@@ -601,6 +605,8 @@ export class KaizDB {
             if (attachments && attachments.length > 0) {
                 msg.attachments = attachments;
             }
+            if (tokenCount !== undefined) msg.tokenCount = tokenCount;
+            if (genTime !== undefined) msg.genTime = genTime;
 
             const request = store.add(msg);
             request.onsuccess = async () => {

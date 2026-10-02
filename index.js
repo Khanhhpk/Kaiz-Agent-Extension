@@ -5657,7 +5657,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           });
       }
       // --- MESSAGES ---
-      async addMessage(chatId, role, content, attachments) {
+      async addMessage(chatId, role, content, attachments, tokenCount, genTime) {
           return new Promise((resolve, reject) => {
               if (!this.db)
                   return reject(new Error('DB not initialized'));
@@ -5667,6 +5667,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               if (attachments && attachments.length > 0) {
                   msg.attachments = attachments;
               }
+              if (tokenCount !== undefined)
+                  msg.tokenCount = tokenCount;
+              if (genTime !== undefined)
+                  msg.genTime = genTime;
               const request = store.add(msg);
               request.onsuccess = async () => {
                   await this.updateChatTimestamp(chatId).catch(console.error);
@@ -22417,7 +22421,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           if (this.onChatSwitched)
               this.onChatSwitched(id, messages);
       }
-      async addMessage(role, content, attachments) {
+      async addMessage(role, content, attachments, tokenCount, genTime) {
           let chatId = this.currentChatId;
           if (!chatId) {
               if (this.pendingCreateChatPromise) {
@@ -22437,7 +22441,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   }
               }
           }
-          const msgId = await this.db.addMessage(chatId, role, content, attachments);
+          const msgId = await this.db.addMessage(chatId, role, content, attachments, tokenCount, genTime);
           // Cập nhật lại UI List vì timestamp vừa đổi (đẩy lên đầu)
           const chats = await this.db.getAllChats(this.currentWorkspaceId);
           if (this.onChatsListUpdated)
@@ -27546,6 +27550,37 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   console.warn('Kaiz Agent: Failed to refresh tokens', e);
               }
           };
+          const calcTokenCount = async (text) => {
+              if (!text)
+                  return 0;
+              let count;
+              if (typeof window.getTokenCountAsync === 'function') {
+                  count = await window.getTokenCountAsync(text);
+              }
+              else if (typeof window.getTokenCount === 'function') {
+                  count = window.getTokenCount(text);
+              }
+              else {
+                  count = Math.ceil(text.split(/\s+/).length * 1.3);
+              }
+              return count;
+          };
+          const generateMsgMetaHtml = (role, timestamp, tokenCount, genTime) => {
+              const timeStr = new Date(timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+              });
+              let html = `<div class="kaiz-msg-meta" style="font-size: 11px; color: #888; margin-bottom: 4px; display: flex; gap: 8px; align-items: center; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; width: 100%;">`;
+              html += `<span title="Time started"><i class="fa-solid fa-clock"></i> ${timeStr}</span>`;
+              if (tokenCount)
+                  html += `<span title="Tokens"><i class="fa-solid fa-coins"></i> ${tokenCount}</span>`;
+              if (role === 'agent' && genTime) {
+                  html += `<span title="Generation time"><i class="fa-solid fa-bolt"></i> ${(genTime / 1000).toFixed(1)}s</span>`;
+              }
+              html += `</div>`;
+              return html;
+          };
           // Lắng nghe StateManager
           stateManager.onChatsListUpdated = (chats) => {
               renderChatList(chats);
@@ -27574,14 +27609,30 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
                   const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
-                  const deleteBtnHtml = msg.id
-                      ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${msg.id}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
-                      : '';
+                  const actionsHtml = msg.id
+                      ? `
+                    <div class="kaiz-msg-actions" style="display: flex; gap: 8px; justify-content: ${msg.role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" data-msg-id="${msg.id}" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" data-msg-id="${msg.id}" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" data-msg-id="${msg.id}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                    `
+                      : `
+                    <div class="kaiz-msg-actions" style="display: none; gap: 8px; justify-content: ${msg.role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" style="display:none;" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" style="display:none;" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                    `;
+                  const metaHtml = generateMsgMetaHtml(msg.role, msg.timestamp || Date.now(), msg.tokenCount, msg.genTime);
                   htmlBuffer += `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${msg.id || ''}">
                         <div class="kaiz-msg-avatar">${avatar}</div>
-                        <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
-                        ${deleteBtnHtml}
+                        <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px); width: 100%;">
+                            ${metaHtml}
+                            <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                            ${actionsHtml}
+                        </div>
                     </div>
                 `;
               }
@@ -27608,8 +27659,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               updateContinueBtnVisibility();
               requestUpdateMilestones();
           };
-          // Hàm tiện ích thêm tin nhắn DOM (không save DB)
-          const addMessageToDOM = (role, htmlContent, animate = true, dbMessageId) => {
+          const addMessageToDOM = (role, htmlContent, animate = true, dbMessageId, timestamp, tokenCount, genTime) => {
               let avatar;
               let extraClass;
               if (role === 'user') {
@@ -27625,14 +27675,30 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   extraClass = 'kaiz-msg-agent';
               }
               const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-              const deleteBtnHtml = dbMessageId
-                  ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${dbMessageId}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
-                  : `<button type="button" class="kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`;
+              const actionsHtml = dbMessageId
+                  ? `
+                <div class="kaiz-msg-actions" style="display: flex; gap: 8px; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" data-msg-id="${dbMessageId}" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" data-msg-id="${dbMessageId}" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" data-msg-id="${dbMessageId}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                `
+                  : `
+                <div class="kaiz-msg-actions" style="display: none; gap: 8px; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" style="display:none;" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" style="display:none;" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                `;
+              const metaHtml = generateMsgMetaHtml(role, timestamp || Date.now(), tokenCount, genTime);
               history.append(`
                 <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${dbMessageId || ''}">
                     <div class="kaiz-msg-avatar">${avatar}</div>
-                    <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
-                    ${deleteBtnHtml}
+                    <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px); width: 100%;">
+                        ${metaHtml}
+                        <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
+                        ${actionsHtml}
+                    </div>
                 </div>
             `);
               if (animate) {
@@ -27650,6 +27716,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           // Lắng nghe sự kiện xóa tin nhắn
           history.on('click', '.kaiz-msg-delete-btn', async function (e) {
               e.stopPropagation();
+              if (loop.isRunning) {
+                  toastr.warning('Vui lòng chờ Agent hoàn thành trước khi xóa.', 'Agent');
+                  return;
+              }
               const btn = $(this);
               const container = btn.closest('.kaiz-msg');
               const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
@@ -27677,6 +27747,135 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               });
               toastr.info('Đã xóa tin nhắn', 'Agent');
+          });
+          // Lắng nghe sự kiện sao chép tin nhắn
+          history.on('click', '.kaiz-msg-copy-btn', async function (e) {
+              e.stopPropagation();
+              const btn = $(this);
+              const container = btn.closest('.kaiz-msg');
+              const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+              const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
+              if (msgId && !isNaN(msgId) && stateManager.currentChatId !== null) {
+                  try {
+                      const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                      const msg = historyMsgs.find((m) => m.id === msgId);
+                      if (msg) {
+                          try {
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                  await navigator.clipboard.writeText(msg.content);
+                              }
+                              else {
+                                  const textArea = document.createElement('textarea');
+                                  textArea.value = msg.content;
+                                  textArea.style.position = 'fixed';
+                                  textArea.style.opacity = '0';
+                                  document.body.appendChild(textArea);
+                                  textArea.focus();
+                                  textArea.select();
+                                  document.execCommand('copy');
+                                  document.body.removeChild(textArea);
+                              }
+                              toastr.success('Đã sao chép vào khay nhớ tạm', 'Agent');
+                          }
+                          catch (copyErr) {
+                              console.error('[KaizAgent] Failed to copy message:', copyErr);
+                              toastr.error('Không thể sao chép vào khay nhớ tạm', 'Agent');
+                          }
+                      }
+                  }
+                  catch (err) {
+                      console.error('[KaizAgent] Failed to fetch message for copy:', err);
+                  }
+              }
+          });
+          // Lắng nghe sự kiện chỉnh sửa tin nhắn
+          history.on('click', '.kaiz-msg-edit-btn', async function (e) {
+              e.stopPropagation();
+              if (loop.isRunning) {
+                  toastr.warning('Vui lòng chờ Agent hoàn thành trước khi chỉnh sửa.', 'Agent');
+                  return;
+              }
+              const btn = $(this);
+              const container = btn.closest('.kaiz-msg');
+              const contentBox = container.find('.kaiz-msg-content');
+              const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+              const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
+              const isUser = container.hasClass('kaiz-msg-user');
+              if (msgId && !isNaN(msgId) && stateManager.currentChatId !== null && !contentBox.hasClass('kaiz-editing')) {
+                  try {
+                      const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                      const msg = historyMsgs.find((m) => m.id === msgId);
+                      if (msg) {
+                          container.addClass('kaiz-msg-is-editing');
+                          contentBox.addClass('kaiz-editing');
+                          const originalHtml = contentBox.html();
+                          const rawContent = msg.content;
+                          const editHtml = `
+                            <div class="kaiz-edit-box">
+                                <textarea class="kaiz-edit-textarea" placeholder="Nhập nội dung tin nhắn...">${escapeHtml$3(rawContent)}</textarea>
+                                <div class="kaiz-edit-actions">
+                                    <button type="button" class="kaiz-edit-btn kaiz-edit-cancel-btn"><i class="fa-solid fa-xmark"></i> Hủy</button>
+                                    <button type="button" class="kaiz-edit-btn kaiz-edit-save-btn"><i class="fa-solid fa-check"></i> Lưu</button>
+                                </div>
+                            </div>
+                        `;
+                          contentBox.html(editHtml);
+                          const actionsBox = container.find('.kaiz-msg-actions');
+                          actionsBox.hide(); // Hide actions while editing
+                          const cancelBtn = contentBox.find('.kaiz-edit-cancel-btn');
+                          const saveBtn = contentBox.find('.kaiz-edit-save-btn');
+                          const textarea = contentBox.find('.kaiz-edit-textarea');
+                          const textareaEl = textarea[0];
+                          if (textareaEl) {
+                              // Tự động căn chỉnh chiều cao khớp với nội dung
+                              const adjustHeight = () => {
+                                  textareaEl.style.height = 'auto';
+                                  textareaEl.style.height =
+                                      Math.min(Math.max(textareaEl.scrollHeight + 4, 100), 450) + 'px';
+                              };
+                              adjustHeight();
+                              textarea.on('input', adjustHeight);
+                              textarea.focus();
+                              // Đặt con trỏ ở cuối văn bản
+                              textareaEl.setSelectionRange(textareaEl.value.length, textareaEl.value.length);
+                          }
+                          cancelBtn.on('click', () => {
+                              container.removeClass('kaiz-msg-is-editing');
+                              contentBox.removeClass('kaiz-editing');
+                              contentBox.html(originalHtml);
+                              actionsBox.css('display', 'flex'); // Show actions again
+                          });
+                          saveBtn.on('click', async () => {
+                              const newText = String(textarea.val()).trim();
+                              if (!newText) {
+                                  toastr.warning('Nội dung không được để trống', 'Agent');
+                                  return;
+                              }
+                              // update DB
+                              await stateManager.updateMessage(msgId, newText);
+                              // update DOM
+                              container.removeClass('kaiz-msg-is-editing');
+                              contentBox.removeClass('kaiz-editing');
+                              const formatted = isUser
+                                  ? formatUserMessage(newText, msg.attachments)
+                                  : formatMessage(newText, true);
+                              contentBox.html(formatted);
+                              if (!isUser) {
+                                  renderMermaid();
+                              }
+                              const tokenCount = await calcTokenCount(newText);
+                              const newMetaHtml = generateMsgMetaHtml(isUser ? 'user' : 'agent', msg.timestamp || Date.now(), tokenCount, msg.genTime);
+                              container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
+                              actionsBox.css('display', 'flex'); // Show actions again
+                              refreshTokens();
+                              toastr.success('Đã lưu thay đổi', 'Agent');
+                          });
+                      }
+                  }
+                  catch (err) {
+                      console.error('[KaizAgent] Failed to edit message:', err);
+                  }
+              }
           });
           // Lắng nghe sự kiện mở rộng / thu gọn tin nhắn User siêu dài
           history.on('click', '.kaiz-user-collapsible', function (e) {
@@ -27723,6 +27922,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               let agentMsgId = '';
               let agentContentBox = null;
               let currentStepResponse = '';
+              let agentStartTime = Date.now();
               let streamUpdatePending = false;
               let lastStreamEvent = null;
               const flushStreamUpdate = () => {
@@ -27757,6 +27957,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   if (event.type === 'step_start') {
                       btnIcon.addClass('kaiz-icon-spin');
                       btnFloat.removeClass('kaiz-btn-blink');
+                      agentStartTime = Date.now();
                       if (event.data?.isContinue) {
                           const agentMsgs = history.find('.kaiz-msg-agent .kaiz-msg-content');
                           agentContentBox = agentMsgs.last();
@@ -27764,7 +27965,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                               historyMsgs.length > 0 ? historyMsgs[historyMsgs.length - 1].content : '';
                       }
                       else {
-                          agentMsgId = addMessageToDOM('agent', '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>');
+                          agentMsgId = addMessageToDOM('agent', '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>', true, undefined, agentStartTime);
                           agentContentBox = $(`#${agentMsgId}`);
                           currentStepResponse = '';
                       }
@@ -27787,6 +27988,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       // Gọi render biểu đồ Mermaid
                       renderMermaid();
                       currentStepResponse = event.text || '';
+                      const genTime = Date.now() - agentStartTime;
+                      const tokenCount = await calcTokenCount(currentStepResponse);
                       if (event.data?.isContinue) {
                           const lastMsg = historyMsgs[historyMsgs.length - 1];
                           if (lastMsg && lastMsg.id) {
@@ -27794,11 +27997,14 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           }
                       }
                       else {
-                          const newAgentMsgId = await stateManager.addMessage('agent', currentStepResponse);
+                          const newAgentMsgId = await stateManager.addMessage('agent', currentStepResponse, undefined, tokenCount, genTime);
                           if (agentMsgId) {
                               const container = $(`#container-${agentMsgId}`);
                               container.attr('data-msg-id', newAgentMsgId);
-                              container.find('.kaiz-msg-delete-btn').attr('data-msg-id', newAgentMsgId).show();
+                              container.find('.kaiz-msg-action-btn').attr('data-msg-id', newAgentMsgId).show();
+                              container.find('.kaiz-msg-actions').css('display', 'flex');
+                              const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, tokenCount, genTime);
+                              container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
                           }
                       }
                       refreshTokens();
@@ -27806,9 +28012,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       requestUpdateMilestones();
                   }
                   else if (event.type === 'tool_result') {
-                      const toolMsgId = await stateManager.addMessage('user', event.text || '');
+                      const tokenCount = await calcTokenCount(event.text || '');
+                      const toolMsgId = await stateManager.addMessage('user', event.text || '', undefined, tokenCount);
                       const formatted = formatUserMessage(event.text || '');
-                      addMessageToDOM('user', formatted, true, toolMsgId);
+                      addMessageToDOM('user', formatted, true, toolMsgId, Date.now(), tokenCount);
                       refreshTokens();
                   }
                   else if (event.type === 'tool_confirm') {
@@ -27869,16 +28076,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       else {
                           errDomId = addMessageToDOM('agent', `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml$3(event.text || '')}</div>`);
                       }
-                      const errMsgId = await stateManager.addMessage('agent', `[Error] ${event.text}`);
+                      const genTime = Date.now() - agentStartTime;
+                      const errMsgId = await stateManager.addMessage('agent', `[Error] ${event.text}`, undefined, 0, genTime);
                       if (errDomId) {
                           const container = $(`#container-${errDomId}`);
                           container.attr('data-msg-id', errMsgId);
-                          container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+                          container.find('.kaiz-msg-action-btn').attr('data-msg-id', errMsgId).show();
+                          container.find('.kaiz-msg-actions').css('display', 'flex');
+                          const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
+                          container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
                       }
                       else if (agentMsgId) {
                           const container = $(`#container-${agentMsgId}`);
                           container.attr('data-msg-id', errMsgId);
-                          container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+                          container.find('.kaiz-msg-action-btn').attr('data-msg-id', errMsgId).show();
+                          container.find('.kaiz-msg-actions').css('display', 'flex');
+                          const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
+                          container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
                       }
                   }
                   else if (event.type === 'debug') {
@@ -28064,11 +28278,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               ChatWindowUI.currentAttachments = [];
               renderAttachmentsPreview();
               // Lưu vào DB trước
-              const userMsgId = await stateManager.addMessage('user', text, attachmentsToSend);
+              const tokenCount = await calcTokenCount(text);
+              const userMsgId = await stateManager.addMessage('user', text, attachmentsToSend, tokenCount);
               refreshTokens();
               // In ra UI
               const formattedUI = formatUserMessage(text, attachmentsToSend);
-              addMessageToDOM('user', formattedUI, true, userMsgId);
+              addMessageToDOM('user', formattedUI, true, userMsgId, Date.now(), tokenCount);
               // Title updates are removed
               startAgent(false);
           };
