@@ -27760,12 +27760,31 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
                       const msg = historyMsgs.find((m) => m.id === msgId);
                       if (msg) {
-                          await navigator.clipboard.writeText(msg.content);
-                          toastr.success('Đã sao chép vào khay nhớ tạm', 'Agent');
+                          try {
+                              if (navigator.clipboard && navigator.clipboard.writeText) {
+                                  await navigator.clipboard.writeText(msg.content);
+                              }
+                              else {
+                                  const textArea = document.createElement('textarea');
+                                  textArea.value = msg.content;
+                                  textArea.style.position = 'fixed';
+                                  textArea.style.opacity = '0';
+                                  document.body.appendChild(textArea);
+                                  textArea.focus();
+                                  textArea.select();
+                                  document.execCommand('copy');
+                                  document.body.removeChild(textArea);
+                              }
+                              toastr.success('Đã sao chép vào khay nhớ tạm', 'Agent');
+                          }
+                          catch (copyErr) {
+                              console.error('[KaizAgent] Failed to copy message:', copyErr);
+                              toastr.error('Không thể sao chép vào khay nhớ tạm', 'Agent');
+                          }
                       }
                   }
                   catch (err) {
-                      console.error('[KaizAgent] Failed to copy message:', err);
+                      console.error('[KaizAgent] Failed to fetch message for copy:', err);
                   }
               }
           });
