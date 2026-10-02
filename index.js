@@ -27609,18 +27609,30 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           ? AppIconManager.getInstance().getAvatarHtml()
                           : '<i class="fa-solid fa-gear"></i>';
                   const extraClass = msg.role === 'user' ? 'kaiz-msg-user' : 'kaiz-msg-agent';
-                  const deleteBtnHtml = msg.id
-                      ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${msg.id}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
-                      : '';
+                  const actionsHtml = msg.id
+                      ? `
+                    <div class="kaiz-msg-actions" style="display: flex; gap: 8px; justify-content: ${msg.role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" data-msg-id="${msg.id}" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" data-msg-id="${msg.id}" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" data-msg-id="${msg.id}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                    `
+                      : `
+                    <div class="kaiz-msg-actions" style="display: none; gap: 8px; justify-content: ${msg.role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" style="display:none;" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" style="display:none;" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                        <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                    </div>
+                    `;
                   const metaHtml = generateMsgMetaHtml(msg.role, msg.timestamp || Date.now(), msg.tokenCount, msg.genTime);
                   htmlBuffer += `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${msg.id || ''}">
                         <div class="kaiz-msg-avatar">${avatar}</div>
-                        <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px);">
+                        <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px); width: 100%;">
                             ${metaHtml}
                             <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                            ${actionsHtml}
                         </div>
-                        ${deleteBtnHtml}
                     </div>
                 `;
               }
@@ -27663,18 +27675,30 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   extraClass = 'kaiz-msg-agent';
               }
               const msgId = 'kaiz-msg-' + Date.now() + Math.floor(Math.random() * 1000);
-              const deleteBtnHtml = dbMessageId
-                  ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${dbMessageId}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
-                  : `<button type="button" class="kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`;
+              const actionsHtml = dbMessageId
+                  ? `
+                <div class="kaiz-msg-actions" style="display: flex; gap: 8px; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" data-msg-id="${dbMessageId}" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" data-msg-id="${dbMessageId}" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" data-msg-id="${dbMessageId}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                `
+                  : `
+                <div class="kaiz-msg-actions" style="display: none; gap: 8px; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; margin-top: 4px;">
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-edit-btn" style="display:none;" title="Chỉnh sửa"><i class="fa-solid fa-pen"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-copy-btn" style="display:none;" title="Sao chép"><i class="fa-solid fa-copy"></i></button>
+                    <button type="button" class="kaiz-msg-action-btn kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                `;
               const metaHtml = generateMsgMetaHtml(role, timestamp || Date.now(), tokenCount, genTime);
               history.append(`
                 <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${dbMessageId || ''}">
                     <div class="kaiz-msg-avatar">${avatar}</div>
-                    <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px);">
+                    <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px); width: 100%;">
                         ${metaHtml}
                         <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
+                        ${actionsHtml}
                     </div>
-                    ${deleteBtnHtml}
                 </div>
             `);
               if (animate) {
@@ -27719,6 +27743,89 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }
               });
               toastr.info('Đã xóa tin nhắn', 'Agent');
+          });
+          // Lắng nghe sự kiện sao chép tin nhắn
+          history.on('click', '.kaiz-msg-copy-btn', async function (e) {
+              e.stopPropagation();
+              const btn = $(this);
+              const container = btn.closest('.kaiz-msg');
+              const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+              const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
+              if (msgId && !isNaN(msgId) && stateManager.currentChatId !== null) {
+                  try {
+                      const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                      const msg = historyMsgs.find((m) => m.id === msgId);
+                      if (msg) {
+                          await navigator.clipboard.writeText(msg.content);
+                          toastr.success('Đã sao chép vào khay nhớ tạm', 'Agent');
+                      }
+                  }
+                  catch (err) {
+                      console.error('[KaizAgent] Failed to copy message:', err);
+                  }
+              }
+          });
+          // Lắng nghe sự kiện chỉnh sửa tin nhắn
+          history.on('click', '.kaiz-msg-edit-btn', async function (e) {
+              e.stopPropagation();
+              const btn = $(this);
+              const container = btn.closest('.kaiz-msg');
+              const contentBox = container.find('.kaiz-msg-content');
+              const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
+              const msgId = msgIdStr ? parseInt(msgIdStr, 10) : null;
+              const isUser = container.hasClass('kaiz-msg-user');
+              if (msgId && !isNaN(msgId) && stateManager.currentChatId !== null && !contentBox.hasClass('kaiz-editing')) {
+                  try {
+                      const historyMsgs = await stateManager.db.getMessages(stateManager.currentChatId);
+                      const msg = historyMsgs.find((m) => m.id === msgId);
+                      if (msg) {
+                          contentBox.addClass('kaiz-editing');
+                          const originalHtml = contentBox.html();
+                          const rawContent = msg.content;
+                          const editHtml = `
+                            <div class="kaiz-edit-box" style="display: flex; flex-direction: column; gap: 8px;">
+                                <textarea class="kaiz-edit-textarea" style="width: 100%; min-height: 80px; padding: 8px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; font-family: inherit; resize: vertical;">${escapeHtml$3(rawContent)}</textarea>
+                                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                                    <button type="button" class="kaiz-edit-cancel-btn" style="padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer; background: #555; color: #fff;">Hủy</button>
+                                    <button type="button" class="kaiz-edit-save-btn" style="padding: 4px 12px; border: none; border-radius: 4px; cursor: pointer; background: #00c9ff; color: #000; font-weight: bold;">Lưu</button>
+                                </div>
+                            </div>
+                        `;
+                          contentBox.html(editHtml);
+                          const actionsBox = container.find('.kaiz-msg-actions');
+                          actionsBox.hide(); // Hide actions while editing
+                          const cancelBtn = contentBox.find('.kaiz-edit-cancel-btn');
+                          const saveBtn = contentBox.find('.kaiz-edit-save-btn');
+                          const textarea = contentBox.find('.kaiz-edit-textarea');
+                          textarea.focus();
+                          cancelBtn.on('click', () => {
+                              contentBox.removeClass('kaiz-editing');
+                              contentBox.html(originalHtml);
+                              actionsBox.css('display', 'flex'); // Show actions again
+                          });
+                          saveBtn.on('click', async () => {
+                              const newText = String(textarea.val()).trim();
+                              if (!newText) {
+                                  toastr.warning('Nội dung không được để trống', 'Agent');
+                                  return;
+                              }
+                              // update DB
+                              await stateManager.updateMessage(msgId, newText);
+                              // update DOM
+                              contentBox.removeClass('kaiz-editing');
+                              const formatted = isUser
+                                  ? formatUserMessage(newText, msg.attachments)
+                                  : formatMessage(newText, true);
+                              contentBox.html(formatted);
+                              actionsBox.css('display', 'flex'); // Show actions again
+                              toastr.success('Đã lưu thay đổi', 'Agent');
+                          });
+                      }
+                  }
+                  catch (err) {
+                      console.error('[KaizAgent] Failed to edit message:', err);
+                  }
+              }
           });
           // Lắng nghe sự kiện mở rộng / thu gọn tin nhắn User siêu dài
           history.on('click', '.kaiz-user-collapsible', function (e) {
