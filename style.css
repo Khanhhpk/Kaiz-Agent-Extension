@@ -551,15 +551,21 @@
     flex-direction: column;
     gap: 16px;
     scroll-behavior: smooth;
+    outline: none;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
 }
 
 .kaiz-chat-history::-webkit-scrollbar {
-    width: 6px;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
+.kaiz-chat-history::-webkit-scrollbar-track,
 .kaiz-chat-history::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 3px;
+    display: none !important;
+    background: transparent !important;
 }
 
 .kaiz-milestone-rail {
@@ -677,6 +683,10 @@
     z-index: 5;
 }
 
+.kaiz-milestone-rail.is-scrubbing .kaiz-milestone-active-thumb {
+    transition: none !important;
+}
+
 .kaiz-milestone-active-thumb::after {
     content: '';
     position: absolute;
@@ -703,6 +713,16 @@
     transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 0 4px rgba(0, 201, 255, 0.4);
     z-index: 6;
+}
+
+.kaiz-milestone-marker::before {
+    content: '';
+    position: absolute;
+    top: -6px;
+    bottom: -6px;
+    left: -4px;
+    right: -4px;
+    pointer-events: auto;
 }
 
 .kaiz-milestone-marker:hover,
@@ -1017,7 +1037,9 @@
     line-height: 1.55;
     resize: vertical;
     outline: none;
-    transition: border-color 0.2s, box-shadow 0.2s;
+    transition:
+        border-color 0.2s,
+        box-shadow 0.2s;
 }
 
 .kaiz-edit-textarea:focus {
