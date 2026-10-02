@@ -2352,7 +2352,8 @@ export class ChatWindowUI {
                             if (agentMsgId) {
                                 const container = $(`#container-${agentMsgId}`);
                                 container.attr('data-msg-id', newAgentMsgId);
-                                container.find('.kaiz-msg-delete-btn').attr('data-msg-id', newAgentMsgId).show();
+                                container.find('.kaiz-msg-action-btn').attr('data-msg-id', newAgentMsgId).show();
+                                container.find('.kaiz-msg-actions').css('display', 'flex');
 
                                 const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, tokenCount, genTime);
                                 container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
@@ -2455,14 +2456,16 @@ export class ChatWindowUI {
                         if (errDomId) {
                             const container = $(`#container-${errDomId}`);
                             container.attr('data-msg-id', errMsgId);
-                            container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+                            container.find('.kaiz-msg-action-btn').attr('data-msg-id', errMsgId).show();
+                            container.find('.kaiz-msg-actions').css('display', 'flex');
 
                             const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
                             container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
                         } else if (agentMsgId) {
                             const container = $(`#container-${agentMsgId}`);
                             container.attr('data-msg-id', errMsgId);
-                            container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+                            container.find('.kaiz-msg-action-btn').attr('data-msg-id', errMsgId).show();
+                            container.find('.kaiz-msg-actions').css('display', 'flex');
 
                             const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
                             container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);

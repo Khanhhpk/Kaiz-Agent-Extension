@@ -891,6 +891,16 @@
     opacity: 1 !important;
 }
 
+@media (hover: none) {
+    .kaiz-msg-actions {
+        opacity: 1 !important;
+    }
+}
+
+.kaiz-phone-mode .kaiz-msg-actions {
+    opacity: 1 !important;
+}
+
 .kaiz-msg-action-btn {
     background: transparent;
     border: none;
