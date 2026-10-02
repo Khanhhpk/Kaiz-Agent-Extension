@@ -2078,6 +2078,10 @@ export class ChatWindowUI {
         // Lắng nghe sự kiện xóa tin nhắn
         history.on('click', '.kaiz-msg-delete-btn', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng chờ Agent hoàn thành trước khi xóa.', 'Agent');
+                return;
+            }
             const btn = $(this);
             const container = btn.closest('.kaiz-msg');
             const msgIdStr = btn.attr('data-msg-id') || container.attr('data-msg-id');
@@ -2133,6 +2137,10 @@ export class ChatWindowUI {
         // Lắng nghe sự kiện chỉnh sửa tin nhắn
         history.on('click', '.kaiz-msg-edit-btn', async function (this: HTMLElement, e: any) {
             e.stopPropagation();
+            if (loop.isRunning) {
+                toastr.warning('Vui lòng chờ Agent hoàn thành trước khi chỉnh sửa.', 'Agent');
+                return;
+            }
             const btn = $(this);
             const container = btn.closest('.kaiz-msg');
             const contentBox = container.find('.kaiz-msg-content');
