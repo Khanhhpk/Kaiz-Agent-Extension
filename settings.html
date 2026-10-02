@@ -1060,21 +1060,74 @@
                             </div>
 
                             <!-- Avatar Background Color Section -->
-                            <div style="margin-top: 18px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                                    <div style="font-size: 13px; font-weight: 600; color: #fff; display: flex; align-items: center; gap: 8px;">
-                                        <i class="fa-solid fa-palette" style="color: var(--accent, #6495ed);"></i> Màu nền Avatar & Nút nổi
+                            <div
+                                style="
+                                    margin-top: 18px;
+                                    padding-top: 14px;
+                                    border-top: 1px solid rgba(255, 255, 255, 0.08);
+                                "
+                            >
+                                <div
+                                    style="
+                                        display: flex;
+                                        justify-content: space-between;
+                                        align-items: center;
+                                        margin-bottom: 8px;
+                                    "
+                                >
+                                    <div
+                                        style="
+                                            font-size: 13px;
+                                            font-weight: 600;
+                                            color: #fff;
+                                            display: flex;
+                                            align-items: center;
+                                            gap: 8px;
+                                        "
+                                    >
+                                        <i class="fa-solid fa-palette" style="color: var(--accent, #6495ed)"></i> Màu
+                                        nền Avatar & Nút nổi
                                     </div>
-                                    <div id="kaiz-avatar-bg-name" style="font-size: 11px; color: #aaa;">Đen Khói Cổ Điển</div>
+                                    <div id="kaiz-avatar-bg-name" style="font-size: 11px; color: #aaa">
+                                        Đen Khói Cổ Điển
+                                    </div>
                                 </div>
                                 <div class="kaiz-avatar-bg-swatches" id="kaiz-avatar-bg-swatches">
                                     <!-- Swatches injected via JS -->
                                 </div>
-                                <div id="kaiz-avatar-bg-custom-box" style="display: none; margin-top: 10px; align-items: center; gap: 10px;">
-                                    <span style="font-size: 12px; color: #ccc;">Chọn mã màu riêng:</span>
-                                    <input type="color" id="kaiz-avatar-bg-color-picker" value="#1e272e" style="cursor: pointer; width: 36px; height: 28px; border: none; background: none; border-radius: 4px;" />
-                                    <input type="text" id="kaiz-avatar-bg-custom-input" class="text_pole kaiz-input" placeholder="#1e272e hoặc rgba(...)" style="width: 180px; font-size: 12px; padding: 4px 8px;" />
-                                    <button type="button" id="kaiz-avatar-bg-custom-apply" class="menu_button interactable" style="font-size: 11px; padding: 4px 10px;">Áp dụng</button>
+                                <div
+                                    id="kaiz-avatar-bg-custom-box"
+                                    style="display: none; margin-top: 10px; align-items: center; gap: 10px"
+                                >
+                                    <span style="font-size: 12px; color: #ccc">Chọn mã màu riêng:</span>
+                                    <input
+                                        type="color"
+                                        id="kaiz-avatar-bg-color-picker"
+                                        value="#1e272e"
+                                        style="
+                                            cursor: pointer;
+                                            width: 36px;
+                                            height: 28px;
+                                            border: none;
+                                            background: none;
+                                            border-radius: 4px;
+                                        "
+                                    />
+                                    <input
+                                        type="text"
+                                        id="kaiz-avatar-bg-custom-input"
+                                        class="text_pole kaiz-input"
+                                        placeholder="#1e272e hoặc rgba(...)"
+                                        style="width: 180px; font-size: 12px; padding: 4px 8px"
+                                    />
+                                    <button
+                                        type="button"
+                                        id="kaiz-avatar-bg-custom-apply"
+                                        class="menu_button interactable"
+                                        style="font-size: 11px; padding: 4px 10px"
+                                    >
+                                        Áp dụng
+                                    </button>
                                 </div>
                             </div>
 
@@ -1153,27 +1206,90 @@
 
                         <div class="kaiz-card-body">
                             <p class="kaiz-card-desc">
-                                Tùy chọn ảnh đại diện của bạn hiển thị ở các tin nhắn trong khung chat Kaiz Agent.
-                                Bạn có thể tải ảnh lên và cắt theo khung tròn (thu phóng, kéo thả, xoay) theo ý muốn.
+                                Tùy chọn ảnh đại diện của bạn hiển thị ở các tin nhắn trong khung chat Kaiz Agent. Bạn
+                                có thể tải ảnh lên và cắt theo khung tròn (thu phóng, kéo thả, xoay) theo ý muốn.
                             </p>
 
-                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 12px; padding: 12px 14px; background: rgba(0,0,0,0.22); border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);">
-                                <div style="display: flex; align-items: center; gap: 14px;">
-                                    <div id="kaiz-user-avatar-preview-box" style="width: 48px; height: 48px; border-radius: 50%; background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.25); display: flex; align-items: center; justify-content: center; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.4); flex-shrink: 0;">
-                                        <i class="fa-solid fa-user" style="font-size: 20px; color: #fff;"></i>
+                            <div
+                                style="
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: space-between;
+                                    gap: 14px;
+                                    flex-wrap: wrap;
+                                    margin-top: 12px;
+                                    padding: 12px 14px;
+                                    background: rgba(0, 0, 0, 0.22);
+                                    border-radius: 10px;
+                                    border: 1px solid rgba(255, 255, 255, 0.06);
+                                "
+                            >
+                                <div style="display: flex; align-items: center; gap: 14px">
+                                    <div
+                                        id="kaiz-user-avatar-preview-box"
+                                        style="
+                                            width: 48px;
+                                            height: 48px;
+                                            border-radius: 50%;
+                                            background: rgba(255, 255, 255, 0.1);
+                                            border: 2px solid rgba(255, 255, 255, 0.25);
+                                            display: flex;
+                                            align-items: center;
+                                            justify-content: center;
+                                            overflow: hidden;
+                                            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+                                            flex-shrink: 0;
+                                        "
+                                    >
+                                        <i class="fa-solid fa-user" style="font-size: 20px; color: #fff"></i>
                                     </div>
                                     <div>
-                                        <div style="font-size: 13px; font-weight: 600; color: #fff;">Avatar hiện tại</div>
-                                        <div id="kaiz-user-avatar-status-text" style="font-size: 11px; color: #aaa;">Đang dùng biểu tượng mặc định</div>
+                                        <div style="font-size: 13px; font-weight: 600; color: #fff">
+                                            Avatar hiện tại
+                                        </div>
+                                        <div id="kaiz-user-avatar-status-text" style="font-size: 11px; color: #aaa">
+                                            Đang dùng biểu tượng mặc định
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div style="display: flex; gap: 8px;">
-                                    <input type="file" id="kaiz-user-avatar-file-input" accept="image/*" style="display: none;" />
-                                    <button type="button" id="kaiz-user-avatar-browse-btn" class="menu_button interactable" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 14px; background: var(--accent, #6495ed); color: #fff; font-weight: 600;">
+                                <div style="display: flex; gap: 8px">
+                                    <input
+                                        type="file"
+                                        id="kaiz-user-avatar-file-input"
+                                        accept="image/*"
+                                        style="display: none"
+                                    />
+                                    <button
+                                        type="button"
+                                        id="kaiz-user-avatar-browse-btn"
+                                        class="menu_button interactable"
+                                        style="
+                                            display: inline-flex;
+                                            align-items: center;
+                                            gap: 6px;
+                                            font-size: 12px;
+                                            padding: 6px 14px;
+                                            background: var(--accent, #6495ed);
+                                            color: #fff;
+                                            font-weight: 600;
+                                        "
+                                    >
                                         <i class="fa-solid fa-crop-simple"></i> Chọn ảnh & Cắt...
                                     </button>
-                                    <button type="button" id="kaiz-user-avatar-delete-btn" class="menu_button interactable" style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 6px 12px; color: #ff7675;">
+                                    <button
+                                        type="button"
+                                        id="kaiz-user-avatar-delete-btn"
+                                        class="menu_button interactable"
+                                        style="
+                                            display: inline-flex;
+                                            align-items: center;
+                                            gap: 6px;
+                                            font-size: 12px;
+                                            padding: 6px 12px;
+                                            color: #ff7675;
+                                        "
+                                    >
                                         <i class="fa-solid fa-trash"></i> Xóa avatar
                                     </button>
                                 </div>

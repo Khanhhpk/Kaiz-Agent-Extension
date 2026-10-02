@@ -1887,6 +1887,40 @@ export class ChatWindowUI {
             }
         };
 
+        const calcTokenCount = async (text: string): Promise<number> => {
+            if (!text) return 0;
+            let count = 0;
+            if (typeof (window as any).getTokenCountAsync === 'function') {
+                count = await (window as any).getTokenCountAsync(text);
+            } else if (typeof (window as any).getTokenCount === 'function') {
+                count = (window as any).getTokenCount(text);
+            } else {
+                count = Math.ceil(text.split(/\s+/).length * 1.3);
+            }
+            return count;
+        };
+
+        const generateMsgMetaHtml = (
+            role: 'user' | 'agent' | 'system',
+            timestamp: number,
+            tokenCount?: number,
+            genTime?: number,
+        ): string => {
+            const timeStr = new Date(timestamp).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+            });
+            let html = `<div class="kaiz-msg-meta" style="font-size: 11px; color: #888; margin-bottom: 4px; display: flex; gap: 8px; align-items: center; justify-content: ${role === 'user' ? 'flex-end' : 'flex-start'}; width: 100%;">`;
+            html += `<span title="Time started"><i class="fa-solid fa-clock"></i> ${timeStr}</span>`;
+            if (tokenCount) html += `<span title="Tokens"><i class="fa-solid fa-coins"></i> ${tokenCount}</span>`;
+            if (role === 'agent' && genTime) {
+                html += `<span title="Generation time"><i class="fa-solid fa-bolt"></i> ${(genTime / 1000).toFixed(1)}s</span>`;
+            }
+            html += `</div>`;
+            return html;
+        };
+
         // Lắng nghe StateManager
         stateManager.onChatsListUpdated = (chats) => {
             renderChatList(chats);
@@ -1924,10 +1958,20 @@ export class ChatWindowUI {
                     ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${msg.id}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
                     : '';
 
+                const metaHtml = generateMsgMetaHtml(
+                    msg.role,
+                    msg.timestamp || Date.now(),
+                    msg.tokenCount,
+                    msg.genTime,
+                );
+
                 htmlBuffer += `
                     <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${msg.id || ''}">
                         <div class="kaiz-msg-avatar">${avatar}</div>
-                        <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                        <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px);">
+                            ${metaHtml}
+                            <div class="kaiz-msg-content" id="${msgId}">${formatted}</div>
+                        </div>
                         ${deleteBtnHtml}
                     </div>
                 `;
@@ -1956,12 +2000,14 @@ export class ChatWindowUI {
             requestUpdateMilestones();
         };
 
-        // Hàm tiện ích thêm tin nhắn DOM (không save DB)
         const addMessageToDOM = (
             role: 'user' | 'agent' | 'system',
             htmlContent: string,
             animate: boolean = true,
             dbMessageId?: number,
+            timestamp?: number,
+            tokenCount?: number,
+            genTime?: number,
         ): string => {
             let avatar: string;
             let extraClass: string;
@@ -1981,10 +2027,15 @@ export class ChatWindowUI {
                 ? `<button type="button" class="kaiz-msg-delete-btn" data-msg-id="${dbMessageId}" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`
                 : `<button type="button" class="kaiz-msg-delete-btn" style="display:none;" title="Xóa tin nhắn"><i class="fa-solid fa-trash-can"></i></button>`;
 
+            const metaHtml = generateMsgMetaHtml(role, timestamp || Date.now(), tokenCount, genTime);
+
             history.append(`
                 <div class="kaiz-msg ${extraClass}" id="container-${msgId}" data-msg-id="${dbMessageId || ''}">
                     <div class="kaiz-msg-avatar">${avatar}</div>
-                    <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
+                    <div class="kaiz-msg-body" style="display: flex; flex-direction: column; max-width: calc(100% - 42px);">
+                        ${metaHtml}
+                        <div class="kaiz-msg-content" id="${msgId}">${htmlContent}</div>
+                    </div>
                     ${deleteBtnHtml}
                 </div>
             `);
@@ -2085,6 +2136,7 @@ export class ChatWindowUI {
             let agentMsgId = '';
             let agentContentBox: any = null;
             let currentStepResponse = '';
+            let agentStartTime = Date.now();
 
             let streamUpdatePending = false;
             let lastStreamEvent: any = null;
@@ -2129,6 +2181,7 @@ export class ChatWindowUI {
                     if (event.type === 'step_start') {
                         btnIcon.addClass('kaiz-icon-spin');
                         btnFloat.removeClass('kaiz-btn-blink');
+                        agentStartTime = Date.now();
                         if (event.data?.isContinue) {
                             const agentMsgs = history.find('.kaiz-msg-agent .kaiz-msg-content');
                             agentContentBox = agentMsgs.last();
@@ -2138,6 +2191,9 @@ export class ChatWindowUI {
                             agentMsgId = addMessageToDOM(
                                 'agent',
                                 '<div class="kaiz-spinner"><i class="fa-solid fa-circle-notch"></i> Processing...</div>',
+                                true,
+                                undefined,
+                                agentStartTime,
                             );
                             agentContentBox = $(`#${agentMsgId}`);
                             currentStepResponse = '';
@@ -2158,26 +2214,45 @@ export class ChatWindowUI {
                         renderMermaid();
 
                         currentStepResponse = event.text || '';
+
+                        const genTime = Date.now() - agentStartTime;
+                        const tokenCount = await calcTokenCount(currentStepResponse);
+
                         if (event.data?.isContinue) {
                             const lastMsg = historyMsgs[historyMsgs.length - 1];
                             if (lastMsg && lastMsg.id) {
                                 await stateManager.updateMessage(lastMsg.id, currentStepResponse);
                             }
                         } else {
-                            const newAgentMsgId = await stateManager.addMessage('agent', currentStepResponse);
+                            const newAgentMsgId = await stateManager.addMessage(
+                                'agent',
+                                currentStepResponse,
+                                undefined,
+                                tokenCount,
+                                genTime,
+                            );
                             if (agentMsgId) {
                                 const container = $(`#container-${agentMsgId}`);
                                 container.attr('data-msg-id', newAgentMsgId);
                                 container.find('.kaiz-msg-delete-btn').attr('data-msg-id', newAgentMsgId).show();
+
+                                const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, tokenCount, genTime);
+                                container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
                             }
                         }
                         refreshTokens();
                         agentContentBox = null;
                         requestUpdateMilestones();
                     } else if (event.type === 'tool_result') {
-                        const toolMsgId = await stateManager.addMessage('user', event.text || '');
+                        const tokenCount = await calcTokenCount(event.text || '');
+                        const toolMsgId = await stateManager.addMessage(
+                            'user',
+                            event.text || '',
+                            undefined,
+                            tokenCount,
+                        );
                         const formatted = formatUserMessage(event.text || '');
-                        addMessageToDOM('user', formatted, true, toolMsgId);
+                        addMessageToDOM('user', formatted, true, toolMsgId, Date.now(), tokenCount);
                         refreshTokens();
                     } else if (event.type === 'tool_confirm') {
                         btnIcon.removeClass('kaiz-icon-spin');
@@ -2251,15 +2326,28 @@ export class ChatWindowUI {
                                 `<div style="color:#e74c3c; border-left: 3px solid #e74c3c; padding: 10px; background: rgba(231,76,60,0.1); border-radius: 4px;"><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(event.text || '')}</div>`,
                             );
                         }
-                        const errMsgId = await stateManager.addMessage('agent', `[Error] ${event.text}`);
+                        const genTime = Date.now() - agentStartTime;
+                        const errMsgId = await stateManager.addMessage(
+                            'agent',
+                            `[Error] ${event.text}`,
+                            undefined,
+                            0,
+                            genTime,
+                        );
                         if (errDomId) {
                             const container = $(`#container-${errDomId}`);
                             container.attr('data-msg-id', errMsgId);
                             container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+
+                            const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
+                            container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
                         } else if (agentMsgId) {
                             const container = $(`#container-${agentMsgId}`);
                             container.attr('data-msg-id', errMsgId);
                             container.find('.kaiz-msg-delete-btn').attr('data-msg-id', errMsgId).show();
+
+                            const newMetaHtml = generateMsgMetaHtml('agent', agentStartTime, 0, genTime);
+                            container.find('.kaiz-msg-meta').replaceWith(newMetaHtml);
                         }
                     } else if (event.type === 'debug') {
                         ChatWindowUI.lastLogSent = JSON.stringify(event.data.messages, null, 2);
@@ -2464,11 +2552,12 @@ export class ChatWindowUI {
             renderAttachmentsPreview();
 
             // Lưu vào DB trước
-            const userMsgId = await stateManager.addMessage('user', text, attachmentsToSend);
+            const tokenCount = await calcTokenCount(text);
+            const userMsgId = await stateManager.addMessage('user', text, attachmentsToSend, tokenCount);
             refreshTokens();
             // In ra UI
             const formattedUI = formatUserMessage(text, attachmentsToSend);
-            addMessageToDOM('user', formattedUI, true, userMsgId);
+            addMessageToDOM('user', formattedUI, true, userMsgId, Date.now(), tokenCount);
 
             // Title updates are removed
 
