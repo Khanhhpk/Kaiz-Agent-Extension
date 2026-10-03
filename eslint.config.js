@@ -17,6 +17,7 @@ export default tseslint.config(
             'userscripts/**',
             '_references/**',
             '.agents/**',
+            'mvu_*.js',
         ],
     },
     {

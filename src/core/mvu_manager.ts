@@ -1661,12 +1661,34 @@ export class MvuManager {
         }
 
         // 2. Quét các Zod Object con độc lập khai báo trước Schema (TaiSan, NPC, DiChung, VatPham...)
+        // Tự động xác định tên Schema chính theo chuẩn MVU (qua registerMvuSchema hoặc tên Schema mặc định)
+        let mainSchemaName = 'Schema';
+        const regMatch = code.match(/(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*([A-Za-z0-9_$]+)\s*\)/i);
+        if (regMatch) {
+            mainSchemaName = regMatch[1];
+        }
+
+        // Tự động phân giải chuỗi alias nếu biến được gán lại (ví dụ: export const Schema = TargetSchema;)
+        for (let hop = 0; hop < 5; hop++) {
+            const aliasRegex = new RegExp(
+                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*([A-Za-z0-9_$]+)(?!\\s*[.(])(?:\\s*;|\\s*\\n|$)`,
+                'i',
+            );
+            const aliasMatch = code.match(aliasRegex);
+            if (aliasMatch && aliasMatch[1] && aliasMatch[1] !== mainSchemaName) {
+                mainSchemaName = aliasMatch[1];
+            } else {
+                break;
+            }
+        }
+
         const knownSubSchemas: Record<string, MvuVariableDescriptor[]> = {};
-        const subSchemaRegex = /const\s+([A-Za-z0-9_]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
+        const subSchemaRegex =
+            /(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
         let sMatch: RegExpExecArray | null;
         while ((sMatch = subSchemaRegex.exec(code)) !== null) {
             const sName = sMatch[1];
-            if (sName.toLowerCase() === 'schema') continue;
+            if (sName.toLowerCase() === mainSchemaName.toLowerCase() || sName.toLowerCase() === 'schema') continue;
             const braceIdx = sMatch.index + sMatch[0].length - 1;
             const inner = this.extractMatchingBraceContent(code, braceIdx);
             if (inner) {
@@ -1675,10 +1697,25 @@ export class MvuManager {
         }
 
         // 3. Tìm Schema chính
-        const match =
-            code.match(/(?:export\s+)?const\s+Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-            code.match(/Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-            code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
+        let match: RegExpMatchArray | null = null;
+        if (mainSchemaName) {
+            const targetRegex = new RegExp(
+                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)object\\s*\\(\\s*\\{`,
+                'i',
+            );
+            match = code.match(targetRegex);
+        }
+        if (!match) {
+            match =
+                code.match(/(?:export\s+)?(?:const|let|var)\s+\bSchema\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+                code.match(
+                    /(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*(?:Mvu|State|Card)Schema\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i,
+                ) ||
+                code.match(
+                    /(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]+\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i,
+                ) ||
+                code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
+        }
         if (!match || match.index === undefined) return [];
 
         const startIdx = match.index + match[0].length - 1; // vị trí ký tự '{'
@@ -1850,12 +1887,25 @@ export class MvuManager {
             let max: number | undefined;
             let defaultValue: any;
 
-            // 1. Kiểm tra outermost z.record hoặc z.object({ ... })
+            // 1. Kiểm tra outermost z.record, z.array hoặc z.object({ ... })
             const isRecord = /^\s*z(?:\s*\.\s*)record\s*\(/.test(expr);
+            const isArray = /^\s*z(?:\s*\.\s*)array\s*\(/.test(expr);
             const isObject = /^\s*z(?:\s*\.\s*)object\s*\(/.test(expr);
 
             if (isRecord) {
                 type = 'record';
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                if (objMatch && objMatch.index !== undefined) {
+                    const openIdx = expr.indexOf('{', objMatch.index);
+                    if (openIdx !== -1) {
+                        const inner = this.extractMatchingBraceContent(expr, openIdx);
+                        if (inner) {
+                            recordTemplate = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                        }
+                    }
+                }
+            } else if (isArray) {
+                type = 'array';
                 const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
                 if (objMatch && objMatch.index !== undefined) {
                     const openIdx = expr.indexOf('{', objMatch.index);
@@ -1994,7 +2044,7 @@ export class MvuManager {
 
             if (defaultValue === undefined) {
                 const prefaultMatch = expr.match(
-                    /\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/,
+                    /\.(?:prefault|default)\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/,
                 );
                 if (prefaultMatch) {
                     try {
@@ -2337,8 +2387,8 @@ export class MvuManager {
                         checkLeaves(desc.children);
                         continue;
                     }
-                    if (desc.type === 'record') {
-                        // Record là danh sách thực thể động (như Túi_đồ, Quan_hệ), không yêu cầu instance mẫu trong InitVar
+                    if (desc.type === 'record' || desc.type === 'array') {
+                        // Record và Array là danh sách thực thể động (như Túi_đồ, Danh_hiệu), không yêu cầu instance mẫu trong InitVar
                         continue;
                     }
                     // Theo chuẩn Zod 4: Các trường có .prefault() tự động nạp fallback an toàn tại runtime
