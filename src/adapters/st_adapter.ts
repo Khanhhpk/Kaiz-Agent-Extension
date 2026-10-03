@@ -3,6 +3,8 @@
  * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
  */
 
+import { PngChunkUtil } from '../core/utils/png_chunks';
+
 declare const SillyTavern: any;
 declare const window: any;
 declare const document: any;
@@ -907,12 +909,13 @@ export class SillyTavernAdapter {
     }
 
     /**
-     * Xuất dữ liệu dưới dạng JSON string để sao lưu
+     * Xuất dữ liệu dưới dạng PNG hoặc JSON string để sao lưu
      */
     public async exportBackupData(
         type: 'character' | 'chat' | 'worldbook',
         name?: string,
-    ): Promise<{ name: string; data: string } | null> {
+        format?: 'png' | 'json',
+    ): Promise<{ name: string; data: string; format?: 'png' | 'json'; avatarUrl?: string } | null> {
         const ctx = SillyTavern.getContext();
         try {
             if (type === 'character') {
@@ -1045,21 +1048,68 @@ export class SillyTavernAdapter {
                 };
 
                 const cardPayload = {
-                    spec: 'chara_card_v2',
-                    spec_version: '2.0',
+                    name,
+                    description,
+                    personality,
+                    scenario,
+                    first_mes,
+                    mes_example,
+                    creatorcomment: creator_notes,
+                    avatar: char.avatar || '',
+                    talkativeness: extensions.talkativeness ?? char.talkativeness ?? 0.5,
+                    fav: extensions.fav ?? char.fav ?? false,
+                    tags,
+                    spec: 'chara_card_v3',
+                    spec_version: '3.0',
                     data: fullCharData,
-                    metadata: {
-                        avatar: char.avatar || '',
-                        exportDate: new Date().toISOString(),
-                        source: 'KaizAgent_FullCardBackup',
-                        linkedWorld: linkedWorldName,
-                    },
+                    create_date: new Date().toISOString(),
                 };
 
-                return {
-                    name: charName,
-                    data: JSON.stringify(cardPayload, null, 2),
-                };
+                const effectiveFormat = format || 'png';
+
+                if (effectiveFormat === 'png') {
+                    let avatarUrl = '';
+                    if (char.avatar) {
+                        avatarUrl =
+                            char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                                ? char.avatar
+                                : `/characters/${encodeURIComponent(char.avatar)}`;
+                    }
+
+                    const pngBuffer = await PngChunkUtil.convertImageToPng(avatarUrl);
+                    const embeddedPng = PngChunkUtil.embedCardData(pngBuffer, cardPayload);
+
+                    let binary = '';
+                    const len = embeddedPng.byteLength;
+                    for (let i = 0; i < len; i++) {
+                        binary += String.fromCharCode(embeddedPng[i]);
+                    }
+                    const b64DataUrl =
+                        'data:image/png;base64,' +
+                        (typeof window !== 'undefined'
+                            ? window.btoa(binary)
+                            : Buffer.from(embeddedPng).toString('base64'));
+
+                    return {
+                        name: charName,
+                        data: b64DataUrl,
+                        format: 'png',
+                        avatarUrl: b64DataUrl,
+                    };
+                } else {
+                    const avatarUrl = char.avatar
+                        ? char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                            ? char.avatar
+                            : `/characters/${encodeURIComponent(char.avatar)}`
+                        : undefined;
+
+                    return {
+                        name: charName,
+                        data: JSON.stringify(cardPayload, null, 2),
+                        format: 'json',
+                        avatarUrl,
+                    };
+                }
             }
             if (type === 'chat') {
                 const chatName = ctx.chatId || 'Unknown_Chat';
@@ -1079,7 +1129,7 @@ export class SillyTavernAdapter {
                     JSON.stringify(metadataLine),
                     ...chatData.map((msg: any) => JSON.stringify(msg)),
                 ].join('\n');
-                return { name: chatName, data: jsonlData };
+                return { name: chatName, data: jsonlData, format: 'json' };
             }
             if (type === 'worldbook') {
                 const bookName = name;
@@ -1101,13 +1151,134 @@ export class SillyTavernAdapter {
                 }
 
                 if (!data) throw new Error('Worldbook not found: ' + bookName);
-                return { name: bookName, data: JSON.stringify(data, null, 2) };
+                return { name: bookName, data: JSON.stringify(data, null, 2), format: 'json' };
             }
         } catch (e: any) {
             console.error('[KaizAgent] Backup export error:', e);
             throw e;
         }
         return null;
+    }
+
+    /**
+     * Khôi phục trực tiếp thẻ nhân vật từ bản sao lưu vào SillyTavern
+     */
+    public async restoreCharacterBackup(entry: {
+        name: string;
+        data: string;
+        format?: 'png' | 'json';
+    }): Promise<{ success: boolean; message: string }> {
+        const ctx = SillyTavern.getContext();
+        try {
+            let cardObj: any = null;
+
+            if (entry.format === 'png' || entry.data.startsWith('data:image/png')) {
+                const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                let bytes: Uint8Array;
+                if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+                    const bin = window.atob(b64);
+                    bytes = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                } else if (typeof Buffer !== 'undefined') {
+                    bytes = new Uint8Array(Buffer.from(b64, 'base64'));
+                } else {
+                    throw new Error('No base64 decoder available');
+                }
+                cardObj = PngChunkUtil.extractCardData(bytes);
+            } else {
+                cardObj = JSON.parse(entry.data);
+            }
+
+            if (!cardObj) {
+                throw new Error('Không thể đọc cấu trúc thẻ từ dữ liệu backup');
+            }
+
+            const cardData = cardObj.data || cardObj;
+            const char = ctx.characters?.[ctx.characterId];
+            if (!char) {
+                throw new Error('Không tìm thấy nhân vật đang kích hoạt trong SillyTavern');
+            }
+
+            const mergePayload: Record<string, any> = {
+                avatar_url: char.avatar,
+                name: cardData.name ?? char.name,
+                description: cardData.description ?? '',
+                personality: cardData.personality ?? '',
+                scenario: cardData.scenario ?? '',
+                first_mes: cardData.first_mes ?? '',
+                mes_example: cardData.mes_example ?? '',
+                creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                system_prompt: cardData.system_prompt ?? '',
+                post_history_instructions: cardData.post_history_instructions ?? '',
+                alternate_greetings: cardData.alternate_greetings ?? [],
+                tags: cardData.tags ?? [],
+                creator: cardData.creator ?? '',
+                character_version: cardData.character_version ?? '',
+                extensions: cardData.extensions ?? {},
+            };
+            if (cardData.character_book) {
+                mergePayload.character_book = cardData.character_book;
+            }
+
+            const res = await fetch('/api/characters/merge-attributes', {
+                method: 'POST',
+                headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                body: JSON.stringify(mergePayload),
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+            }
+
+            // In-memory update
+            if (!char.data) char.data = {};
+            Object.assign(char.data, cardData);
+            char.name = cardData.name ?? char.name;
+            char.description = cardData.description ?? char.description;
+            char.personality = cardData.personality ?? char.personality;
+            char.scenario = cardData.scenario ?? char.scenario;
+            char.first_mes = cardData.first_mes ?? char.first_mes;
+            char.mes_example = cardData.mes_example ?? char.mes_example;
+            char.creatorcomment = cardData.creator_notes ?? char.creatorcomment;
+
+            // Trigger ST events & UI updates
+            const es = ctx.eventSource || (window as any).eventSource;
+            const et = ctx.event_types || (window as any).event_types;
+            if (es && et?.CHARACTER_EDITED) {
+                es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
+                es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
+            }
+            if (es && et?.CHARACTERS_UPDATED) {
+                es.emit(et.CHARACTERS_UPDATED);
+            }
+
+            // Update DOM inputs if visible
+            const domMap: Record<string, string> = {
+                description: 'description_textarea',
+                personality: 'personality_textarea',
+                scenario: 'scenario_pole',
+                first_mes: 'firstmessage_textarea',
+                mes_example: 'mes_example_textarea',
+                system_prompt: 'system_prompt_textarea',
+                post_history_instructions: 'post_history_instructions_textarea',
+                creator_notes: 'creator_notes_textarea',
+            };
+            for (const [key, domId] of Object.entries(domMap)) {
+                const el = document.getElementById(domId) as HTMLTextAreaElement;
+                if (el && cardData[key] !== undefined) {
+                    el.value = typeof cardData[key] === 'string' ? cardData[key] : JSON.stringify(cardData[key]);
+                    el.dispatchEvent(new Event('input', { bubbles: true }));
+                }
+            }
+
+            return {
+                success: true,
+                message: `Đã khôi phục thành công thẻ nhân vật [${char.name}] từ bản sao lưu!`,
+            };
+        } catch (e: any) {
+            console.error('[KaizAgent] Lỗi khi khôi phục thẻ:', e);
+            throw e;
+        }
     }
 
     /**

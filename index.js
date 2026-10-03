@@ -1317,6 +1317,11 @@ CÁC CÔNG CỤ HIỆN CÓ:
                       type: 'string',
                       description: 'Tên đối tượng cần sao lưu (bắt buộc nếu target_type là worldbook, đối với character và chat sẽ tự động lấy đối tượng hiện tại).',
                   },
+                  format: {
+                      type: 'string',
+                      enum: ['png', 'json'],
+                      description: 'Định dạng sao lưu cho thẻ nhân vật. Mặc định là "png" (ưu tiên khuyên dùng để lưu trữ kèm toàn bộ ảnh avatar và metadata chuẩn Tavern V2/V3). Nếu chọn "json" thì chỉ lưu cấu trúc dữ liệu text.',
+                  },
               },
               required: ['target_type'],
           },
@@ -1330,7 +1335,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
           try {
               const type = args.target_type;
               const name = args.target_name;
-              const exportResult = await context.adapter.exportBackupData(type, name);
+              const format = args.format || (type === 'character' ? 'png' : 'json');
+              const exportResult = await context.adapter.exportBackupData(type, name, format);
               if (!exportResult) {
                   return {
                       isError: true,
@@ -1338,9 +1344,10 @@ CÁC CÔNG CỤ HIỆN CÓ:
                   };
               }
               // Lưu vào IDB
-              const backupId = await context.stateManager.db.addBackup(type, exportResult.name, exportResult.data);
+              const backupId = await context.stateManager.db.addBackup(type, exportResult.name, exportResult.data, exportResult.format, exportResult.avatarUrl);
+              const formatLabel = exportResult.format === 'png' ? 'PNG (kèm ảnh avatar)' : 'JSON';
               return {
-                  content: `✅ Đã tạo backup thành công cho [${type}: ${exportResult.name}] với ID=${backupId}. Người dùng có thể tải về từ Backup Manager.`,
+                  content: `✅ Đã tạo backup thành công cho [${type}: ${exportResult.name}] định dạng [${formatLabel}] với ID=${backupId}. Người dùng có thể xem, tải về hoặc khôi phục từ Backup Manager.`,
               };
           }
           catch (e) {
@@ -5727,13 +5734,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           });
       }
       // --- BACKUPS ---
-      async addBackup(type, name, data) {
+      async addBackup(type, name, data, format, avatarUrl) {
           return new Promise((resolve, reject) => {
               if (!this.db)
                   return reject(new Error('DB not initialized'));
               const transaction = this.db.transaction(['backups'], 'readwrite');
               const store = transaction.objectStore('backups');
-              const entry = { type, name, data, timestamp: Date.now() };
+              const entry = { type, name, data, format, avatarUrl, timestamp: Date.now() };
               const request = store.add(entry);
               request.onsuccess = () => resolve(request.result);
               request.onerror = () => reject(request.error);
@@ -20692,6 +20699,316 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
   }
 
   /**
+   * PNG Chunks Utility for SillyTavern Character Cards
+   * Implements Tavern Character Card V2 and CCv3 specifications:
+   * - Reads/writes standard PNG chunks
+   * - Embeds card JSON in `tEXt` chunks with keywords 'chara' and 'ccv3'
+   * - Extracts card metadata from PNG buffers
+   * - Converts any image (WebP, JPG, URL) to standard PNG via Canvas
+   */
+  // Precomputed CRC32 IEEE 802.3 table
+  const CRC_TABLE = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) {
+          c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      CRC_TABLE[n] = c >>> 0;
+  }
+  class PngChunkUtil {
+      static PNG_SIG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      /**
+       * Compute CRC32 checksum for a given buffer
+       */
+      static crc32(buf) {
+          let crc = 0xffffffff;
+          const len = buf.length;
+          for (let i = 0; i < len; i++) {
+              crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xff];
+          }
+          return (crc ^ 0xffffffff) >>> 0;
+      }
+      /**
+       * Encode UTF-8 string to Base64 string
+       */
+      static utf8ToBase64(str) {
+          if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+              const bytes = new TextEncoder().encode(str);
+              let binary = '';
+              const len = bytes.byteLength;
+              for (let i = 0; i < len; i++) {
+                  binary += String.fromCharCode(bytes[i]);
+              }
+              return window.btoa(binary);
+          }
+          else if (typeof Buffer !== 'undefined') {
+              return Buffer.from(str, 'utf8').toString('base64');
+          }
+          throw new Error('No base64 encoder available');
+      }
+      /**
+       * Decode Base64 string to UTF-8 string
+       */
+      static base64ToUtf8(b64) {
+          if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+              const binary = window.atob(b64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) {
+                  bytes[i] = binary.charCodeAt(i);
+              }
+              return new TextDecoder('utf-8').decode(bytes);
+          }
+          else if (typeof Buffer !== 'undefined') {
+              return Buffer.from(b64, 'base64').toString('utf8');
+          }
+          throw new Error('No base64 decoder available');
+      }
+      /**
+       * Parse all chunks from a valid PNG buffer
+       */
+      static parseChunks(buffer) {
+          if (buffer.length < 8) {
+              throw new Error('Buffer too small to be a PNG image');
+          }
+          for (let i = 0; i < 8; i++) {
+              if (buffer[i] !== this.PNG_SIG[i]) {
+                  throw new Error('Invalid PNG signature');
+              }
+          }
+          const chunks = [];
+          let offset = 8;
+          const totalLen = buffer.length;
+          while (offset < totalLen) {
+              if (offset + 12 > totalLen) {
+                  break;
+              }
+              const len = ((buffer[offset] << 24) |
+                  (buffer[offset + 1] << 16) |
+                  (buffer[offset + 2] << 8) |
+                  buffer[offset + 3]) >>>
+                  0;
+              let type = '';
+              for (let i = 0; i < 4; i++) {
+                  type += String.fromCharCode(buffer[offset + 4 + i]);
+              }
+              const dataStart = offset + 8;
+              const dataEnd = dataStart + len;
+              if (dataEnd + 4 > totalLen) {
+                  break; // Corrupted or truncated chunk
+              }
+              const data = buffer.slice(dataStart, dataEnd);
+              const crc = ((buffer[dataEnd] << 24) |
+                  (buffer[dataEnd + 1] << 16) |
+                  (buffer[dataEnd + 2] << 8) |
+                  buffer[dataEnd + 3]) >>>
+                  0;
+              chunks.push({ type, data, crc });
+              offset = dataEnd + 4;
+          }
+          return chunks;
+      }
+      /**
+       * Build binary PNG buffer from an array of chunks
+       */
+      static buildPng(chunks) {
+          let totalSize = 8;
+          for (const c of chunks) {
+              totalSize += 12 + c.data.length;
+          }
+          const out = new Uint8Array(totalSize);
+          out.set(this.PNG_SIG, 0);
+          let offset = 8;
+          for (const c of chunks) {
+              const len = c.data.length;
+              out[offset] = (len >>> 24) & 0xff;
+              out[offset + 1] = (len >>> 16) & 0xff;
+              out[offset + 2] = (len >>> 8) & 0xff;
+              out[offset + 3] = len & 0xff;
+              const typeBytes = new Uint8Array(4);
+              for (let i = 0; i < 4; i++) {
+                  typeBytes[i] = c.type.charCodeAt(i);
+                  out[offset + 4 + i] = typeBytes[i];
+              }
+              out.set(c.data, offset + 8);
+              // Calculate CRC over type + data
+              const crcBuf = new Uint8Array(4 + len);
+              crcBuf.set(typeBytes, 0);
+              crcBuf.set(c.data, 4);
+              const chunkCrc = this.crc32(crcBuf);
+              const crcOffset = offset + 8 + len;
+              out[crcOffset] = (chunkCrc >>> 24) & 0xff;
+              out[crcOffset + 1] = (chunkCrc >>> 16) & 0xff;
+              out[crcOffset + 2] = (chunkCrc >>> 8) & 0xff;
+              out[crcOffset + 3] = chunkCrc & 0xff;
+              offset += 12 + len;
+          }
+          return out;
+      }
+      /**
+       * Embed character card JSON into PNG chunks ('chara' and 'ccv3')
+       */
+      static embedCardData(pngBuffer, cardJson) {
+          const jsonStr = typeof cardJson === 'string' ? cardJson : JSON.stringify(cardJson);
+          const b64 = this.utf8ToBase64(jsonStr);
+          const chunks = this.parseChunks(pngBuffer);
+          // Filter out any pre-existing chara or ccv3 chunks
+          const filtered = chunks.filter((c) => {
+              if (c.type !== 'tEXt')
+                  return true;
+              const nullIdx = c.data.indexOf(0);
+              if (nullIdx === -1)
+                  return true;
+              let kw = '';
+              for (let i = 0; i < nullIdx; i++) {
+                  kw += String.fromCharCode(c.data[i]);
+              }
+              return kw !== 'chara' && kw !== 'ccv3';
+          });
+          const makeTextChunk = (keyword, text) => {
+              const kwBytes = new Uint8Array(keyword.length);
+              for (let i = 0; i < keyword.length; i++) {
+                  kwBytes[i] = keyword.charCodeAt(i);
+              }
+              const textBytes = new TextEncoder().encode(text);
+              const data = new Uint8Array(kwBytes.length + 1 + textBytes.length);
+              data.set(kwBytes, 0);
+              data[kwBytes.length] = 0; // null separator
+              data.set(textBytes, kwBytes.length + 1);
+              return { type: 'tEXt', data, crc: 0 };
+          };
+          const charaChunk = makeTextChunk('chara', b64);
+          const ccv3Chunk = makeTextChunk('ccv3', b64);
+          const ihdrIdx = filtered.findIndex((c) => c.type === 'IHDR');
+          const insertIdx = ihdrIdx >= 0 ? ihdrIdx + 1 : 1;
+          filtered.splice(insertIdx, 0, charaChunk, ccv3Chunk);
+          return this.buildPng(filtered);
+      }
+      /**
+       * Extract card data from PNG buffer (reads 'ccv3' or 'chara' chunk)
+       */
+      static extractCardData(pngBuffer) {
+          try {
+              const chunks = this.parseChunks(pngBuffer);
+              let charaData = null;
+              let ccv3Data = null;
+              for (const c of chunks) {
+                  if (c.type === 'tEXt') {
+                      const nullIdx = c.data.indexOf(0);
+                      if (nullIdx === -1)
+                          continue;
+                      let kw = '';
+                      for (let i = 0; i < nullIdx; i++) {
+                          kw += String.fromCharCode(c.data[i]);
+                      }
+                      const textBytes = c.data.slice(nullIdx + 1);
+                      const text = new TextDecoder('utf-8').decode(textBytes);
+                      if (kw === 'ccv3')
+                          ccv3Data = text;
+                      if (kw === 'chara')
+                          charaData = text;
+                  }
+              }
+              const targetB64 = ccv3Data || charaData;
+              if (!targetB64)
+                  return null;
+              const jsonStr = this.base64ToUtf8(targetB64.trim());
+              return JSON.parse(jsonStr);
+          }
+          catch (e) {
+              console.error('[PngChunkUtil] Error extracting card data:', e);
+              return null;
+          }
+      }
+      /**
+       * Convert any image (URL, DataURL, WebP, JPG) into a standard PNG buffer using Canvas
+       */
+      static async convertImageToPng(imageSourceUrl) {
+          // If it's already a DataURL PNG, we can decode it directly
+          if (imageSourceUrl.startsWith('data:image/png;base64,')) {
+              const b64 = imageSourceUrl.replace('data:image/png;base64,', '');
+              if (typeof Buffer !== 'undefined') {
+                  return new Uint8Array(Buffer.from(b64, 'base64'));
+              }
+              else if (typeof window !== 'undefined') {
+                  const bin = window.atob(b64);
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) {
+                      bytes[i] = bin.charCodeAt(i);
+                  }
+                  return bytes;
+              }
+          }
+          // In browser context: use Image + Canvas
+          if (typeof document !== 'undefined') {
+              return new Promise((resolve, reject) => {
+                  const img = new Image();
+                  img.crossOrigin = 'anonymous';
+                  img.onload = () => {
+                      try {
+                          const canvas = document.createElement('canvas');
+                          canvas.width = img.naturalWidth || img.width || 400;
+                          canvas.height = img.naturalHeight || img.height || 600;
+                          const ctx = canvas.getContext('2d');
+                          if (!ctx) {
+                              return reject(new Error('Canvas 2D context not available'));
+                          }
+                          ctx.drawImage(img, 0, 0);
+                          canvas.toBlob((blob) => {
+                              if (!blob) {
+                                  return reject(new Error('Failed to export canvas to PNG blob'));
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                  resolve(new Uint8Array(reader.result));
+                              };
+                              reader.onerror = () => reject(reader.error);
+                              reader.readAsArrayBuffer(blob);
+                          }, 'image/png');
+                      }
+                      catch (canvasErr) {
+                          reject(canvasErr);
+                      }
+                  };
+                  img.onerror = () => {
+                      // Fallback to a clean 400x600 default canvas if image failed to load
+                      try {
+                          const canvas = document.createElement('canvas');
+                          canvas.width = 400;
+                          canvas.height = 600;
+                          const ctx = canvas.getContext('2d');
+                          ctx.fillStyle = '#2c3e50';
+                          ctx.fillRect(0, 0, 400, 600);
+                          ctx.fillStyle = '#ecf0f1';
+                          ctx.font = 'bold 24px sans-serif';
+                          ctx.textAlign = 'center';
+                          ctx.fillText('Character Card', 200, 300);
+                          canvas.toBlob((blob) => {
+                              if (!blob)
+                                  return reject(new Error('Fallback canvas failed'));
+                              const reader = new FileReader();
+                              reader.onload = () => resolve(new Uint8Array(reader.result));
+                              reader.onerror = () => reject(reader.error);
+                              reader.readAsArrayBuffer(blob);
+                          }, 'image/png');
+                      }
+                      catch (_e) {
+                          reject(new Error('Image load failed and fallback canvas failed: ' + imageSourceUrl));
+                      }
+                  };
+                  img.src = imageSourceUrl;
+              });
+          }
+          // If outside browser (e.g. Node tests), create minimal 1x1 PNG fallback if needed
+          return new Uint8Array([
+              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
+              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+              0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d,
+              0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+          ]);
+      }
+  }
+
+  /**
    * SillyTavern Adapter
    * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
    */
@@ -21516,9 +21833,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           }
       }
       /**
-       * Xuất dữ liệu dưới dạng JSON string để sao lưu
+       * Xuất dữ liệu dưới dạng PNG hoặc JSON string để sao lưu
        */
-      async exportBackupData(type, name) {
+      async exportBackupData(type, name, format) {
           const ctx = SillyTavern.getContext();
           try {
               if (type === 'character') {
@@ -21642,20 +21959,62 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       extensions,
                   };
                   const cardPayload = {
-                      spec: 'chara_card_v2',
-                      spec_version: '2.0',
+                      name,
+                      description,
+                      personality,
+                      scenario,
+                      first_mes,
+                      mes_example,
+                      creatorcomment: creator_notes,
+                      avatar: char.avatar || '',
+                      talkativeness: extensions.talkativeness ?? char.talkativeness ?? 0.5,
+                      fav: extensions.fav ?? char.fav ?? false,
+                      tags,
+                      spec: 'chara_card_v3',
+                      spec_version: '3.0',
                       data: fullCharData,
-                      metadata: {
-                          avatar: char.avatar || '',
-                          exportDate: new Date().toISOString(),
-                          source: 'KaizAgent_FullCardBackup',
-                          linkedWorld: linkedWorldName,
-                      },
+                      create_date: new Date().toISOString(),
                   };
-                  return {
-                      name: charName,
-                      data: JSON.stringify(cardPayload, null, 2),
-                  };
+                  const effectiveFormat = format || 'png';
+                  if (effectiveFormat === 'png') {
+                      let avatarUrl = '';
+                      if (char.avatar) {
+                          avatarUrl =
+                              char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                                  ? char.avatar
+                                  : `/characters/${encodeURIComponent(char.avatar)}`;
+                      }
+                      const pngBuffer = await PngChunkUtil.convertImageToPng(avatarUrl);
+                      const embeddedPng = PngChunkUtil.embedCardData(pngBuffer, cardPayload);
+                      let binary = '';
+                      const len = embeddedPng.byteLength;
+                      for (let i = 0; i < len; i++) {
+                          binary += String.fromCharCode(embeddedPng[i]);
+                      }
+                      const b64DataUrl = 'data:image/png;base64,' +
+                          (typeof window !== 'undefined'
+                              ? window.btoa(binary)
+                              : Buffer.from(embeddedPng).toString('base64'));
+                      return {
+                          name: charName,
+                          data: b64DataUrl,
+                          format: 'png',
+                          avatarUrl: b64DataUrl,
+                      };
+                  }
+                  else {
+                      const avatarUrl = char.avatar
+                          ? char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                              ? char.avatar
+                              : `/characters/${encodeURIComponent(char.avatar)}`
+                          : undefined;
+                      return {
+                          name: charName,
+                          data: JSON.stringify(cardPayload, null, 2),
+                          format: 'json',
+                          avatarUrl,
+                      };
+                  }
               }
               if (type === 'chat') {
                   const chatName = ctx.chatId || 'Unknown_Chat';
@@ -21674,7 +22033,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       JSON.stringify(metadataLine),
                       ...chatData.map((msg) => JSON.stringify(msg)),
                   ].join('\n');
-                  return { name: chatName, data: jsonlData };
+                  return { name: chatName, data: jsonlData, format: 'json' };
               }
               if (type === 'worldbook') {
                   const bookName = name;
@@ -21698,7 +22057,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   }
                   if (!data)
                       throw new Error('Worldbook not found: ' + bookName);
-                  return { name: bookName, data: JSON.stringify(data, null, 2) };
+                  return { name: bookName, data: JSON.stringify(data, null, 2), format: 'json' };
               }
           }
           catch (e) {
@@ -21706,6 +22065,118 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               throw e;
           }
           return null;
+      }
+      /**
+       * Khôi phục trực tiếp thẻ nhân vật từ bản sao lưu vào SillyTavern
+       */
+      async restoreCharacterBackup(entry) {
+          const ctx = SillyTavern.getContext();
+          try {
+              let cardObj = null;
+              if (entry.format === 'png' || entry.data.startsWith('data:image/png')) {
+                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                  let bytes;
+                  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+                      const bin = window.atob(b64);
+                      bytes = new Uint8Array(bin.length);
+                      for (let i = 0; i < bin.length; i++)
+                          bytes[i] = bin.charCodeAt(i);
+                  }
+                  else if (typeof Buffer !== 'undefined') {
+                      bytes = new Uint8Array(Buffer.from(b64, 'base64'));
+                  }
+                  else {
+                      throw new Error('No base64 decoder available');
+                  }
+                  cardObj = PngChunkUtil.extractCardData(bytes);
+              }
+              else {
+                  cardObj = JSON.parse(entry.data);
+              }
+              if (!cardObj) {
+                  throw new Error('Không thể đọc cấu trúc thẻ từ dữ liệu backup');
+              }
+              const cardData = cardObj.data || cardObj;
+              const char = ctx.characters?.[ctx.characterId];
+              if (!char) {
+                  throw new Error('Không tìm thấy nhân vật đang kích hoạt trong SillyTavern');
+              }
+              const mergePayload = {
+                  avatar_url: char.avatar,
+                  name: cardData.name ?? char.name,
+                  description: cardData.description ?? '',
+                  personality: cardData.personality ?? '',
+                  scenario: cardData.scenario ?? '',
+                  first_mes: cardData.first_mes ?? '',
+                  mes_example: cardData.mes_example ?? '',
+                  creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                  system_prompt: cardData.system_prompt ?? '',
+                  post_history_instructions: cardData.post_history_instructions ?? '',
+                  alternate_greetings: cardData.alternate_greetings ?? [],
+                  tags: cardData.tags ?? [],
+                  creator: cardData.creator ?? '',
+                  character_version: cardData.character_version ?? '',
+                  extensions: cardData.extensions ?? {},
+              };
+              if (cardData.character_book) {
+                  mergePayload.character_book = cardData.character_book;
+              }
+              const res = await fetch('/api/characters/merge-attributes', {
+                  method: 'POST',
+                  headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                  body: JSON.stringify(mergePayload),
+              });
+              if (!res.ok) {
+                  throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+              }
+              // In-memory update
+              if (!char.data)
+                  char.data = {};
+              Object.assign(char.data, cardData);
+              char.name = cardData.name ?? char.name;
+              char.description = cardData.description ?? char.description;
+              char.personality = cardData.personality ?? char.personality;
+              char.scenario = cardData.scenario ?? char.scenario;
+              char.first_mes = cardData.first_mes ?? char.first_mes;
+              char.mes_example = cardData.mes_example ?? char.mes_example;
+              char.creatorcomment = cardData.creator_notes ?? char.creatorcomment;
+              // Trigger ST events & UI updates
+              const es = ctx.eventSource || window.eventSource;
+              const et = ctx.event_types || window.event_types;
+              if (es && et?.CHARACTER_EDITED) {
+                  es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
+                  es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
+              }
+              if (es && et?.CHARACTERS_UPDATED) {
+                  es.emit(et.CHARACTERS_UPDATED);
+              }
+              // Update DOM inputs if visible
+              const domMap = {
+                  description: 'description_textarea',
+                  personality: 'personality_textarea',
+                  scenario: 'scenario_pole',
+                  first_mes: 'firstmessage_textarea',
+                  mes_example: 'mes_example_textarea',
+                  system_prompt: 'system_prompt_textarea',
+                  post_history_instructions: 'post_history_instructions_textarea',
+                  creator_notes: 'creator_notes_textarea',
+              };
+              for (const [key, domId] of Object.entries(domMap)) {
+                  const el = document.getElementById(domId);
+                  if (el && cardData[key] !== undefined) {
+                      el.value = typeof cardData[key] === 'string' ? cardData[key] : JSON.stringify(cardData[key]);
+                      el.dispatchEvent(new Event('input', { bubbles: true }));
+                  }
+              }
+              return {
+                  success: true,
+                  message: `Đã khôi phục thành công thẻ nhân vật [${char.name}] từ bản sao lưu!`,
+              };
+          }
+          catch (e) {
+              console.error('[KaizAgent] Lỗi khi khôi phục thẻ:', e);
+              throw e;
+          }
       }
       /**
        * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
@@ -25659,8 +26130,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       modal = null;
       currentFilter = 'all';
       db;
-      constructor(db) {
+      adapter;
+      constructor(db, adapter) {
           this.db = db;
+          this.adapter = adapter || new SillyTavernAdapter();
       }
       show() {
           this.render();
@@ -25668,27 +26141,27 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       render() {
           if ($$1('#kaiz-backup-modal').length === 0) {
               const html = `
-                <dialog id="kaiz-backup-modal" class="kaiz-modal-content" style="width: 600px; max-width: 90vw; padding: 0; background: transparent; border: none;">
+                <dialog id="kaiz-backup-modal" class="kaiz-modal-content" style="width: 650px; max-width: 90vw; padding: 0; background: transparent; border: none;">
                     <div style="background: var(--SmartThemeBlurTintColor); backdrop-filter: blur(10px); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px; padding: 20px; color: var(--SmartThemeBodyColor); box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                         <div class="kaiz-modal-header">
                             <h2 style="margin: 0; font-size: 1.2rem;"><i class="fa-solid fa-save"></i> Backup Manager</h2>
                             <div class="kaiz-modal-close" style="cursor: pointer; font-size: 1.2rem;"><i class="fa-solid fa-xmark"></i></div>
                         </div>
                         <div class="kaiz-backup-header">
-                            <h3 style="margin: 0; font-size: 1.2em;">Backup Manager</h3>
-                            <div id="kaiz-backup-storage-info" style="font-size: 0.85em; color: #aaa;">Calculating storage...</div>
+                            <h3 style="margin: 0; font-size: 1.2em;">Bản sao lưu hệ thống</h3>
+                            <div id="kaiz-backup-storage-info" style="font-size: 0.85em; color: #aaa;">Đang tính toán dung lượng...</div>
                         </div>
                         <div class="kaiz-backup-tabs">
-                            <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">All</div>
-                            <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Characters</div>
-                            <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Chats</div>
+                            <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">Tất cả</div>
+                            <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Nhân vật (Cards)</div>
+                            <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Đoạn chat</div>
                             <div class="kaiz-tab" data-type="worldbook" style="padding: 8px 12px; cursor: pointer;">Worldbooks</div>
                         </div>
-                        <div class="kaiz-backup-list" style="max-height: 400px; overflow-y: auto;">
+                        <div class="kaiz-backup-list" style="max-height: 420px; overflow-y: auto;">
                             <!-- Backup items will be rendered here -->
                         </div>
                         <div class="kaiz-modal-footer" style="margin-top: 15px; text-align: right;">
-                            <button id="kaiz-backup-close-btn" class="menu_button">Close</button>
+                            <button id="kaiz-backup-close-btn" class="menu_button">Đóng</button>
                         </div>
                     </div>
                 </dialog>
@@ -25727,19 +26200,28 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         .kaiz-backup-item {
                             display: flex; justify-content: space-between; align-items: center;
                             padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
-                            background: rgba(0,0,0,0.2); border-radius: 5px; margin-bottom: 8px;
-                            flex-wrap: wrap; gap: 10px;
+                            background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 8px;
+                            flex-wrap: wrap; gap: 10px; transition: background 0.2s;
                         }
                         .kaiz-backup-item:hover {
-                            background: rgba(255,255,255,0.05);
+                            background: rgba(255,255,255,0.06);
                         }
                         .kaiz-backup-info { flex: 1; min-width: 0; }
                         .kaiz-backup-title { 
-                            font-weight: bold; font-size: 1.1em; 
+                            font-weight: bold; font-size: 1.05em; 
                             word-break: break-word; overflow-wrap: anywhere;
+                            display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
                         }
                         .kaiz-backup-meta { font-size: 0.85em; opacity: 0.7; margin-top: 4px; }
-                        .kaiz-backup-actions { display: flex; gap: 8px; flex-shrink: 0; }
+                        .kaiz-backup-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+                        .kaiz-backup-badge-png {
+                            background: #27ae60; color: #ffffff; font-size: 0.7em; font-weight: bold;
+                            padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px;
+                        }
+                        .kaiz-backup-badge-json {
+                            background: #d35400; color: #ffffff; font-size: 0.7em; font-weight: bold;
+                            padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px;
+                        }
                     </style>
                 `);
               }
@@ -25772,16 +26254,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               this.currentFilter = target.attr('data-type');
               this.loadBackups();
           });
-          // Backup list actions
+          // Backup list actions: Download
           this.modal.on('click', '.kaiz-backup-download', (e) => {
               const id = $$1(e.currentTarget).attr('data-id');
               if (id)
                   this.downloadBackup(parseInt(id));
           });
+          // Backup list actions: Restore
+          this.modal.on('click', '.kaiz-backup-restore', (e) => {
+              const id = $$1(e.currentTarget).attr('data-id');
+              if (id)
+                  this.restoreBackup(parseInt(id));
+          });
+          // Backup list actions: Delete
           this.modal.on('click', '.kaiz-backup-delete', (e) => {
               const id = $$1(e.currentTarget).attr('data-id');
               if (id) {
-                  if (confirm('Are you sure you want to delete this backup?')) {
+                  if (confirm('Bạn có chắc chắn muốn xóa bản sao lưu này khỏi bộ nhớ không?')) {
                       this.deleteBackup(parseInt(id));
                   }
               }
@@ -25791,7 +26280,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (!this.modal)
               return;
           const listContainer = this.modal.find('.kaiz-backup-list');
-          listContainer.html('<div style="text-align: center; padding: 20px;">Loading...</div>');
+          listContainer.html('<div style="text-align: center; padding: 20px;">Đang tải danh sách bản sao lưu...</div>');
           try {
               const allBackups = await this.db.getBackups();
               let filtered = allBackups;
@@ -25799,7 +26288,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   filtered = allBackups.filter((b) => b.type === this.currentFilter);
               }
               if (filtered.length === 0) {
-                  listContainer.html('<div style="text-align: center; padding: 20px; color: #888;">No backups found.</div>');
+                  listContainer.html('<div style="text-align: center; padding: 20px; color: #888;">Chưa có bản sao lưu nào.</div>');
               }
               else {
                   let html = '';
@@ -25808,18 +26297,36 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const sizeInBytes = new Blob([b.data]).size;
                       const sizeKb = (sizeInBytes / 1024).toFixed(1);
                       const icon = b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
+                      const isCharacter = b.type === 'character';
+                      const isPng = b.format === 'png' || (typeof b.data === 'string' && b.data.startsWith('data:image/png'));
+                      let badgeHtml = '';
+                      if (isCharacter) {
+                          badgeHtml = isPng
+                              ? `<span class="kaiz-backup-badge-png">PNG</span>`
+                              : `<span class="kaiz-backup-badge-json">JSON</span>`;
+                      }
+                      // Avatar or Icon preview
+                      const visualPreview = isCharacter && (b.avatarUrl || isPng)
+                          ? `<img src="${b.avatarUrl || b.data}" alt="${this.escapeHtml(b.name)}" style="width: 44px; height: 44px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" />`
+                          : `<div style="width: 44px; height: 44px; border-radius: 6px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><i class="fa-solid ${icon}" style="font-size: 1.3em; color: #888;"></i></div>`;
                       html += `
                         <div class="kaiz-backup-item">
-                            <div class="kaiz-backup-info" style="display: flex; align-items: center; gap: 10px;">
-                                <i class="fa-solid ${icon}" style="font-size: 1.2em; color: #888; flex-shrink: 0;"></i>
+                            <div class="kaiz-backup-info" style="display: flex; align-items: center; gap: 12px;">
+                                ${visualPreview}
                                 <div style="min-width: 0;">
-                                    <div class="kaiz-backup-title">${this.escapeHtml(b.name)}</div>
-                                    <div class="kaiz-backup-meta">${date} - ${sizeKb} KB</div>
+                                    <div class="kaiz-backup-title">
+                                        <span>${this.escapeHtml(b.name)}</span>
+                                        ${badgeHtml}
+                                    </div>
+                                    <div class="kaiz-backup-meta">${date} • ${sizeKb} KB</div>
                                 </div>
                             </div>
                             <div class="kaiz-backup-actions">
-                                <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Download"><i class="fa-solid fa-download"></i></button>
-                                <button class="kaiz-backup-delete kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #c0392b; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                ${isCharacter
+                        ? `<button class="kaiz-backup-restore kaiz-btn" data-id="${b.id}" style="padding: 6px 12px; background: #2980b9; border: none; color: white; cursor: pointer; border-radius: 4px; font-size: 0.85em;" title="Khôi phục vào SillyTavern"><i class="fa-solid fa-rotate-left"></i> Khôi phục</button>`
+                        : ''}
+                                <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 6px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 4px;" title="Tải về máy"><i class="fa-solid fa-download"></i></button>
+                                <button class="kaiz-backup-delete kaiz-btn" data-id="${b.id}" style="padding: 6px 10px; background: #c0392b; border: none; color: white; cursor: pointer; border-radius: 4px;" title="Xóa"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
                     `;
@@ -25831,15 +26338,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const estimate = await navigator.storage.estimate();
                   const usedMb = ((estimate.usage || 0) / (1024 * 1024)).toFixed(2);
                   const quotaMb = ((estimate.quota || 0) / (1024 * 1024)).toFixed(2);
-                  this.modal.find('#kaiz-backup-storage-info').text(`Storage: ${usedMb}MB / ${quotaMb}MB used`);
+                  this.modal.find('#kaiz-backup-storage-info').text(`Bộ nhớ đã dùng: ${usedMb}MB / ${quotaMb}MB`);
               }
               else {
-                  this.modal.find('#kaiz-backup-storage-info').text('Storage info not available');
+                  this.modal.find('#kaiz-backup-storage-info').text('');
               }
           }
           catch (error) {
               console.error('[BackupModal] Error loading backups:', error);
-              listContainer.html('<div style="color: red; padding: 10px;">Error loading backups. Check console.</div>');
+              listContainer.html('<div style="color: red; padding: 10px;">Lỗi khi tải danh sách bản sao lưu. Vui lòng kiểm tra Console.</div>');
           }
       }
       async downloadBackup(id) {
@@ -25847,18 +26354,33 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const backups = await this.db.getBackups();
               const backup = backups.find((b) => b.id === id);
               if (!backup) {
-                  alert('Backup not found!');
+                  alert('Không tìm thấy bản sao lưu!');
                   return;
               }
-              // Create blob and download
-              const blob = new Blob([backup.data], { type: 'application/json' });
+              const safeName = backup.name.replace(/[/\\:*?"<>|]/g, '_');
+              const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
+              const isPng = backup.format === 'png' ||
+                  (typeof backup.data === 'string' && backup.data.startsWith('data:image/png'));
+              let blob;
+              let extension;
+              if (isPng) {
+                  // Convert Data URL to binary blob
+                  const b64 = backup.data.replace(/^data:image\/png;base64,/, '');
+                  const bin = window.atob(b64);
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) {
+                      bytes[i] = bin.charCodeAt(i);
+                  }
+                  blob = new Blob([bytes], { type: 'image/png' });
+                  extension = 'png';
+              }
+              else {
+                  blob = new Blob([backup.data], { type: 'application/json' });
+                  extension = backup.type === 'chat' ? 'jsonl' : 'json';
+              }
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              // Format file name
-              const safeName = backup.name.replace(/[/\\:*?"<>|]/g, '_');
-              const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
-              const extension = backup.type === 'chat' ? 'jsonl' : 'json';
               a.download = `${safeName}_backup_${dateStr}.${extension}`;
               document.body.appendChild(a);
               a.click();
@@ -25867,7 +26389,26 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           catch (error) {
               console.error('[BackupModal] Error downloading backup:', error);
-              alert('Failed to download backup.');
+              alert('Lỗi khi tải bản sao lưu về máy.');
+          }
+      }
+      async restoreBackup(id) {
+          try {
+              const backups = await this.db.getBackups();
+              const backup = backups.find((b) => b.id === id);
+              if (!backup) {
+                  alert('Không tìm thấy bản sao lưu!');
+                  return;
+              }
+              if (!confirm(`Bạn có chắc chắn muốn khôi phục thẻ nhân vật [${backup.name}] từ bản sao lưu này vào SillyTavern không?\nThao tác này sẽ cập nhật các trường thông tin của nhân vật hiện tại.`)) {
+                  return;
+              }
+              const res = await this.adapter.restoreCharacterBackup(backup);
+              alert(`✅ ${res.message}`);
+          }
+          catch (error) {
+              console.error('[BackupModal] Error restoring backup:', error);
+              alert(`❌ Không thể khôi phục bản sao lưu: ${error.message}`);
           }
       }
       async deleteBackup(id) {
@@ -25877,7 +26418,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           catch (error) {
               console.error('[BackupModal] Error deleting backup:', error);
-              alert('Failed to delete backup.');
+              alert('Lỗi khi xóa bản sao lưu.');
           }
       }
       escapeHtml(unsafe) {
