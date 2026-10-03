@@ -1222,35 +1222,103 @@ export class SillyTavernAdapter {
             // TRƯỜNG HỢP 1: Nhân vật đã tồn tại -> Ghi đè hoàn hảo lên thẻ đó
             if (targetIndex !== -1) {
                 const char = characters[targetIndex];
-                const mergePayload: Record<string, any> = {
-                    avatar_url: char.avatar,
-                    name: cardData.name ?? char.name,
-                    description: cardData.description ?? '',
-                    personality: cardData.personality ?? '',
-                    scenario: cardData.scenario ?? '',
-                    first_mes: cardData.first_mes ?? '',
-                    mes_example: cardData.mes_example ?? '',
-                    creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
-                    system_prompt: cardData.system_prompt ?? '',
-                    post_history_instructions: cardData.post_history_instructions ?? '',
-                    alternate_greetings: cardData.alternate_greetings ?? [],
-                    tags: cardData.tags ?? [],
-                    creator: cardData.creator ?? '',
-                    character_version: cardData.character_version ?? '',
-                    extensions: cardData.extensions ?? {},
-                };
-                if (cardData.character_book) {
-                    mergePayload.character_book = cardData.character_book;
+
+                if (isPng) {
+                    const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                    const bin = window.atob(b64);
+                    const bytes = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    const file = new File([bytes], char.avatar || `${backupName || 'character'}.png`, {
+                        type: 'image/png',
+                    });
+
+                    const formData = new FormData();
+                    formData.append('avatar', file);
+                    formData.append('file_type', 'png');
+                    if (ctx.name1) {
+                        formData.append('user_name', ctx.name1);
+                    }
+                    const preservedName = (char.avatar || backupName || '').replace(/\.png$/i, '');
+                    if (preservedName) {
+                        formData.append('preserved_name', preservedName);
+                    }
+
+                    const headers =
+                        (ctx.getRequestHeaders ? ctx.getRequestHeaders({ omitContentType: true }) : {}) || {};
+                    delete headers['Content-Type'];
+
+                    const res = await fetch('/api/characters/import', {
+                        method: 'POST',
+                        headers,
+                        body: formData,
+                    });
+
+                    if (!res.ok) {
+                        const errText = await res.text().catch(() => res.statusText);
+                        throw new Error(`HTTP ${res.status}: ${errText}`);
+                    }
+                } else {
+                    const mergePayload: Record<string, any> = {
+                        avatar: char.avatar,
+                        avatar_url: char.avatar,
+                        ch_name: cardData.name ?? char.name,
+                        name: cardData.name ?? char.name,
+                        description: cardData.description ?? '',
+                        personality: cardData.personality ?? '',
+                        scenario: cardData.scenario ?? '',
+                        first_mes: cardData.first_mes ?? '',
+                        mes_example: cardData.mes_example ?? '',
+                        creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                        creatorcomment: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                        system_prompt: cardData.system_prompt ?? '',
+                        post_history_instructions: cardData.post_history_instructions ?? '',
+                        alternate_greetings: cardData.alternate_greetings ?? [],
+                        tags: cardData.tags ?? [],
+                        creator: cardData.creator ?? '',
+                        character_version: cardData.character_version ?? '',
+                        talkativeness: cardData.talkativeness ?? char.talkativeness ?? 0.5,
+                        fav: cardData.fav ?? char.fav ?? false,
+                        data: {
+                            name: cardData.name ?? char.name,
+                            description: cardData.description ?? '',
+                            personality: cardData.personality ?? '',
+                            scenario: cardData.scenario ?? '',
+                            first_mes: cardData.first_mes ?? '',
+                            mes_example: cardData.mes_example ?? '',
+                            creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                            system_prompt: cardData.system_prompt ?? '',
+                            post_history_instructions: cardData.post_history_instructions ?? '',
+                            alternate_greetings: cardData.alternate_greetings ?? [],
+                            tags: cardData.tags ?? [],
+                            creator: cardData.creator ?? '',
+                            character_version: cardData.character_version ?? '',
+                            talkativeness: cardData.talkativeness ?? char.talkativeness ?? 0.5,
+                            fav: cardData.fav ?? char.fav ?? false,
+                            extensions: cardData.extensions ?? char.data?.extensions ?? {},
+                            ...(cardData.character_book ? { character_book: cardData.character_book } : {}),
+                        },
+                        extensions: cardData.extensions ?? char.data?.extensions ?? {},
+                    };
+                    if (cardData.character_book) {
+                        mergePayload.character_book = cardData.character_book;
+                    }
+
+                    const res = await fetch('/api/characters/merge-attributes', {
+                        method: 'POST',
+                        headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                        body: JSON.stringify(mergePayload),
+                    });
+
+                    if (!res.ok) {
+                        throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                    }
                 }
 
-                const res = await fetch('/api/characters/merge-attributes', {
-                    method: 'POST',
-                    headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                    body: JSON.stringify(mergePayload),
-                });
-
-                if (!res.ok) {
-                    throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                // Tải lại dữ liệu mới nhất từ backend vào memory
+                if (typeof (window as any).getOneCharacter === 'function') {
+                    await (window as any).getOneCharacter(char.avatar);
+                } else if (typeof ctx.getOneCharacter === 'function') {
+                    await ctx.getOneCharacter(char.avatar);
                 }
 
                 // In-memory update
@@ -1263,6 +1331,8 @@ export class SillyTavernAdapter {
                 char.first_mes = cardData.first_mes ?? char.first_mes;
                 char.mes_example = cardData.mes_example ?? char.mes_example;
                 char.creatorcomment = cardData.creator_notes ?? char.creatorcomment;
+                if (cardData.talkativeness !== undefined) char.talkativeness = cardData.talkativeness;
+                if (cardData.fav !== undefined) char.fav = cardData.fav;
 
                 // Trigger ST events & UI updates
                 const es = ctx.eventSource || (window as any).eventSource;
@@ -1278,21 +1348,28 @@ export class SillyTavernAdapter {
                 // Cập nhật DOM nếu đang mở đúng nhân vật này
                 if (targetIndex === ctx.characterId) {
                     const domMap: Record<string, string> = {
-                        description: 'description_textarea',
-                        personality: 'personality_textarea',
-                        scenario: 'scenario_pole',
-                        first_mes: 'firstmessage_textarea',
-                        mes_example: 'mes_example_textarea',
-                        system_prompt: 'system_prompt_textarea',
-                        post_history_instructions: 'post_history_instructions_textarea',
-                        creator_notes: 'creator_notes_textarea',
+                        character_name_pole: 'name',
+                        description_textarea: 'description',
+                        personality_textarea: 'personality',
+                        scenario_pole: 'scenario',
+                        firstmessage_textarea: 'first_mes',
+                        mes_example_textarea: 'mes_example',
+                        system_prompt_textarea: 'system_prompt',
+                        post_history_instructions_textarea: 'post_history_instructions',
+                        creator_notes_textarea: 'creator_notes',
                     };
-                    for (const [key, domId] of Object.entries(domMap)) {
-                        const el = document.getElementById(domId) as HTMLTextAreaElement;
+                    for (const [domId, key] of Object.entries(domMap)) {
+                        const el = document.getElementById(domId) as HTMLTextAreaElement | HTMLInputElement;
                         if (el && cardData[key] !== undefined) {
                             el.value =
                                 typeof cardData[key] === 'string' ? cardData[key] : JSON.stringify(cardData[key]);
                             el.dispatchEvent(new Event('input', { bubbles: true }));
+                        }
+                    }
+                    if (isPng) {
+                        const imgPreview = document.getElementById('avatar_load_preview') as HTMLImageElement;
+                        if (imgPreview && char.avatar) {
+                            imgPreview.src = `/characters/${encodeURIComponent(char.avatar)}?v=${Date.now()}`;
                         }
                     }
                 }
