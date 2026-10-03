@@ -16696,11 +16696,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               let score = 0;
               if (content.includes('registerMvuSchema'))
                   score += 10;
-              if (/z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i.test(content))
+              if (/z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i.test(content))
                   score += 5;
-              if (scriptName.includes('Cấu trúc') ||
-                  scriptName.includes('Schema') ||
-                  scriptName.toLowerCase().includes('zod')) {
+              if (/(?:cấu\s*trúc|schema|zod|structure|variables?|state|trạng\s*thái|biến|结构|变量|状态)/i.test(scriptName)) {
                   score += 2;
               }
               if (score > bestScore && score > 0) {
@@ -17891,22 +17889,25 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           }
           // Tự động phân giải chuỗi alias nếu biến được gán lại (ví dụ: export const Schema = TargetSchema hoặc z.preprocess(..., TargetSchema))
           for (let hop = 0; hop < 5; hop++) {
-              const directRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*([A-Za-z0-9_$]+)(?!\\s*[.(])(?:\\s*;|\\s*\\n|$)`, 'i');
+              const directRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*(?!z\\s*\\.)([A-Za-z0-9_$]+)(?:\\s*\\.[A-Za-z0-9_$]+(?:\\([^)]*\\))?)*(?:\\s*;|\\s*\\n|$)`, 'i');
               const directMatch = code.match(directRegex);
-              if (directMatch && directMatch[1] && directMatch[1] !== mainSchemaName) {
+              if (directMatch &&
+                  directMatch[1] &&
+                  directMatch[1] !== mainSchemaName &&
+                  directMatch[1].toLowerCase() !== 'z') {
                   mainSchemaName = directMatch[1];
                   continue;
               }
-              const preprocessRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)preprocess\\s*\\([^,]+,\\s*([A-Za-z0-9_$]+)`, 'i');
+              const preprocessRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)preprocess\\s*\\([\\s\\S]*?,\\s*([A-Za-z0-9_$]+)`, 'i');
               const prepMatch = code.match(preprocessRegex);
-              if (prepMatch && prepMatch[1] && prepMatch[1] !== mainSchemaName) {
+              if (prepMatch && prepMatch[1] && prepMatch[1] !== mainSchemaName && prepMatch[1].toLowerCase() !== 'z') {
                   mainSchemaName = prepMatch[1];
                   continue;
               }
               break;
           }
           const knownSubSchemas = {};
-          const subSchemaRegex = /(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/g;
+          const subSchemaRegex = /(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/g;
           let sMatch;
           while ((sMatch = subSchemaRegex.exec(code)) !== null) {
               const sName = sMatch[1];
@@ -17921,15 +17922,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           // 3. Tìm Schema chính
           let match = null;
           if (mainSchemaName) {
-              const targetRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)(?:object|looseObject)\\s*\\(\\s*\\{`, 'i');
+              const targetRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)(?:object|looseObject|strictObject)\\s*\\(\\s*\\{`, 'i');
               match = code.match(targetRegex);
           }
           if (!match) {
               match =
-                  code.match(/(?:export\s+)?(?:const|let|var)\s+\bSchema\b\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i) ||
-                      code.match(/(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*(?:Mvu|State|Card)Schema\b\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i) ||
-                      code.match(/(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i) ||
-                      code.match(/(?:export\s+const\s+)?\bSchema\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i);
+                  code.match(/(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*Schema\b\s*=\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i) ||
+                      code.match(/(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i);
           }
           if (!match || match.index === undefined)
               return [];
@@ -18100,13 +18099,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               let min;
               let max;
               let defaultValue;
-              // 1. Kiểm tra outermost z.record, z.array hoặc z.object/z.looseObject({ ... })
+              // 1. Kiểm tra outermost z.record, z.array hoặc z.object/z.looseObject/z.strictObject({ ... })
               const isRecord = /^\s*z(?:\s*\.\s*)record\s*\(/.test(expr);
               const isArray = /^\s*z(?:\s*\.\s*)array\s*\(/.test(expr);
-              const isObject = /^\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(/.test(expr);
+              const isObject = /^\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(/.test(expr);
               if (isRecord) {
                   type = 'record';
-                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/);
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
                   if (objMatch && objMatch.index !== undefined) {
                       const openIdx = expr.indexOf('{', objMatch.index);
                       if (openIdx !== -1) {
@@ -18119,7 +18118,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               else if (isArray) {
                   type = 'array';
-                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/);
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
                   if (objMatch && objMatch.index !== undefined) {
                       const openIdx = expr.indexOf('{', objMatch.index);
                       if (openIdx !== -1) {
@@ -18130,9 +18129,9 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       }
                   }
               }
-              else if (isObject || /\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/.test(expr)) {
+              else if (isObject || /\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/.test(expr)) {
                   type = 'object';
-                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/);
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
                   if (objMatch && objMatch.index !== undefined) {
                       const openIdx = expr.indexOf('{', objMatch.index);
                       if (openIdx !== -1) {
