@@ -1496,7 +1496,12 @@ export class SillyTavernAdapter {
             const bookData = JSON.parse(entry.data);
             if (!bookData) throw new Error('Dữ liệu worldbook không hợp lệ.');
 
-            if (typeof ctx.saveWorldInfo === 'function') {
+            const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')().catch(() => null);
+
+            // 1. Lưu dữ liệu Worldbook vào SillyTavern (sử dụng saveWorldInfo trực tiếp từ module nếu có)
+            if (ST_WorldInfo && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                await ST_WorldInfo.saveWorldInfo(bookName, bookData, true);
+            } else if (typeof ctx.saveWorldInfo === 'function') {
                 await ctx.saveWorldInfo(bookName, bookData);
             } else {
                 const res = await fetch('/api/worldinfo/edit', {
@@ -1512,8 +1517,50 @@ export class SillyTavernAdapter {
                 }
             }
 
-            if (typeof ctx.loadWorldInfo === 'function') {
-                await ctx.loadWorldInfo(bookName);
+            // 2. Cập nhật cache in-memory nếu ST_WorldInfo có worldInfoCache
+            if (ST_WorldInfo && ST_WorldInfo.worldInfoCache && typeof ST_WorldInfo.worldInfoCache.set === 'function') {
+                ST_WorldInfo.worldInfoCache.set(bookName, bookData);
+            }
+
+            // 3. Cập nhật danh sách Worldbook cho SillyTavern (Xử lý triệt để trường hợp WB đã bị xóa hoặc tạo mới)
+            if (ST_WorldInfo && typeof ST_WorldInfo.updateWorldInfoList === 'function') {
+                await ST_WorldInfo.updateWorldInfoList();
+            }
+
+            // 4. Đồng bộ và render lại World Info Editor UI (cho cả trường hợp WB vẫn còn lẫn vừa phục hồi)
+            const allBooks = ST_WorldInfo?.world_names || (window as any).world_names || [];
+            const bookIndex = allBooks.indexOf(bookName);
+            const $ = (window as any).$;
+
+            if ($ && bookIndex >= 0) {
+                $('#world_editor_select').val(bookIndex).trigger('change');
+            }
+
+            if (ST_WorldInfo && typeof ST_WorldInfo.reloadEditor === 'function') {
+                ST_WorldInfo.reloadEditor(bookName, true);
+            } else if (ST_WorldInfo && typeof ST_WorldInfo.showWorldEditor === 'function') {
+                await ST_WorldInfo.showWorldEditor(bookName);
+            }
+
+            // 5. Cập nhật trạng thái nút World Info gắn với nhân vật hiện tại (nếu có)
+            if (
+                ST_WorldInfo &&
+                typeof ST_WorldInfo.setWorldInfoButtonClass === 'function' &&
+                ctx.characterId !== undefined
+            ) {
+                ST_WorldInfo.setWorldInfoButtonClass(ctx.characterId);
+            }
+
+            // 6. Emit các sự kiện SillyTavern để toàn bộ hệ thống & extension nhận biết
+            const es = ctx.eventSource || (window as any).eventSource;
+            const et = ctx.eventTypes || ctx.event_types || (window as any).event_types;
+            if (es && et) {
+                if (et.WORLDINFO_UPDATED) {
+                    es.emit(et.WORLDINFO_UPDATED, bookName, bookData);
+                }
+                if (et.WORLDINFO_SETTINGS_UPDATED) {
+                    es.emit(et.WORLDINFO_SETTINGS_UPDATED);
+                }
             }
 
             return {
