@@ -22101,7 +22101,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }
               const cardData = cardObj.data || cardObj;
               const characters = ctx.characters || [];
-              const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar);
+              const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar) || entry.avatarUrl;
               const backupName = cardData.name || entry.name;
               // 1. Tìm kiếm xem nhân vật đã có trong ST hay chưa
               let targetIndex = -1;
@@ -22197,6 +22197,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }
               // TRƯỜNG HỢP 2: Thẻ không có trong ST (đã bị xóa) -> Import lại như 1 card mới
               const safeName = (cardData.name || entry.name || 'Restored_Character').replace(/[/\\:*?"<>|]/g, '_');
+              const format = isPng ? 'png' : 'json';
               const formData = new FormData();
               if (isPng) {
                   const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
@@ -22211,7 +22212,21 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   const blob = new Blob([entry.data], { type: 'application/json' });
                   formData.append('avatar', blob, `${safeName}.json`);
               }
-              const headers = ctx.getRequestHeaders();
+              formData.append('file_type', format);
+              if (ctx.name1) {
+                  formData.append('user_name', ctx.name1);
+              }
+              // Bảo toàn tên file gốc nếu có trong metadata backup
+              const cleanPreservedName = entry.avatarUrl
+                  ? entry.avatarUrl
+                      .split('?')[0]
+                      .replace(/\.[^/.]+$/, '')
+                      .replace(/[/\\:*?"<>|]/g, '_')
+                  : safeName;
+              if (cleanPreservedName) {
+                  formData.append('preserved_name', cleanPreservedName);
+              }
+              const headers = (ctx.getRequestHeaders ? ctx.getRequestHeaders({ omitContentType: true }) : {}) || {};
               delete headers['Content-Type'];
               const res = await fetch('/api/characters/import', {
                   method: 'POST',
@@ -22222,13 +22237,25 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   const errText = await res.text().catch(() => res.statusText);
                   throw new Error(`Import mới thất bại (HTTP ${res.status}): ${errText}`);
               }
-              // Đồng bộ danh sách nhân vật
+              const resData = await res.json().catch(() => ({}));
+              if (resData.error || !resData.file_name) {
+                  const errDetail = typeof resData.error === 'string'
+                      ? resData.error
+                      : resData.error
+                          ? JSON.stringify(resData.error)
+                          : 'Máy chủ SillyTavern không trả về file_name hợp lệ.';
+                  throw new Error(`SillyTavern server từ chối import thẻ: ${errDetail}`);
+              }
+              // Đồng bộ danh sách nhân vật và chọn thẻ vừa khôi phục
               if (typeof ctx.getCharacters === 'function')
                   await ctx.getCharacters();
               if (typeof window.getCharacters === 'function')
                   await window.getCharacters();
               if (typeof window.PrintCharacterList === 'function')
                   window.PrintCharacterList();
+              if (typeof window.select_rm_info === 'function' && resData.file_name) {
+                  window.select_rm_info('char_import', resData.file_name);
+              }
               const es = ctx.eventSource || window.eventSource;
               const et = ctx.event_types || window.event_types;
               if (es && et?.CHARACTERS_UPDATED) {
