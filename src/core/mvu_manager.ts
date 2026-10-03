@@ -361,17 +361,28 @@ export class MvuManager {
         const scripts = char.data?.extensions?.tavern_helper?.scripts;
         if (!scripts || typeof scripts !== 'object') return null;
 
+        let bestScript: { key: string; name: string; content: string; script: any } | null = null;
+        let bestScore = -1;
+
         for (const [key, script] of Object.entries(scripts)) {
             const s = script as any;
             const content = s?.content || '';
             const scriptName = s?.name || key;
+            let score = 0;
 
+            if (content.includes('registerMvuSchema')) score += 10;
+            if (/z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i.test(content)) score += 5;
             if (
-                content.includes('registerMvuSchema') ||
-                scriptName.toLowerCase().includes('zod') ||
-                scriptName.includes('Cấu trúc biến')
+                scriptName.includes('Cấu trúc') ||
+                scriptName.includes('Schema') ||
+                scriptName.toLowerCase().includes('zod')
             ) {
-                return {
+                score += 2;
+            }
+
+            if (score > bestScore && score > 0) {
+                bestScore = score;
+                bestScript = {
                     key,
                     name: scriptName,
                     content,
@@ -379,7 +390,7 @@ export class MvuManager {
                 };
             }
         }
-        return null;
+        return bestScript;
     }
 
     /**
@@ -1650,7 +1661,7 @@ export class MvuManager {
             const hBody = hMatch[2] || hMatch[4] || '';
             if (hBody.includes('z.record')) {
                 helpers[hName] = { type: 'record' };
-            } else if (hBody.includes('z.object')) {
+            } else if (hBody.includes('z.object') || hBody.includes('z.looseObject')) {
                 helpers[hName] = { type: 'object' };
             } else if (hBody.includes('z.array')) {
                 helpers[hName] = { type: 'array' };
@@ -1671,23 +1682,34 @@ export class MvuManager {
             mainSchemaName = regMatch[1];
         }
 
-        // Tự động phân giải chuỗi alias nếu biến được gán lại (ví dụ: export const Schema = TargetSchema;)
+        // Tự động phân giải chuỗi alias nếu biến được gán lại (ví dụ: export const Schema = TargetSchema hoặc z.preprocess(..., TargetSchema))
         for (let hop = 0; hop < 5; hop++) {
-            const aliasRegex = new RegExp(
+            const directRegex = new RegExp(
                 `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*([A-Za-z0-9_$]+)(?!\\s*[.(])(?:\\s*;|\\s*\\n|$)`,
                 'i',
             );
-            const aliasMatch = code.match(aliasRegex);
-            if (aliasMatch && aliasMatch[1] && aliasMatch[1] !== mainSchemaName) {
-                mainSchemaName = aliasMatch[1];
-            } else {
-                break;
+            const directMatch = code.match(directRegex);
+            if (directMatch && directMatch[1] && directMatch[1] !== mainSchemaName) {
+                mainSchemaName = directMatch[1];
+                continue;
             }
+
+            const preprocessRegex = new RegExp(
+                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)preprocess\\s*\\([^,]+,\\s*([A-Za-z0-9_$]+)`,
+                'i',
+            );
+            const prepMatch = code.match(preprocessRegex);
+            if (prepMatch && prepMatch[1] && prepMatch[1] !== mainSchemaName) {
+                mainSchemaName = prepMatch[1];
+                continue;
+            }
+
+            break;
         }
 
         const knownSubSchemas: Record<string, MvuVariableDescriptor[]> = {};
         const subSchemaRegex =
-            /(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
+            /(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/g;
         let sMatch: RegExpExecArray | null;
         while ((sMatch = subSchemaRegex.exec(code)) !== null) {
             const sName = sMatch[1];
@@ -1703,21 +1725,23 @@ export class MvuManager {
         let match: RegExpMatchArray | null = null;
         if (mainSchemaName) {
             const targetRegex = new RegExp(
-                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)object\\s*\\(\\s*\\{`,
+                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)(?:object|looseObject)\\s*\\(\\s*\\{`,
                 'i',
             );
             match = code.match(targetRegex);
         }
         if (!match) {
             match =
-                code.match(/(?:export\s+)?(?:const|let|var)\s+\bSchema\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
                 code.match(
-                    /(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*(?:Mvu|State|Card)Schema\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i,
+                    /(?:export\s+)?(?:const|let|var)\s+\bSchema\b\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i,
                 ) ||
                 code.match(
-                    /(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)object\s*\(\s*\{/i,
+                    /(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*(?:Mvu|State|Card)Schema\b\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i,
                 ) ||
-                code.match(/(?:export\s+const\s+)?\bSchema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i);
+                code.match(
+                    /(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i,
+                ) ||
+                code.match(/(?:export\s+const\s+)?\bSchema\s*=\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/i);
         }
         if (!match || match.index === undefined) return [];
 
@@ -1890,14 +1914,14 @@ export class MvuManager {
             let max: number | undefined;
             let defaultValue: any;
 
-            // 1. Kiểm tra outermost z.record, z.array hoặc z.object({ ... })
+            // 1. Kiểm tra outermost z.record, z.array hoặc z.object/z.looseObject({ ... })
             const isRecord = /^\s*z(?:\s*\.\s*)record\s*\(/.test(expr);
             const isArray = /^\s*z(?:\s*\.\s*)array\s*\(/.test(expr);
-            const isObject = /^\s*z(?:\s*\.\s*)object\s*\(/.test(expr);
+            const isObject = /^\s*z(?:\s*\.\s*)(?:object|looseObject)\s*\(/.test(expr);
 
             if (isRecord) {
                 type = 'record';
-                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/);
                 if (objMatch && objMatch.index !== undefined) {
                     const openIdx = expr.indexOf('{', objMatch.index);
                     if (openIdx !== -1) {
@@ -1909,7 +1933,7 @@ export class MvuManager {
                 }
             } else if (isArray) {
                 type = 'array';
-                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/);
                 if (objMatch && objMatch.index !== undefined) {
                     const openIdx = expr.indexOf('{', objMatch.index);
                     if (openIdx !== -1) {
@@ -1919,9 +1943,9 @@ export class MvuManager {
                         }
                     }
                 }
-            } else if (isObject || /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr)) {
+            } else if (isObject || /\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/.test(expr)) {
                 type = 'object';
-                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject)\s*\(\s*\{/);
                 if (objMatch && objMatch.index !== undefined) {
                     const openIdx = expr.indexOf('{', objMatch.index);
                     if (openIdx !== -1) {
