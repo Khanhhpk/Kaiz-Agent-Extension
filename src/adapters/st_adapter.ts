@@ -1054,6 +1054,8 @@ export class SillyTavernAdapter {
                     extensions,
                 };
 
+                const effectiveFormat = format || 'png';
+
                 const cardPayload = {
                     name,
                     description,
@@ -1062,7 +1064,7 @@ export class SillyTavernAdapter {
                     first_mes,
                     mes_example,
                     creatorcomment: creator_notes,
-                    avatar: char.avatar || '',
+                    avatar: effectiveFormat === 'png' ? 'none' : char.avatar || '',
                     talkativeness: extensions.talkativeness ?? char.talkativeness ?? 0.5,
                     fav: extensions.fav ?? char.fav ?? false,
                     tags,
@@ -1070,9 +1072,9 @@ export class SillyTavernAdapter {
                     spec_version: '3.0',
                     data: fullCharData,
                     create_date: char.create_date || rawData.create_date || new Date().toISOString(),
+                    creator_notes,
+                    alternate_greetings,
                 };
-
-                const effectiveFormat = format || 'png';
 
                 if (effectiveFormat === 'png') {
                     let avatarUrl = '';

@@ -20879,8 +20879,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           };
           const charaChunk = makeTextChunk('chara', b64);
           const ccv3Chunk = makeTextChunk('ccv3', b64);
-          const ihdrIdx = filtered.findIndex((c) => c.type === 'IHDR');
-          const insertIdx = ihdrIdx >= 0 ? ihdrIdx + 1 : 1;
+          // In standard SillyTavern PNG cards, metadata chunks are placed right before IEND
+          const iendIdx = filtered.findIndex((c) => c.type === 'IEND');
+          const insertIdx = iendIdx >= 0 ? iendIdx : filtered.length;
           filtered.splice(insertIdx, 0, charaChunk, ccv3Chunk);
           return this.buildPng(filtered);
       }
@@ -20945,7 +20946,28 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   return bytes;
               }
           }
-          // In browser context: use Image + Canvas
+          // If imageSourceUrl is a fetchable URL pointing to an existing PNG, fetch raw bytes directly
+          // to preserve 100% bit-exact original image quality without Canvas re-encoding
+          if (typeof fetch === 'function' && imageSourceUrl && !imageSourceUrl.startsWith('data:')) {
+              try {
+                  const res = await fetch(imageSourceUrl);
+                  if (res.ok) {
+                      const arrayBuf = await res.arrayBuffer();
+                      const bytes = new Uint8Array(arrayBuf);
+                      if (bytes.length >= 8 &&
+                          bytes[0] === 0x89 &&
+                          bytes[1] === 0x50 &&
+                          bytes[2] === 0x4e &&
+                          bytes[3] === 0x47) {
+                          return bytes;
+                      }
+                  }
+              }
+              catch (fetchErr) {
+                  console.warn('[PngChunkUtil] Direct fetch of PNG avatar failed, falling back to Canvas:', fetchErr);
+              }
+          }
+          // In browser context: use Image + Canvas fallback (for WebP, JPG, or cross-origin URLs)
           if (typeof document !== 'undefined') {
               return new Promise((resolve, reject) => {
                   const img = new Image();
@@ -21972,6 +21994,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       character_version,
                       extensions,
                   };
+                  const effectiveFormat = format || 'png';
                   const cardPayload = {
                       name,
                       description,
@@ -21980,7 +22003,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       first_mes,
                       mes_example,
                       creatorcomment: creator_notes,
-                      avatar: char.avatar || '',
+                      avatar: effectiveFormat === 'png' ? 'none' : char.avatar || '',
                       talkativeness: extensions.talkativeness ?? char.talkativeness ?? 0.5,
                       fav: extensions.fav ?? char.fav ?? false,
                       tags,
@@ -21988,8 +22011,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       spec_version: '3.0',
                       data: fullCharData,
                       create_date: char.create_date || rawData.create_date || new Date().toISOString(),
+                      creator_notes,
+                      alternate_greetings,
                   };
-                  const effectiveFormat = format || 'png';
                   if (effectiveFormat === 'png') {
                       let avatarUrl = '';
                       if (char.avatar) {
