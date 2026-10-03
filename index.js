@@ -16437,6 +16437,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       static cachedFloors = [];
       static cachedDataSource = 'fallback';
       /**
+       * Xóa sạch bộ nhớ đệm trạng thái MVU khi chuyển đổi nhân vật hoặc chat mới
+       */
+      static clearCache() {
+          this.cachedStatData = null;
+          this.cachedWrapper = null;
+          this.cachedCurrentFloor = null;
+          this.cachedFloors = [];
+          this.cachedDataSource = 'fallback';
+      }
+      /**
        * Truy xuất ngữ cảnh toàn cục (hỗ trợ cả iframe và window cha)
        */
       static getGlobalContext() {
@@ -16750,7 +16760,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const hasStatData = Object.prototype.hasOwnProperty.call(raw, 'stat_data') &&
               raw.stat_data &&
               typeof raw.stat_data === 'object';
-          const statData = hasStatData ? raw.stat_data : raw;
+          let statData;
+          if (hasStatData) {
+              statData = raw.stat_data;
+          }
+          else if (source === 'mvu') {
+              // SillyTavern-MVU plugin có thể trả trực tiếp statData mà không bọc stat_data
+              statData = raw;
+          }
+          else {
+              // Nguồn TavernHelper hoặc ST chat memory: Nếu không có stat_data thì KHÔNG PHẢI biến MVU.
+              // Tuyệt đối không lấy raw làm statData để tránh bắt nhầm biến var (getvar, setvar) của Preset/Lorebook!
+              statData = null;
+          }
           return {
               wrapper: raw,
               statData,
@@ -16881,7 +16903,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        */
       static getLiveVariables(subPath, _messageId) {
           let data = this.cachedStatData;
-          let wrapper = this.cachedWrapper;
           // Nếu chưa có cache, lấy nhanh từ context hiện tại
           if (!data) {
               const { th, mvu } = this.getGlobalContext();
@@ -16906,8 +16927,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   catch { }
               }
               if (raw && typeof raw === 'object') {
-                  wrapper = raw;
-                  data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : raw;
+                  // Chuẩn MVU: Trong TavernHelper, dữ liệu MVU chỉ nằm trong raw.stat_data
+                  data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : mvu ? raw : null;
               }
           }
           if (!data)
@@ -16916,7 +16937,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const parts = this.normalizePathParts(subPath);
               if (parts.length === 0)
                   return data;
-              // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
+              // Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
               let curr = data;
               let found = true;
               for (const p of parts) {
@@ -16942,34 +16963,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               if (found)
                   return curr;
-              // Ưu tiên 2: Fallback tìm trong root wrapper (phòng trường hợp biến root)
-              if (wrapper && typeof wrapper === 'object') {
-                  let rootCurr = wrapper;
-                  let rootFound = true;
-                  for (const p of parts) {
-                      if (rootCurr && typeof rootCurr === 'object') {
-                          if (p in rootCurr) {
-                              rootCurr = rootCurr[p];
-                          }
-                          else {
-                              const matchKey = Object.keys(rootCurr).find((k) => k.toLowerCase() === p.toLowerCase());
-                              if (matchKey && matchKey in rootCurr) {
-                                  rootCurr = rootCurr[matchKey];
-                              }
-                              else {
-                                  rootFound = false;
-                                  break;
-                              }
-                          }
-                      }
-                      else {
-                          rootFound = false;
-                          break;
-                      }
-                  }
-                  if (rootFound)
-                      return rootCurr;
-              }
               return undefined;
           }
           return data;
@@ -17085,12 +17078,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       const clone = typeof structuredClone === 'function'
                           ? structuredClone(floor.wrapper)
                           : JSON.parse(JSON.stringify(floor.wrapper));
-                      if (clone.stat_data && typeof clone.stat_data === 'object') {
-                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                          clone.stat_data = {};
                       }
-                      else {
-                          setDeep(clone, cleanParts, parsedValue);
-                      }
+                      setDeep(clone.stat_data, cleanParts, parsedValue);
                       await mvu.replaceMvuData(clone, { type: 'message', message_id: targetMessageId });
                       updated = true;
                   }
@@ -17106,12 +17097,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       const clone = typeof structuredClone === 'function'
                           ? structuredClone(existing || {})
                           : JSON.parse(JSON.stringify(existing || {}));
-                      if (clone.stat_data && typeof clone.stat_data === 'object') {
-                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                          clone.stat_data = {};
                       }
-                      else {
-                          setDeep(clone, cleanParts, parsedValue);
-                      }
+                      setDeep(clone.stat_data, cleanParts, parsedValue);
                       return clone;
                   }, { type: 'message', message_id: targetMessageId });
                   updated = true;
@@ -17299,8 +17288,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               lowerComment.includes('变量列表')) {
               return true;
           }
-          return (content.includes('{{format_message_variable::') ||
-              content.includes('{{get_message_variable::') ||
+          return ((content.includes('{{format_message_variable::') && content.includes('stat_data')) ||
+              (content.includes('{{get_message_variable::') && content.includes('stat_data')) ||
               lower.includes('<status_current_variable>') ||
               lower.includes('<status_current_variables>') ||
               lower.includes('<biến_trạng_thái') ||
@@ -17341,7 +17330,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               lower.includes('phân giai đoạn') ||
               lower.includes('thời kỳ');
           if (content.includes('<%') &&
-              (content.includes('getvar(') || content.includes('setvar(')) &&
+              /\b(?:getvar|setvar)\s*\(\s*['"`]stat_data\b/i.test(content) &&
               isPhaseController) {
               return true;
           }
@@ -17512,8 +17501,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   // Ignore
               }
           }
-          // 3. Nếu vẫn chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
-          if (!result.initvarEntry || !result.updateRulesEntry) {
+          // 3. Nếu vẫn chưa tìm thấy, chỉ tìm trong global / active lorebook nếu card thực sự có dấu hiệu MVU
+          // (Tránh trường hợp card thông thường vô tình bắt nhầm lorebook MVU đang kích hoạt ở menu World Info)
+          const hasAnyMvuSign = this.getZodScript(char) !== null ||
+              (Array.isArray(embeddedEntries) &&
+                  embeddedEntries.some((e) => {
+                      const comment = (e?.comment || e?.name || '').toLowerCase();
+                      return comment.includes('mvu') || comment.includes('initvar') || comment.includes('init_var');
+                  })) ||
+              Boolean(char?.data?.extensions?.world || char?.world);
+          if (hasAnyMvuSign && (!result.initvarEntry || !result.updateRulesEntry)) {
               try {
                   const worldInfo = window.world_info;
                   const entries = Array.isArray(worldInfo?.entries)
@@ -17915,8 +17912,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               match =
                   code.match(/(?:export\s+)?(?:const|let|var)\s+\bSchema\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
                       code.match(/(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*(?:Mvu|State|Card)Schema\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-                      code.match(/(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]+\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-                      code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
+                      code.match(/(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
+                      code.match(/(?:export\s+const\s+)?\bSchema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i);
           }
           if (!match || match.index === undefined)
               return [];
@@ -18544,7 +18541,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (parsedSchema.length === 0 && initvarParsed) {
               parsedSchema = this.generateSchemaFromData(initvarParsed);
           }
-          if (liveVars) {
+          if (isMvu && liveVars) {
               if (parsedSchema.length === 0) {
                   parsedSchema = this.generateSchemaFromData(liveVars);
               }
@@ -22124,7 +22121,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               let cardObj = null;
               const isPng = entry.format === 'png' || entry.data.startsWith('data:image/png');
               if (isPng) {
-                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
                   let bytes;
                   if (typeof window !== 'undefined' && typeof window.atob === 'function') {
                       const bin = window.atob(b64);
@@ -22168,7 +22165,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               if (targetIndex !== -1) {
                   const char = characters[targetIndex];
                   if (isPng) {
-                      const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                      const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
                       const bin = window.atob(b64);
                       const bytes = new Uint8Array(bin.length);
                       for (let i = 0; i < bin.length; i++)
@@ -22281,7 +22278,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       char.fav = cardData.fav;
                   // Trigger ST events & UI updates
                   const es = ctx.eventSource || window.eventSource;
-                  const et = ctx.event_types || window.event_types;
+                  const et = ctx.eventTypes || ctx.event_types || window.event_types;
                   if (es && et?.CHARACTER_EDITED) {
                       es.emit(et.CHARACTER_EDITED, { detail: { id: targetIndex, character: char } });
                       es.emit(et.CHARACTER_EDITED, { id: targetIndex, character: char });
@@ -22327,7 +22324,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               const format = isPng ? 'png' : 'json';
               const formData = new FormData();
               if (isPng) {
-                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
                   const bin = window.atob(b64);
                   const bytes = new Uint8Array(bin.length);
                   for (let i = 0; i < bin.length; i++)
@@ -22378,7 +22375,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   window.select_rm_info('char_import', resData.file_name);
               }
               const es = ctx.eventSource || window.eventSource;
-              const et = ctx.event_types || window.event_types;
+              const et = ctx.eventTypes || ctx.event_types || window.event_types;
               if (es && et?.CHARACTERS_UPDATED) {
                   es.emit(et.CHARACTERS_UPDATED);
               }
@@ -32384,6 +32381,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (!this.attachedEvents) {
               this.setupLiveEventListeners();
           }
+          MvuManager.clearCache();
           await this.refresh();
       }
       close() {
@@ -32393,6 +32391,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           // Đặt lại chế độ tự động theo lượt mới nhất cho lần mở tiếp theo
           this.selectedFloorId = undefined;
+          MvuManager.clearCache();
       }
       async refresh(floorId) {
           const $ = jQuery;
@@ -32440,7 +32439,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }, 300);
               };
               const handleChatChanged = () => {
-                  // Đổi chat hoặc đổi character -> đưa về chế độ Tự động (Mới nhất)
+                  // Đổi chat hoặc đổi character -> xóa sạch cache và đưa về chế độ Tự động (Mới nhất)
+                  MvuManager.clearCache();
                   this.selectedFloorId = undefined;
                   const modal = this.getModalElement();
                   if (modal && (modal.open || jQuery(modal).is(':visible'))) {

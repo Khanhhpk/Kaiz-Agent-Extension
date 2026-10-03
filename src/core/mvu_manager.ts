@@ -105,6 +105,17 @@ export class MvuManager {
     private static cachedDataSource: 'mvu' | 'helper' | 'fallback' = 'fallback';
 
     /**
+     * Xóa sạch bộ nhớ đệm trạng thái MVU khi chuyển đổi nhân vật hoặc chat mới
+     */
+    public static clearCache(): void {
+        this.cachedStatData = null;
+        this.cachedWrapper = null;
+        this.cachedCurrentFloor = null;
+        this.cachedFloors = [];
+        this.cachedDataSource = 'fallback';
+    }
+
+    /**
      * Truy xuất ngữ cảnh toàn cục (hỗ trợ cả iframe và window cha)
      */
     public static getGlobalContext(): { win: any; th: any; mvu: any; stContext: any } {
@@ -435,7 +446,17 @@ export class MvuManager {
             raw.stat_data &&
             typeof raw.stat_data === 'object';
 
-        const statData = hasStatData ? raw.stat_data : raw;
+        let statData: any;
+        if (hasStatData) {
+            statData = raw.stat_data;
+        } else if (source === 'mvu') {
+            // SillyTavern-MVU plugin có thể trả trực tiếp statData mà không bọc stat_data
+            statData = raw;
+        } else {
+            // Nguồn TavernHelper hoặc ST chat memory: Nếu không có stat_data thì KHÔNG PHẢI biến MVU.
+            // Tuyệt đối không lấy raw làm statData để tránh bắt nhầm biến var (getvar, setvar) của Preset/Lorebook!
+            statData = null;
+        }
 
         return {
             wrapper: raw,
@@ -576,7 +597,6 @@ export class MvuManager {
      */
     public static getLiveVariables(subPath?: string, _messageId?: number): any {
         let data = this.cachedStatData;
-        let wrapper = this.cachedWrapper;
 
         // Nếu chưa có cache, lấy nhanh từ context hiện tại
         if (!data) {
@@ -600,8 +620,8 @@ export class MvuManager {
                 } catch {}
             }
             if (raw && typeof raw === 'object') {
-                wrapper = raw;
-                data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : raw;
+                // Chuẩn MVU: Trong TavernHelper, dữ liệu MVU chỉ nằm trong raw.stat_data
+                data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : mvu ? raw : null;
             }
         }
 
@@ -611,7 +631,7 @@ export class MvuManager {
             const parts = this.normalizePathParts(subPath);
             if (parts.length === 0) return data;
 
-            // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
+            // Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
             let curr = data;
             let found = true;
             for (const p of parts) {
@@ -633,31 +653,6 @@ export class MvuManager {
                 }
             }
             if (found) return curr;
-
-            // Ưu tiên 2: Fallback tìm trong root wrapper (phòng trường hợp biến root)
-            if (wrapper && typeof wrapper === 'object') {
-                let rootCurr = wrapper;
-                let rootFound = true;
-                for (const p of parts) {
-                    if (rootCurr && typeof rootCurr === 'object') {
-                        if (p in rootCurr) {
-                            rootCurr = rootCurr[p];
-                        } else {
-                            const matchKey = Object.keys(rootCurr).find((k) => k.toLowerCase() === p.toLowerCase());
-                            if (matchKey && matchKey in rootCurr) {
-                                rootCurr = rootCurr[matchKey];
-                            } else {
-                                rootFound = false;
-                                break;
-                            }
-                        }
-                    } else {
-                        rootFound = false;
-                        break;
-                    }
-                }
-                if (rootFound) return rootCurr;
-            }
 
             return undefined;
         }
@@ -788,11 +783,10 @@ export class MvuManager {
                         typeof structuredClone === 'function'
                             ? structuredClone(floor.wrapper)
                             : JSON.parse(JSON.stringify(floor.wrapper));
-                    if (clone.stat_data && typeof clone.stat_data === 'object') {
-                        setDeep(clone.stat_data, cleanParts, parsedValue);
-                    } else {
-                        setDeep(clone, cleanParts, parsedValue);
+                    if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                        clone.stat_data = {};
                     }
+                    setDeep(clone.stat_data, cleanParts, parsedValue);
                     await mvu.replaceMvuData(clone, { type: 'message', message_id: targetMessageId });
                     updated = true;
                 }
@@ -810,11 +804,10 @@ export class MvuManager {
                             typeof structuredClone === 'function'
                                 ? structuredClone(existing || {})
                                 : JSON.parse(JSON.stringify(existing || {}));
-                        if (clone.stat_data && typeof clone.stat_data === 'object') {
-                            setDeep(clone.stat_data, cleanParts, parsedValue);
-                        } else {
-                            setDeep(clone, cleanParts, parsedValue);
+                        if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                            clone.stat_data = {};
                         }
+                        setDeep(clone.stat_data, cleanParts, parsedValue);
                         return clone;
                     },
                     { type: 'message', message_id: targetMessageId },
@@ -1026,8 +1019,8 @@ export class MvuManager {
         }
 
         return (
-            content.includes('{{format_message_variable::') ||
-            content.includes('{{get_message_variable::') ||
+            (content.includes('{{format_message_variable::') && content.includes('stat_data')) ||
+            (content.includes('{{get_message_variable::') && content.includes('stat_data')) ||
             lower.includes('<status_current_variable>') ||
             lower.includes('<status_current_variables>') ||
             lower.includes('<biến_trạng_thái') ||
@@ -1076,7 +1069,7 @@ export class MvuManager {
 
         if (
             content.includes('<%') &&
-            (content.includes('getvar(') || content.includes('setvar(')) &&
+            /\b(?:getvar|setvar)\s*\(\s*['"`]stat_data\b/i.test(content) &&
             isPhaseController
         ) {
             return true;
@@ -1288,8 +1281,18 @@ export class MvuManager {
             }
         }
 
-        // 3. Nếu vẫn chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
-        if (!result.initvarEntry || !result.updateRulesEntry) {
+        // 3. Nếu vẫn chưa tìm thấy, chỉ tìm trong global / active lorebook nếu card thực sự có dấu hiệu MVU
+        // (Tránh trường hợp card thông thường vô tình bắt nhầm lorebook MVU đang kích hoạt ở menu World Info)
+        const hasAnyMvuSign =
+            this.getZodScript(char) !== null ||
+            (Array.isArray(embeddedEntries) &&
+                embeddedEntries.some((e: any) => {
+                    const comment = (e?.comment || e?.name || '').toLowerCase();
+                    return comment.includes('mvu') || comment.includes('initvar') || comment.includes('init_var');
+                })) ||
+            Boolean(char?.data?.extensions?.world || char?.world);
+
+        if (hasAnyMvuSign && (!result.initvarEntry || !result.updateRulesEntry)) {
             try {
                 const worldInfo = (window as any).world_info;
                 const entries = Array.isArray(worldInfo?.entries)
@@ -1712,9 +1715,9 @@ export class MvuManager {
                     /(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*(?:Mvu|State|Card)Schema\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i,
                 ) ||
                 code.match(
-                    /(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]+\b\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i,
+                    /(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)object\s*\(\s*\{/i,
                 ) ||
-                code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
+                code.match(/(?:export\s+const\s+)?\bSchema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i);
         }
         if (!match || match.index === undefined) return [];
 
@@ -2357,7 +2360,7 @@ export class MvuManager {
         if (parsedSchema.length === 0 && initvarParsed) {
             parsedSchema = this.generateSchemaFromData(initvarParsed);
         }
-        if (liveVars) {
+        if (isMvu && liveVars) {
             if (parsedSchema.length === 0) {
                 parsedSchema = this.generateSchemaFromData(liveVars);
             }

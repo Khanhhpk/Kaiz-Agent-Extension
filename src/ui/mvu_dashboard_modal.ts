@@ -44,6 +44,7 @@ export class MvuDashboardModal {
         if (!this.attachedEvents) {
             this.setupLiveEventListeners();
         }
+        MvuManager.clearCache();
         await this.refresh();
     }
 
@@ -54,6 +55,7 @@ export class MvuDashboardModal {
         }
         // Đặt lại chế độ tự động theo lượt mới nhất cho lần mở tiếp theo
         this.selectedFloorId = undefined;
+        MvuManager.clearCache();
     }
 
     public async refresh(floorId?: number): Promise<void> {
@@ -107,7 +109,8 @@ export class MvuDashboardModal {
             };
 
             const handleChatChanged = () => {
-                // Đổi chat hoặc đổi character -> đưa về chế độ Tự động (Mới nhất)
+                // Đổi chat hoặc đổi character -> xóa sạch cache và đưa về chế độ Tự động (Mới nhất)
+                MvuManager.clearCache();
                 this.selectedFloorId = undefined;
                 const modal = this.getModalElement();
                 if (modal && (modal.open || jQuery(modal).is(':visible'))) {

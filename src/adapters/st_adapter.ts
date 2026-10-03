@@ -1197,7 +1197,7 @@ export class SillyTavernAdapter {
             const isPng = entry.format === 'png' || entry.data.startsWith('data:image/png');
 
             if (isPng) {
-                const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
                 let bytes: Uint8Array;
                 if (typeof window !== 'undefined' && typeof window.atob === 'function') {
                     const bin = window.atob(b64);
@@ -1244,7 +1244,7 @@ export class SillyTavernAdapter {
                 const char = characters[targetIndex];
 
                 if (isPng) {
-                    const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                    const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
                     const bin = window.atob(b64);
                     const bytes = new Uint8Array(bin.length);
                     for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -1362,7 +1362,7 @@ export class SillyTavernAdapter {
 
                 // Trigger ST events & UI updates
                 const es = ctx.eventSource || (window as any).eventSource;
-                const et = ctx.event_types || (window as any).event_types;
+                const et = ctx.eventTypes || ctx.event_types || (window as any).event_types;
                 if (es && et?.CHARACTER_EDITED) {
                     es.emit(et.CHARACTER_EDITED, { detail: { id: targetIndex, character: char } });
                     es.emit(et.CHARACTER_EDITED, { id: targetIndex, character: char });
@@ -1412,7 +1412,7 @@ export class SillyTavernAdapter {
             const formData = new FormData();
 
             if (isPng) {
-                const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
                 const bin = window.atob(b64);
                 const bytes = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
@@ -1468,7 +1468,7 @@ export class SillyTavernAdapter {
             }
 
             const es = ctx.eventSource || (window as any).eventSource;
-            const et = ctx.event_types || (window as any).event_types;
+            const et = ctx.eventTypes || ctx.event_types || (window as any).event_types;
             if (es && et?.CHARACTERS_UPDATED) {
                 es.emit(et.CHARACTERS_UPDATED);
             }
