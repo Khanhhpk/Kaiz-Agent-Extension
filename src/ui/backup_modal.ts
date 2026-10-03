@@ -191,6 +191,8 @@ export class BackupModal {
                         b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
 
                     const isCharacter = b.type === 'character';
+                    const isWorldbook = b.type === 'worldbook';
+                    const canRestore = isCharacter || isWorldbook;
                     const isPng =
                         b.format === 'png' || (typeof b.data === 'string' && b.data.startsWith('data:image/png'));
 
@@ -221,7 +223,7 @@ export class BackupModal {
                             </div>
                             <div class="kaiz-backup-actions">
                                 ${
-                                    isCharacter
+                                    canRestore
                                         ? `<button class="kaiz-backup-restore kaiz-btn" data-id="${b.id}" style="padding: 6px 12px; background: #2980b9; border: none; color: white; cursor: pointer; border-radius: 4px; font-size: 0.85em;" title="Khôi phục vào SillyTavern"><i class="fa-solid fa-rotate-left"></i> Khôi phục</button>`
                                         : ''
                                 }
@@ -308,26 +310,39 @@ export class BackupModal {
                 return;
             }
 
-            const ctx = (window as any).SillyTavern?.getContext ? (window as any).SillyTavern.getContext() : null;
-            const characters = ctx?.characters || [];
-            const safeName = backup.name || 'Nhân vật';
-            const existingChar = characters.find(
-                (c: any) => c && c.name && c.name.toLowerCase() === safeName.toLowerCase(),
-            );
+            if (backup.type === 'character') {
+                const ctx = (window as any).SillyTavern?.getContext ? (window as any).SillyTavern.getContext() : null;
+                const characters = ctx?.characters || [];
+                const safeName = backup.name || 'Nhân vật';
+                const existingChar = characters.find(
+                    (c: any) => c && c.name && c.name.toLowerCase() === safeName.toLowerCase(),
+                );
 
-            let confirmMsg = '';
-            if (existingChar) {
-                confirmMsg = `Phát hiện thẻ [${existingChar.name}] đang có trong SillyTavern.\nBạn có chắc chắn muốn ghi đè hoàn hảo toàn bộ dữ liệu (tính cách, kịch bản, lời chào, worldbook, tags) từ bản sao lưu này lên thẻ đó không?`;
+                let confirmMsg = '';
+                if (existingChar) {
+                    confirmMsg = `Phát hiện thẻ [${existingChar.name}] đang có trong SillyTavern.\nBạn có chắc chắn muốn ghi đè hoàn hảo toàn bộ dữ liệu (tính cách, kịch bản, lời chào, worldbook, tags) từ bản sao lưu này lên thẻ đó không?`;
+                } else {
+                    confirmMsg = `Thẻ [${safeName}] hiện không có trong danh sách SillyTavern (hoặc đã bị xóa).\nBản sao lưu sẽ được import lại thành một nhân vật mới hoàn chỉnh vào ST.\nBạn có muốn tiếp tục không?`;
+                }
+
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+
+                const res = await this.adapter.restoreCharacterBackup(backup);
+                alert(`✅ ${res.message}`);
+            } else if (backup.type === 'worldbook') {
+                const confirmMsg = `Bạn có chắc chắn muốn khôi phục Worldbook [${backup.name}] vào SillyTavern không? Dữ liệu hiện tại của sách này (nếu có) sẽ được cập nhật.`;
+                if (!confirm(confirmMsg)) {
+                    return;
+                }
+                const res = await this.adapter.restoreWorldbookBackup(backup);
+                alert(`✅ ${res.message}`);
             } else {
-                confirmMsg = `Thẻ [${safeName}] hiện không có trong danh sách SillyTavern (hoặc đã bị xóa).\nBản sao lưu sẽ được import lại thành một nhân vật mới hoàn chỉnh vào ST.\nBạn có muốn tiếp tục không?`;
+                alert(
+                    'Khôi phục trực tiếp hiện chỉ hỗ trợ Thẻ nhân vật và Worldbook. Với Chat, vui lòng tải file .jsonl về máy để import vào ST.',
+                );
             }
-
-            if (!confirm(confirmMsg)) {
-                return;
-            }
-
-            const res = await this.adapter.restoreCharacterBackup(backup);
-            alert(`✅ ${res.message}`);
         } catch (error: any) {
             console.error('[BackupModal] Error restoring backup:', error);
             alert(`❌ Không thể khôi phục bản sao lưu: ${error.message}`);

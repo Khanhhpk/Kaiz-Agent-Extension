@@ -20734,10 +20734,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       static utf8ToBase64(str) {
           if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
               const bytes = new TextEncoder().encode(str);
+              const CHUNK_SIZE = 0x8000; // 32KB chunks for fast processing without call stack overflow
               let binary = '';
-              const len = bytes.byteLength;
-              for (let i = 0; i < len; i++) {
-                  binary += String.fromCharCode(bytes[i]);
+              for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+                  binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length)));
               }
               return window.btoa(binary);
           }
@@ -20750,8 +20750,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
        * Decode Base64 string to UTF-8 string
        */
       static base64ToUtf8(b64) {
+          const cleanedB64 = b64.replace(/\s+/g, '');
           if (typeof window !== 'undefined' && typeof window.atob === 'function') {
-              const binary = window.atob(b64);
+              const binary = window.atob(cleanedB64);
               const bytes = new Uint8Array(binary.length);
               for (let i = 0; i < binary.length; i++) {
                   bytes[i] = binary.charCodeAt(i);
@@ -20759,7 +20760,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               return new TextDecoder('utf-8').decode(bytes);
           }
           else if (typeof Buffer !== 'undefined') {
-              return Buffer.from(b64, 'base64').toString('utf8');
+              return Buffer.from(cleanedB64, 'base64').toString('utf8');
           }
           throw new Error('No base64 decoder available');
       }
@@ -20911,7 +20912,13 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               const targetB64 = ccv3Data || charaData;
               if (!targetB64)
                   return null;
-              const jsonStr = this.base64ToUtf8(targetB64.trim());
+              let jsonStr = '';
+              try {
+                  jsonStr = this.base64ToUtf8(targetB64.trim());
+              }
+              catch {
+                  jsonStr = targetB64.trim();
+              }
               return JSON.parse(jsonStr);
           }
           catch (e) {
@@ -21869,6 +21876,11 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                           : [];
                   const creator = rawData.creator ?? char.creator ?? '';
                   const character_version = rawData.character_version ?? char.character_version ?? '';
+                  const group_only_greetings = Array.isArray(rawData.group_only_greetings)
+                      ? rawData.group_only_greetings
+                      : Array.isArray(char.group_only_greetings)
+                          ? char.group_only_greetings
+                          : [];
                   // 2. Thu thập Tags đầy đủ
                   let tags = Array.isArray(rawData.tags) && rawData.tags.length > 0
                       ? [...rawData.tags]
@@ -21942,6 +21954,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       }
                   }
                   const fullCharData = {
+                      ...rawData,
                       name,
                       description,
                       personality,
@@ -21952,6 +21965,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       system_prompt,
                       post_history_instructions,
                       alternate_greetings,
+                      ...(group_only_greetings.length > 0 ? { group_only_greetings } : {}),
                       character_book: characterBook,
                       tags,
                       creator,
@@ -21973,7 +21987,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       spec: 'chara_card_v3',
                       spec_version: '3.0',
                       data: fullCharData,
-                      create_date: new Date().toISOString(),
+                      create_date: char.create_date || rawData.create_date || new Date().toISOString(),
                   };
                   const effectiveFormat = format || 'png';
                   if (effectiveFormat === 'png') {
@@ -21986,20 +22000,29 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       }
                       const pngBuffer = await PngChunkUtil.convertImageToPng(avatarUrl);
                       const embeddedPng = PngChunkUtil.embedCardData(pngBuffer, cardPayload);
-                      let binary = '';
-                      const len = embeddedPng.byteLength;
-                      for (let i = 0; i < len; i++) {
-                          binary += String.fromCharCode(embeddedPng[i]);
+                      let b64 = '';
+                      if (typeof Buffer !== 'undefined') {
+                          b64 = Buffer.from(embeddedPng).toString('base64');
                       }
-                      const b64DataUrl = 'data:image/png;base64,' +
-                          (typeof window !== 'undefined'
-                              ? window.btoa(binary)
-                              : Buffer.from(embeddedPng).toString('base64'));
+                      else if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+                          const CHUNK_SIZE = 0x8000;
+                          let binary = '';
+                          for (let i = 0; i < embeddedPng.length; i += CHUNK_SIZE) {
+                              binary += String.fromCharCode.apply(null, embeddedPng.subarray(i, Math.min(i + CHUNK_SIZE, embeddedPng.length)));
+                          }
+                          b64 = window.btoa(binary);
+                      }
+                      const b64DataUrl = 'data:image/png;base64,' + b64;
+                      const shortAvatarUrl = char.avatar
+                          ? char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                              ? char.avatar
+                              : `/characters/${encodeURIComponent(char.avatar)}`
+                          : undefined;
                       return {
                           name: charName,
                           data: b64DataUrl,
                           format: 'png',
-                          avatarUrl: b64DataUrl,
+                          avatarUrl: shortAvatarUrl,
                       };
                   }
                   else {
@@ -22150,6 +22173,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                           const errText = await res.text().catch(() => res.statusText);
                           throw new Error(`HTTP ${res.status}: ${errText}`);
                       }
+                      const resData = await res.json().catch(() => ({}));
+                      if (resData && resData.file_name) {
+                          char.avatar = resData.file_name;
+                      }
                   }
                   else {
                       const mergePayload = {
@@ -22173,6 +22200,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                           talkativeness: cardData.talkativeness ?? char.talkativeness ?? 0.5,
                           fav: cardData.fav ?? char.fav ?? false,
                           data: {
+                              ...cardData,
                               name: cardData.name ?? char.name,
                               description: cardData.description ?? '',
                               personality: cardData.personality ?? '',
@@ -22337,6 +22365,45 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           }
           catch (e) {
               console.error('[KaizAgent] Lỗi khi khôi phục thẻ:', e);
+              throw e;
+          }
+      }
+      /**
+       * Khôi phục trực tiếp Worldbook/Lorebook từ bản sao lưu vào SillyTavern
+       */
+      async restoreWorldbookBackup(entry) {
+          const ctx = SillyTavern.getContext();
+          try {
+              const bookName = entry.name;
+              const bookData = JSON.parse(entry.data);
+              if (!bookData)
+                  throw new Error('Dữ liệu worldbook không hợp lệ.');
+              if (typeof ctx.saveWorldInfo === 'function') {
+                  await ctx.saveWorldInfo(bookName, bookData);
+              }
+              else {
+                  const res = await fetch('/api/worldinfo/edit', {
+                      method: 'POST',
+                      headers: {
+                          ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                          'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({ name: bookName, data: bookData }),
+                  });
+                  if (!res.ok) {
+                      throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                  }
+              }
+              if (typeof ctx.loadWorldInfo === 'function') {
+                  await ctx.loadWorldInfo(bookName);
+              }
+              return {
+                  success: true,
+                  message: `Đã khôi phục thành công Worldbook [${bookName}] vào SillyTavern!`,
+              };
+          }
+          catch (e) {
+              console.error('[KaizAgent] Restore Worldbook error:', e);
               throw e;
           }
       }
@@ -26460,6 +26527,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const sizeKb = (sizeInBytes / 1024).toFixed(1);
                       const icon = b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
                       const isCharacter = b.type === 'character';
+                      const isWorldbook = b.type === 'worldbook';
+                      const canRestore = isCharacter || isWorldbook;
                       const isPng = b.format === 'png' || (typeof b.data === 'string' && b.data.startsWith('data:image/png'));
                       let badgeHtml = '';
                       if (isCharacter) {
@@ -26484,7 +26553,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                                 </div>
                             </div>
                             <div class="kaiz-backup-actions">
-                                ${isCharacter
+                                ${canRestore
                         ? `<button class="kaiz-backup-restore kaiz-btn" data-id="${b.id}" style="padding: 6px 12px; background: #2980b9; border: none; color: white; cursor: pointer; border-radius: 4px; font-size: 0.85em;" title="Khôi phục vào SillyTavern"><i class="fa-solid fa-rotate-left"></i> Khôi phục</button>`
                         : ''}
                                 <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 6px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 4px;" title="Tải về máy"><i class="fa-solid fa-download"></i></button>
@@ -26562,22 +26631,35 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   alert('Không tìm thấy bản sao lưu!');
                   return;
               }
-              const ctx = window.SillyTavern?.getContext ? window.SillyTavern.getContext() : null;
-              const characters = ctx?.characters || [];
-              const safeName = backup.name || 'Nhân vật';
-              const existingChar = characters.find((c) => c && c.name && c.name.toLowerCase() === safeName.toLowerCase());
-              let confirmMsg = '';
-              if (existingChar) {
-                  confirmMsg = `Phát hiện thẻ [${existingChar.name}] đang có trong SillyTavern.\nBạn có chắc chắn muốn ghi đè hoàn hảo toàn bộ dữ liệu (tính cách, kịch bản, lời chào, worldbook, tags) từ bản sao lưu này lên thẻ đó không?`;
+              if (backup.type === 'character') {
+                  const ctx = window.SillyTavern?.getContext ? window.SillyTavern.getContext() : null;
+                  const characters = ctx?.characters || [];
+                  const safeName = backup.name || 'Nhân vật';
+                  const existingChar = characters.find((c) => c && c.name && c.name.toLowerCase() === safeName.toLowerCase());
+                  let confirmMsg = '';
+                  if (existingChar) {
+                      confirmMsg = `Phát hiện thẻ [${existingChar.name}] đang có trong SillyTavern.\nBạn có chắc chắn muốn ghi đè hoàn hảo toàn bộ dữ liệu (tính cách, kịch bản, lời chào, worldbook, tags) từ bản sao lưu này lên thẻ đó không?`;
+                  }
+                  else {
+                      confirmMsg = `Thẻ [${safeName}] hiện không có trong danh sách SillyTavern (hoặc đã bị xóa).\nBản sao lưu sẽ được import lại thành một nhân vật mới hoàn chỉnh vào ST.\nBạn có muốn tiếp tục không?`;
+                  }
+                  if (!confirm(confirmMsg)) {
+                      return;
+                  }
+                  const res = await this.adapter.restoreCharacterBackup(backup);
+                  alert(`✅ ${res.message}`);
+              }
+              else if (backup.type === 'worldbook') {
+                  const confirmMsg = `Bạn có chắc chắn muốn khôi phục Worldbook [${backup.name}] vào SillyTavern không? Dữ liệu hiện tại của sách này (nếu có) sẽ được cập nhật.`;
+                  if (!confirm(confirmMsg)) {
+                      return;
+                  }
+                  const res = await this.adapter.restoreWorldbookBackup(backup);
+                  alert(`✅ ${res.message}`);
               }
               else {
-                  confirmMsg = `Thẻ [${safeName}] hiện không có trong danh sách SillyTavern (hoặc đã bị xóa).\nBản sao lưu sẽ được import lại thành một nhân vật mới hoàn chỉnh vào ST.\nBạn có muốn tiếp tục không?`;
+                  alert('Khôi phục trực tiếp hiện chỉ hỗ trợ Thẻ nhân vật và Worldbook. Với Chat, vui lòng tải file .jsonl về máy để import vào ST.');
               }
-              if (!confirm(confirmMsg)) {
-                  return;
-              }
-              const res = await this.adapter.restoreCharacterBackup(backup);
-              alert(`✅ ${res.message}`);
           }
           catch (error) {
               console.error('[BackupModal] Error restoring backup:', error);

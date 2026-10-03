@@ -953,6 +953,11 @@ export class SillyTavernAdapter {
                       : [];
                 const creator = rawData.creator ?? char.creator ?? '';
                 const character_version = rawData.character_version ?? char.character_version ?? '';
+                const group_only_greetings = Array.isArray(rawData.group_only_greetings)
+                    ? rawData.group_only_greetings
+                    : Array.isArray(char.group_only_greetings)
+                      ? char.group_only_greetings
+                      : [];
 
                 // 2. Thu thập Tags đầy đủ
                 let tags =
@@ -1030,6 +1035,7 @@ export class SillyTavernAdapter {
                 }
 
                 const fullCharData: Record<string, any> = {
+                    ...rawData,
                     name,
                     description,
                     personality,
@@ -1040,6 +1046,7 @@ export class SillyTavernAdapter {
                     system_prompt,
                     post_history_instructions,
                     alternate_greetings,
+                    ...(group_only_greetings.length > 0 ? { group_only_greetings } : {}),
                     character_book: characterBook,
                     tags,
                     creator,
@@ -1062,7 +1069,7 @@ export class SillyTavernAdapter {
                     spec: 'chara_card_v3',
                     spec_version: '3.0',
                     data: fullCharData,
-                    create_date: new Date().toISOString(),
+                    create_date: char.create_date || rawData.create_date || new Date().toISOString(),
                 };
 
                 const effectiveFormat = format || 'png';
@@ -1079,22 +1086,33 @@ export class SillyTavernAdapter {
                     const pngBuffer = await PngChunkUtil.convertImageToPng(avatarUrl);
                     const embeddedPng = PngChunkUtil.embedCardData(pngBuffer, cardPayload);
 
-                    let binary = '';
-                    const len = embeddedPng.byteLength;
-                    for (let i = 0; i < len; i++) {
-                        binary += String.fromCharCode(embeddedPng[i]);
+                    let b64 = '';
+                    if (typeof Buffer !== 'undefined') {
+                        b64 = Buffer.from(embeddedPng).toString('base64');
+                    } else if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+                        const CHUNK_SIZE = 0x8000;
+                        let binary = '';
+                        for (let i = 0; i < embeddedPng.length; i += CHUNK_SIZE) {
+                            binary += String.fromCharCode.apply(
+                                null,
+                                embeddedPng.subarray(i, Math.min(i + CHUNK_SIZE, embeddedPng.length)) as any,
+                            );
+                        }
+                        b64 = window.btoa(binary);
                     }
-                    const b64DataUrl =
-                        'data:image/png;base64,' +
-                        (typeof window !== 'undefined'
-                            ? window.btoa(binary)
-                            : Buffer.from(embeddedPng).toString('base64'));
+                    const b64DataUrl = 'data:image/png;base64,' + b64;
+
+                    const shortAvatarUrl = char.avatar
+                        ? char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                            ? char.avatar
+                            : `/characters/${encodeURIComponent(char.avatar)}`
+                        : undefined;
 
                     return {
                         name: charName,
                         data: b64DataUrl,
                         format: 'png',
-                        avatarUrl: b64DataUrl,
+                        avatarUrl: shortAvatarUrl,
                     };
                 } else {
                     const avatarUrl = char.avatar
@@ -1257,6 +1275,11 @@ export class SillyTavernAdapter {
                         const errText = await res.text().catch(() => res.statusText);
                         throw new Error(`HTTP ${res.status}: ${errText}`);
                     }
+
+                    const resData = await res.json().catch(() => ({}));
+                    if (resData && resData.file_name) {
+                        char.avatar = resData.file_name;
+                    }
                 } else {
                     const mergePayload: Record<string, any> = {
                         avatar: char.avatar,
@@ -1279,6 +1302,7 @@ export class SillyTavernAdapter {
                         talkativeness: cardData.talkativeness ?? char.talkativeness ?? 0.5,
                         fav: cardData.fav ?? char.fav ?? false,
                         data: {
+                            ...cardData,
                             name: cardData.name ?? char.name,
                             description: cardData.description ?? '',
                             personality: cardData.personality ?? '',
@@ -1453,6 +1477,49 @@ export class SillyTavernAdapter {
             };
         } catch (e: any) {
             console.error('[KaizAgent] Lỗi khi khôi phục thẻ:', e);
+            throw e;
+        }
+    }
+
+    /**
+     * Khôi phục trực tiếp Worldbook/Lorebook từ bản sao lưu vào SillyTavern
+     */
+    public async restoreWorldbookBackup(entry: {
+        name: string;
+        data: string;
+    }): Promise<{ success: boolean; message: string }> {
+        const ctx = SillyTavern.getContext();
+        try {
+            const bookName = entry.name;
+            const bookData = JSON.parse(entry.data);
+            if (!bookData) throw new Error('Dữ liệu worldbook không hợp lệ.');
+
+            if (typeof ctx.saveWorldInfo === 'function') {
+                await ctx.saveWorldInfo(bookName, bookData);
+            } else {
+                const res = await fetch('/api/worldinfo/edit', {
+                    method: 'POST',
+                    headers: {
+                        ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ name: bookName, data: bookData }),
+                });
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                }
+            }
+
+            if (typeof ctx.loadWorldInfo === 'function') {
+                await ctx.loadWorldInfo(bookName);
+            }
+
+            return {
+                success: true,
+                message: `Đã khôi phục thành công Worldbook [${bookName}] vào SillyTavern!`,
+            };
+        } catch (e: any) {
+            console.error('[KaizAgent] Restore Worldbook error:', e);
             throw e;
         }
     }

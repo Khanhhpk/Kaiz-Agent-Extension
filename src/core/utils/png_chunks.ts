@@ -44,10 +44,13 @@ export class PngChunkUtil {
     public static utf8ToBase64(str: string): string {
         if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
             const bytes = new TextEncoder().encode(str);
+            const CHUNK_SIZE = 0x8000; // 32KB chunks for fast processing without call stack overflow
             let binary = '';
-            const len = bytes.byteLength;
-            for (let i = 0; i < len; i++) {
-                binary += String.fromCharCode(bytes[i]);
+            for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+                binary += String.fromCharCode.apply(
+                    null,
+                    bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length)) as any,
+                );
             }
             return window.btoa(binary);
         } else if (typeof Buffer !== 'undefined') {
@@ -60,15 +63,16 @@ export class PngChunkUtil {
      * Decode Base64 string to UTF-8 string
      */
     public static base64ToUtf8(b64: string): string {
+        const cleanedB64 = b64.replace(/\s+/g, '');
         if (typeof window !== 'undefined' && typeof window.atob === 'function') {
-            const binary = window.atob(b64);
+            const binary = window.atob(cleanedB64);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) {
                 bytes[i] = binary.charCodeAt(i);
             }
             return new TextDecoder('utf-8').decode(bytes);
         } else if (typeof Buffer !== 'undefined') {
-            return Buffer.from(b64, 'base64').toString('utf8');
+            return Buffer.from(cleanedB64, 'base64').toString('utf8');
         }
         throw new Error('No base64 decoder available');
     }
@@ -242,7 +246,12 @@ export class PngChunkUtil {
 
             const targetB64 = ccv3Data || charaData;
             if (!targetB64) return null;
-            const jsonStr = this.base64ToUtf8(targetB64.trim());
+            let jsonStr = '';
+            try {
+                jsonStr = this.base64ToUtf8(targetB64.trim());
+            } catch {
+                jsonStr = targetB64.trim();
+            }
             return JSON.parse(jsonStr);
         } catch (e) {
             console.error('[PngChunkUtil] Error extracting card data:', e);
