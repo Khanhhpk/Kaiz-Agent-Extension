@@ -8,6 +8,7 @@ eslint-report.json
 tools_dump.txt
 *context_dump*.txt
 *.cjs
+mvu_*.js
 .agents/
 
 # Assets raw frame dumps

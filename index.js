@@ -1317,6 +1317,11 @@ CÁC CÔNG CỤ HIỆN CÓ:
                       type: 'string',
                       description: 'Tên đối tượng cần sao lưu (bắt buộc nếu target_type là worldbook, đối với character và chat sẽ tự động lấy đối tượng hiện tại).',
                   },
+                  format: {
+                      type: 'string',
+                      enum: ['png', 'json'],
+                      description: 'Định dạng sao lưu cho thẻ nhân vật. Mặc định là "png" (ưu tiên khuyên dùng để lưu trữ kèm toàn bộ ảnh avatar và metadata chuẩn Tavern V2/V3). Nếu chọn "json" thì chỉ lưu cấu trúc dữ liệu text.',
+                  },
               },
               required: ['target_type'],
           },
@@ -1330,7 +1335,8 @@ CÁC CÔNG CỤ HIỆN CÓ:
           try {
               const type = args.target_type;
               const name = args.target_name;
-              const exportResult = await context.adapter.exportBackupData(type, name);
+              const format = args.format || (type === 'character' ? 'png' : 'json');
+              const exportResult = await context.adapter.exportBackupData(type, name, format);
               if (!exportResult) {
                   return {
                       isError: true,
@@ -1338,9 +1344,10 @@ CÁC CÔNG CỤ HIỆN CÓ:
                   };
               }
               // Lưu vào IDB
-              const backupId = await context.stateManager.db.addBackup(type, exportResult.name, exportResult.data);
+              const backupId = await context.stateManager.db.addBackup(type, exportResult.name, exportResult.data, exportResult.format, exportResult.avatarUrl);
+              const formatLabel = exportResult.format === 'png' ? 'PNG (kèm ảnh avatar)' : 'JSON';
               return {
-                  content: `✅ Đã tạo backup thành công cho [${type}: ${exportResult.name}] với ID=${backupId}. Người dùng có thể tải về từ Backup Manager.`,
+                  content: `✅ Đã tạo backup thành công cho [${type}: ${exportResult.name}] định dạng [${formatLabel}] với ID=${backupId}. Người dùng có thể xem, tải về hoặc khôi phục từ Backup Manager.`,
               };
           }
           catch (e) {
@@ -5727,13 +5734,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           });
       }
       // --- BACKUPS ---
-      async addBackup(type, name, data) {
+      async addBackup(type, name, data, format, avatarUrl) {
           return new Promise((resolve, reject) => {
               if (!this.db)
                   return reject(new Error('DB not initialized'));
               const transaction = this.db.transaction(['backups'], 'readwrite');
               const store = transaction.objectStore('backups');
-              const entry = { type, name, data, timestamp: Date.now() };
+              const entry = { type, name, data, format, avatarUrl, timestamp: Date.now() };
               const request = store.add(entry);
               request.onsuccess = () => resolve(request.result);
               request.onerror = () => reject(request.error);
@@ -16430,6 +16437,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
       static cachedFloors = [];
       static cachedDataSource = 'fallback';
       /**
+       * Xóa sạch bộ nhớ đệm trạng thái MVU khi chuyển đổi nhân vật hoặc chat mới
+       */
+      static clearCache() {
+          this.cachedStatData = null;
+          this.cachedWrapper = null;
+          this.cachedCurrentFloor = null;
+          this.cachedFloors = [];
+          this.cachedDataSource = 'fallback';
+      }
+      /**
        * Truy xuất ngữ cảnh toàn cục (hỗ trợ cả iframe và window cha)
        */
       static getGlobalContext() {
@@ -16670,14 +16687,23 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const scripts = char.data?.extensions?.tavern_helper?.scripts;
           if (!scripts || typeof scripts !== 'object')
               return null;
+          let bestScript = null;
+          let bestScore = -1;
           for (const [key, script] of Object.entries(scripts)) {
               const s = script;
               const content = s?.content || '';
               const scriptName = s?.name || key;
-              if (content.includes('registerMvuSchema') ||
-                  scriptName.toLowerCase().includes('zod') ||
-                  scriptName.includes('Cấu trúc biến')) {
-                  return {
+              let score = 0;
+              if (content.includes('registerMvuSchema'))
+                  score += 10;
+              if (/z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i.test(content))
+                  score += 5;
+              if (/(?:cấu\s*trúc|schema|zod|structure|variables?|state|trạng\s*thái|biến|结构|变量|状态)/i.test(scriptName)) {
+                  score += 2;
+              }
+              if (score > bestScore && score > 0) {
+                  bestScore = score;
+                  bestScript = {
                       key,
                       name: scriptName,
                       content,
@@ -16685,7 +16711,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   };
               }
           }
-          return null;
+          return bestScript;
       }
       /**
        * Đọc dữ liệu biến của một lượt tin nhắn (floor/message) cụ thể
@@ -16743,7 +16769,19 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           const hasStatData = Object.prototype.hasOwnProperty.call(raw, 'stat_data') &&
               raw.stat_data &&
               typeof raw.stat_data === 'object';
-          const statData = hasStatData ? raw.stat_data : raw;
+          let statData;
+          if (hasStatData) {
+              statData = raw.stat_data;
+          }
+          else if (source === 'mvu') {
+              // SillyTavern-MVU plugin có thể trả trực tiếp statData mà không bọc stat_data
+              statData = raw;
+          }
+          else {
+              // Nguồn TavernHelper hoặc ST chat memory: Nếu không có stat_data thì KHÔNG PHẢI biến MVU.
+              // Tuyệt đối không lấy raw làm statData để tránh bắt nhầm biến var (getvar, setvar) của Preset/Lorebook!
+              statData = null;
+          }
           return {
               wrapper: raw,
               statData,
@@ -16874,7 +16912,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
        */
       static getLiveVariables(subPath, _messageId) {
           let data = this.cachedStatData;
-          let wrapper = this.cachedWrapper;
           // Nếu chưa có cache, lấy nhanh từ context hiện tại
           if (!data) {
               const { th, mvu } = this.getGlobalContext();
@@ -16899,8 +16936,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   catch { }
               }
               if (raw && typeof raw === 'object') {
-                  wrapper = raw;
-                  data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : raw;
+                  // Chuẩn MVU: Trong TavernHelper, dữ liệu MVU chỉ nằm trong raw.stat_data
+                  data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : mvu ? raw : null;
               }
           }
           if (!data)
@@ -16909,7 +16946,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               const parts = this.normalizePathParts(subPath);
               if (parts.length === 0)
                   return data;
-              // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
+              // Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
               let curr = data;
               let found = true;
               for (const p of parts) {
@@ -16935,34 +16972,6 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
               if (found)
                   return curr;
-              // Ưu tiên 2: Fallback tìm trong root wrapper (phòng trường hợp biến root)
-              if (wrapper && typeof wrapper === 'object') {
-                  let rootCurr = wrapper;
-                  let rootFound = true;
-                  for (const p of parts) {
-                      if (rootCurr && typeof rootCurr === 'object') {
-                          if (p in rootCurr) {
-                              rootCurr = rootCurr[p];
-                          }
-                          else {
-                              const matchKey = Object.keys(rootCurr).find((k) => k.toLowerCase() === p.toLowerCase());
-                              if (matchKey && matchKey in rootCurr) {
-                                  rootCurr = rootCurr[matchKey];
-                              }
-                              else {
-                                  rootFound = false;
-                                  break;
-                              }
-                          }
-                      }
-                      else {
-                          rootFound = false;
-                          break;
-                      }
-                  }
-                  if (rootFound)
-                      return rootCurr;
-              }
               return undefined;
           }
           return data;
@@ -17078,12 +17087,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       const clone = typeof structuredClone === 'function'
                           ? structuredClone(floor.wrapper)
                           : JSON.parse(JSON.stringify(floor.wrapper));
-                      if (clone.stat_data && typeof clone.stat_data === 'object') {
-                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                          clone.stat_data = {};
                       }
-                      else {
-                          setDeep(clone, cleanParts, parsedValue);
-                      }
+                      setDeep(clone.stat_data, cleanParts, parsedValue);
                       await mvu.replaceMvuData(clone, { type: 'message', message_id: targetMessageId });
                       updated = true;
                   }
@@ -17099,12 +17106,10 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       const clone = typeof structuredClone === 'function'
                           ? structuredClone(existing || {})
                           : JSON.parse(JSON.stringify(existing || {}));
-                      if (clone.stat_data && typeof clone.stat_data === 'object') {
-                          setDeep(clone.stat_data, cleanParts, parsedValue);
+                      if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                          clone.stat_data = {};
                       }
-                      else {
-                          setDeep(clone, cleanParts, parsedValue);
-                      }
+                      setDeep(clone.stat_data, cleanParts, parsedValue);
                       return clone;
                   }, { type: 'message', message_id: targetMessageId });
                   updated = true;
@@ -17292,8 +17297,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               lowerComment.includes('变量列表')) {
               return true;
           }
-          return (content.includes('{{format_message_variable::') ||
-              content.includes('{{get_message_variable::') ||
+          return ((content.includes('{{format_message_variable::') && content.includes('stat_data')) ||
+              (content.includes('{{get_message_variable::') && content.includes('stat_data')) ||
               lower.includes('<status_current_variable>') ||
               lower.includes('<status_current_variables>') ||
               lower.includes('<biến_trạng_thái') ||
@@ -17334,7 +17339,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               lower.includes('phân giai đoạn') ||
               lower.includes('thời kỳ');
           if (content.includes('<%') &&
-              (content.includes('getvar(') || content.includes('setvar(')) &&
+              /\b(?:getvar|setvar)\s*\(\s*['"`]stat_data\b/i.test(content) &&
               isPhaseController) {
               return true;
           }
@@ -17505,8 +17510,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   // Ignore
               }
           }
-          // 3. Nếu vẫn chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
-          if (!result.initvarEntry || !result.updateRulesEntry) {
+          // 3. Nếu vẫn chưa tìm thấy, chỉ tìm trong global / active lorebook nếu card thực sự có dấu hiệu MVU
+          // (Tránh trường hợp card thông thường vô tình bắt nhầm lorebook MVU đang kích hoạt ở menu World Info)
+          const hasAnyMvuSign = this.getZodScript(char) !== null ||
+              (Array.isArray(embeddedEntries) &&
+                  embeddedEntries.some((e) => {
+                      const comment = (e?.comment || e?.name || '').toLowerCase();
+                      return comment.includes('mvu') || comment.includes('initvar') || comment.includes('init_var');
+                  })) ||
+              Boolean(char?.data?.extensions?.world || char?.world);
+          if (hasAnyMvuSign && (!result.initvarEntry || !result.updateRulesEntry)) {
               try {
                   const worldInfo = window.world_info;
                   const entries = Array.isArray(worldInfo?.entries)
@@ -17851,7 +17864,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               if (hBody.includes('z.record')) {
                   helpers[hName] = { type: 'record' };
               }
-              else if (hBody.includes('z.object')) {
+              else if (hBody.includes('z.object') || hBody.includes('z.looseObject')) {
                   helpers[hName] = { type: 'object' };
               }
               else if (hBody.includes('z.array')) {
@@ -17868,12 +17881,37 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
           }
           // 2. Quét các Zod Object con độc lập khai báo trước Schema (TaiSan, NPC, DiChung, VatPham...)
+          // Tự động xác định tên Schema chính theo chuẩn MVU (qua registerMvuSchema hoặc tên Schema mặc định)
+          let mainSchemaName = 'Schema';
+          const regMatch = code.match(/(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*([A-Za-z0-9_$]+)\s*\)/i);
+          if (regMatch) {
+              mainSchemaName = regMatch[1];
+          }
+          // Tự động phân giải chuỗi alias nếu biến được gán lại (ví dụ: export const Schema = TargetSchema hoặc z.preprocess(..., TargetSchema))
+          for (let hop = 0; hop < 5; hop++) {
+              const directRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*(?!z\\s*\\.)([A-Za-z0-9_$]+)(?:\\s*\\.[A-Za-z0-9_$]+(?:\\([^)]*\\))?)*(?:\\s*;|\\s*\\n|$)`, 'i');
+              const directMatch = code.match(directRegex);
+              if (directMatch &&
+                  directMatch[1] &&
+                  directMatch[1] !== mainSchemaName &&
+                  directMatch[1].toLowerCase() !== 'z') {
+                  mainSchemaName = directMatch[1];
+                  continue;
+              }
+              const preprocessRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)preprocess\\s*\\([\\s\\S]*?,\\s*([A-Za-z0-9_$]+)`, 'i');
+              const prepMatch = code.match(preprocessRegex);
+              if (prepMatch && prepMatch[1] && prepMatch[1] !== mainSchemaName && prepMatch[1].toLowerCase() !== 'z') {
+                  mainSchemaName = prepMatch[1];
+                  continue;
+              }
+              break;
+          }
           const knownSubSchemas = {};
-          const subSchemaRegex = /const\s+([A-Za-z0-9_]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
+          const subSchemaRegex = /(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/g;
           let sMatch;
           while ((sMatch = subSchemaRegex.exec(code)) !== null) {
               const sName = sMatch[1];
-              if (sName.toLowerCase() === 'schema')
+              if (sName.toLowerCase() === mainSchemaName.toLowerCase() || sName.toLowerCase() === 'schema')
                   continue;
               const braceIdx = sMatch.index + sMatch[0].length - 1;
               const inner = this.extractMatchingBraceContent(code, braceIdx);
@@ -17882,9 +17920,16 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               }
           }
           // 3. Tìm Schema chính
-          const match = code.match(/(?:export\s+)?const\s+Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-              code.match(/Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-              code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
+          let match = null;
+          if (mainSchemaName) {
+              const targetRegex = new RegExp(`(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)(?:object|looseObject|strictObject)\\s*\\(\\s*\\{`, 'i');
+              match = code.match(targetRegex);
+          }
+          if (!match) {
+              match =
+                  code.match(/(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*Schema\b\s*=\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i) ||
+                      code.match(/(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i);
+          }
           if (!match || match.index === undefined)
               return [];
           const startIdx = match.index + match[0].length - 1; // vị trí ký tự '{'
@@ -18054,12 +18099,13 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
               let min;
               let max;
               let defaultValue;
-              // 1. Kiểm tra outermost z.record hoặc z.object({ ... })
+              // 1. Kiểm tra outermost z.record, z.array hoặc z.object/z.looseObject/z.strictObject({ ... })
               const isRecord = /^\s*z(?:\s*\.\s*)record\s*\(/.test(expr);
-              const isObject = /^\s*z(?:\s*\.\s*)object\s*\(/.test(expr);
+              const isArray = /^\s*z(?:\s*\.\s*)array\s*\(/.test(expr);
+              const isObject = /^\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(/.test(expr);
               if (isRecord) {
                   type = 'record';
-                  const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
                   if (objMatch && objMatch.index !== undefined) {
                       const openIdx = expr.indexOf('{', objMatch.index);
                       if (openIdx !== -1) {
@@ -18070,9 +18116,22 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                       }
                   }
               }
-              else if (isObject || /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr)) {
+              else if (isArray) {
+                  type = 'array';
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
+                  if (objMatch && objMatch.index !== undefined) {
+                      const openIdx = expr.indexOf('{', objMatch.index);
+                      if (openIdx !== -1) {
+                          const inner = this.extractMatchingBraceContent(expr, openIdx);
+                          if (inner) {
+                              recordTemplate = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                          }
+                      }
+                  }
+              }
+              else if (isObject || /\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/.test(expr)) {
                   type = 'object';
-                  const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                  const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
                   if (objMatch && objMatch.index !== undefined) {
                       const openIdx = expr.indexOf('{', objMatch.index);
                       if (openIdx !== -1) {
@@ -18201,7 +18260,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                   }
               }
               if (defaultValue === undefined) {
-                  const prefaultMatch = expr.match(/\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/);
+                  const prefaultMatch = expr.match(/\.(?:prefault|default)\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/);
                   if (prefaultMatch) {
                       try {
                           defaultValue = JSON.parse(prefaultMatch[1].replace(/'/g, '"'));
@@ -18497,7 +18556,7 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
           if (parsedSchema.length === 0 && initvarParsed) {
               parsedSchema = this.generateSchemaFromData(initvarParsed);
           }
-          if (liveVars) {
+          if (isMvu && liveVars) {
               if (parsedSchema.length === 0) {
                   parsedSchema = this.generateSchemaFromData(liveVars);
               }
@@ -18526,8 +18585,8 @@ Hướng dẫn sử dụng cho AI (RẤT QUAN TRỌNG):
                           checkLeaves(desc.children);
                           continue;
                       }
-                      if (desc.type === 'record') {
-                          // Record là danh sách thực thể động (như Túi_đồ, Quan_hệ), không yêu cầu instance mẫu trong InitVar
+                      if (desc.type === 'record' || desc.type === 'array') {
+                          // Record và Array là danh sách thực thể động (như Túi_đồ, Danh_hiệu), không yêu cầu instance mẫu trong InitVar
                           continue;
                       }
                       // Theo chuẩn Zod 4: Các trường có .prefault() tự động nạp fallback an toàn tại runtime
@@ -20652,6 +20711,345 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
   }
 
   /**
+   * PNG Chunks Utility for SillyTavern Character Cards
+   * Implements Tavern Character Card V2 and CCv3 specifications:
+   * - Reads/writes standard PNG chunks
+   * - Embeds card JSON in `tEXt` chunks with keywords 'chara' and 'ccv3'
+   * - Extracts card metadata from PNG buffers
+   * - Converts any image (WebP, JPG, URL) to standard PNG via Canvas
+   */
+  // Precomputed CRC32 IEEE 802.3 table
+  const CRC_TABLE = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) {
+          c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      }
+      CRC_TABLE[n] = c >>> 0;
+  }
+  class PngChunkUtil {
+      static PNG_SIG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+      /**
+       * Compute CRC32 checksum for a given buffer
+       */
+      static crc32(buf) {
+          let crc = 0xffffffff;
+          const len = buf.length;
+          for (let i = 0; i < len; i++) {
+              crc = (crc >>> 8) ^ CRC_TABLE[(crc ^ buf[i]) & 0xff];
+          }
+          return (crc ^ 0xffffffff) >>> 0;
+      }
+      /**
+       * Encode UTF-8 string to Base64 string
+       */
+      static utf8ToBase64(str) {
+          if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+              const bytes = new TextEncoder().encode(str);
+              const CHUNK_SIZE = 0x8000; // 32KB chunks for fast processing without call stack overflow
+              let binary = '';
+              for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+                  binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length)));
+              }
+              return window.btoa(binary);
+          }
+          else if (typeof Buffer !== 'undefined') {
+              return Buffer.from(str, 'utf8').toString('base64');
+          }
+          throw new Error('No base64 encoder available');
+      }
+      /**
+       * Decode Base64 string to UTF-8 string
+       */
+      static base64ToUtf8(b64) {
+          const cleanedB64 = b64.replace(/\s+/g, '');
+          if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+              const binary = window.atob(cleanedB64);
+              const bytes = new Uint8Array(binary.length);
+              for (let i = 0; i < binary.length; i++) {
+                  bytes[i] = binary.charCodeAt(i);
+              }
+              return new TextDecoder('utf-8').decode(bytes);
+          }
+          else if (typeof Buffer !== 'undefined') {
+              return Buffer.from(cleanedB64, 'base64').toString('utf8');
+          }
+          throw new Error('No base64 decoder available');
+      }
+      /**
+       * Parse all chunks from a valid PNG buffer
+       */
+      static parseChunks(buffer) {
+          if (buffer.length < 8) {
+              throw new Error('Buffer too small to be a PNG image');
+          }
+          for (let i = 0; i < 8; i++) {
+              if (buffer[i] !== this.PNG_SIG[i]) {
+                  throw new Error('Invalid PNG signature');
+              }
+          }
+          const chunks = [];
+          let offset = 8;
+          const totalLen = buffer.length;
+          while (offset < totalLen) {
+              if (offset + 12 > totalLen) {
+                  break;
+              }
+              const len = ((buffer[offset] << 24) |
+                  (buffer[offset + 1] << 16) |
+                  (buffer[offset + 2] << 8) |
+                  buffer[offset + 3]) >>>
+                  0;
+              let type = '';
+              for (let i = 0; i < 4; i++) {
+                  type += String.fromCharCode(buffer[offset + 4 + i]);
+              }
+              const dataStart = offset + 8;
+              const dataEnd = dataStart + len;
+              if (dataEnd + 4 > totalLen) {
+                  break; // Corrupted or truncated chunk
+              }
+              const data = buffer.slice(dataStart, dataEnd);
+              const crc = ((buffer[dataEnd] << 24) |
+                  (buffer[dataEnd + 1] << 16) |
+                  (buffer[dataEnd + 2] << 8) |
+                  buffer[dataEnd + 3]) >>>
+                  0;
+              chunks.push({ type, data, crc });
+              offset = dataEnd + 4;
+          }
+          return chunks;
+      }
+      /**
+       * Build binary PNG buffer from an array of chunks
+       */
+      static buildPng(chunks) {
+          let totalSize = 8;
+          for (const c of chunks) {
+              totalSize += 12 + c.data.length;
+          }
+          const out = new Uint8Array(totalSize);
+          out.set(this.PNG_SIG, 0);
+          let offset = 8;
+          for (const c of chunks) {
+              const len = c.data.length;
+              out[offset] = (len >>> 24) & 0xff;
+              out[offset + 1] = (len >>> 16) & 0xff;
+              out[offset + 2] = (len >>> 8) & 0xff;
+              out[offset + 3] = len & 0xff;
+              const typeBytes = new Uint8Array(4);
+              for (let i = 0; i < 4; i++) {
+                  typeBytes[i] = c.type.charCodeAt(i);
+                  out[offset + 4 + i] = typeBytes[i];
+              }
+              out.set(c.data, offset + 8);
+              // Calculate CRC over type + data
+              const crcBuf = new Uint8Array(4 + len);
+              crcBuf.set(typeBytes, 0);
+              crcBuf.set(c.data, 4);
+              const chunkCrc = this.crc32(crcBuf);
+              const crcOffset = offset + 8 + len;
+              out[crcOffset] = (chunkCrc >>> 24) & 0xff;
+              out[crcOffset + 1] = (chunkCrc >>> 16) & 0xff;
+              out[crcOffset + 2] = (chunkCrc >>> 8) & 0xff;
+              out[crcOffset + 3] = chunkCrc & 0xff;
+              offset += 12 + len;
+          }
+          return out;
+      }
+      /**
+       * Embed character card JSON into PNG chunks ('chara' and 'ccv3')
+       */
+      static embedCardData(pngBuffer, cardJson) {
+          const jsonStr = typeof cardJson === 'string' ? cardJson : JSON.stringify(cardJson);
+          const b64 = this.utf8ToBase64(jsonStr);
+          const chunks = this.parseChunks(pngBuffer);
+          // Filter out any pre-existing chara or ccv3 chunks
+          const filtered = chunks.filter((c) => {
+              if (c.type !== 'tEXt')
+                  return true;
+              const nullIdx = c.data.indexOf(0);
+              if (nullIdx === -1)
+                  return true;
+              let kw = '';
+              for (let i = 0; i < nullIdx; i++) {
+                  kw += String.fromCharCode(c.data[i]);
+              }
+              return kw !== 'chara' && kw !== 'ccv3';
+          });
+          const makeTextChunk = (keyword, text) => {
+              const kwBytes = new Uint8Array(keyword.length);
+              for (let i = 0; i < keyword.length; i++) {
+                  kwBytes[i] = keyword.charCodeAt(i);
+              }
+              const textBytes = new TextEncoder().encode(text);
+              const data = new Uint8Array(kwBytes.length + 1 + textBytes.length);
+              data.set(kwBytes, 0);
+              data[kwBytes.length] = 0; // null separator
+              data.set(textBytes, kwBytes.length + 1);
+              return { type: 'tEXt', data, crc: 0 };
+          };
+          const charaChunk = makeTextChunk('chara', b64);
+          const ccv3Chunk = makeTextChunk('ccv3', b64);
+          // In standard SillyTavern PNG cards, metadata chunks are placed right before IEND
+          const iendIdx = filtered.findIndex((c) => c.type === 'IEND');
+          const insertIdx = iendIdx >= 0 ? iendIdx : filtered.length;
+          filtered.splice(insertIdx, 0, charaChunk, ccv3Chunk);
+          return this.buildPng(filtered);
+      }
+      /**
+       * Extract card data from PNG buffer (reads 'ccv3' or 'chara' chunk)
+       */
+      static extractCardData(pngBuffer) {
+          try {
+              const chunks = this.parseChunks(pngBuffer);
+              let charaData = null;
+              let ccv3Data = null;
+              for (const c of chunks) {
+                  if (c.type === 'tEXt') {
+                      const nullIdx = c.data.indexOf(0);
+                      if (nullIdx === -1)
+                          continue;
+                      let kw = '';
+                      for (let i = 0; i < nullIdx; i++) {
+                          kw += String.fromCharCode(c.data[i]);
+                      }
+                      const textBytes = c.data.slice(nullIdx + 1);
+                      const text = new TextDecoder('utf-8').decode(textBytes);
+                      if (kw === 'ccv3')
+                          ccv3Data = text;
+                      if (kw === 'chara')
+                          charaData = text;
+                  }
+              }
+              const targetB64 = ccv3Data || charaData;
+              if (!targetB64)
+                  return null;
+              let jsonStr = '';
+              try {
+                  jsonStr = this.base64ToUtf8(targetB64.trim());
+              }
+              catch {
+                  jsonStr = targetB64.trim();
+              }
+              return JSON.parse(jsonStr);
+          }
+          catch (e) {
+              console.error('[PngChunkUtil] Error extracting card data:', e);
+              return null;
+          }
+      }
+      /**
+       * Convert any image (URL, DataURL, WebP, JPG) into a standard PNG buffer using Canvas
+       */
+      static async convertImageToPng(imageSourceUrl) {
+          // If it's already a DataURL PNG, we can decode it directly
+          if (imageSourceUrl.startsWith('data:image/png;base64,')) {
+              const b64 = imageSourceUrl.replace('data:image/png;base64,', '');
+              if (typeof Buffer !== 'undefined') {
+                  return new Uint8Array(Buffer.from(b64, 'base64'));
+              }
+              else if (typeof window !== 'undefined') {
+                  const bin = window.atob(b64);
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) {
+                      bytes[i] = bin.charCodeAt(i);
+                  }
+                  return bytes;
+              }
+          }
+          // If imageSourceUrl is a fetchable URL pointing to an existing PNG, fetch raw bytes directly
+          // to preserve 100% bit-exact original image quality without Canvas re-encoding
+          if (typeof fetch === 'function' && imageSourceUrl && !imageSourceUrl.startsWith('data:')) {
+              try {
+                  const res = await fetch(imageSourceUrl);
+                  if (res.ok) {
+                      const arrayBuf = await res.arrayBuffer();
+                      const bytes = new Uint8Array(arrayBuf);
+                      if (bytes.length >= 8 &&
+                          bytes[0] === 0x89 &&
+                          bytes[1] === 0x50 &&
+                          bytes[2] === 0x4e &&
+                          bytes[3] === 0x47) {
+                          return bytes;
+                      }
+                  }
+              }
+              catch (fetchErr) {
+                  console.warn('[PngChunkUtil] Direct fetch of PNG avatar failed, falling back to Canvas:', fetchErr);
+              }
+          }
+          // In browser context: use Image + Canvas fallback (for WebP, JPG, or cross-origin URLs)
+          if (typeof document !== 'undefined') {
+              return new Promise((resolve, reject) => {
+                  const img = new Image();
+                  img.crossOrigin = 'anonymous';
+                  img.onload = () => {
+                      try {
+                          const canvas = document.createElement('canvas');
+                          canvas.width = img.naturalWidth || img.width || 400;
+                          canvas.height = img.naturalHeight || img.height || 600;
+                          const ctx = canvas.getContext('2d');
+                          if (!ctx) {
+                              return reject(new Error('Canvas 2D context not available'));
+                          }
+                          ctx.drawImage(img, 0, 0);
+                          canvas.toBlob((blob) => {
+                              if (!blob) {
+                                  return reject(new Error('Failed to export canvas to PNG blob'));
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                  resolve(new Uint8Array(reader.result));
+                              };
+                              reader.onerror = () => reject(reader.error);
+                              reader.readAsArrayBuffer(blob);
+                          }, 'image/png');
+                      }
+                      catch (canvasErr) {
+                          reject(canvasErr);
+                      }
+                  };
+                  img.onerror = () => {
+                      // Fallback to a clean 400x600 default canvas if image failed to load
+                      try {
+                          const canvas = document.createElement('canvas');
+                          canvas.width = 400;
+                          canvas.height = 600;
+                          const ctx = canvas.getContext('2d');
+                          ctx.fillStyle = '#2c3e50';
+                          ctx.fillRect(0, 0, 400, 600);
+                          ctx.fillStyle = '#ecf0f1';
+                          ctx.font = 'bold 24px sans-serif';
+                          ctx.textAlign = 'center';
+                          ctx.fillText('Character Card', 200, 300);
+                          canvas.toBlob((blob) => {
+                              if (!blob)
+                                  return reject(new Error('Fallback canvas failed'));
+                              const reader = new FileReader();
+                              reader.onload = () => resolve(new Uint8Array(reader.result));
+                              reader.onerror = () => reject(reader.error);
+                              reader.readAsArrayBuffer(blob);
+                          }, 'image/png');
+                      }
+                      catch (_e) {
+                          reject(new Error('Image load failed and fallback canvas failed: ' + imageSourceUrl));
+                      }
+                  };
+                  img.src = imageSourceUrl;
+              });
+          }
+          // If outside browser (e.g. Node tests), create minimal 1x1 PNG fallback if needed
+          return new Uint8Array([
+              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00,
+              0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4, 0x89, 0x00, 0x00, 0x00,
+              0x0a, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0d, 0x0a, 0x2d,
+              0xb4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82,
+          ]);
+      }
+  }
+
+  /**
    * SillyTavern Adapter
    * Lớp trung gian để bọc các API của ST, lấy cảm hứng từ ST-Copilot.
    */
@@ -21476,9 +21874,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           }
       }
       /**
-       * Xuất dữ liệu dưới dạng JSON string để sao lưu
+       * Xuất dữ liệu dưới dạng PNG hoặc JSON string để sao lưu
        */
-      async exportBackupData(type, name) {
+      async exportBackupData(type, name, format) {
           const ctx = SillyTavern.getContext();
           try {
               if (type === 'character') {
@@ -21512,6 +21910,11 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                           : [];
                   const creator = rawData.creator ?? char.creator ?? '';
                   const character_version = rawData.character_version ?? char.character_version ?? '';
+                  const group_only_greetings = Array.isArray(rawData.group_only_greetings)
+                      ? rawData.group_only_greetings
+                      : Array.isArray(char.group_only_greetings)
+                          ? char.group_only_greetings
+                          : [];
                   // 2. Thu thập Tags đầy đủ
                   let tags = Array.isArray(rawData.tags) && rawData.tags.length > 0
                       ? [...rawData.tags]
@@ -21585,6 +21988,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       }
                   }
                   const fullCharData = {
+                      ...rawData,
                       name,
                       description,
                       personality,
@@ -21595,27 +21999,81 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       system_prompt,
                       post_history_instructions,
                       alternate_greetings,
+                      ...(group_only_greetings.length > 0 ? { group_only_greetings } : {}),
                       character_book: characterBook,
                       tags,
                       creator,
                       character_version,
                       extensions,
                   };
+                  const effectiveFormat = format || 'png';
                   const cardPayload = {
-                      spec: 'chara_card_v2',
-                      spec_version: '2.0',
+                      name,
+                      description,
+                      personality,
+                      scenario,
+                      first_mes,
+                      mes_example,
+                      creatorcomment: creator_notes,
+                      avatar: effectiveFormat === 'png' ? 'none' : char.avatar || '',
+                      talkativeness: extensions.talkativeness ?? char.talkativeness ?? 0.5,
+                      fav: extensions.fav ?? char.fav ?? false,
+                      tags,
+                      spec: 'chara_card_v3',
+                      spec_version: '3.0',
                       data: fullCharData,
-                      metadata: {
-                          avatar: char.avatar || '',
-                          exportDate: new Date().toISOString(),
-                          source: 'KaizAgent_FullCardBackup',
-                          linkedWorld: linkedWorldName,
-                      },
+                      create_date: char.create_date || rawData.create_date || new Date().toISOString(),
+                      creator_notes,
+                      alternate_greetings,
                   };
-                  return {
-                      name: charName,
-                      data: JSON.stringify(cardPayload, null, 2),
-                  };
+                  if (effectiveFormat === 'png') {
+                      let avatarUrl = '';
+                      if (char.avatar) {
+                          avatarUrl =
+                              char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                                  ? char.avatar
+                                  : `/characters/${encodeURIComponent(char.avatar)}`;
+                      }
+                      const pngBuffer = await PngChunkUtil.convertImageToPng(avatarUrl);
+                      const embeddedPng = PngChunkUtil.embedCardData(pngBuffer, cardPayload);
+                      let b64 = '';
+                      if (typeof Buffer !== 'undefined') {
+                          b64 = Buffer.from(embeddedPng).toString('base64');
+                      }
+                      else if (typeof window !== 'undefined' && typeof window.btoa === 'function') {
+                          const CHUNK_SIZE = 0x8000;
+                          let binary = '';
+                          for (let i = 0; i < embeddedPng.length; i += CHUNK_SIZE) {
+                              binary += String.fromCharCode.apply(null, embeddedPng.subarray(i, Math.min(i + CHUNK_SIZE, embeddedPng.length)));
+                          }
+                          b64 = window.btoa(binary);
+                      }
+                      const b64DataUrl = 'data:image/png;base64,' + b64;
+                      const shortAvatarUrl = char.avatar
+                          ? char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                              ? char.avatar
+                              : `/characters/${encodeURIComponent(char.avatar)}`
+                          : undefined;
+                      return {
+                          name: charName,
+                          data: b64DataUrl,
+                          format: 'png',
+                          avatarUrl: shortAvatarUrl,
+                      };
+                  }
+                  else {
+                      const avatarUrl = char.avatar
+                          ? char.avatar.startsWith('http') || char.avatar.startsWith('data:')
+                              ? char.avatar
+                              : `/characters/${encodeURIComponent(char.avatar)}`
+                          : undefined;
+                      return {
+                          name: charName,
+                          data: JSON.stringify(cardPayload, null, 2),
+                          format: 'json',
+                          avatarUrl,
+                      };
+                  }
               }
               if (type === 'chat') {
                   const chatName = ctx.chatId || 'Unknown_Chat';
@@ -21634,7 +22092,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       JSON.stringify(metadataLine),
                       ...chatData.map((msg) => JSON.stringify(msg)),
                   ].join('\n');
-                  return { name: chatName, data: jsonlData };
+                  return { name: chatName, data: jsonlData, format: 'json' };
               }
               if (type === 'worldbook') {
                   const bookName = name;
@@ -21658,7 +22116,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   }
                   if (!data)
                       throw new Error('Worldbook not found: ' + bookName);
-                  return { name: bookName, data: JSON.stringify(data, null, 2) };
+                  return { name: bookName, data: JSON.stringify(data, null, 2), format: 'json' };
               }
           }
           catch (e) {
@@ -21666,6 +22124,367 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               throw e;
           }
           return null;
+      }
+      /**
+       * Khôi phục trực tiếp thẻ nhân vật từ bản sao lưu vào SillyTavern.
+       * - Nếu thẻ đã có trong ST: Ghi đè hoàn hảo mọi trường (description, personality, scenario, lorebook, extensions...)
+       * - Nếu thẻ đã bị xóa / chưa có: Tự động import lại như một nhân vật mới vào ST.
+       */
+      async restoreCharacterBackup(entry) {
+          const ctx = SillyTavern.getContext();
+          try {
+              let cardObj = null;
+              const isPng = entry.format === 'png' || entry.data.startsWith('data:image/png');
+              if (isPng) {
+                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
+                  let bytes;
+                  if (typeof window !== 'undefined' && typeof window.atob === 'function') {
+                      const bin = window.atob(b64);
+                      bytes = new Uint8Array(bin.length);
+                      for (let i = 0; i < bin.length; i++)
+                          bytes[i] = bin.charCodeAt(i);
+                  }
+                  else if (typeof Buffer !== 'undefined') {
+                      bytes = new Uint8Array(Buffer.from(b64, 'base64'));
+                  }
+                  else {
+                      throw new Error('No base64 decoder available');
+                  }
+                  cardObj = PngChunkUtil.extractCardData(bytes);
+              }
+              else {
+                  cardObj = JSON.parse(entry.data);
+              }
+              if (!cardObj) {
+                  throw new Error('Không thể đọc cấu trúc thẻ từ dữ liệu backup');
+              }
+              const cardData = cardObj.data || cardObj;
+              const characters = ctx.characters || [];
+              const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar);
+              const backupName = cardData.name || entry.name;
+              // 1. Tìm kiếm xem nhân vật đã có trong ST hay chưa
+              let targetIndex = -1;
+              if (backupAvatar) {
+                  targetIndex = characters.findIndex((c) => c && c.avatar === backupAvatar);
+              }
+              if (targetIndex === -1 && backupName) {
+                  targetIndex = characters.findIndex((c) => c && c.name && c.name.toLowerCase() === backupName.toLowerCase());
+              }
+              if (targetIndex === -1 && ctx.characterId !== undefined && characters[ctx.characterId]) {
+                  const activeChar = characters[ctx.characterId];
+                  if (activeChar.name && backupName && activeChar.name.toLowerCase() === backupName.toLowerCase()) {
+                      targetIndex = ctx.characterId;
+                  }
+              }
+              // TRƯỜNG HỢP 1: Nhân vật đã tồn tại -> Ghi đè hoàn hảo lên thẻ đó
+              if (targetIndex !== -1) {
+                  const char = characters[targetIndex];
+                  if (isPng) {
+                      const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
+                      const bin = window.atob(b64);
+                      const bytes = new Uint8Array(bin.length);
+                      for (let i = 0; i < bin.length; i++)
+                          bytes[i] = bin.charCodeAt(i);
+                      const file = new File([bytes], char.avatar || `${backupName || 'character'}.png`, {
+                          type: 'image/png',
+                      });
+                      const formData = new FormData();
+                      formData.append('avatar', file);
+                      formData.append('file_type', 'png');
+                      if (ctx.name1) {
+                          formData.append('user_name', ctx.name1);
+                      }
+                      const preservedName = (char.avatar || backupName || '').replace(/\.png$/i, '');
+                      if (preservedName) {
+                          formData.append('preserved_name', preservedName);
+                      }
+                      const headers = (ctx.getRequestHeaders ? ctx.getRequestHeaders({ omitContentType: true }) : {}) || {};
+                      delete headers['Content-Type'];
+                      const res = await fetch('/api/characters/import', {
+                          method: 'POST',
+                          headers,
+                          body: formData,
+                      });
+                      if (!res.ok) {
+                          const errText = await res.text().catch(() => res.statusText);
+                          throw new Error(`HTTP ${res.status}: ${errText}`);
+                      }
+                      const resData = await res.json().catch(() => ({}));
+                      if (resData && resData.file_name) {
+                          char.avatar = resData.file_name;
+                      }
+                  }
+                  else {
+                      const mergePayload = {
+                          avatar: char.avatar,
+                          avatar_url: char.avatar,
+                          ch_name: cardData.name ?? char.name,
+                          name: cardData.name ?? char.name,
+                          description: cardData.description ?? '',
+                          personality: cardData.personality ?? '',
+                          scenario: cardData.scenario ?? '',
+                          first_mes: cardData.first_mes ?? '',
+                          mes_example: cardData.mes_example ?? '',
+                          creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                          creatorcomment: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                          system_prompt: cardData.system_prompt ?? '',
+                          post_history_instructions: cardData.post_history_instructions ?? '',
+                          alternate_greetings: cardData.alternate_greetings ?? [],
+                          tags: cardData.tags ?? [],
+                          creator: cardData.creator ?? '',
+                          character_version: cardData.character_version ?? '',
+                          talkativeness: cardData.talkativeness ?? char.talkativeness ?? 0.5,
+                          fav: cardData.fav ?? char.fav ?? false,
+                          data: {
+                              ...cardData,
+                              name: cardData.name ?? char.name,
+                              description: cardData.description ?? '',
+                              personality: cardData.personality ?? '',
+                              scenario: cardData.scenario ?? '',
+                              first_mes: cardData.first_mes ?? '',
+                              mes_example: cardData.mes_example ?? '',
+                              creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                              system_prompt: cardData.system_prompt ?? '',
+                              post_history_instructions: cardData.post_history_instructions ?? '',
+                              alternate_greetings: cardData.alternate_greetings ?? [],
+                              tags: cardData.tags ?? [],
+                              creator: cardData.creator ?? '',
+                              character_version: cardData.character_version ?? '',
+                              talkativeness: cardData.talkativeness ?? char.talkativeness ?? 0.5,
+                              fav: cardData.fav ?? char.fav ?? false,
+                              extensions: cardData.extensions ?? char.data?.extensions ?? {},
+                              ...(cardData.character_book ? { character_book: cardData.character_book } : {}),
+                          },
+                          extensions: cardData.extensions ?? char.data?.extensions ?? {},
+                      };
+                      if (cardData.character_book) {
+                          mergePayload.character_book = cardData.character_book;
+                      }
+                      const res = await fetch('/api/characters/merge-attributes', {
+                          method: 'POST',
+                          headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                          body: JSON.stringify(mergePayload),
+                      });
+                      if (!res.ok) {
+                          throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                      }
+                  }
+                  // Tải lại dữ liệu mới nhất từ backend vào memory
+                  if (typeof window.getOneCharacter === 'function') {
+                      await window.getOneCharacter(char.avatar);
+                  }
+                  else if (typeof ctx.getOneCharacter === 'function') {
+                      await ctx.getOneCharacter(char.avatar);
+                  }
+                  // In-memory update
+                  if (!char.data)
+                      char.data = {};
+                  Object.assign(char.data, cardData);
+                  char.name = cardData.name ?? char.name;
+                  char.description = cardData.description ?? char.description;
+                  char.personality = cardData.personality ?? char.personality;
+                  char.scenario = cardData.scenario ?? char.scenario;
+                  char.first_mes = cardData.first_mes ?? char.first_mes;
+                  char.mes_example = cardData.mes_example ?? char.mes_example;
+                  char.creatorcomment = cardData.creator_notes ?? char.creatorcomment;
+                  if (cardData.talkativeness !== undefined)
+                      char.talkativeness = cardData.talkativeness;
+                  if (cardData.fav !== undefined)
+                      char.fav = cardData.fav;
+                  // Trigger ST events & UI updates
+                  const es = ctx.eventSource || window.eventSource;
+                  const et = ctx.eventTypes || ctx.event_types || window.event_types;
+                  if (es && et?.CHARACTER_EDITED) {
+                      es.emit(et.CHARACTER_EDITED, { detail: { id: targetIndex, character: char } });
+                      es.emit(et.CHARACTER_EDITED, { id: targetIndex, character: char });
+                  }
+                  if (es && et?.CHARACTERS_UPDATED) {
+                      es.emit(et.CHARACTERS_UPDATED);
+                  }
+                  // Cập nhật DOM nếu đang mở đúng nhân vật này
+                  if (targetIndex === ctx.characterId) {
+                      const domMap = {
+                          character_name_pole: 'name',
+                          description_textarea: 'description',
+                          personality_textarea: 'personality',
+                          scenario_pole: 'scenario',
+                          firstmessage_textarea: 'first_mes',
+                          mes_example_textarea: 'mes_example',
+                          system_prompt_textarea: 'system_prompt',
+                          post_history_instructions_textarea: 'post_history_instructions',
+                          creator_notes_textarea: 'creator_notes',
+                      };
+                      for (const [domId, key] of Object.entries(domMap)) {
+                          const el = document.getElementById(domId);
+                          if (el && cardData[key] !== undefined) {
+                              el.value =
+                                  typeof cardData[key] === 'string' ? cardData[key] : JSON.stringify(cardData[key]);
+                              el.dispatchEvent(new Event('input', { bubbles: true }));
+                          }
+                      }
+                      if (isPng) {
+                          const imgPreview = document.getElementById('avatar_load_preview');
+                          if (imgPreview && char.avatar) {
+                              imgPreview.src = `/characters/${encodeURIComponent(char.avatar)}?v=${Date.now()}`;
+                          }
+                      }
+                  }
+                  return {
+                      success: true,
+                      message: `Đã ghi đè hoàn hảo toàn bộ dữ liệu thẻ [${char.name}] trong SillyTavern!`,
+                  };
+              }
+              // TRƯỜNG HỢP 2: Thẻ không có trong ST (đã bị xóa) -> Import lại như 1 card mới
+              const rawName = (cardData.name || entry.name || '').trim();
+              const format = isPng ? 'png' : 'json';
+              const formData = new FormData();
+              if (isPng) {
+                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '').replace(/\s+/g, '');
+                  const bin = window.atob(b64);
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++)
+                      bytes[i] = bin.charCodeAt(i);
+                  const file = new File([bytes], `${rawName || 'character'}.png`, { type: 'image/png' });
+                  formData.append('avatar', file);
+              }
+              else {
+                  const file = new File([entry.data], `${rawName || 'character'}.json`, { type: 'application/json' });
+                  formData.append('avatar', file);
+              }
+              formData.append('file_type', format);
+              if (ctx.name1) {
+                  formData.append('user_name', ctx.name1);
+              }
+              // Bảo toàn nguyên vẹn tên thẻ chính gốc từ block name
+              if (rawName) {
+                  formData.append('preserved_name', rawName);
+              }
+              const headers = (ctx.getRequestHeaders ? ctx.getRequestHeaders({ omitContentType: true }) : {}) || {};
+              delete headers['Content-Type'];
+              const res = await fetch('/api/characters/import', {
+                  method: 'POST',
+                  headers,
+                  body: formData,
+              });
+              if (!res.ok) {
+                  const errText = await res.text().catch(() => res.statusText);
+                  throw new Error(`Import mới thất bại (HTTP ${res.status}): ${errText}`);
+              }
+              const resData = await res.json().catch(() => ({}));
+              if (resData.error || !resData.file_name) {
+                  const errDetail = typeof resData.error === 'string'
+                      ? resData.error
+                      : resData.error
+                          ? JSON.stringify(resData.error)
+                          : 'Máy chủ SillyTavern không trả về file_name hợp lệ.';
+                  throw new Error(`SillyTavern server từ chối import thẻ: ${errDetail}`);
+              }
+              // Đồng bộ danh sách nhân vật và chọn thẻ vừa khôi phục
+              if (typeof ctx.getCharacters === 'function')
+                  await ctx.getCharacters();
+              if (typeof window.getCharacters === 'function')
+                  await window.getCharacters();
+              if (typeof window.PrintCharacterList === 'function')
+                  window.PrintCharacterList();
+              if (typeof window.select_rm_info === 'function' && resData.file_name) {
+                  window.select_rm_info('char_import', resData.file_name);
+              }
+              const es = ctx.eventSource || window.eventSource;
+              const et = ctx.eventTypes || ctx.event_types || window.event_types;
+              if (es && et?.CHARACTERS_UPDATED) {
+                  es.emit(et.CHARACTERS_UPDATED);
+              }
+              return {
+                  success: true,
+                  message: `Thẻ [${rawName || 'Nhân vật'}] chưa có trong danh sách và đã được import lại thành một nhân vật mới vào SillyTavern!`,
+              };
+          }
+          catch (e) {
+              console.error('[KaizAgent] Lỗi khi khôi phục thẻ:', e);
+              throw e;
+          }
+      }
+      /**
+       * Khôi phục trực tiếp Worldbook/Lorebook từ bản sao lưu vào SillyTavern
+       */
+      async restoreWorldbookBackup(entry) {
+          const ctx = SillyTavern.getContext();
+          try {
+              const bookName = entry.name;
+              const bookData = JSON.parse(entry.data);
+              if (!bookData)
+                  throw new Error('Dữ liệu worldbook không hợp lệ.');
+              const ST_WorldInfo = await new Function('return import("/scripts/world-info.js")')().catch(() => null);
+              // 1. Lưu dữ liệu Worldbook vào SillyTavern (sử dụng saveWorldInfo trực tiếp từ module nếu có)
+              if (ST_WorldInfo && typeof ST_WorldInfo.saveWorldInfo === 'function') {
+                  await ST_WorldInfo.saveWorldInfo(bookName, bookData, true);
+              }
+              else if (typeof ctx.saveWorldInfo === 'function') {
+                  await ctx.saveWorldInfo(bookName, bookData);
+              }
+              else {
+                  const res = await fetch('/api/worldinfo/edit', {
+                      method: 'POST',
+                      headers: {
+                          ...(typeof ctx.getRequestHeaders === 'function' ? ctx.getRequestHeaders() : {}),
+                          'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({ name: bookName, data: bookData }),
+                  });
+                  if (!res.ok) {
+                      throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                  }
+              }
+              // 2. Cập nhật cache in-memory nếu ST_WorldInfo có worldInfoCache
+              if (ST_WorldInfo && ST_WorldInfo.worldInfoCache && typeof ST_WorldInfo.worldInfoCache.set === 'function') {
+                  ST_WorldInfo.worldInfoCache.set(bookName, bookData);
+              }
+              // 3. Cập nhật danh sách Worldbook cho SillyTavern (Xử lý triệt để trường hợp WB đã bị xóa hoặc tạo mới)
+              if (ST_WorldInfo && typeof ST_WorldInfo.updateWorldInfoList === 'function') {
+                  await ST_WorldInfo.updateWorldInfoList();
+              }
+              // 4. Đồng bộ và render lại World Info Editor UI duy nhất 1 lần (tránh double trigger gây dup render)
+              if (ST_WorldInfo && typeof ST_WorldInfo.reloadEditor === 'function') {
+                  ST_WorldInfo.reloadEditor(bookName, true);
+              }
+              else {
+                  const allBooks = ST_WorldInfo?.world_names || window.world_names || [];
+                  const bookIndex = allBooks.indexOf(bookName);
+                  const $ = window.$;
+                  if ($ && bookIndex >= 0) {
+                      $('#world_editor_select').val(bookIndex).trigger('change');
+                  }
+                  else if (ST_WorldInfo && typeof ST_WorldInfo.showWorldEditor === 'function') {
+                      await ST_WorldInfo.showWorldEditor(bookName);
+                  }
+              }
+              // 5. Cập nhật trạng thái nút World Info gắn với nhân vật hiện tại (nếu có)
+              if (ST_WorldInfo &&
+                  typeof ST_WorldInfo.setWorldInfoButtonClass === 'function' &&
+                  ctx.characterId !== undefined) {
+                  ST_WorldInfo.setWorldInfoButtonClass(ctx.characterId);
+              }
+              // 6. Emit các sự kiện SillyTavern để toàn bộ hệ thống & extension nhận biết
+              const es = ctx.eventSource || window.eventSource;
+              const et = ctx.eventTypes || ctx.event_types || window.event_types;
+              if (es && et) {
+                  // saveWorldInfo đã tự emit WORLDINFO_UPDATED bên trong _save, chỉ emit nếu dùng fallback
+                  if (!ST_WorldInfo?.saveWorldInfo && et.WORLDINFO_UPDATED) {
+                      es.emit(et.WORLDINFO_UPDATED, bookName, bookData);
+                  }
+                  if (et.WORLDINFO_SETTINGS_UPDATED) {
+                      es.emit(et.WORLDINFO_SETTINGS_UPDATED);
+                  }
+              }
+              return {
+                  success: true,
+                  message: `Đã khôi phục thành công Worldbook [${bookName}] vào SillyTavern!`,
+              };
+          }
+          catch (e) {
+              console.error('[KaizAgent] Restore Worldbook error:', e);
+              throw e;
+          }
       }
       /**
        * Lấy toàn bộ thông tin Lorebook (World Info) bao gồm Global và Character-bound
@@ -25619,8 +26438,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       modal = null;
       currentFilter = 'all';
       db;
-      constructor(db) {
+      adapter;
+      constructor(db, adapter) {
           this.db = db;
+          this.adapter = adapter || new SillyTavernAdapter();
       }
       show() {
           this.render();
@@ -25628,27 +26449,27 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
       render() {
           if ($$1('#kaiz-backup-modal').length === 0) {
               const html = `
-                <dialog id="kaiz-backup-modal" class="kaiz-modal-content" style="width: 600px; max-width: 90vw; padding: 0; background: transparent; border: none;">
+                <dialog id="kaiz-backup-modal" class="kaiz-modal-content" style="width: 650px; max-width: 90vw; padding: 0; background: transparent; border: none;">
                     <div style="background: var(--SmartThemeBlurTintColor); backdrop-filter: blur(10px); border: 1px solid var(--SmartThemeBorderColor); border-radius: 8px; padding: 20px; color: var(--SmartThemeBodyColor); box-shadow: 0 4px 15px rgba(0,0,0,0.5);">
                         <div class="kaiz-modal-header">
                             <h2 style="margin: 0; font-size: 1.2rem;"><i class="fa-solid fa-save"></i> Backup Manager</h2>
                             <div class="kaiz-modal-close" style="cursor: pointer; font-size: 1.2rem;"><i class="fa-solid fa-xmark"></i></div>
                         </div>
                         <div class="kaiz-backup-header">
-                            <h3 style="margin: 0; font-size: 1.2em;">Backup Manager</h3>
-                            <div id="kaiz-backup-storage-info" style="font-size: 0.85em; color: #aaa;">Calculating storage...</div>
+                            <h3 style="margin: 0; font-size: 1.2em;">Bản sao lưu hệ thống</h3>
+                            <div id="kaiz-backup-storage-info" style="font-size: 0.85em; color: #aaa;">Đang tính toán dung lượng...</div>
                         </div>
                         <div class="kaiz-backup-tabs">
-                            <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">All</div>
-                            <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Characters</div>
-                            <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Chats</div>
+                            <div class="kaiz-tab active" data-type="all" style="padding: 8px 12px; cursor: pointer;">Tất cả</div>
+                            <div class="kaiz-tab" data-type="character" style="padding: 8px 12px; cursor: pointer;">Nhân vật (Cards)</div>
+                            <div class="kaiz-tab" data-type="chat" style="padding: 8px 12px; cursor: pointer;">Đoạn chat</div>
                             <div class="kaiz-tab" data-type="worldbook" style="padding: 8px 12px; cursor: pointer;">Worldbooks</div>
                         </div>
-                        <div class="kaiz-backup-list" style="max-height: 400px; overflow-y: auto;">
+                        <div class="kaiz-backup-list" style="max-height: 420px; overflow-y: auto;">
                             <!-- Backup items will be rendered here -->
                         </div>
                         <div class="kaiz-modal-footer" style="margin-top: 15px; text-align: right;">
-                            <button id="kaiz-backup-close-btn" class="menu_button">Close</button>
+                            <button id="kaiz-backup-close-btn" class="menu_button">Đóng</button>
                         </div>
                     </div>
                 </dialog>
@@ -25687,19 +26508,28 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                         .kaiz-backup-item {
                             display: flex; justify-content: space-between; align-items: center;
                             padding: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);
-                            background: rgba(0,0,0,0.2); border-radius: 5px; margin-bottom: 8px;
-                            flex-wrap: wrap; gap: 10px;
+                            background: rgba(0,0,0,0.2); border-radius: 6px; margin-bottom: 8px;
+                            flex-wrap: wrap; gap: 10px; transition: background 0.2s;
                         }
                         .kaiz-backup-item:hover {
-                            background: rgba(255,255,255,0.05);
+                            background: rgba(255,255,255,0.06);
                         }
                         .kaiz-backup-info { flex: 1; min-width: 0; }
                         .kaiz-backup-title { 
-                            font-weight: bold; font-size: 1.1em; 
+                            font-weight: bold; font-size: 1.05em; 
                             word-break: break-word; overflow-wrap: anywhere;
+                            display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
                         }
                         .kaiz-backup-meta { font-size: 0.85em; opacity: 0.7; margin-top: 4px; }
-                        .kaiz-backup-actions { display: flex; gap: 8px; flex-shrink: 0; }
+                        .kaiz-backup-actions { display: flex; gap: 8px; flex-shrink: 0; align-items: center; }
+                        .kaiz-backup-badge-png {
+                            background: #27ae60; color: #ffffff; font-size: 0.7em; font-weight: bold;
+                            padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px;
+                        }
+                        .kaiz-backup-badge-json {
+                            background: #d35400; color: #ffffff; font-size: 0.7em; font-weight: bold;
+                            padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px;
+                        }
                     </style>
                 `);
               }
@@ -25732,16 +26562,23 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               this.currentFilter = target.attr('data-type');
               this.loadBackups();
           });
-          // Backup list actions
+          // Backup list actions: Download
           this.modal.on('click', '.kaiz-backup-download', (e) => {
               const id = $$1(e.currentTarget).attr('data-id');
               if (id)
                   this.downloadBackup(parseInt(id));
           });
+          // Backup list actions: Restore
+          this.modal.on('click', '.kaiz-backup-restore', (e) => {
+              const id = $$1(e.currentTarget).attr('data-id');
+              if (id)
+                  this.restoreBackup(parseInt(id));
+          });
+          // Backup list actions: Delete
           this.modal.on('click', '.kaiz-backup-delete', (e) => {
               const id = $$1(e.currentTarget).attr('data-id');
               if (id) {
-                  if (confirm('Are you sure you want to delete this backup?')) {
+                  if (confirm('Bạn có chắc chắn muốn xóa bản sao lưu này khỏi bộ nhớ không?')) {
                       this.deleteBackup(parseInt(id));
                   }
               }
@@ -25751,7 +26588,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (!this.modal)
               return;
           const listContainer = this.modal.find('.kaiz-backup-list');
-          listContainer.html('<div style="text-align: center; padding: 20px;">Loading...</div>');
+          listContainer.html('<div style="text-align: center; padding: 20px;">Đang tải danh sách bản sao lưu...</div>');
           try {
               const allBackups = await this.db.getBackups();
               let filtered = allBackups;
@@ -25759,7 +26596,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   filtered = allBackups.filter((b) => b.type === this.currentFilter);
               }
               if (filtered.length === 0) {
-                  listContainer.html('<div style="text-align: center; padding: 20px; color: #888;">No backups found.</div>');
+                  listContainer.html('<div style="text-align: center; padding: 20px; color: #888;">Chưa có bản sao lưu nào.</div>');
               }
               else {
                   let html = '';
@@ -25768,18 +26605,38 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       const sizeInBytes = new Blob([b.data]).size;
                       const sizeKb = (sizeInBytes / 1024).toFixed(1);
                       const icon = b.type === 'character' ? 'fa-user' : b.type === 'chat' ? 'fa-comments' : 'fa-book-atlas';
+                      const isCharacter = b.type === 'character';
+                      const isWorldbook = b.type === 'worldbook';
+                      const canRestore = isCharacter || isWorldbook;
+                      const isPng = b.format === 'png' || (typeof b.data === 'string' && b.data.startsWith('data:image/png'));
+                      let badgeHtml = '';
+                      if (isCharacter) {
+                          badgeHtml = isPng
+                              ? `<span class="kaiz-backup-badge-png">PNG</span>`
+                              : `<span class="kaiz-backup-badge-json">JSON</span>`;
+                      }
+                      // Avatar or Icon preview
+                      const visualPreview = isCharacter && (b.avatarUrl || isPng)
+                          ? `<img src="${b.avatarUrl || b.data}" alt="${this.escapeHtml(b.name)}" style="width: 44px; height: 44px; border-radius: 6px; object-fit: cover; border: 1px solid rgba(255,255,255,0.2); flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.3);" />`
+                          : `<div style="width: 44px; height: 44px; border-radius: 6px; background: rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; flex-shrink: 0;"><i class="fa-solid ${icon}" style="font-size: 1.3em; color: #888;"></i></div>`;
                       html += `
                         <div class="kaiz-backup-item">
-                            <div class="kaiz-backup-info" style="display: flex; align-items: center; gap: 10px;">
-                                <i class="fa-solid ${icon}" style="font-size: 1.2em; color: #888; flex-shrink: 0;"></i>
+                            <div class="kaiz-backup-info" style="display: flex; align-items: center; gap: 12px;">
+                                ${visualPreview}
                                 <div style="min-width: 0;">
-                                    <div class="kaiz-backup-title">${this.escapeHtml(b.name)}</div>
-                                    <div class="kaiz-backup-meta">${date} - ${sizeKb} KB</div>
+                                    <div class="kaiz-backup-title">
+                                        <span>${this.escapeHtml(b.name)}</span>
+                                        ${badgeHtml}
+                                    </div>
+                                    <div class="kaiz-backup-meta">${date} • ${sizeKb} KB</div>
                                 </div>
                             </div>
                             <div class="kaiz-backup-actions">
-                                <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Download"><i class="fa-solid fa-download"></i></button>
-                                <button class="kaiz-backup-delete kaiz-btn" data-id="${b.id}" style="padding: 5px 10px; background: #c0392b; border: none; color: white; cursor: pointer; border-radius: 3px;" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                                ${canRestore
+                        ? `<button class="kaiz-backup-restore kaiz-btn" data-id="${b.id}" style="padding: 6px 12px; background: #2980b9; border: none; color: white; cursor: pointer; border-radius: 4px; font-size: 0.85em;" title="Khôi phục vào SillyTavern"><i class="fa-solid fa-rotate-left"></i> Khôi phục</button>`
+                        : ''}
+                                <button class="kaiz-backup-download kaiz-btn" data-id="${b.id}" style="padding: 6px 10px; background: #2c3e50; border: none; color: white; cursor: pointer; border-radius: 4px;" title="Tải về máy"><i class="fa-solid fa-download"></i></button>
+                                <button class="kaiz-backup-delete kaiz-btn" data-id="${b.id}" style="padding: 6px 10px; background: #c0392b; border: none; color: white; cursor: pointer; border-radius: 4px;" title="Xóa"><i class="fa-solid fa-trash"></i></button>
                             </div>
                         </div>
                     `;
@@ -25791,15 +26648,15 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   const estimate = await navigator.storage.estimate();
                   const usedMb = ((estimate.usage || 0) / (1024 * 1024)).toFixed(2);
                   const quotaMb = ((estimate.quota || 0) / (1024 * 1024)).toFixed(2);
-                  this.modal.find('#kaiz-backup-storage-info').text(`Storage: ${usedMb}MB / ${quotaMb}MB used`);
+                  this.modal.find('#kaiz-backup-storage-info').text(`Bộ nhớ đã dùng: ${usedMb}MB / ${quotaMb}MB`);
               }
               else {
-                  this.modal.find('#kaiz-backup-storage-info').text('Storage info not available');
+                  this.modal.find('#kaiz-backup-storage-info').text('');
               }
           }
           catch (error) {
               console.error('[BackupModal] Error loading backups:', error);
-              listContainer.html('<div style="color: red; padding: 10px;">Error loading backups. Check console.</div>');
+              listContainer.html('<div style="color: red; padding: 10px;">Lỗi khi tải danh sách bản sao lưu. Vui lòng kiểm tra Console.</div>');
           }
       }
       async downloadBackup(id) {
@@ -25807,18 +26664,33 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const backups = await this.db.getBackups();
               const backup = backups.find((b) => b.id === id);
               if (!backup) {
-                  alert('Backup not found!');
+                  alert('Không tìm thấy bản sao lưu!');
                   return;
               }
-              // Create blob and download
-              const blob = new Blob([backup.data], { type: 'application/json' });
+              const safeName = backup.name.replace(/[/\\:*?"<>|]/g, '_');
+              const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
+              const isPng = backup.format === 'png' ||
+                  (typeof backup.data === 'string' && backup.data.startsWith('data:image/png'));
+              let blob;
+              let extension;
+              if (isPng) {
+                  // Convert Data URL to binary blob
+                  const b64 = backup.data.replace(/^data:image\/png;base64,/, '');
+                  const bin = window.atob(b64);
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++) {
+                      bytes[i] = bin.charCodeAt(i);
+                  }
+                  blob = new Blob([bytes], { type: 'image/png' });
+                  extension = 'png';
+              }
+              else {
+                  blob = new Blob([backup.data], { type: 'application/json' });
+                  extension = backup.type === 'chat' ? 'jsonl' : 'json';
+              }
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
-              // Format file name
-              const safeName = backup.name.replace(/[/\\:*?"<>|]/g, '_');
-              const dateStr = new Date(backup.timestamp).toISOString().split('T')[0];
-              const extension = backup.type === 'chat' ? 'jsonl' : 'json';
               a.download = `${safeName}_backup_${dateStr}.${extension}`;
               document.body.appendChild(a);
               a.click();
@@ -25827,7 +26699,50 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           catch (error) {
               console.error('[BackupModal] Error downloading backup:', error);
-              alert('Failed to download backup.');
+              alert('Lỗi khi tải bản sao lưu về máy.');
+          }
+      }
+      async restoreBackup(id) {
+          try {
+              const backups = await this.db.getBackups();
+              const backup = backups.find((b) => b.id === id);
+              if (!backup) {
+                  alert('Không tìm thấy bản sao lưu!');
+                  return;
+              }
+              if (backup.type === 'character') {
+                  const ctx = window.SillyTavern?.getContext ? window.SillyTavern.getContext() : null;
+                  const characters = ctx?.characters || [];
+                  const safeName = backup.name || 'Nhân vật';
+                  const existingChar = characters.find((c) => c && c.name && c.name.toLowerCase() === safeName.toLowerCase());
+                  let confirmMsg = '';
+                  if (existingChar) {
+                      confirmMsg = `Phát hiện thẻ [${existingChar.name}] đang có trong SillyTavern.\nBạn có chắc chắn muốn ghi đè hoàn hảo toàn bộ dữ liệu (tính cách, kịch bản, lời chào, worldbook, tags) từ bản sao lưu này lên thẻ đó không?`;
+                  }
+                  else {
+                      confirmMsg = `Thẻ [${safeName}] hiện không có trong danh sách SillyTavern (hoặc đã bị xóa).\nBản sao lưu sẽ được import lại thành một nhân vật mới hoàn chỉnh vào ST.\nBạn có muốn tiếp tục không?`;
+                  }
+                  if (!confirm(confirmMsg)) {
+                      return;
+                  }
+                  const res = await this.adapter.restoreCharacterBackup(backup);
+                  alert(`✅ ${res.message}`);
+              }
+              else if (backup.type === 'worldbook') {
+                  const confirmMsg = `Bạn có chắc chắn muốn khôi phục Worldbook [${backup.name}] vào SillyTavern không? Dữ liệu hiện tại của sách này (nếu có) sẽ được cập nhật.`;
+                  if (!confirm(confirmMsg)) {
+                      return;
+                  }
+                  const res = await this.adapter.restoreWorldbookBackup(backup);
+                  alert(`✅ ${res.message}`);
+              }
+              else {
+                  alert('Khôi phục trực tiếp hiện chỉ hỗ trợ Thẻ nhân vật và Worldbook. Với Chat, vui lòng tải file .jsonl về máy để import vào ST.');
+              }
+          }
+          catch (error) {
+              console.error('[BackupModal] Error restoring backup:', error);
+              alert(`❌ Không thể khôi phục bản sao lưu: ${error.message}`);
           }
       }
       async deleteBackup(id) {
@@ -25837,7 +26752,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           catch (error) {
               console.error('[BackupModal] Error deleting backup:', error);
-              alert('Failed to delete backup.');
+              alert('Lỗi khi xóa bản sao lưu.');
           }
       }
       escapeHtml(unsafe) {
@@ -31481,6 +32396,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           if (!this.attachedEvents) {
               this.setupLiveEventListeners();
           }
+          MvuManager.clearCache();
           await this.refresh();
       }
       close() {
@@ -31490,6 +32406,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
           }
           // Đặt lại chế độ tự động theo lượt mới nhất cho lần mở tiếp theo
           this.selectedFloorId = undefined;
+          MvuManager.clearCache();
       }
       async refresh(floorId) {
           const $ = jQuery;
@@ -31537,7 +32454,8 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   }, 300);
               };
               const handleChatChanged = () => {
-                  // Đổi chat hoặc đổi character -> đưa về chế độ Tự động (Mới nhất)
+                  // Đổi chat hoặc đổi character -> xóa sạch cache và đưa về chế độ Tự động (Mới nhất)
+                  MvuManager.clearCache();
                   this.selectedFloorId = undefined;
                   const modal = this.getModalElement();
                   if (modal && (modal.open || jQuery(modal).is(':visible'))) {

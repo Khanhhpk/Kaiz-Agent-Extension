@@ -105,6 +105,17 @@ export class MvuManager {
     private static cachedDataSource: 'mvu' | 'helper' | 'fallback' = 'fallback';
 
     /**
+     * Xóa sạch bộ nhớ đệm trạng thái MVU khi chuyển đổi nhân vật hoặc chat mới
+     */
+    public static clearCache(): void {
+        this.cachedStatData = null;
+        this.cachedWrapper = null;
+        this.cachedCurrentFloor = null;
+        this.cachedFloors = [];
+        this.cachedDataSource = 'fallback';
+    }
+
+    /**
      * Truy xuất ngữ cảnh toàn cục (hỗ trợ cả iframe và window cha)
      */
     public static getGlobalContext(): { win: any; th: any; mvu: any; stContext: any } {
@@ -350,17 +361,28 @@ export class MvuManager {
         const scripts = char.data?.extensions?.tavern_helper?.scripts;
         if (!scripts || typeof scripts !== 'object') return null;
 
+        let bestScript: { key: string; name: string; content: string; script: any } | null = null;
+        let bestScore = -1;
+
         for (const [key, script] of Object.entries(scripts)) {
             const s = script as any;
             const content = s?.content || '';
             const scriptName = s?.name || key;
+            let score = 0;
 
+            if (content.includes('registerMvuSchema')) score += 10;
+            if (/z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i.test(content)) score += 5;
             if (
-                content.includes('registerMvuSchema') ||
-                scriptName.toLowerCase().includes('zod') ||
-                scriptName.includes('Cấu trúc biến')
+                /(?:cấu\s*trúc|schema|zod|structure|variables?|state|trạng\s*thái|biến|结构|变量|状态)/i.test(
+                    scriptName,
+                )
             ) {
-                return {
+                score += 2;
+            }
+
+            if (score > bestScore && score > 0) {
+                bestScore = score;
+                bestScript = {
                     key,
                     name: scriptName,
                     content,
@@ -368,7 +390,7 @@ export class MvuManager {
                 };
             }
         }
-        return null;
+        return bestScript;
     }
 
     /**
@@ -435,7 +457,17 @@ export class MvuManager {
             raw.stat_data &&
             typeof raw.stat_data === 'object';
 
-        const statData = hasStatData ? raw.stat_data : raw;
+        let statData: any;
+        if (hasStatData) {
+            statData = raw.stat_data;
+        } else if (source === 'mvu') {
+            // SillyTavern-MVU plugin có thể trả trực tiếp statData mà không bọc stat_data
+            statData = raw;
+        } else {
+            // Nguồn TavernHelper hoặc ST chat memory: Nếu không có stat_data thì KHÔNG PHẢI biến MVU.
+            // Tuyệt đối không lấy raw làm statData để tránh bắt nhầm biến var (getvar, setvar) của Preset/Lorebook!
+            statData = null;
+        }
 
         return {
             wrapper: raw,
@@ -576,7 +608,6 @@ export class MvuManager {
      */
     public static getLiveVariables(subPath?: string, _messageId?: number): any {
         let data = this.cachedStatData;
-        let wrapper = this.cachedWrapper;
 
         // Nếu chưa có cache, lấy nhanh từ context hiện tại
         if (!data) {
@@ -600,8 +631,8 @@ export class MvuManager {
                 } catch {}
             }
             if (raw && typeof raw === 'object') {
-                wrapper = raw;
-                data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : raw;
+                // Chuẩn MVU: Trong TavernHelper, dữ liệu MVU chỉ nằm trong raw.stat_data
+                data = raw.stat_data && typeof raw.stat_data === 'object' ? raw.stat_data : mvu ? raw : null;
             }
         }
 
@@ -611,7 +642,7 @@ export class MvuManager {
             const parts = this.normalizePathParts(subPath);
             if (parts.length === 0) return data;
 
-            // Ưu tiên 1: Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
+            // Tìm trong cây statData (chuẩn MVU, hỗ trợ Case-Insensitive Matching)
             let curr = data;
             let found = true;
             for (const p of parts) {
@@ -633,31 +664,6 @@ export class MvuManager {
                 }
             }
             if (found) return curr;
-
-            // Ưu tiên 2: Fallback tìm trong root wrapper (phòng trường hợp biến root)
-            if (wrapper && typeof wrapper === 'object') {
-                let rootCurr = wrapper;
-                let rootFound = true;
-                for (const p of parts) {
-                    if (rootCurr && typeof rootCurr === 'object') {
-                        if (p in rootCurr) {
-                            rootCurr = rootCurr[p];
-                        } else {
-                            const matchKey = Object.keys(rootCurr).find((k) => k.toLowerCase() === p.toLowerCase());
-                            if (matchKey && matchKey in rootCurr) {
-                                rootCurr = rootCurr[matchKey];
-                            } else {
-                                rootFound = false;
-                                break;
-                            }
-                        }
-                    } else {
-                        rootFound = false;
-                        break;
-                    }
-                }
-                if (rootFound) return rootCurr;
-            }
 
             return undefined;
         }
@@ -788,11 +794,10 @@ export class MvuManager {
                         typeof structuredClone === 'function'
                             ? structuredClone(floor.wrapper)
                             : JSON.parse(JSON.stringify(floor.wrapper));
-                    if (clone.stat_data && typeof clone.stat_data === 'object') {
-                        setDeep(clone.stat_data, cleanParts, parsedValue);
-                    } else {
-                        setDeep(clone, cleanParts, parsedValue);
+                    if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                        clone.stat_data = {};
                     }
+                    setDeep(clone.stat_data, cleanParts, parsedValue);
                     await mvu.replaceMvuData(clone, { type: 'message', message_id: targetMessageId });
                     updated = true;
                 }
@@ -810,11 +815,10 @@ export class MvuManager {
                             typeof structuredClone === 'function'
                                 ? structuredClone(existing || {})
                                 : JSON.parse(JSON.stringify(existing || {}));
-                        if (clone.stat_data && typeof clone.stat_data === 'object') {
-                            setDeep(clone.stat_data, cleanParts, parsedValue);
-                        } else {
-                            setDeep(clone, cleanParts, parsedValue);
+                        if (!clone.stat_data || typeof clone.stat_data !== 'object') {
+                            clone.stat_data = {};
                         }
+                        setDeep(clone.stat_data, cleanParts, parsedValue);
                         return clone;
                     },
                     { type: 'message', message_id: targetMessageId },
@@ -1026,8 +1030,8 @@ export class MvuManager {
         }
 
         return (
-            content.includes('{{format_message_variable::') ||
-            content.includes('{{get_message_variable::') ||
+            (content.includes('{{format_message_variable::') && content.includes('stat_data')) ||
+            (content.includes('{{get_message_variable::') && content.includes('stat_data')) ||
             lower.includes('<status_current_variable>') ||
             lower.includes('<status_current_variables>') ||
             lower.includes('<biến_trạng_thái') ||
@@ -1076,7 +1080,7 @@ export class MvuManager {
 
         if (
             content.includes('<%') &&
-            (content.includes('getvar(') || content.includes('setvar(')) &&
+            /\b(?:getvar|setvar)\s*\(\s*['"`]stat_data\b/i.test(content) &&
             isPhaseController
         ) {
             return true;
@@ -1288,8 +1292,18 @@ export class MvuManager {
             }
         }
 
-        // 3. Nếu vẫn chưa tìm thấy, tìm trong global / active lorebook của SillyTavern
-        if (!result.initvarEntry || !result.updateRulesEntry) {
+        // 3. Nếu vẫn chưa tìm thấy, chỉ tìm trong global / active lorebook nếu card thực sự có dấu hiệu MVU
+        // (Tránh trường hợp card thông thường vô tình bắt nhầm lorebook MVU đang kích hoạt ở menu World Info)
+        const hasAnyMvuSign =
+            this.getZodScript(char) !== null ||
+            (Array.isArray(embeddedEntries) &&
+                embeddedEntries.some((e: any) => {
+                    const comment = (e?.comment || e?.name || '').toLowerCase();
+                    return comment.includes('mvu') || comment.includes('initvar') || comment.includes('init_var');
+                })) ||
+            Boolean(char?.data?.extensions?.world || char?.world);
+
+        if (hasAnyMvuSign && (!result.initvarEntry || !result.updateRulesEntry)) {
             try {
                 const worldInfo = (window as any).world_info;
                 const entries = Array.isArray(worldInfo?.entries)
@@ -1647,7 +1661,7 @@ export class MvuManager {
             const hBody = hMatch[2] || hMatch[4] || '';
             if (hBody.includes('z.record')) {
                 helpers[hName] = { type: 'record' };
-            } else if (hBody.includes('z.object')) {
+            } else if (hBody.includes('z.object') || hBody.includes('z.looseObject')) {
                 helpers[hName] = { type: 'object' };
             } else if (hBody.includes('z.array')) {
                 helpers[hName] = { type: 'array' };
@@ -1661,12 +1675,50 @@ export class MvuManager {
         }
 
         // 2. Quét các Zod Object con độc lập khai báo trước Schema (TaiSan, NPC, DiChung, VatPham...)
+        // Tự động xác định tên Schema chính theo chuẩn MVU (qua registerMvuSchema hoặc tên Schema mặc định)
+        let mainSchemaName = 'Schema';
+        const regMatch = code.match(/(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*([A-Za-z0-9_$]+)\s*\)/i);
+        if (regMatch) {
+            mainSchemaName = regMatch[1];
+        }
+
+        // Tự động phân giải chuỗi alias nếu biến được gán lại (ví dụ: export const Schema = TargetSchema hoặc z.preprocess(..., TargetSchema))
+        for (let hop = 0; hop < 5; hop++) {
+            const directRegex = new RegExp(
+                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*(?!z\\s*\\.)([A-Za-z0-9_$]+)(?:\\s*\\.[A-Za-z0-9_$]+(?:\\([^)]*\\))?)*(?:\\s*;|\\s*\\n|$)`,
+                'i',
+            );
+            const directMatch = code.match(directRegex);
+            if (
+                directMatch &&
+                directMatch[1] &&
+                directMatch[1] !== mainSchemaName &&
+                directMatch[1].toLowerCase() !== 'z'
+            ) {
+                mainSchemaName = directMatch[1];
+                continue;
+            }
+
+            const preprocessRegex = new RegExp(
+                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)preprocess\\s*\\([\\s\\S]*?,\\s*([A-Za-z0-9_$]+)`,
+                'i',
+            );
+            const prepMatch = code.match(preprocessRegex);
+            if (prepMatch && prepMatch[1] && prepMatch[1] !== mainSchemaName && prepMatch[1].toLowerCase() !== 'z') {
+                mainSchemaName = prepMatch[1];
+                continue;
+            }
+
+            break;
+        }
+
         const knownSubSchemas: Record<string, MvuVariableDescriptor[]> = {};
-        const subSchemaRegex = /const\s+([A-Za-z0-9_]+)\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/g;
+        const subSchemaRegex =
+            /(?:export\s+)?(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/g;
         let sMatch: RegExpExecArray | null;
         while ((sMatch = subSchemaRegex.exec(code)) !== null) {
             const sName = sMatch[1];
-            if (sName.toLowerCase() === 'schema') continue;
+            if (sName.toLowerCase() === mainSchemaName.toLowerCase() || sName.toLowerCase() === 'schema') continue;
             const braceIdx = sMatch.index + sMatch[0].length - 1;
             const inner = this.extractMatchingBraceContent(code, braceIdx);
             if (inner) {
@@ -1675,10 +1727,23 @@ export class MvuManager {
         }
 
         // 3. Tìm Schema chính
-        const match =
-            code.match(/(?:export\s+)?const\s+Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-            code.match(/Schema\s*=\s*z(?:\s*\.\s*)object\s*\(\s*\{/i) ||
-            code.match(/z(?:\s*\.\s*)object\s*\(\s*\{/i);
+        let match: RegExpMatchArray | null = null;
+        if (mainSchemaName) {
+            const targetRegex = new RegExp(
+                `(?:export\\s+)?(?:const|let|var)\\s+${mainSchemaName}\\s*=\\s*z(?:\\s*\\.\\s*)(?:object|looseObject|strictObject)\\s*\\(\\s*\\{`,
+                'i',
+            );
+            match = code.match(targetRegex);
+        }
+        if (!match) {
+            match =
+                code.match(
+                    /(?:export\s+)?(?:const|let|var)\s+\b[A-Za-z0-9_$]*Schema\b\s*=\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i,
+                ) ||
+                code.match(
+                    /(?:window\.)?(?:tavern_helper\.)?registerMvuSchema\s*\(\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/i,
+                );
+        }
         if (!match || match.index === undefined) return [];
 
         const startIdx = match.index + match[0].length - 1; // vị trí ký tự '{'
@@ -1850,13 +1915,14 @@ export class MvuManager {
             let max: number | undefined;
             let defaultValue: any;
 
-            // 1. Kiểm tra outermost z.record hoặc z.object({ ... })
+            // 1. Kiểm tra outermost z.record, z.array hoặc z.object/z.looseObject/z.strictObject({ ... })
             const isRecord = /^\s*z(?:\s*\.\s*)record\s*\(/.test(expr);
-            const isObject = /^\s*z(?:\s*\.\s*)object\s*\(/.test(expr);
+            const isArray = /^\s*z(?:\s*\.\s*)array\s*\(/.test(expr);
+            const isObject = /^\s*z(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(/.test(expr);
 
             if (isRecord) {
                 type = 'record';
-                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
                 if (objMatch && objMatch.index !== undefined) {
                     const openIdx = expr.indexOf('{', objMatch.index);
                     if (openIdx !== -1) {
@@ -1866,9 +1932,21 @@ export class MvuManager {
                         }
                     }
                 }
-            } else if (isObject || /\bz(?:\s*\.\s*)object\s*\(\s*\{/.test(expr)) {
+            } else if (isArray) {
+                type = 'array';
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
+                if (objMatch && objMatch.index !== undefined) {
+                    const openIdx = expr.indexOf('{', objMatch.index);
+                    if (openIdx !== -1) {
+                        const inner = this.extractMatchingBraceContent(expr, openIdx);
+                        if (inner) {
+                            recordTemplate = this.parseZodObjectContent(inner, currentPath, knownSubSchemas, helpers);
+                        }
+                    }
+                }
+            } else if (isObject || /\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/.test(expr)) {
                 type = 'object';
-                const objMatch = expr.match(/\bz(?:\s*\.\s*)object\s*\(\s*\{/);
+                const objMatch = expr.match(/\bz(?:\s*\.\s*)(?:object|looseObject|strictObject)\s*\(\s*\{/);
                 if (objMatch && objMatch.index !== undefined) {
                     const openIdx = expr.indexOf('{', objMatch.index);
                     if (openIdx !== -1) {
@@ -1994,7 +2072,7 @@ export class MvuManager {
 
             if (defaultValue === undefined) {
                 const prefaultMatch = expr.match(
-                    /\.prefault\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/,
+                    /\.(?:prefault|default)\s*\(\s*(['"][^'"]*['"]|-?\d+(?:\.\d+)?|true|false|\{\}|\[\])\s*\)/,
                 );
                 if (prefaultMatch) {
                     try {
@@ -2307,7 +2385,7 @@ export class MvuManager {
         if (parsedSchema.length === 0 && initvarParsed) {
             parsedSchema = this.generateSchemaFromData(initvarParsed);
         }
-        if (liveVars) {
+        if (isMvu && liveVars) {
             if (parsedSchema.length === 0) {
                 parsedSchema = this.generateSchemaFromData(liveVars);
             }
@@ -2337,8 +2415,8 @@ export class MvuManager {
                         checkLeaves(desc.children);
                         continue;
                     }
-                    if (desc.type === 'record') {
-                        // Record là danh sách thực thể động (như Túi_đồ, Quan_hệ), không yêu cầu instance mẫu trong InitVar
+                    if (desc.type === 'record' || desc.type === 'array') {
+                        // Record và Array là danh sách thực thể động (như Túi_đồ, Danh_hiệu), không yêu cầu instance mẫu trong InitVar
                         continue;
                     }
                     // Theo chuẩn Zod 4: Các trường có .prefault() tự động nạp fallback an toàn tại runtime

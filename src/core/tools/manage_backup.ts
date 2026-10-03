@@ -21,6 +21,12 @@ export const manageBackupTool: ITool = {
                     description:
                         'Tên đối tượng cần sao lưu (bắt buộc nếu target_type là worldbook, đối với character và chat sẽ tự động lấy đối tượng hiện tại).',
                 },
+                format: {
+                    type: 'string',
+                    enum: ['png', 'json'],
+                    description:
+                        'Định dạng sao lưu cho thẻ nhân vật. Mặc định là "png" (ưu tiên khuyên dùng để lưu trữ kèm toàn bộ ảnh avatar và metadata chuẩn Tavern V2/V3). Nếu chọn "json" thì chỉ lưu cấu trúc dữ liệu text.',
+                },
             },
             required: ['target_type'],
         },
@@ -37,8 +43,9 @@ export const manageBackupTool: ITool = {
         try {
             const type = args.target_type as 'character' | 'chat' | 'worldbook';
             const name = args.target_name;
+            const format = (args.format as 'png' | 'json') || (type === 'character' ? 'png' : 'json');
 
-            const exportResult = await context.adapter.exportBackupData(type, name);
+            const exportResult = await context.adapter.exportBackupData(type, name, format);
             if (!exportResult) {
                 return {
                     isError: true,
@@ -47,10 +54,18 @@ export const manageBackupTool: ITool = {
             }
 
             // Lưu vào IDB
-            const backupId = await context.stateManager.db.addBackup(type, exportResult.name, exportResult.data);
+            const backupId = await context.stateManager.db.addBackup(
+                type,
+                exportResult.name,
+                exportResult.data,
+                exportResult.format,
+                exportResult.avatarUrl,
+            );
+
+            const formatLabel = exportResult.format === 'png' ? 'PNG (kèm ảnh avatar)' : 'JSON';
 
             return {
-                content: `✅ Đã tạo backup thành công cho [${type}: ${exportResult.name}] với ID=${backupId}. Người dùng có thể tải về từ Backup Manager.`,
+                content: `✅ Đã tạo backup thành công cho [${type}: ${exportResult.name}] định dạng [${formatLabel}] với ID=${backupId}. Người dùng có thể xem, tải về hoặc khôi phục từ Backup Manager.`,
             };
         } catch (e: any) {
             return {

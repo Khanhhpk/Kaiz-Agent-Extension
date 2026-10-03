@@ -38,6 +38,8 @@ export interface BackupEntry {
     type: 'character' | 'chat' | 'worldbook';
     name: string;
     data: string;
+    format?: 'png' | 'json';
+    avatarUrl?: string;
     timestamp: number;
 }
 
@@ -668,12 +670,18 @@ export class KaizDB {
 
     // --- BACKUPS ---
 
-    public async addBackup(type: 'character' | 'chat' | 'worldbook', name: string, data: string): Promise<number> {
+    public async addBackup(
+        type: 'character' | 'chat' | 'worldbook',
+        name: string,
+        data: string,
+        format?: 'png' | 'json',
+        avatarUrl?: string,
+    ): Promise<number> {
         return new Promise((resolve, reject) => {
             if (!this.db) return reject(new Error('DB not initialized'));
             const transaction = this.db.transaction(['backups'], 'readwrite');
             const store = transaction.objectStore('backups');
-            const entry: BackupEntry = { type, name, data, timestamp: Date.now() };
+            const entry: BackupEntry = { type, name, data, format, avatarUrl, timestamp: Date.now() };
 
             const request = store.add(entry);
             request.onsuccess = () => resolve(request.result as number);
