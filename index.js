@@ -22101,10 +22101,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }
               const cardData = cardObj.data || cardObj;
               const characters = ctx.characters || [];
-              const rawAvatar = entry.avatarUrl && !entry.avatarUrl.startsWith('data:') && !entry.avatarUrl.startsWith('http')
-                  ? entry.avatarUrl.replace(/^\/characters\//, '').split('?')[0]
-                  : undefined;
-              const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar) || rawAvatar;
+              const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar);
               const backupName = cardData.name || entry.name;
               // 1. Tìm kiếm xem nhân vật đã có trong ST hay chưa
               let targetIndex = -1;
@@ -22219,8 +22216,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               if (ctx.name1) {
                   formData.append('user_name', ctx.name1);
               }
-              // Bảo toàn nguyên vẹn tên thẻ chính gốc, không giới hạn độ dài nhân tạo, chỉ loại trừ Data URL
-              if (rawName && !rawName.startsWith('data:')) {
+              // Bảo toàn nguyên vẹn tên thẻ chính gốc từ block name
+              if (rawName) {
                   formData.append('preserved_name', rawName);
               }
               const headers = (ctx.getRequestHeaders ? ctx.getRequestHeaders({ omitContentType: true }) : {}) || {};
