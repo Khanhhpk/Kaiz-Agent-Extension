@@ -22067,13 +22067,16 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           return null;
       }
       /**
-       * Khôi phục trực tiếp thẻ nhân vật từ bản sao lưu vào SillyTavern
+       * Khôi phục trực tiếp thẻ nhân vật từ bản sao lưu vào SillyTavern.
+       * - Nếu thẻ đã có trong ST: Ghi đè hoàn hảo mọi trường (description, personality, scenario, lorebook, extensions...)
+       * - Nếu thẻ đã bị xóa / chưa có: Tự động import lại như một nhân vật mới vào ST.
        */
       async restoreCharacterBackup(entry) {
           const ctx = SillyTavern.getContext();
           try {
               let cardObj = null;
-              if (entry.format === 'png' || entry.data.startsWith('data:image/png')) {
+              const isPng = entry.format === 'png' || entry.data.startsWith('data:image/png');
+              if (isPng) {
                   const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
                   let bytes;
                   if (typeof window !== 'undefined' && typeof window.atob === 'function') {
@@ -22097,80 +22100,143 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   throw new Error('Không thể đọc cấu trúc thẻ từ dữ liệu backup');
               }
               const cardData = cardObj.data || cardObj;
-              const char = ctx.characters?.[ctx.characterId];
-              if (!char) {
-                  throw new Error('Không tìm thấy nhân vật đang kích hoạt trong SillyTavern');
+              const characters = ctx.characters || [];
+              const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar);
+              const backupName = cardData.name || entry.name;
+              // 1. Tìm kiếm xem nhân vật đã có trong ST hay chưa
+              let targetIndex = -1;
+              if (backupAvatar) {
+                  targetIndex = characters.findIndex((c) => c && c.avatar === backupAvatar);
               }
-              const mergePayload = {
-                  avatar_url: char.avatar,
-                  name: cardData.name ?? char.name,
-                  description: cardData.description ?? '',
-                  personality: cardData.personality ?? '',
-                  scenario: cardData.scenario ?? '',
-                  first_mes: cardData.first_mes ?? '',
-                  mes_example: cardData.mes_example ?? '',
-                  creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
-                  system_prompt: cardData.system_prompt ?? '',
-                  post_history_instructions: cardData.post_history_instructions ?? '',
-                  alternate_greetings: cardData.alternate_greetings ?? [],
-                  tags: cardData.tags ?? [],
-                  creator: cardData.creator ?? '',
-                  character_version: cardData.character_version ?? '',
-                  extensions: cardData.extensions ?? {},
-              };
-              if (cardData.character_book) {
-                  mergePayload.character_book = cardData.character_book;
+              if (targetIndex === -1 && backupName) {
+                  targetIndex = characters.findIndex((c) => c && c.name && c.name.toLowerCase() === backupName.toLowerCase());
               }
-              const res = await fetch('/api/characters/merge-attributes', {
+              if (targetIndex === -1 && ctx.characterId !== undefined && characters[ctx.characterId]) {
+                  const activeChar = characters[ctx.characterId];
+                  if (activeChar.name && backupName && activeChar.name.toLowerCase() === backupName.toLowerCase()) {
+                      targetIndex = ctx.characterId;
+                  }
+              }
+              // TRƯỜNG HỢP 1: Nhân vật đã tồn tại -> Ghi đè hoàn hảo lên thẻ đó
+              if (targetIndex !== -1) {
+                  const char = characters[targetIndex];
+                  const mergePayload = {
+                      avatar_url: char.avatar,
+                      name: cardData.name ?? char.name,
+                      description: cardData.description ?? '',
+                      personality: cardData.personality ?? '',
+                      scenario: cardData.scenario ?? '',
+                      first_mes: cardData.first_mes ?? '',
+                      mes_example: cardData.mes_example ?? '',
+                      creator_notes: cardData.creator_notes ?? cardData.creatorcomment ?? '',
+                      system_prompt: cardData.system_prompt ?? '',
+                      post_history_instructions: cardData.post_history_instructions ?? '',
+                      alternate_greetings: cardData.alternate_greetings ?? [],
+                      tags: cardData.tags ?? [],
+                      creator: cardData.creator ?? '',
+                      character_version: cardData.character_version ?? '',
+                      extensions: cardData.extensions ?? {},
+                  };
+                  if (cardData.character_book) {
+                      mergePayload.character_book = cardData.character_book;
+                  }
+                  const res = await fetch('/api/characters/merge-attributes', {
+                      method: 'POST',
+                      headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
+                      body: JSON.stringify(mergePayload),
+                  });
+                  if (!res.ok) {
+                      throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                  }
+                  // In-memory update
+                  if (!char.data)
+                      char.data = {};
+                  Object.assign(char.data, cardData);
+                  char.name = cardData.name ?? char.name;
+                  char.description = cardData.description ?? char.description;
+                  char.personality = cardData.personality ?? char.personality;
+                  char.scenario = cardData.scenario ?? char.scenario;
+                  char.first_mes = cardData.first_mes ?? char.first_mes;
+                  char.mes_example = cardData.mes_example ?? char.mes_example;
+                  char.creatorcomment = cardData.creator_notes ?? char.creatorcomment;
+                  // Trigger ST events & UI updates
+                  const es = ctx.eventSource || window.eventSource;
+                  const et = ctx.event_types || window.event_types;
+                  if (es && et?.CHARACTER_EDITED) {
+                      es.emit(et.CHARACTER_EDITED, { detail: { id: targetIndex, character: char } });
+                      es.emit(et.CHARACTER_EDITED, { id: targetIndex, character: char });
+                  }
+                  if (es && et?.CHARACTERS_UPDATED) {
+                      es.emit(et.CHARACTERS_UPDATED);
+                  }
+                  // Cập nhật DOM nếu đang mở đúng nhân vật này
+                  if (targetIndex === ctx.characterId) {
+                      const domMap = {
+                          description: 'description_textarea',
+                          personality: 'personality_textarea',
+                          scenario: 'scenario_pole',
+                          first_mes: 'firstmessage_textarea',
+                          mes_example: 'mes_example_textarea',
+                          system_prompt: 'system_prompt_textarea',
+                          post_history_instructions: 'post_history_instructions_textarea',
+                          creator_notes: 'creator_notes_textarea',
+                      };
+                      for (const [key, domId] of Object.entries(domMap)) {
+                          const el = document.getElementById(domId);
+                          if (el && cardData[key] !== undefined) {
+                              el.value =
+                                  typeof cardData[key] === 'string' ? cardData[key] : JSON.stringify(cardData[key]);
+                              el.dispatchEvent(new Event('input', { bubbles: true }));
+                          }
+                      }
+                  }
+                  return {
+                      success: true,
+                      message: `Đã ghi đè hoàn hảo toàn bộ dữ liệu thẻ [${char.name}] trong SillyTavern!`,
+                  };
+              }
+              // TRƯỜNG HỢP 2: Thẻ không có trong ST (đã bị xóa) -> Import lại như 1 card mới
+              const safeName = (cardData.name || entry.name || 'Restored_Character').replace(/[/\\:*?"<>|]/g, '_');
+              const formData = new FormData();
+              if (isPng) {
+                  const b64 = entry.data.replace(/^data:image\/png;base64,/, '');
+                  const bin = window.atob(b64);
+                  const bytes = new Uint8Array(bin.length);
+                  for (let i = 0; i < bin.length; i++)
+                      bytes[i] = bin.charCodeAt(i);
+                  const blob = new Blob([bytes], { type: 'image/png' });
+                  formData.append('avatar', blob, `${safeName}.png`);
+              }
+              else {
+                  const blob = new Blob([entry.data], { type: 'application/json' });
+                  formData.append('avatar', blob, `${safeName}.json`);
+              }
+              const headers = ctx.getRequestHeaders();
+              delete headers['Content-Type'];
+              const res = await fetch('/api/characters/import', {
                   method: 'POST',
-                  headers: { ...ctx.getRequestHeaders(), 'Content-Type': 'application/json' },
-                  body: JSON.stringify(mergePayload),
+                  headers,
+                  body: formData,
               });
               if (!res.ok) {
-                  throw new Error(`HTTP ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+                  const errText = await res.text().catch(() => res.statusText);
+                  throw new Error(`Import mới thất bại (HTTP ${res.status}): ${errText}`);
               }
-              // In-memory update
-              if (!char.data)
-                  char.data = {};
-              Object.assign(char.data, cardData);
-              char.name = cardData.name ?? char.name;
-              char.description = cardData.description ?? char.description;
-              char.personality = cardData.personality ?? char.personality;
-              char.scenario = cardData.scenario ?? char.scenario;
-              char.first_mes = cardData.first_mes ?? char.first_mes;
-              char.mes_example = cardData.mes_example ?? char.mes_example;
-              char.creatorcomment = cardData.creator_notes ?? char.creatorcomment;
-              // Trigger ST events & UI updates
+              // Đồng bộ danh sách nhân vật
+              if (typeof ctx.getCharacters === 'function')
+                  await ctx.getCharacters();
+              if (typeof window.getCharacters === 'function')
+                  await window.getCharacters();
+              if (typeof window.PrintCharacterList === 'function')
+                  window.PrintCharacterList();
               const es = ctx.eventSource || window.eventSource;
               const et = ctx.event_types || window.event_types;
-              if (es && et?.CHARACTER_EDITED) {
-                  es.emit(et.CHARACTER_EDITED, { detail: { id: ctx.characterId, character: char } });
-                  es.emit(et.CHARACTER_EDITED, { id: ctx.characterId, character: char });
-              }
               if (es && et?.CHARACTERS_UPDATED) {
                   es.emit(et.CHARACTERS_UPDATED);
               }
-              // Update DOM inputs if visible
-              const domMap = {
-                  description: 'description_textarea',
-                  personality: 'personality_textarea',
-                  scenario: 'scenario_pole',
-                  first_mes: 'firstmessage_textarea',
-                  mes_example: 'mes_example_textarea',
-                  system_prompt: 'system_prompt_textarea',
-                  post_history_instructions: 'post_history_instructions_textarea',
-                  creator_notes: 'creator_notes_textarea',
-              };
-              for (const [key, domId] of Object.entries(domMap)) {
-                  const el = document.getElementById(domId);
-                  if (el && cardData[key] !== undefined) {
-                      el.value = typeof cardData[key] === 'string' ? cardData[key] : JSON.stringify(cardData[key]);
-                      el.dispatchEvent(new Event('input', { bubbles: true }));
-                  }
-              }
               return {
                   success: true,
-                  message: `Đã khôi phục thành công thẻ nhân vật [${char.name}] từ bản sao lưu!`,
+                  message: `Thẻ [${safeName}] chưa có trong danh sách và đã được import lại thành một nhân vật mới vào SillyTavern!`,
               };
           }
           catch (e) {
@@ -26400,7 +26466,18 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   alert('Không tìm thấy bản sao lưu!');
                   return;
               }
-              if (!confirm(`Bạn có chắc chắn muốn khôi phục thẻ nhân vật [${backup.name}] từ bản sao lưu này vào SillyTavern không?\nThao tác này sẽ cập nhật các trường thông tin của nhân vật hiện tại.`)) {
+              const ctx = window.SillyTavern?.getContext ? window.SillyTavern.getContext() : null;
+              const characters = ctx?.characters || [];
+              const safeName = backup.name || 'Nhân vật';
+              const existingChar = characters.find((c) => c && c.name && c.name.toLowerCase() === safeName.toLowerCase());
+              let confirmMsg = '';
+              if (existingChar) {
+                  confirmMsg = `Phát hiện thẻ [${existingChar.name}] đang có trong SillyTavern.\nBạn có chắc chắn muốn ghi đè hoàn hảo toàn bộ dữ liệu (tính cách, kịch bản, lời chào, worldbook, tags) từ bản sao lưu này lên thẻ đó không?`;
+              }
+              else {
+                  confirmMsg = `Thẻ [${safeName}] hiện không có trong danh sách SillyTavern (hoặc đã bị xóa).\nBản sao lưu sẽ được import lại thành một nhân vật mới hoàn chỉnh vào ST.\nBạn có muốn tiếp tục không?`;
+              }
+              if (!confirm(confirmMsg)) {
                   return;
               }
               const res = await this.adapter.restoreCharacterBackup(backup);

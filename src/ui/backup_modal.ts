@@ -308,11 +308,21 @@ export class BackupModal {
                 return;
             }
 
-            if (
-                !confirm(
-                    `Bạn có chắc chắn muốn khôi phục thẻ nhân vật [${backup.name}] từ bản sao lưu này vào SillyTavern không?\nThao tác này sẽ cập nhật các trường thông tin của nhân vật hiện tại.`,
-                )
-            ) {
+            const ctx = (window as any).SillyTavern?.getContext ? (window as any).SillyTavern.getContext() : null;
+            const characters = ctx?.characters || [];
+            const safeName = backup.name || 'Nhân vật';
+            const existingChar = characters.find(
+                (c: any) => c && c.name && c.name.toLowerCase() === safeName.toLowerCase(),
+            );
+
+            let confirmMsg = '';
+            if (existingChar) {
+                confirmMsg = `Phát hiện thẻ [${existingChar.name}] đang có trong SillyTavern.\nBạn có chắc chắn muốn ghi đè hoàn hảo toàn bộ dữ liệu (tính cách, kịch bản, lời chào, worldbook, tags) từ bản sao lưu này lên thẻ đó không?`;
+            } else {
+                confirmMsg = `Thẻ [${safeName}] hiện không có trong danh sách SillyTavern (hoặc đã bị xóa).\nBản sao lưu sẽ được import lại thành một nhân vật mới hoàn chỉnh vào ST.\nBạn có muốn tiếp tục không?`;
+            }
+
+            if (!confirm(confirmMsg)) {
                 return;
             }
 
