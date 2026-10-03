@@ -1308,7 +1308,7 @@ export class SillyTavernAdapter {
             }
 
             // TRƯỜNG HỢP 2: Thẻ không có trong ST (đã bị xóa) -> Import lại như 1 card mới
-            const safeName = (cardData.name || entry.name || 'Restored_Character').replace(/[/\\:*?"<>|]/g, '_').trim();
+            const rawName = (cardData.name || entry.name || '').trim();
             const format = isPng ? 'png' : 'json';
             const formData = new FormData();
 
@@ -1317,10 +1317,10 @@ export class SillyTavernAdapter {
                 const bin = window.atob(b64);
                 const bytes = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                const file = new File([bytes], `${safeName}.png`, { type: 'image/png' });
+                const file = new File([bytes], `${rawName || 'character'}.png`, { type: 'image/png' });
                 formData.append('avatar', file);
             } else {
-                const file = new File([entry.data], `${safeName}.json`, { type: 'application/json' });
+                const file = new File([entry.data], `${rawName || 'character'}.json`, { type: 'application/json' });
                 formData.append('avatar', file);
             }
 
@@ -1329,22 +1329,9 @@ export class SillyTavernAdapter {
                 formData.append('user_name', ctx.name1);
             }
 
-            // Tên định danh file thẻ (chỉ dùng chuỗi tên ngắn hợp lệ, tuyệt đối không dùng Data URL)
-            let preservedName = safeName;
-            if (entry.avatarUrl && !entry.avatarUrl.startsWith('data:') && !entry.avatarUrl.startsWith('http')) {
-                const clean = entry.avatarUrl
-                    .replace(/^\/characters\//, '')
-                    .split('?')[0]
-                    .replace(/\.[^/.]+$/, '')
-                    .replace(/[/\\:*?"<>|]/g, '_')
-                    .trim();
-                if (clean && clean.length > 0 && clean.length < 150) {
-                    preservedName = clean;
-                }
-            }
-
-            if (preservedName && preservedName.length > 0 && preservedName.length < 150) {
-                formData.append('preserved_name', preservedName);
+            // Bảo toàn nguyên vẹn tên thẻ chính gốc, không giới hạn độ dài nhân tạo, chỉ loại trừ Data URL
+            if (rawName && !rawName.startsWith('data:')) {
+                formData.append('preserved_name', rawName);
             }
 
             const headers = (ctx.getRequestHeaders ? ctx.getRequestHeaders({ omitContentType: true }) : {}) || {};
@@ -1389,7 +1376,7 @@ export class SillyTavernAdapter {
 
             return {
                 success: true,
-                message: `Thẻ [${safeName}] chưa có trong danh sách và đã được import lại thành một nhân vật mới vào SillyTavern!`,
+                message: `Thẻ [${rawName || 'Nhân vật'}] chưa có trong danh sách và đã được import lại thành một nhân vật mới vào SillyTavern!`,
             };
         } catch (e: any) {
             console.error('[KaizAgent] Lỗi khi khôi phục thẻ:', e);
