@@ -1,0 +1,1229 @@
+/**
+ * Floating Music Player Widget
+ * Giao diện Mini Player mang phong cách Hi-Fi cổ điển (Classic Matte Charcoal & Amber Accent).
+ * Thiết kế dịu mắt, trực quan, thân thiện, tôn trọng công năng và loại bỏ hoàn toàn AI/Neon slop.
+ * Đồng bộ hai chiều với AudioManager: Play/Pause, Seek, Volume, Repeat, Shuffle, Favorite & Queue/Playlist Drawer.
+ */
+
+import { AudioManager, AudioState } from '../core/music/audio_manager';
+import { DEFAULT_MUSIC_COVER } from '../core/music/music_engine';
+
+export class MusicPlayerWidget {
+    private static instance: MusicPlayerWidget;
+    private container: HTMLElement | null = null;
+    private isMinimized: boolean = false;
+    private isDrawerOpen: boolean = false;
+    private activeDrawerTab: 'queue' | 'playlists' = 'queue';
+    private audioManager: AudioManager;
+
+    private readonly WIDGET_ID = 'kaiz-music-player-widget';
+    private readonly STYLE_ID = 'kaiz-music-player-style';
+
+    private constructor() {
+        this.audioManager = AudioManager.getInstance();
+    }
+
+    public static getInstance(): MusicPlayerWidget {
+        if (!MusicPlayerWidget.instance) {
+            MusicPlayerWidget.instance = new MusicPlayerWidget();
+        }
+        return MusicPlayerWidget.instance;
+    }
+
+    /**
+     * Khởi tạo và gắn widget vào DOM
+     */
+    public init(): void {
+        if (document.getElementById(this.WIDGET_ID)) return;
+
+        this.injectStyles();
+        this.createWidgetDOM();
+        this.bindEvents();
+        this.subscribeAudioEvents();
+    }
+
+    private injectStyles(): void {
+        if (document.getElementById(this.STYLE_ID)) return;
+
+        const style = document.createElement('style');
+        style.id = this.STYLE_ID;
+        style.textContent = `
+            /* Container chính: Phong cách Classic Hi-Fi Charcoal */
+            #${this.WIDGET_ID} {
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                z-index: 99998;
+                width: 380px;
+                background: #181a20;
+                border: 1px solid rgba(255, 255, 255, 0.09);
+                border-radius: 16px;
+                box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+                color: #e2e8f0;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                user-select: none;
+                transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, width 0.25s ease, height 0.25s ease;
+                display: none;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
+            #${this.WIDGET_ID}.is-active {
+                display: flex;
+            }
+
+            /* Chế độ thu gọn thành Đĩa than Mini (Pill Mode) */
+            #${this.WIDGET_ID}.is-minimized {
+                width: 56px;
+                height: 56px;
+                border-radius: 28px;
+                padding: 0;
+                cursor: pointer;
+                border: 1px solid rgba(245, 158, 11, 0.35);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card {
+                display: none;
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card {
+                display: flex;
+                width: 100%;
+                height: 100%;
+                align-items: center;
+                justify-content: center;
+                background: #181a20;
+                border-radius: 28px;
+            }
+
+            .kaiz-mp-pill-card {
+                display: none;
+                position: relative;
+            }
+
+            .kaiz-mp-pill-cover {
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 2px solid #d97706;
+            }
+
+            .kaiz-mp-main-card {
+                padding: 14px 16px 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 11px;
+            }
+
+            /* Header: Thanh tiêu đề & Kéo thả */
+            .kaiz-mp-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                cursor: grab;
+                padding-bottom: 2px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .kaiz-mp-header:active {
+                cursor: grabbing;
+            }
+
+            .kaiz-mp-brand {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11.5px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                color: #94a3b8;
+                text-transform: uppercase;
+            }
+
+            .kaiz-mp-status-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: #64748b;
+                transition: background 0.3s ease;
+            }
+
+            .kaiz-mp-status-dot.is-playing {
+                background: #f59e0b;
+                box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+            }
+
+            .kaiz-mp-actions {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .kaiz-mp-header-btn {
+                background: transparent;
+                border: none;
+                color: #64748b;
+                cursor: pointer;
+                padding: 4px 6px;
+                border-radius: 6px;
+                font-size: 12px;
+                line-height: 1;
+                transition: all 0.15s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .kaiz-mp-header-btn:hover {
+                color: #e2e8f0;
+                background: rgba(255, 255, 255, 0.06);
+            }
+
+            .kaiz-mp-header-btn.btn-close:hover {
+                color: #f87171;
+                background: rgba(239, 68, 68, 0.12);
+            }
+
+            /* Body: Đĩa than & Thông tin bài hát */
+            .kaiz-mp-body {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+
+            .kaiz-mp-cover-wrap {
+                position: relative;
+                width: 58px;
+                height: 58px;
+                flex-shrink: 0;
+            }
+
+            .kaiz-mp-cover {
+                width: 58px;
+                height: 58px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 2px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            }
+
+            .kaiz-mp-cover-groove {
+                position: absolute;
+                inset: 0;
+                border-radius: 50%;
+                box-shadow: inset 0 0 0 3px rgba(0,0,0,0.5), inset 0 0 0 8px rgba(255,255,255,0.04);
+                pointer-events: none;
+            }
+
+            .kaiz-mp-cover.is-spinning,
+            .kaiz-mp-pill-cover.is-spinning {
+                animation: kaiz-vinyl-rotate 16s linear infinite;
+            }
+
+            @keyframes kaiz-vinyl-rotate {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+
+            .kaiz-mp-info {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 0;
+                flex: 1;
+            }
+
+            .kaiz-mp-title-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+
+            .kaiz-mp-title {
+                font-size: 13.5px;
+                font-weight: 600;
+                color: #f1f5f9;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                letter-spacing: -0.01em;
+            }
+
+            .kaiz-mp-source-tag {
+                font-size: 9.5px;
+                font-weight: 600;
+                padding: 1px 5px;
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.08);
+                color: #94a3b8;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                flex-shrink: 0;
+            }
+
+            .kaiz-mp-singer {
+                font-size: 12px;
+                color: #94a3b8;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .kaiz-mp-lyric {
+                font-size: 11.5px;
+                color: #d1d5db;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                font-style: italic;
+                opacity: 0.85;
+                margin-top: 2px;
+            }
+
+            /* Progress Bar */
+            .kaiz-mp-progress-container {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .kaiz-mp-progress-bar {
+                width: 100%;
+                height: 4px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 2px;
+                cursor: pointer;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .kaiz-mp-progress-fill {
+                height: 100%;
+                width: 0%;
+                background: #f59e0b;
+                border-radius: 2px;
+                transition: width 0.1s linear;
+            }
+
+            .kaiz-mp-time-row {
+                display: flex;
+                justify-content: space-between;
+                font-size: 10.5px;
+                color: #64748b;
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* Thanh điều khiển: Cổ điển, Đầy đủ & Cân bằng */
+            .kaiz-mp-controls-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 6px;
+                padding-top: 2px;
+            }
+
+            .kaiz-mp-btn-group {
+                display: flex;
+                align-items: center;
+                gap: 3px;
+            }
+
+            .kaiz-mp-btn {
+                background: transparent;
+                border: none;
+                color: #94a3b8;
+                cursor: pointer;
+                width: 30px;
+                height: 30px;
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.15s ease;
+                position: relative;
+            }
+
+            .kaiz-mp-btn:hover {
+                color: #f1f5f9;
+                background: rgba(255, 255, 255, 0.06);
+            }
+
+            .kaiz-mp-btn:active {
+                transform: scale(0.95);
+            }
+
+            .kaiz-mp-btn.is-active {
+                color: #f59e0b;
+            }
+
+            .kaiz-mp-btn.btn-fav.is-favorite {
+                color: #e11d48;
+            }
+
+            .kaiz-mp-btn-badge {
+                position: absolute;
+                top: 3px;
+                right: 3px;
+                font-size: 8px;
+                font-weight: 700;
+                background: #f59e0b;
+                color: #181a20;
+                border-radius: 50%;
+                width: 11px;
+                height: 11px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                line-height: 1;
+            }
+
+            .kaiz-mp-play-btn {
+                background: #23262f;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                color: #f8fafc;
+                cursor: pointer;
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.15s ease;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+            }
+
+            .kaiz-mp-play-btn:hover {
+                background: #2a2d37;
+                border-color: rgba(245, 158, 11, 0.4);
+                color: #f59e0b;
+            }
+
+            .kaiz-mp-play-btn:active {
+                transform: scale(0.94);
+            }
+
+            /* Volume slider */
+            .kaiz-mp-vol-wrap {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+            .kaiz-mp-vol-slider {
+                width: 52px;
+                height: 4px;
+                -webkit-appearance: none;
+                appearance: none;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 2px;
+                outline: none;
+                cursor: pointer;
+            }
+
+            .kaiz-mp-vol-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: #f59e0b;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+                cursor: pointer;
+            }
+
+            /* Queue / Playlist Drawer (Bung danh sách mượt mà) */
+            .kaiz-mp-drawer {
+                display: none;
+                flex-direction: column;
+                border-top: 1px solid rgba(255, 255, 255, 0.07);
+                background: #14151b;
+                border-radius: 0 0 16px 16px;
+                overflow: hidden;
+                transition: max-height 0.25s ease;
+                max-height: 230px;
+            }
+
+            .kaiz-mp-drawer.is-open {
+                display: flex;
+            }
+
+            .kaiz-mp-drawer-tabs {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px 14px;
+                background: rgba(0, 0, 0, 0.25);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .kaiz-mp-tab-group {
+                display: flex;
+                gap: 6px;
+            }
+
+            .kaiz-mp-tab-btn {
+                background: transparent;
+                border: none;
+                color: #64748b;
+                font-size: 11.5px;
+                font-weight: 600;
+                cursor: pointer;
+                padding: 3px 8px;
+                border-radius: 5px;
+                transition: all 0.15s ease;
+            }
+
+            .kaiz-mp-tab-btn:hover {
+                color: #94a3b8;
+            }
+
+            .kaiz-mp-tab-btn.is-active {
+                color: #f1f5f9;
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .kaiz-mp-drawer-actions {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .kaiz-mp-drawer-text-btn {
+                background: transparent;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                color: #94a3b8;
+                font-size: 10.5px;
+                padding: 2px 7px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+
+            .kaiz-mp-drawer-text-btn:hover {
+                color: #f59e0b;
+                border-color: rgba(245, 158, 11, 0.3);
+            }
+
+            .kaiz-mp-drawer-list {
+                display: flex;
+                flex-direction: column;
+                overflow-y: auto;
+                max-height: 180px;
+                padding: 4px 6px;
+                gap: 2px;
+            }
+
+            .kaiz-mp-drawer-list::-webkit-scrollbar {
+                width: 4px;
+            }
+
+            .kaiz-mp-drawer-list::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.15);
+                border-radius: 2px;
+            }
+
+            .kaiz-mp-list-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 6px 8px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: background 0.15s ease;
+                gap: 8px;
+            }
+
+            .kaiz-mp-list-item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            .kaiz-mp-list-item.is-current {
+                background: rgba(245, 158, 11, 0.12);
+            }
+
+            .kaiz-mp-item-left {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-width: 0;
+                flex: 1;
+            }
+
+            .kaiz-mp-item-index {
+                font-size: 10px;
+                color: #64748b;
+                width: 14px;
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+
+            .kaiz-mp-list-item.is-current .kaiz-mp-item-index {
+                color: #f59e0b;
+                font-weight: 700;
+            }
+
+            .kaiz-mp-item-details {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
+            .kaiz-mp-item-name {
+                font-size: 12px;
+                color: #f1f5f9;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .kaiz-mp-list-item.is-current .kaiz-mp-item-name {
+                color: #f59e0b;
+                font-weight: 600;
+            }
+
+            .kaiz-mp-item-sub {
+                font-size: 10.5px;
+                color: #94a3b8;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .kaiz-mp-item-del-btn {
+                background: transparent;
+                border: none;
+                color: #64748b;
+                cursor: pointer;
+                padding: 2px 5px;
+                font-size: 11px;
+                border-radius: 4px;
+                opacity: 0.6;
+                transition: all 0.15s ease;
+            }
+
+            .kaiz-mp-item-del-btn:hover {
+                color: #f87171;
+                opacity: 1;
+                background: rgba(239, 68, 68, 0.1);
+            }
+
+            .kaiz-mp-empty-drawer {
+                padding: 20px 10px;
+                text-align: center;
+                color: #64748b;
+                font-size: 11.5px;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    private createWidgetDOM(): void {
+        const div = document.createElement('div');
+        div.id = this.WIDGET_ID;
+
+        div.innerHTML = `
+            <!-- Pill Mode khi thu gọn -->
+            <div class="kaiz-mp-pill-card" id="kaiz-mp-pill" title="Mở rộng trình phát nhạc Kaiz">
+                <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-pill-cover" id="kaiz-mp-pill-cover" alt="cover">
+            </div>
+
+            <!-- Main Full Card -->
+            <div class="kaiz-mp-main-card">
+                <!-- Header -->
+                <div class="kaiz-mp-header" id="kaiz-mp-drag-header">
+                    <div class="kaiz-mp-brand">
+                        <span class="kaiz-mp-status-dot" id="kaiz-mp-status-dot"></span>
+                        <span>Kaiz Hi-Fi</span>
+                    </div>
+                    <div class="kaiz-mp-actions">
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-minimize" title="Thu gọn thành đĩa than mini">─</button>
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-hide" title="Ẩn giao diện (nhạc vẫn tiếp tục phát)">⌄</button>
+                        <button class="kaiz-mp-header-btn btn-close" id="kaiz-mp-btn-close" title="Tắt nhạc và đóng">✕</button>
+                    </div>
+                </div>
+
+                <!-- Body: Vinyl & Info -->
+                <div class="kaiz-mp-body">
+                    <div class="kaiz-mp-cover-wrap">
+                        <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-cover" id="kaiz-mp-cover" alt="album cover">
+                        <div class="kaiz-mp-cover-groove"></div>
+                    </div>
+                    <div class="kaiz-mp-info">
+                        <div class="kaiz-mp-title-row">
+                            <span class="kaiz-mp-title" id="kaiz-mp-title">Chưa có bài hát</span>
+                            <span class="kaiz-mp-source-tag" id="kaiz-mp-source">STREAM</span>
+                        </div>
+                        <span class="kaiz-mp-singer" id="kaiz-mp-singer">Kaiz Music</span>
+                        <div class="kaiz-mp-lyric" id="kaiz-mp-lyric">♪ Sẵn sàng phát nhạc</div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="kaiz-mp-progress-container">
+                    <div class="kaiz-mp-progress-bar" id="kaiz-mp-progress-bar">
+                        <div class="kaiz-mp-progress-fill" id="kaiz-mp-progress-fill"></div>
+                    </div>
+                    <div class="kaiz-mp-time-row">
+                        <span id="kaiz-mp-time-cur">0:00</span>
+                        <span id="kaiz-mp-time-dur">0:00</span>
+                    </div>
+                </div>
+
+                <!-- Controls Row: Đầy đủ Shuffle, Prev, Play, Next, Repeat, Favorite, Drawer, Volume -->
+                <div class="kaiz-mp-controls-row">
+                    <!-- Nhóm điều hướng -->
+                    <div class="kaiz-mp-btn-group">
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-shuffle" title="Bật/Tắt phát ngẫu nhiên">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-prev" title="Bài trước">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                        </button>
+                        <button class="kaiz-mp-play-btn" id="kaiz-mp-btn-play" title="Phát / Tạm dừng">
+                            <svg id="kaiz-mp-icon-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            <svg id="kaiz-mp-icon-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-next" title="Bài kế tiếp">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-repeat" title="Chế độ lặp lại: Lặp danh sách / Lặp 1 bài / Tắt lặp">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                            </svg>
+                            <span class="kaiz-mp-btn-badge" id="kaiz-mp-repeat-badge" style="display:none;">1</span>
+                        </button>
+                    </div>
+
+                    <!-- Nhóm tiện ích: Favorite, Drawer, Volume -->
+                    <div class="kaiz-mp-btn-group">
+                        <button class="kaiz-mp-btn btn-fav" id="kaiz-mp-btn-fav" title="Yêu thích bài hát này">
+                            <svg id="kaiz-mp-icon-heart" width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-drawer" title="Danh sách hàng đợi & Playlist">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
+                            </svg>
+                        </button>
+                        <div class="kaiz-mp-vol-wrap">
+                            <input type="range" min="0" max="1" step="0.01" value="0.8" class="kaiz-mp-vol-slider" id="kaiz-mp-vol-slider" title="Âm lượng">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Queue & Playlist Drawer -->
+            <div class="kaiz-mp-drawer" id="kaiz-mp-drawer">
+                <div class="kaiz-mp-drawer-tabs">
+                    <div class="kaiz-mp-tab-group">
+                        <button class="kaiz-mp-tab-btn is-active" id="kaiz-mp-tab-queue">Hàng đợi (<span id="kaiz-mp-queue-count">0</span>)</button>
+                        <button class="kaiz-mp-tab-btn" id="kaiz-mp-tab-playlists">Playlists</button>
+                    </div>
+                    <div class="kaiz-mp-drawer-actions">
+                        <button class="kaiz-mp-drawer-text-btn" id="kaiz-mp-drawer-action-btn">Lưu Playlist</button>
+                    </div>
+                </div>
+                <div class="kaiz-mp-drawer-list" id="kaiz-mp-drawer-list">
+                    <!-- Danh sách bài hát / playlists sẽ được render ở đây -->
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(div);
+        this.container = div;
+    }
+
+    private formatTime(seconds: number): string {
+        if (!seconds || isNaN(seconds) || seconds < 0) return '0:00';
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
+
+    private bindEvents(): void {
+        if (!this.container) return;
+
+        // Click Pill để phóng to
+        const pill = this.container.querySelector('#kaiz-mp-pill');
+        if (pill) {
+            pill.addEventListener('click', () => {
+                this.toggleMinimize(false);
+            });
+        }
+
+        // Thu gọn thành đĩa than mini
+        const minBtn = this.container.querySelector('#kaiz-mp-btn-minimize');
+        if (minBtn) {
+            minBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.toggleMinimize(true);
+            });
+        }
+
+        // Ẩn giao diện tạm thời (nhạc vẫn tiếp tục phát)
+        const hideBtn = this.container.querySelector('#kaiz-mp-btn-hide');
+        if (hideBtn) {
+            hideBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.hide();
+            });
+        }
+
+        // Đóng / Stop
+        const closeBtn = this.container.querySelector('#kaiz-mp-btn-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.audioManager.stop();
+                this.hide();
+            });
+        }
+
+        // Play / Pause
+        const playBtn = this.container.querySelector('#kaiz-mp-btn-play');
+        if (playBtn) {
+            playBtn.addEventListener('click', () => {
+                this.audioManager.togglePlay();
+            });
+        }
+
+        // Prev & Next
+        const prevBtn = this.container.querySelector('#kaiz-mp-btn-prev');
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => {
+                this.audioManager.playPrev();
+            });
+        }
+
+        const nextBtn = this.container.querySelector('#kaiz-mp-btn-next');
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => {
+                this.audioManager.playNext();
+            });
+        }
+
+        // Shuffle Toggle
+        const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
+        if (shuffleBtn) {
+            shuffleBtn.addEventListener('click', () => {
+                this.audioManager.toggleShuffleMode();
+            });
+        }
+
+        // Repeat Toggle
+        const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
+        if (repeatBtn) {
+            repeatBtn.addEventListener('click', () => {
+                this.audioManager.toggleRepeatMode();
+            });
+        }
+
+        // Favorite Toggle
+        const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
+        if (favBtn) {
+            favBtn.addEventListener('click', () => {
+                const current = this.audioManager.getState().currentSong;
+                if (current) {
+                    this.audioManager.toggleFavorite(current);
+                }
+            });
+        }
+
+        // Drawer Toggle
+        const drawerBtn = this.container.querySelector('#kaiz-mp-btn-drawer');
+        if (drawerBtn) {
+            drawerBtn.addEventListener('click', () => {
+                this.toggleDrawer();
+            });
+        }
+
+        // Drawer Tabs
+        const tabQueue = this.container.querySelector('#kaiz-mp-tab-queue');
+        const tabPlaylists = this.container.querySelector('#kaiz-mp-tab-playlists');
+        if (tabQueue && tabPlaylists) {
+            tabQueue.addEventListener('click', () => {
+                this.activeDrawerTab = 'queue';
+                tabQueue.classList.add('is-active');
+                tabPlaylists.classList.remove('is-active');
+                this.updateDrawerContent();
+            });
+
+            tabPlaylists.addEventListener('click', () => {
+                this.activeDrawerTab = 'playlists';
+                tabPlaylists.classList.add('is-active');
+                tabQueue.classList.remove('is-active');
+                this.updateDrawerContent();
+            });
+        }
+
+        // Drawer Action Button ("Lưu Playlist" hoặc "Tạo mới")
+        const drawerActionBtn = this.container.querySelector('#kaiz-mp-drawer-action-btn');
+        if (drawerActionBtn) {
+            drawerActionBtn.addEventListener('click', () => {
+                if (this.activeDrawerTab === 'queue') {
+                    const plName = prompt('Nhập tên danh sách phát để lưu hàng đợi hiện tại:');
+                    if (plName && plName.trim()) {
+                        this.audioManager.saveQueueAsPlaylist(plName.trim());
+                        this.activeDrawerTab = 'playlists';
+                        if (tabPlaylists && tabQueue) {
+                            tabPlaylists.classList.add('is-active');
+                            tabQueue.classList.remove('is-active');
+                        }
+                        this.updateDrawerContent();
+                    }
+                } else {
+                    const plName = prompt('Nhập tên danh sách phát mới:');
+                    if (plName && plName.trim()) {
+                        this.audioManager.createPlaylist(plName.trim());
+                        this.updateDrawerContent();
+                    }
+                }
+            });
+        }
+
+        // Tua nhạc trên progress bar
+        const progBar = this.container.querySelector('#kaiz-mp-progress-bar') as HTMLElement;
+        if (progBar) {
+            progBar.addEventListener('click', (e: MouseEvent) => {
+                const rect = progBar.getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                const pct = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
+                this.audioManager.seekPercent(pct);
+            });
+        }
+
+        // Điều chỉnh âm lượng
+        const volSlider = this.container.querySelector('#kaiz-mp-vol-slider') as HTMLInputElement | null;
+        if (volSlider) {
+            volSlider.addEventListener('input', () => {
+                const val = parseFloat(volSlider.value);
+                this.audioManager.setVolume(val);
+            });
+        }
+
+        // Kéo thả di chuyển Widget
+        this.setupDragging();
+    }
+
+    private setupDragging(): void {
+        const header = this.container?.querySelector('#kaiz-mp-drag-header') as HTMLElement | null;
+        if (!header || !this.container) return;
+
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let origRight = 24;
+        let origBottom = 24;
+
+        header.addEventListener('mousedown', (e: MouseEvent) => {
+            if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+            isDragging = true;
+            startX = e.clientX;
+            startY = e.clientY;
+
+            const rect = this.container!.getBoundingClientRect();
+            origRight = window.innerWidth - rect.right;
+            origBottom = window.innerHeight - rect.bottom;
+            header.style.cursor = 'grabbing';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', (e: MouseEvent) => {
+            if (!isDragging || !this.container) return;
+            const deltaX = e.clientX - startX;
+            const deltaY = e.clientY - startY;
+
+            const newRight = Math.max(10, Math.min(window.innerWidth - 80, origRight - deltaX));
+            const newBottom = Math.max(10, Math.min(window.innerHeight - 80, origBottom - deltaY));
+
+            this.container.style.right = `${newRight}px`;
+            this.container.style.bottom = `${newBottom}px`;
+        });
+
+        document.addEventListener('mouseup', () => {
+            if (isDragging) {
+                isDragging = false;
+                if (header) header.style.cursor = 'grab';
+            }
+        });
+    }
+
+    private subscribeAudioEvents(): void {
+        // Đồng bộ trạng thái bài hát
+        this.audioManager.onStateChange((state: AudioState) => {
+            if (!this.container) return;
+
+            if (state.currentSong) {
+                this.show();
+                const titleEl = this.container.querySelector('#kaiz-mp-title');
+                const singerEl = this.container.querySelector('#kaiz-mp-singer');
+                const sourceEl = this.container.querySelector('#kaiz-mp-source');
+                const coverEl = this.container.querySelector('#kaiz-mp-cover') as HTMLImageElement | null;
+                const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover') as HTMLImageElement | null;
+                const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
+                const dotEl = this.container.querySelector('#kaiz-mp-status-dot');
+
+                if (titleEl) titleEl.textContent = state.currentSong.name;
+                if (singerEl) singerEl.textContent = state.currentSong.singer;
+                if (sourceEl) sourceEl.textContent = state.currentSong.source.toUpperCase();
+
+                const coverSrc = state.currentSong.cover || DEFAULT_MUSIC_COVER;
+                if (coverEl) {
+                    coverEl.src = coverSrc;
+                    if (state.isPlaying) {
+                        coverEl.classList.add('is-spinning');
+                    } else {
+                        coverEl.classList.remove('is-spinning');
+                    }
+                }
+                if (pillCoverEl) {
+                    pillCoverEl.src = coverSrc;
+                    if (state.isPlaying) {
+                        pillCoverEl.classList.add('is-spinning');
+                    } else {
+                        pillCoverEl.classList.remove('is-spinning');
+                    }
+                }
+                if (lyricEl) lyricEl.textContent = state.currentLyric || '♪ Sẵn sàng phát nhạc';
+
+                if (dotEl) {
+                    if (state.isPlaying) {
+                        dotEl.classList.add('is-playing');
+                    } else {
+                        dotEl.classList.remove('is-playing');
+                    }
+                }
+
+                // Play / Pause Icon
+                const playIcon = this.container.querySelector('#kaiz-mp-icon-play') as HTMLElement;
+                const pauseIcon = this.container.querySelector('#kaiz-mp-icon-pause') as HTMLElement;
+                if (playIcon && pauseIcon) {
+                    playIcon.style.display = state.isPlaying ? 'none' : 'block';
+                    pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
+                }
+
+                // Volume slider
+                const volSlider = this.container.querySelector('#kaiz-mp-vol-slider') as HTMLInputElement | null;
+                if (volSlider && document.activeElement !== volSlider) {
+                    volSlider.value = String(state.volume);
+                }
+
+                // Favorite Button
+                const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
+                const isFav = this.audioManager.isFavorite(state.currentSong.id);
+                if (favBtn) {
+                    if (isFav) {
+                        favBtn.classList.add('is-favorite');
+                    } else {
+                        favBtn.classList.remove('is-favorite');
+                    }
+                }
+
+                // Repeat Mode Button
+                const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
+                const repeatBadge = this.container.querySelector('#kaiz-mp-repeat-badge') as HTMLElement | null;
+                if (repeatBtn && repeatBadge) {
+                    if (state.repeatMode === 'one') {
+                        repeatBtn.classList.add('is-active');
+                        repeatBadge.style.display = 'flex';
+                    } else if (state.repeatMode === 'all') {
+                        repeatBtn.classList.add('is-active');
+                        repeatBadge.style.display = 'none';
+                    } else {
+                        repeatBtn.classList.remove('is-active');
+                        repeatBadge.style.display = 'none';
+                    }
+                }
+
+                // Shuffle Mode Button
+                const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
+                if (shuffleBtn) {
+                    if (state.shuffleMode) {
+                        shuffleBtn.classList.add('is-active');
+                    } else {
+                        shuffleBtn.classList.remove('is-active');
+                    }
+                }
+
+                // Queue Count in Drawer Tab
+                const queueCountEl = this.container.querySelector('#kaiz-mp-queue-count');
+                if (queueCountEl) {
+                    queueCountEl.textContent = String(state.queue.length);
+                }
+
+                if (this.isDrawerOpen) {
+                    this.updateDrawerContent();
+                }
+            } else {
+                this.hide();
+            }
+        });
+
+        // Đồng bộ tiến độ thời gian & Lyric
+        this.audioManager.onTimeUpdate((curTime: number, duration: number, lyric: string) => {
+            if (!this.container) return;
+
+            const pct = duration > 0 ? (curTime / duration) * 100 : 0;
+            const fill = this.container.querySelector('#kaiz-mp-progress-fill') as HTMLElement | null;
+            if (fill) fill.style.width = `${pct}%`;
+
+            const curEl = this.container.querySelector('#kaiz-mp-time-cur');
+            const durEl = this.container.querySelector('#kaiz-mp-time-dur');
+            if (curEl) curEl.textContent = this.formatTime(curTime);
+            if (durEl) durEl.textContent = this.formatTime(duration);
+
+            const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
+            if (lyricEl && lyric && lyricEl.textContent !== lyric) {
+                lyricEl.textContent = lyric;
+            }
+        });
+    }
+
+    public toggleDrawer(open?: boolean): void {
+        this.isDrawerOpen = open !== undefined ? open : !this.isDrawerOpen;
+        const drawer = this.container?.querySelector('#kaiz-mp-drawer');
+        const drawerBtn = this.container?.querySelector('#kaiz-mp-btn-drawer');
+
+        if (drawer) {
+            if (this.isDrawerOpen) {
+                drawer.classList.add('is-open');
+                drawerBtn?.classList.add('is-active');
+                this.updateDrawerContent();
+            } else {
+                drawer.classList.remove('is-open');
+                drawerBtn?.classList.remove('is-active');
+            }
+        }
+    }
+
+    private updateDrawerContent(): void {
+        if (!this.container) return;
+        const listEl = this.container.querySelector('#kaiz-mp-drawer-list');
+        const actionBtn = this.container.querySelector('#kaiz-mp-drawer-action-btn');
+        if (!listEl) return;
+
+        const state = this.audioManager.getState();
+
+        if (this.activeDrawerTab === 'queue') {
+            if (actionBtn) actionBtn.textContent = 'Lưu Playlist';
+
+            if (state.queue.length === 0) {
+                listEl.innerHTML = `<div class="kaiz-mp-empty-drawer">Hàng đợi đang trống.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = '';
+            state.queue.forEach((song, idx) => {
+                const isCurrent = state.currentSong?.id === song.id;
+                const item = document.createElement('div');
+                item.className = `kaiz-mp-list-item ${isCurrent ? 'is-current' : ''}`;
+
+                item.innerHTML = `
+                    <div class="kaiz-mp-item-left">
+                        <span class="kaiz-mp-item-index">${idx + 1}</span>
+                        <div class="kaiz-mp-item-details">
+                            <span class="kaiz-mp-item-name">${song.name}</span>
+                            <span class="kaiz-mp-item-sub">${song.singer} · ${song.source.toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <button class="kaiz-mp-item-del-btn" title="Xóa khỏi hàng đợi">✕</button>
+                `;
+
+                // Click bài hát để phát
+                item.querySelector('.kaiz-mp-item-left')?.addEventListener('click', () => {
+                    this.audioManager.playSong(song);
+                });
+
+                // Click nút xóa
+                item.querySelector('.kaiz-mp-item-del-btn')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.audioManager.removeFromQueue(song.id);
+                });
+
+                listEl.appendChild(item);
+            });
+        } else {
+            // Tab Playlists
+            if (actionBtn) actionBtn.textContent = '+ Tạo mới';
+
+            const playlists = this.audioManager.getPlaylists();
+            if (playlists.length === 0) {
+                listEl.innerHTML = `<div class="kaiz-mp-empty-drawer">Chưa có playlist nào được lưu.</div>`;
+                return;
+            }
+
+            listEl.innerHTML = '';
+            playlists.forEach((pl, idx) => {
+                const item = document.createElement('div');
+                item.className = 'kaiz-mp-list-item';
+
+                item.innerHTML = `
+                    <div class="kaiz-mp-item-left">
+                        <span class="kaiz-mp-item-index">${idx + 1}</span>
+                        <div class="kaiz-mp-item-details">
+                            <span class="kaiz-mp-item-name">${pl.name}</span>
+                            <span class="kaiz-mp-item-sub">${pl.songs.length} bài hát</span>
+                        </div>
+                    </div>
+                    <button class="kaiz-mp-item-del-btn" title="Xóa playlist này">✕</button>
+                `;
+
+                // Click để phát playlist
+                item.querySelector('.kaiz-mp-item-left')?.addEventListener('click', () => {
+                    this.audioManager.playPlaylist(pl.id);
+                });
+
+                // Xóa playlist
+                item.querySelector('.kaiz-mp-item-del-btn')?.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (confirm(`Bạn có chắc muốn xóa playlist "${pl.name}"?`)) {
+                        this.audioManager.deletePlaylist(pl.id);
+                        this.updateDrawerContent();
+                    }
+                });
+
+                listEl.appendChild(item);
+            });
+        }
+    }
+
+    public isVisible(): boolean {
+        return !!this.container?.classList.contains('is-active');
+    }
+
+    public toggle(): void {
+        if (this.isVisible()) {
+            this.hide();
+        } else {
+            this.show();
+        }
+    }
+
+    public show(): void {
+        if (this.container) {
+            this.container.classList.add('is-active');
+        }
+    }
+
+    public hide(): void {
+        if (this.container) {
+            this.container.classList.remove('is-active');
+        }
+    }
+
+    public toggleMinimize(minimized?: boolean): void {
+        this.isMinimized = minimized !== undefined ? minimized : !this.isMinimized;
+        if (this.container) {
+            if (this.isMinimized) {
+                this.container.classList.add('is-minimized');
+            } else {
+                this.container.classList.remove('is-minimized');
+            }
+        }
+    }
+}

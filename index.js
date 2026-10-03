@@ -20654,6 +20654,2713 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
   };
 
   /**
+   * Music Engine Core
+   * Trích xuất và hiện đại hóa từ app_music.js (Kaiz Collection v6.9)
+   * Hỗ trợ tìm kiếm, phân giải URL stream từ Tencent, NetEase, KuGou, KuWo kèm Auto-Bypass VIP.
+   */
+  const DEFAULT_MUSIC_COVER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9IiM3Nzc3NzciIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiMyMjIyMjI7Ij48cGF0aCBkPSJNMTIgM3YxMC41NWMtLjU5LS4zNC0xLjI3LS41NS0yLS41NS0yLjIxIDAtNCAxLjc5LTQgNHMxLjc5IDQgNCA0IDQtMS43OSA0LTRWN2g0VjNoLTZ6Ii8+PC9zdmc+';
+  function normalizeStr(str) {
+      return str ? str.trim().toLowerCase() : '';
+  }
+  class MusicEngine {
+      static sources = ['tencent', 'netease', 'kugou', 'kuwo'];
+      /**
+       * Fetch dữ liệu với cơ chế CORS Proxy fallback
+       */
+      static async fetchWithFallback(rawUrl) {
+          try {
+              const res = await fetch(rawUrl);
+              if (res.ok) {
+                  return (await res.json());
+              }
+          }
+          catch (_e) {
+              // Thử tiếp qua CORS Proxy nếu direct fetch bị chặn
+          }
+          try {
+              const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(rawUrl)}`;
+              const resProxy = await fetch(proxyUrl);
+              if (!resProxy.ok) {
+                  console.warn(`[MusicEngine] Proxy HTTP status ${resProxy.status}: ${rawUrl}`);
+                  return null;
+              }
+              return (await resProxy.json());
+          }
+          catch (errProxy) {
+              console.warn(`[MusicEngine] Fetch thất bại cả direct và proxy: ${rawUrl}`, errProxy);
+              return null;
+          }
+      }
+      /**
+       * Tìm kiếm bài hát trên một hoặc toàn bộ các nền tảng
+       */
+      static async search(keyword, page = 1, sourceFilter = 'all', limitPerSource = 10) {
+          const normKeyword = normalizeStr(keyword);
+          if (!normKeyword)
+              return [];
+          const sourcesToSearch = sourceFilter === 'all' ? this.sources : [sourceFilter];
+          const searchPromises = sourcesToSearch.map(async (src) => {
+              try {
+                  if (src === 'tencent') {
+                      const url = `https://api.vkeys.cn/v2/music/tencent/search/song?word=${encodeURIComponent(normKeyword)}&page=${page}&num=${limitPerSource}`;
+                      const res = await this.fetchWithFallback(url);
+                      if (res && res.data && Array.isArray(res.data)) {
+                          return res.data.map((item) => {
+                              let singerStr = 'Unknown';
+                              if (typeof item.singer === 'string') {
+                                  singerStr = item.singer;
+                              }
+                              else if (Array.isArray(item.singer)) {
+                                  singerStr = item.singer
+                                      .map((s) => (typeof s === 'string' ? s : s.name || ''))
+                                      .filter(Boolean)
+                                      .join(' / ');
+                              }
+                              let coverUrl = item.cover;
+                              if (!coverUrl && item.albummid) {
+                                  coverUrl = `https://y.qq.com/music/photo_new/T002R300x300M000${item.albummid}.jpg`;
+                              }
+                              if (coverUrl && coverUrl.startsWith('http:')) {
+                                  coverUrl = coverUrl.replace('http:', 'https:');
+                              }
+                              return {
+                                  id: String(item.mid || item.id),
+                                  mid: item.mid,
+                                  name: item.song || item.songname || item.name || 'Unknown',
+                                  singer: singerStr || 'Unknown',
+                                  cover: coverUrl || DEFAULT_MUSIC_COVER,
+                                  source: 'tencent',
+                              };
+                          });
+                      }
+                  }
+                  else if (src === 'kugou') {
+                      const url = `http://mobilecdn.kugou.com/api/v3/search/song?format=json&keyword=${encodeURIComponent(normKeyword)}&page=${page}&pagesize=${limitPerSource}&showtype=1`;
+                      const res = await this.fetchWithFallback(url);
+                      if (res && res.data && res.data.info && Array.isArray(res.data.info)) {
+                          return res.data.info.map((item) => ({
+                              id: String(item.hash || item.filehash),
+                              mid: item.hash || item.filehash,
+                              name: item.songname || item.filename || 'Unknown',
+                              singer: item.singername || 'Unknown',
+                              cover: DEFAULT_MUSIC_COVER,
+                              source: 'kugou',
+                          }));
+                      }
+                  }
+                  else {
+                      // NetEase ('netease') hoặc KuWo ('kuwo')
+                      const url = `https://music-api.gdstudio.xyz/api.php?types=search&source=${src}&name=${encodeURIComponent(normKeyword)}&count=${limitPerSource}&pages=${page}`;
+                      const data = await this.fetchWithFallback(url);
+                      if (data && Array.isArray(data)) {
+                          return data.map((item) => {
+                              let coverUrl = item.pic || item.cover || item.pic_url || item.cover_url || item.pic120;
+                              if (!coverUrl && item.al && item.al.picUrl)
+                                  coverUrl = item.al.picUrl;
+                              if (!coverUrl && item.album && item.album.picUrl)
+                                  coverUrl = item.album.picUrl;
+                              if (coverUrl) {
+                                  if (coverUrl.startsWith('http:'))
+                                      coverUrl = coverUrl.replace('http:', 'https:');
+                                  if (!coverUrl.startsWith('data:')) {
+                                      coverUrl = `https://wsrv.nl/?url=${encodeURIComponent(coverUrl)}`;
+                                  }
+                              }
+                              let singerName = 'Unknown';
+                              if (Array.isArray(item.artist)) {
+                                  singerName = item.artist
+                                      .map((a) => (typeof a === 'string' ? a : a.name || ''))
+                                      .filter(Boolean)
+                                      .join(' / ');
+                              }
+                              else if (typeof item.artist === 'string') {
+                                  singerName = item.artist;
+                              }
+                              else if (typeof item.singer === 'string') {
+                                  singerName = item.singer;
+                              }
+                              return {
+                                  id: String(item.id || item.mid),
+                                  mid: String(item.lyric_id || item.mid || item.id),
+                                  name: item.name || item.song || 'Unknown',
+                                  singer: singerName || 'Unknown',
+                                  cover: coverUrl || DEFAULT_MUSIC_COVER,
+                                  source: src,
+                              };
+                          });
+                      }
+                  }
+              }
+              catch (err) {
+                  console.warn(`[MusicEngine] Lỗi tìm kiếm nguồn ${src}:`, err);
+              }
+              return [];
+          });
+          const resultsArray = await Promise.allSettled(searchPromises);
+          const allResults = [];
+          resultsArray.forEach((res) => {
+              if (res.status === 'fulfilled' && Array.isArray(res.value)) {
+                  res.value.forEach((song) => {
+                      if (!allResults.some((s) => normalizeStr(s.name) === normalizeStr(song.name) &&
+                          normalizeStr(s.singer) === normalizeStr(song.singer))) {
+                          allResults.push(song);
+                      }
+                  });
+              }
+          });
+          return allResults;
+      }
+      /**
+       * Lấy trực tiếp URL phát nhạc từ nguồn gốc
+       */
+      static async getDirectUrl(song) {
+          const src = song.source || 'tencent';
+          try {
+              if (src === 'tencent') {
+                  const idParam = song.mid ? `mid=${song.mid}` : `id=${song.id}`;
+                  const urlReq = `https://api.vkeys.cn/v2/music/tencent?${idParam}`;
+                  const res = await this.fetchWithFallback(urlReq);
+                  if (res && res.data && res.data.url)
+                      return res.data.url;
+              }
+              else {
+                  const urlReq = `https://music-api.gdstudio.xyz/api.php?types=url&source=${src}&id=${song.id}&br=320`;
+                  const data = await this.fetchWithFallback(urlReq);
+                  if (data && data.url && !data.url.includes('music.163.com/404')) {
+                      return data.url;
+                  }
+              }
+          }
+          catch (e) {
+              console.warn(`[MusicEngine] Không thể lấy direct URL cho ${song.name}:`, e);
+          }
+          return null;
+      }
+      /**
+       * Lấy URL phát nhạc kèm cơ chế Auto-Bypass VIP tự động tìm nguồn thay thế
+       */
+      static async resolvePlayableSong(song) {
+          // 1. Thử lấy từ nguồn gốc trước
+          const directUrl = await this.getDirectUrl(song);
+          if (directUrl) {
+              return { url: directUrl, song };
+          }
+          // 2. Kích hoạt Auto-Bypass VIP: tìm bài trên các nguồn khác
+          console.log(`[MusicEngine] Bài hát '${song.name}' có thể bị khóa VIP ở nguồn ${song.source}. Đang quét nguồn thay thế...`);
+          const mainSinger = (song.singer || '').split('/')[0].trim();
+          const fallbackQuery = `${song.name} ${mainSinger}`.trim();
+          const fallbackSources = this.sources.filter((s) => s !== song.source);
+          for (const src of fallbackSources) {
+              try {
+                  const results = await this.search(fallbackQuery, 1, src, 5);
+                  if (results && results.length > 0) {
+                      for (const candidate of results) {
+                          const fallbackUrl = await this.getDirectUrl(candidate);
+                          if (fallbackUrl) {
+                              console.log(`[MusicEngine] Đã tự động thay thế bằng nguồn: ${src.toUpperCase()}`);
+                              return {
+                                  url: fallbackUrl,
+                                  song: {
+                                      ...candidate,
+                                      // Giữ ảnh bìa cũ nếu bài candidate là cover mặc định
+                                      cover: candidate.cover !== DEFAULT_MUSIC_COVER ? candidate.cover : song.cover,
+                                  },
+                              };
+                          }
+                      }
+                  }
+              }
+              catch (_err) {
+                  continue;
+              }
+          }
+          return null;
+      }
+      /**
+       * Lấy lời bài hát thô
+       */
+      static async getRawLyric(song) {
+          const src = song.source || 'tencent';
+          try {
+              if (src === 'tencent') {
+                  const idParam = song.mid ? `mid=${song.mid}` : `id=${song.id}`;
+                  const urlReq = `https://api.vkeys.cn/v2/music/tencent/lyric?${idParam}`;
+                  const res = await this.fetchWithFallback(urlReq);
+                  if (res && res.data && res.data.lyric)
+                      return res.data.lyric;
+              }
+              else {
+                  const queryId = song.mid || song.id;
+                  const urlReq = `https://music-api.gdstudio.xyz/api.php?types=lyric&source=${src}&id=${queryId}`;
+                  const data = await this.fetchWithFallback(urlReq);
+                  if (data && data.lyric)
+                      return data.lyric;
+              }
+          }
+          catch (e) {
+              console.warn(`[MusicEngine] Lấy lời bài hát thất bại cho ${song.name}:`, e);
+          }
+          return null;
+      }
+      /**
+       * Phân giải chuỗi LRC thành mảng mốc thời gian { time, text }
+       */
+      static parseLyrics(rawLrc) {
+          if (!rawLrc)
+              return [];
+          const lines = rawLrc.split('\n');
+          const re = /\[(\d{2}):(\d{2})\.(\d{2,3})\]/g;
+          const result = [];
+          lines.forEach((line) => {
+              const matches = [];
+              let match;
+              while ((match = re.exec(line)) !== null) {
+                  matches.push(match);
+              }
+              re.lastIndex = 0;
+              const text = line.replace(re, '').trim();
+              if (matches.length > 0 && text) {
+                  matches.forEach((m) => {
+                      const min = parseInt(m[1], 10);
+                      const sec = parseInt(m[2], 10);
+                      const ms = parseInt(m[3], 10);
+                      const timeInSeconds = min * 60 + sec + (m[3].length === 2 ? ms / 100 : ms / 1000);
+                      result.push({ time: timeInSeconds, text });
+                  });
+              }
+          });
+          result.sort((a, b) => a.time - b.time);
+          return result;
+      }
+  }
+
+  /**
+   * Audio Manager Singleton
+   * Quản lý vòng đời phát âm thanh, hàng đợi, tiến trình và sự kiện đồng bộ với UI Widget.
+   */
+  class AudioManager {
+      static instance;
+      audio;
+      currentSong = null;
+      isPlaying = false;
+      volume = 0.8;
+      lyrics = [];
+      currentLyric = '';
+      queue = [];
+      history = [];
+      favorites = [];
+      playlists = [];
+      repeatMode = 'all';
+      shuffleMode = false;
+      stateListeners = new Set();
+      timeListeners = new Set();
+      AUDIO_ELEMENT_ID = 'kaiz-agent-audio-player';
+      STORAGE_VOLUME_KEY = 'kaiz_music_volume';
+      STORAGE_HISTORY_KEY = 'kaiz_music_history';
+      STORAGE_FAVORITES_KEY = 'kaiz_music_favorites';
+      STORAGE_PLAYLISTS_KEY = 'kaiz_music_playlists';
+      STORAGE_REPEAT_KEY = 'kaiz_music_repeat_mode';
+      STORAGE_SHUFFLE_KEY = 'kaiz_music_shuffle_mode';
+      constructor() {
+          this.audio = this.getOrCreateAudioElement();
+          this.loadSettings();
+          this.setupAudioEvents();
+      }
+      static getInstance() {
+          if (!AudioManager.instance) {
+              AudioManager.instance = new AudioManager();
+          }
+          return AudioManager.instance;
+      }
+      getOrCreateAudioElement() {
+          let el = document.getElementById(this.AUDIO_ELEMENT_ID);
+          if (!el) {
+              el = document.createElement('audio');
+              el.id = this.AUDIO_ELEMENT_ID;
+              el.style.display = 'none';
+              document.body.appendChild(el);
+          }
+          return el;
+      }
+      loadSettings() {
+          try {
+              const savedVol = localStorage.getItem(this.STORAGE_VOLUME_KEY);
+              if (savedVol !== null) {
+                  const parsed = parseFloat(savedVol);
+                  if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
+                      this.volume = parsed;
+                  }
+              }
+              this.audio.volume = this.volume;
+              const savedHistory = localStorage.getItem(this.STORAGE_HISTORY_KEY);
+              if (savedHistory) {
+                  const parsedHist = JSON.parse(savedHistory);
+                  if (Array.isArray(parsedHist)) {
+                      this.history = parsedHist.slice(0, 30);
+                  }
+              }
+              const savedFavs = localStorage.getItem(this.STORAGE_FAVORITES_KEY);
+              if (savedFavs) {
+                  const parsedFavs = JSON.parse(savedFavs);
+                  if (Array.isArray(parsedFavs)) {
+                      this.favorites = parsedFavs;
+                  }
+              }
+              const savedPlaylists = localStorage.getItem(this.STORAGE_PLAYLISTS_KEY);
+              if (savedPlaylists) {
+                  const parsedPlaylists = JSON.parse(savedPlaylists);
+                  if (Array.isArray(parsedPlaylists)) {
+                      this.playlists = parsedPlaylists;
+                  }
+              }
+              const savedRepeat = localStorage.getItem(this.STORAGE_REPEAT_KEY);
+              if (savedRepeat === 'all' || savedRepeat === 'one' || savedRepeat === 'none') {
+                  this.repeatMode = savedRepeat;
+              }
+              const savedShuffle = localStorage.getItem(this.STORAGE_SHUFFLE_KEY);
+              if (savedShuffle !== null) {
+                  this.shuffleMode = savedShuffle === 'true';
+              }
+          }
+          catch (e) {
+              console.warn('[AudioManager] Lỗi đọc cấu hình từ localStorage:', e);
+          }
+      }
+      saveSettings() {
+          try {
+              localStorage.setItem(this.STORAGE_VOLUME_KEY, String(this.volume));
+              localStorage.setItem(this.STORAGE_HISTORY_KEY, JSON.stringify(this.history.slice(0, 30)));
+              localStorage.setItem(this.STORAGE_FAVORITES_KEY, JSON.stringify(this.favorites));
+              localStorage.setItem(this.STORAGE_PLAYLISTS_KEY, JSON.stringify(this.playlists));
+              localStorage.setItem(this.STORAGE_REPEAT_KEY, this.repeatMode);
+              localStorage.setItem(this.STORAGE_SHUFFLE_KEY, String(this.shuffleMode));
+          }
+          catch (e) {
+              console.warn('[AudioManager] Lỗi lưu cấu hình vào localStorage:', e);
+          }
+      }
+      setupAudioEvents() {
+          this.audio.addEventListener('play', () => {
+              this.isPlaying = true;
+              this.notifyStateChange();
+          });
+          this.audio.addEventListener('pause', () => {
+              this.isPlaying = false;
+              this.notifyStateChange();
+          });
+          this.audio.addEventListener('ended', () => {
+              this.isPlaying = false;
+              this.notifyStateChange();
+              this.handleTrackEnded();
+          });
+          this.audio.addEventListener('timeupdate', () => {
+              const curTime = this.audio.currentTime || 0;
+              const dur = this.audio.duration || 0;
+              // Tìm lời bài hát tương ứng với curTime
+              if (this.lyrics.length > 0) {
+                  let matching = this.lyrics[0];
+                  for (let i = this.lyrics.length - 1; i >= 0; i--) {
+                      if (curTime >= this.lyrics[i].time) {
+                          matching = this.lyrics[i];
+                          break;
+                      }
+                  }
+                  if (matching && matching.text !== this.currentLyric) {
+                      this.currentLyric = matching.text;
+                  }
+              }
+              this.timeListeners.forEach((listener) => {
+                  try {
+                      listener(curTime, dur, this.currentLyric);
+                  }
+                  catch (err) {
+                      console.error('[AudioManager] Lỗi trong timeListener:', err);
+                  }
+              });
+          });
+          this.audio.addEventListener('error', (e) => {
+              console.error('[AudioManager] Lỗi phát audio:', e);
+              this.isPlaying = false;
+              this.notifyStateChange();
+          });
+      }
+      /**
+       * Bắt đầu phát bài hát
+       */
+      async playSong(song, queueContext) {
+          try {
+              this.currentSong = song;
+              this.currentLyric = 'Đang tải thông tin bài hát...';
+              this.lyrics = [];
+              this.notifyStateChange();
+              if (queueContext && queueContext.length > 0) {
+                  this.queue = [...queueContext];
+              }
+              // Thêm vào lịch sử
+              this.history = this.history.filter((s) => s.id !== song.id);
+              this.history.unshift(song);
+              this.saveSettings();
+              // 1. Phân giải link phát
+              const resolved = await MusicEngine.resolvePlayableSong(song);
+              if (!resolved || !resolved.url) {
+                  this.currentLyric = 'Không tìm thấy link phát nhạc (Bản quyền).';
+                  this.notifyStateChange();
+                  return {
+                      success: false,
+                      message: `Không thể lấy link phát cho bài hát '${song.name}' (Khóa bản quyền trên tất cả các nguồn).`,
+                  };
+              }
+              const playableSong = resolved.song;
+              this.currentSong = playableSong;
+              // 2. Tải lời bài hát song song
+              MusicEngine.getRawLyric(playableSong)
+                  .then((rawLrc) => {
+                  if (rawLrc) {
+                      this.lyrics = MusicEngine.parseLyrics(rawLrc);
+                      if (this.lyrics.length > 0) {
+                          this.currentLyric = this.lyrics[0].text;
+                      }
+                      else {
+                          this.currentLyric = '♪ Nhạc không lời hoặc không có lyric';
+                      }
+                  }
+                  else {
+                      this.currentLyric = '♪ Không có lời bài hát';
+                  }
+                  this.notifyStateChange();
+              })
+                  .catch(() => {
+                  this.currentLyric = '♪ Không có lời bài hát';
+                  this.notifyStateChange();
+              });
+              // 3. Nạp URL và phát
+              this.audio.src = resolved.url;
+              this.audio.currentTime = 0;
+              this.audio.volume = this.volume;
+              await this.audio.play();
+              this.isPlaying = true;
+              this.notifyStateChange();
+              return {
+                  success: true,
+                  message: `Đang phát: ${playableSong.name} - ${playableSong.singer} (${playableSong.source.toUpperCase()})`,
+                  song: playableSong,
+              };
+          }
+          catch (err) {
+              console.error('[AudioManager] playSong error:', err);
+              this.isPlaying = false;
+              this.notifyStateChange();
+              // Nếu lỗi do chính sách Autoplay của trình duyệt
+              if (err.name === 'NotAllowedError') {
+                  return {
+                      success: false,
+                      message: 'Trình duyệt yêu cầu người dùng bấm tương tác trước khi tự động phát âm thanh (Autoplay Policy). Bạn có thể bấm nút Play trên Mini Widget để tiếp tục.',
+                  };
+              }
+              return {
+                  success: false,
+                  message: `Lỗi phát bài hát: ${err.message || String(err)}`,
+              };
+          }
+      }
+      togglePlay() {
+          if (!this.currentSong)
+              return;
+          if (this.isPlaying) {
+              this.pause();
+          }
+          else {
+              this.resume();
+          }
+      }
+      pause() {
+          this.audio.pause();
+          this.isPlaying = false;
+          this.notifyStateChange();
+      }
+      resume() {
+          if (this.audio.src) {
+              this.audio.play().catch((e) => console.warn('[AudioManager] resume error:', e));
+              this.isPlaying = true;
+              this.notifyStateChange();
+          }
+      }
+      stop() {
+          this.audio.pause();
+          this.audio.currentTime = 0;
+          this.audio.src = '';
+          this.isPlaying = false;
+          this.currentSong = null;
+          this.lyrics = [];
+          this.currentLyric = '';
+          this.notifyStateChange();
+      }
+      setVolume(val) {
+          const clamped = Math.max(0, Math.min(1, val));
+          this.volume = clamped;
+          this.audio.volume = clamped;
+          this.saveSettings();
+          this.notifyStateChange();
+      }
+      seekTo(seconds) {
+          if (!this.audio.duration)
+              return;
+          const clamped = Math.max(0, Math.min(this.audio.duration, seconds));
+          this.audio.currentTime = clamped;
+      }
+      seekPercent(pct) {
+          if (!this.audio.duration)
+              return;
+          const clampedPct = Math.max(0, Math.min(100, pct));
+          this.audio.currentTime = (clampedPct / 100) * this.audio.duration;
+      }
+      handleTrackEnded() {
+          if (this.repeatMode === 'one' && this.currentSong) {
+              this.audio.currentTime = 0;
+              this.audio.play().catch((e) => console.warn('[AudioManager] repeat error:', e));
+              this.isPlaying = true;
+              this.notifyStateChange();
+              return;
+          }
+          if (this.queue.length === 0)
+              return;
+          const currentIndex = this.queue.findIndex((s) => s.id === this.currentSong?.id);
+          if (this.shuffleMode && this.queue.length > 1) {
+              let randomIndex = currentIndex;
+              while (randomIndex === currentIndex) {
+                  randomIndex = Math.floor(Math.random() * this.queue.length);
+              }
+              this.playSong(this.queue[randomIndex], this.queue);
+              return;
+          }
+          if (currentIndex === this.queue.length - 1 && this.repeatMode === 'none') {
+              this.stop();
+              return;
+          }
+          this.playNext();
+      }
+      playNext() {
+          if (this.queue.length === 0)
+              return;
+          const currentIndex = this.queue.findIndex((s) => s.id === this.currentSong?.id);
+          if (this.shuffleMode && this.queue.length > 1) {
+              let randomIndex = currentIndex;
+              while (randomIndex === currentIndex) {
+                  randomIndex = Math.floor(Math.random() * this.queue.length);
+              }
+              this.playSong(this.queue[randomIndex], this.queue);
+              return;
+          }
+          const nextIndex = (currentIndex + 1) % this.queue.length;
+          this.playSong(this.queue[nextIndex], this.queue);
+      }
+      playPrev() {
+          if (this.queue.length === 0)
+              return;
+          const currentIndex = this.queue.findIndex((s) => s.id === this.currentSong?.id);
+          const prevIndex = (currentIndex - 1 + this.queue.length) % this.queue.length;
+          this.playSong(this.queue[prevIndex], this.queue);
+      }
+      setQueue(songs) {
+          this.queue = [...songs];
+          this.notifyStateChange();
+      }
+      removeFromQueue(songId) {
+          this.queue = this.queue.filter((s) => s.id !== songId);
+          this.notifyStateChange();
+      }
+      clearQueue() {
+          this.queue = [];
+          this.notifyStateChange();
+      }
+      saveQueueAsPlaylist(name) {
+          return this.createPlaylist(name, [...this.queue]);
+      }
+      toggleRepeatMode() {
+          if (this.repeatMode === 'all') {
+              this.repeatMode = 'one';
+          }
+          else if (this.repeatMode === 'one') {
+              this.repeatMode = 'none';
+          }
+          else {
+              this.repeatMode = 'all';
+          }
+          this.saveSettings();
+          this.notifyStateChange();
+          return this.repeatMode;
+      }
+      setRepeatMode(mode) {
+          this.repeatMode = mode;
+          this.saveSettings();
+          this.notifyStateChange();
+      }
+      toggleShuffleMode() {
+          this.shuffleMode = !this.shuffleMode;
+          this.saveSettings();
+          this.notifyStateChange();
+          return this.shuffleMode;
+      }
+      setShuffleMode(enabled) {
+          this.shuffleMode = enabled;
+          this.saveSettings();
+          this.notifyStateChange();
+      }
+      getState() {
+          return {
+              currentSong: this.currentSong,
+              isPlaying: this.isPlaying,
+              volume: this.volume,
+              currentTime: this.audio.currentTime || 0,
+              duration: this.audio.duration || 0,
+              currentLyric: this.currentLyric,
+              queue: this.queue,
+              history: this.history,
+              favorites: this.favorites,
+              playlists: this.playlists,
+              repeatMode: this.repeatMode,
+              shuffleMode: this.shuffleMode,
+          };
+      }
+      // ==========================================
+      // QUẢN LÝ PLAYLISTS & FAVORITES
+      // ==========================================
+      getPlaylists() {
+          return this.playlists;
+      }
+      getPlaylist(idOrName) {
+          const query = idOrName.toLowerCase().trim();
+          return this.playlists.find((p) => p.id === idOrName || p.name.toLowerCase() === query);
+      }
+      createPlaylist(name, initialSongs = []) {
+          const cleanName = name.trim();
+          const existing = this.getPlaylist(cleanName);
+          if (existing) {
+              return existing;
+          }
+          const newPlaylist = {
+              id: 'pl_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+              name: cleanName,
+              createdAt: Date.now(),
+              songs: [...initialSongs],
+          };
+          this.playlists.push(newPlaylist);
+          this.saveSettings();
+          this.notifyStateChange();
+          return newPlaylist;
+      }
+      addSongToPlaylist(idOrName, song) {
+          let pl = this.getPlaylist(idOrName);
+          if (!pl) {
+              pl = this.createPlaylist(idOrName, [song]);
+              return {
+                  success: true,
+                  message: `Đã tạo mới playlist "${pl.name}" và thêm bài hát "${song.name}".`,
+              };
+          }
+          if (pl.songs.some((s) => s.id === song.id)) {
+              return {
+                  success: false,
+                  message: `Bài hát "${song.name}" đã tồn tại trong playlist "${pl.name}".`,
+              };
+          }
+          pl.songs.push(song);
+          this.saveSettings();
+          this.notifyStateChange();
+          return {
+              success: true,
+              message: `Đã thêm bài "${song.name}" vào playlist "${pl.name}".`,
+          };
+      }
+      removeSongFromPlaylist(idOrName, songId) {
+          const pl = this.getPlaylist(idOrName);
+          if (!pl) {
+              return { success: false, message: `Không tìm thấy playlist "${idOrName}".` };
+          }
+          const initialLen = pl.songs.length;
+          pl.songs = pl.songs.filter((s) => s.id !== songId);
+          if (pl.songs.length === initialLen) {
+              return { success: false, message: `Bài hát với ID "${songId}" không nằm trong playlist "${pl.name}".` };
+          }
+          this.saveSettings();
+          this.notifyStateChange();
+          return { success: true, message: `Đã xóa bài hát khỏi playlist "${pl.name}".` };
+      }
+      deletePlaylist(idOrName) {
+          const idx = this.playlists.findIndex((p) => p.id === idOrName || p.name.toLowerCase() === idOrName.toLowerCase().trim());
+          if (idx === -1) {
+              return { success: false, message: `Không tìm thấy playlist "${idOrName}" để xóa.` };
+          }
+          const removed = this.playlists.splice(idx, 1)[0];
+          this.saveSettings();
+          this.notifyStateChange();
+          return { success: true, message: `Đã xóa playlist "${removed.name}".` };
+      }
+      async playPlaylist(idOrName, shuffle = false) {
+          const pl = this.getPlaylist(idOrName);
+          if (!pl) {
+              return { success: false, message: `Không tìm thấy playlist "${idOrName}".` };
+          }
+          if (pl.songs.length === 0) {
+              return { success: false, message: `Playlist "${pl.name}" hiện chưa có bài hát nào.` };
+          }
+          let songList = [...pl.songs];
+          if (shuffle) {
+              songList = this.shuffleArray(songList);
+          }
+          this.setQueue(songList);
+          const playResult = await this.playSong(songList[0], songList);
+          return {
+              success: playResult.success,
+              message: playResult.success
+                  ? `Đang phát playlist "${pl.name}" (${pl.songs.length} bài${shuffle ? ' - Trộn ngẫu nhiên' : ''}). Bài đầu tiên: ${songList[0].name}`
+                  : playResult.message,
+              count: pl.songs.length,
+          };
+      }
+      // ==========================================
+      // FAVORITES
+      // ==========================================
+      getFavorites() {
+          return this.favorites;
+      }
+      isFavorite(songId) {
+          return this.favorites.some((s) => s.id === songId);
+      }
+      toggleFavorite(song) {
+          const idx = this.favorites.findIndex((s) => s.id === song.id);
+          let isNowFav;
+          if (idx >= 0) {
+              this.favorites.splice(idx, 1);
+              isNowFav = false;
+          }
+          else {
+              this.favorites.unshift(song);
+              isNowFav = true;
+          }
+          this.saveSettings();
+          this.notifyStateChange();
+          return isNowFav;
+      }
+      async playFavorites(shuffle = false) {
+          if (this.favorites.length === 0) {
+              return { success: false, message: 'Danh sách Yêu thích của bạn hiện đang trống.' };
+          }
+          let songList = [...this.favorites];
+          if (shuffle) {
+              songList = this.shuffleArray(songList);
+          }
+          this.setQueue(songList);
+          const playResult = await this.playSong(songList[0], songList);
+          return {
+              success: playResult.success,
+              message: playResult.success
+                  ? `Đang phát danh sách Yêu thích (${this.favorites.length} bài${shuffle ? ' - Trộn ngẫu nhiên' : ''}). Bài đầu tiên: ${songList[0].name}`
+                  : playResult.message,
+              count: this.favorites.length,
+          };
+      }
+      shuffleArray(array) {
+          const arr = [...array];
+          for (let i = arr.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          return arr;
+      }
+      getLyrics() {
+          return this.lyrics;
+      }
+      onStateChange(listener) {
+          this.stateListeners.add(listener);
+          listener(this.getState());
+          return () => this.stateListeners.delete(listener);
+      }
+      onTimeUpdate(listener) {
+          this.timeListeners.add(listener);
+          return () => this.timeListeners.delete(listener);
+      }
+      notifyStateChange() {
+          const state = this.getState();
+          this.stateListeners.forEach((listener) => {
+              try {
+                  listener(state);
+              }
+              catch (err) {
+                  console.error('[AudioManager] Lỗi trong stateListener:', err);
+              }
+          });
+      }
+  }
+
+  /**
+   * Floating Music Player Widget
+   * Giao diện Mini Player mang phong cách Hi-Fi cổ điển (Classic Matte Charcoal & Amber Accent).
+   * Thiết kế dịu mắt, trực quan, thân thiện, tôn trọng công năng và loại bỏ hoàn toàn AI/Neon slop.
+   * Đồng bộ hai chiều với AudioManager: Play/Pause, Seek, Volume, Repeat, Shuffle, Favorite & Queue/Playlist Drawer.
+   */
+  class MusicPlayerWidget {
+      static instance;
+      container = null;
+      isMinimized = false;
+      isDrawerOpen = false;
+      activeDrawerTab = 'queue';
+      audioManager;
+      WIDGET_ID = 'kaiz-music-player-widget';
+      STYLE_ID = 'kaiz-music-player-style';
+      constructor() {
+          this.audioManager = AudioManager.getInstance();
+      }
+      static getInstance() {
+          if (!MusicPlayerWidget.instance) {
+              MusicPlayerWidget.instance = new MusicPlayerWidget();
+          }
+          return MusicPlayerWidget.instance;
+      }
+      /**
+       * Khởi tạo và gắn widget vào DOM
+       */
+      init() {
+          if (document.getElementById(this.WIDGET_ID))
+              return;
+          this.injectStyles();
+          this.createWidgetDOM();
+          this.bindEvents();
+          this.subscribeAudioEvents();
+      }
+      injectStyles() {
+          if (document.getElementById(this.STYLE_ID))
+              return;
+          const style = document.createElement('style');
+          style.id = this.STYLE_ID;
+          style.textContent = `
+            /* Container chính: Phong cách Classic Hi-Fi Charcoal */
+            #${this.WIDGET_ID} {
+                position: fixed;
+                bottom: 24px;
+                right: 24px;
+                z-index: 99998;
+                width: 380px;
+                background: #181a20;
+                border: 1px solid rgba(255, 255, 255, 0.09);
+                border-radius: 16px;
+                box-shadow: 0 16px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.04);
+                color: #e2e8f0;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                user-select: none;
+                transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, width 0.25s ease, height 0.25s ease;
+                display: none;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
+            #${this.WIDGET_ID}.is-active {
+                display: flex;
+            }
+
+            /* Chế độ thu gọn thành Đĩa than Mini (Pill Mode) */
+            #${this.WIDGET_ID}.is-minimized {
+                width: 56px;
+                height: 56px;
+                border-radius: 28px;
+                padding: 0;
+                cursor: pointer;
+                border: 1px solid rgba(245, 158, 11, 0.35);
+                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card {
+                display: none;
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card {
+                display: flex;
+                width: 100%;
+                height: 100%;
+                align-items: center;
+                justify-content: center;
+                background: #181a20;
+                border-radius: 28px;
+            }
+
+            .kaiz-mp-pill-card {
+                display: none;
+                position: relative;
+            }
+
+            .kaiz-mp-pill-cover {
+                width: 44px;
+                height: 44px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 2px solid #d97706;
+            }
+
+            .kaiz-mp-main-card {
+                padding: 14px 16px 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 11px;
+            }
+
+            /* Header: Thanh tiêu đề & Kéo thả */
+            .kaiz-mp-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                cursor: grab;
+                padding-bottom: 2px;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .kaiz-mp-header:active {
+                cursor: grabbing;
+            }
+
+            .kaiz-mp-brand {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                font-size: 11.5px;
+                font-weight: 600;
+                letter-spacing: 0.04em;
+                color: #94a3b8;
+                text-transform: uppercase;
+            }
+
+            .kaiz-mp-status-dot {
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: #64748b;
+                transition: background 0.3s ease;
+            }
+
+            .kaiz-mp-status-dot.is-playing {
+                background: #f59e0b;
+                box-shadow: 0 0 6px rgba(245, 158, 11, 0.5);
+            }
+
+            .kaiz-mp-actions {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .kaiz-mp-header-btn {
+                background: transparent;
+                border: none;
+                color: #64748b;
+                cursor: pointer;
+                padding: 4px 6px;
+                border-radius: 6px;
+                font-size: 12px;
+                line-height: 1;
+                transition: all 0.15s ease;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .kaiz-mp-header-btn:hover {
+                color: #e2e8f0;
+                background: rgba(255, 255, 255, 0.06);
+            }
+
+            .kaiz-mp-header-btn.btn-close:hover {
+                color: #f87171;
+                background: rgba(239, 68, 68, 0.12);
+            }
+
+            /* Body: Đĩa than & Thông tin bài hát */
+            .kaiz-mp-body {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+            }
+
+            .kaiz-mp-cover-wrap {
+                position: relative;
+                width: 58px;
+                height: 58px;
+                flex-shrink: 0;
+            }
+
+            .kaiz-mp-cover {
+                width: 58px;
+                height: 58px;
+                border-radius: 50%;
+                object-fit: cover;
+                border: 2px solid rgba(255, 255, 255, 0.1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+            }
+
+            .kaiz-mp-cover-groove {
+                position: absolute;
+                inset: 0;
+                border-radius: 50%;
+                box-shadow: inset 0 0 0 3px rgba(0,0,0,0.5), inset 0 0 0 8px rgba(255,255,255,0.04);
+                pointer-events: none;
+            }
+
+            .kaiz-mp-cover.is-spinning,
+            .kaiz-mp-pill-cover.is-spinning {
+                animation: kaiz-vinyl-rotate 16s linear infinite;
+            }
+
+            @keyframes kaiz-vinyl-rotate {
+                from { transform: rotate(0deg); }
+                to { transform: rotate(360deg); }
+            }
+
+            .kaiz-mp-info {
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
+                min-width: 0;
+                flex: 1;
+            }
+
+            .kaiz-mp-title-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+            }
+
+            .kaiz-mp-title {
+                font-size: 13.5px;
+                font-weight: 600;
+                color: #f1f5f9;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                letter-spacing: -0.01em;
+            }
+
+            .kaiz-mp-source-tag {
+                font-size: 9.5px;
+                font-weight: 600;
+                padding: 1px 5px;
+                border-radius: 4px;
+                background: rgba(255, 255, 255, 0.08);
+                color: #94a3b8;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                flex-shrink: 0;
+            }
+
+            .kaiz-mp-singer {
+                font-size: 12px;
+                color: #94a3b8;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .kaiz-mp-lyric {
+                font-size: 11.5px;
+                color: #d1d5db;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                font-style: italic;
+                opacity: 0.85;
+                margin-top: 2px;
+            }
+
+            /* Progress Bar */
+            .kaiz-mp-progress-container {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
+            }
+
+            .kaiz-mp-progress-bar {
+                width: 100%;
+                height: 4px;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 2px;
+                cursor: pointer;
+                position: relative;
+                overflow: hidden;
+            }
+
+            .kaiz-mp-progress-fill {
+                height: 100%;
+                width: 0%;
+                background: #f59e0b;
+                border-radius: 2px;
+                transition: width 0.1s linear;
+            }
+
+            .kaiz-mp-time-row {
+                display: flex;
+                justify-content: space-between;
+                font-size: 10.5px;
+                color: #64748b;
+                font-variant-numeric: tabular-nums;
+            }
+
+            /* Thanh điều khiển: Cổ điển, Đầy đủ & Cân bằng */
+            .kaiz-mp-controls-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 6px;
+                padding-top: 2px;
+            }
+
+            .kaiz-mp-btn-group {
+                display: flex;
+                align-items: center;
+                gap: 3px;
+            }
+
+            .kaiz-mp-btn {
+                background: transparent;
+                border: none;
+                color: #94a3b8;
+                cursor: pointer;
+                width: 30px;
+                height: 30px;
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.15s ease;
+                position: relative;
+            }
+
+            .kaiz-mp-btn:hover {
+                color: #f1f5f9;
+                background: rgba(255, 255, 255, 0.06);
+            }
+
+            .kaiz-mp-btn:active {
+                transform: scale(0.95);
+            }
+
+            .kaiz-mp-btn.is-active {
+                color: #f59e0b;
+            }
+
+            .kaiz-mp-btn.btn-fav.is-favorite {
+                color: #e11d48;
+            }
+
+            .kaiz-mp-btn-badge {
+                position: absolute;
+                top: 3px;
+                right: 3px;
+                font-size: 8px;
+                font-weight: 700;
+                background: #f59e0b;
+                color: #181a20;
+                border-radius: 50%;
+                width: 11px;
+                height: 11px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                line-height: 1;
+            }
+
+            .kaiz-mp-play-btn {
+                background: #23262f;
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                color: #f8fafc;
+                cursor: pointer;
+                width: 36px;
+                height: 36px;
+                border-radius: 18px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.15s ease;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+            }
+
+            .kaiz-mp-play-btn:hover {
+                background: #2a2d37;
+                border-color: rgba(245, 158, 11, 0.4);
+                color: #f59e0b;
+            }
+
+            .kaiz-mp-play-btn:active {
+                transform: scale(0.94);
+            }
+
+            /* Volume slider */
+            .kaiz-mp-vol-wrap {
+                display: flex;
+                align-items: center;
+                gap: 5px;
+            }
+
+            .kaiz-mp-vol-slider {
+                width: 52px;
+                height: 4px;
+                -webkit-appearance: none;
+                appearance: none;
+                background: rgba(255, 255, 255, 0.1);
+                border-radius: 2px;
+                outline: none;
+                cursor: pointer;
+            }
+
+            .kaiz-mp-vol-slider::-webkit-slider-thumb {
+                -webkit-appearance: none;
+                width: 10px;
+                height: 10px;
+                border-radius: 50%;
+                background: #f59e0b;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+                cursor: pointer;
+            }
+
+            /* Queue / Playlist Drawer (Bung danh sách mượt mà) */
+            .kaiz-mp-drawer {
+                display: none;
+                flex-direction: column;
+                border-top: 1px solid rgba(255, 255, 255, 0.07);
+                background: #14151b;
+                border-radius: 0 0 16px 16px;
+                overflow: hidden;
+                transition: max-height 0.25s ease;
+                max-height: 230px;
+            }
+
+            .kaiz-mp-drawer.is-open {
+                display: flex;
+            }
+
+            .kaiz-mp-drawer-tabs {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 8px 14px;
+                background: rgba(0, 0, 0, 0.25);
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
+
+            .kaiz-mp-tab-group {
+                display: flex;
+                gap: 6px;
+            }
+
+            .kaiz-mp-tab-btn {
+                background: transparent;
+                border: none;
+                color: #64748b;
+                font-size: 11.5px;
+                font-weight: 600;
+                cursor: pointer;
+                padding: 3px 8px;
+                border-radius: 5px;
+                transition: all 0.15s ease;
+            }
+
+            .kaiz-mp-tab-btn:hover {
+                color: #94a3b8;
+            }
+
+            .kaiz-mp-tab-btn.is-active {
+                color: #f1f5f9;
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .kaiz-mp-drawer-actions {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .kaiz-mp-drawer-text-btn {
+                background: transparent;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                color: #94a3b8;
+                font-size: 10.5px;
+                padding: 2px 7px;
+                border-radius: 4px;
+                cursor: pointer;
+                transition: all 0.15s ease;
+            }
+
+            .kaiz-mp-drawer-text-btn:hover {
+                color: #f59e0b;
+                border-color: rgba(245, 158, 11, 0.3);
+            }
+
+            .kaiz-mp-drawer-list {
+                display: flex;
+                flex-direction: column;
+                overflow-y: auto;
+                max-height: 180px;
+                padding: 4px 6px;
+                gap: 2px;
+            }
+
+            .kaiz-mp-drawer-list::-webkit-scrollbar {
+                width: 4px;
+            }
+
+            .kaiz-mp-drawer-list::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.15);
+                border-radius: 2px;
+            }
+
+            .kaiz-mp-list-item {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 6px 8px;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: background 0.15s ease;
+                gap: 8px;
+            }
+
+            .kaiz-mp-list-item:hover {
+                background: rgba(255, 255, 255, 0.05);
+            }
+
+            .kaiz-mp-list-item.is-current {
+                background: rgba(245, 158, 11, 0.12);
+            }
+
+            .kaiz-mp-item-left {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                min-width: 0;
+                flex: 1;
+            }
+
+            .kaiz-mp-item-index {
+                font-size: 10px;
+                color: #64748b;
+                width: 14px;
+                text-align: right;
+                font-variant-numeric: tabular-nums;
+            }
+
+            .kaiz-mp-list-item.is-current .kaiz-mp-item-index {
+                color: #f59e0b;
+                font-weight: 700;
+            }
+
+            .kaiz-mp-item-details {
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+            }
+
+            .kaiz-mp-item-name {
+                font-size: 12px;
+                color: #f1f5f9;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .kaiz-mp-list-item.is-current .kaiz-mp-item-name {
+                color: #f59e0b;
+                font-weight: 600;
+            }
+
+            .kaiz-mp-item-sub {
+                font-size: 10.5px;
+                color: #94a3b8;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .kaiz-mp-item-del-btn {
+                background: transparent;
+                border: none;
+                color: #64748b;
+                cursor: pointer;
+                padding: 2px 5px;
+                font-size: 11px;
+                border-radius: 4px;
+                opacity: 0.6;
+                transition: all 0.15s ease;
+            }
+
+            .kaiz-mp-item-del-btn:hover {
+                color: #f87171;
+                opacity: 1;
+                background: rgba(239, 68, 68, 0.1);
+            }
+
+            .kaiz-mp-empty-drawer {
+                padding: 20px 10px;
+                text-align: center;
+                color: #64748b;
+                font-size: 11.5px;
+            }
+        `;
+          document.head.appendChild(style);
+      }
+      createWidgetDOM() {
+          const div = document.createElement('div');
+          div.id = this.WIDGET_ID;
+          div.innerHTML = `
+            <!-- Pill Mode khi thu gọn -->
+            <div class="kaiz-mp-pill-card" id="kaiz-mp-pill" title="Mở rộng trình phát nhạc Kaiz">
+                <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-pill-cover" id="kaiz-mp-pill-cover" alt="cover">
+            </div>
+
+            <!-- Main Full Card -->
+            <div class="kaiz-mp-main-card">
+                <!-- Header -->
+                <div class="kaiz-mp-header" id="kaiz-mp-drag-header">
+                    <div class="kaiz-mp-brand">
+                        <span class="kaiz-mp-status-dot" id="kaiz-mp-status-dot"></span>
+                        <span>Kaiz Hi-Fi</span>
+                    </div>
+                    <div class="kaiz-mp-actions">
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-minimize" title="Thu gọn thành đĩa than mini">─</button>
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-hide" title="Ẩn giao diện (nhạc vẫn tiếp tục phát)">⌄</button>
+                        <button class="kaiz-mp-header-btn btn-close" id="kaiz-mp-btn-close" title="Tắt nhạc và đóng">✕</button>
+                    </div>
+                </div>
+
+                <!-- Body: Vinyl & Info -->
+                <div class="kaiz-mp-body">
+                    <div class="kaiz-mp-cover-wrap">
+                        <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-cover" id="kaiz-mp-cover" alt="album cover">
+                        <div class="kaiz-mp-cover-groove"></div>
+                    </div>
+                    <div class="kaiz-mp-info">
+                        <div class="kaiz-mp-title-row">
+                            <span class="kaiz-mp-title" id="kaiz-mp-title">Chưa có bài hát</span>
+                            <span class="kaiz-mp-source-tag" id="kaiz-mp-source">STREAM</span>
+                        </div>
+                        <span class="kaiz-mp-singer" id="kaiz-mp-singer">Kaiz Music</span>
+                        <div class="kaiz-mp-lyric" id="kaiz-mp-lyric">♪ Sẵn sàng phát nhạc</div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="kaiz-mp-progress-container">
+                    <div class="kaiz-mp-progress-bar" id="kaiz-mp-progress-bar">
+                        <div class="kaiz-mp-progress-fill" id="kaiz-mp-progress-fill"></div>
+                    </div>
+                    <div class="kaiz-mp-time-row">
+                        <span id="kaiz-mp-time-cur">0:00</span>
+                        <span id="kaiz-mp-time-dur">0:00</span>
+                    </div>
+                </div>
+
+                <!-- Controls Row: Đầy đủ Shuffle, Prev, Play, Next, Repeat, Favorite, Drawer, Volume -->
+                <div class="kaiz-mp-controls-row">
+                    <!-- Nhóm điều hướng -->
+                    <div class="kaiz-mp-btn-group">
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-shuffle" title="Bật/Tắt phát ngẫu nhiên">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-prev" title="Bài trước">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                        </button>
+                        <button class="kaiz-mp-play-btn" id="kaiz-mp-btn-play" title="Phát / Tạm dừng">
+                            <svg id="kaiz-mp-icon-play" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            <svg id="kaiz-mp-icon-pause" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-next" title="Bài kế tiếp">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-repeat" title="Chế độ lặp lại: Lặp danh sách / Lặp 1 bài / Tắt lặp">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
+                            </svg>
+                            <span class="kaiz-mp-btn-badge" id="kaiz-mp-repeat-badge" style="display:none;">1</span>
+                        </button>
+                    </div>
+
+                    <!-- Nhóm tiện ích: Favorite, Drawer, Volume -->
+                    <div class="kaiz-mp-btn-group">
+                        <button class="kaiz-mp-btn btn-fav" id="kaiz-mp-btn-fav" title="Yêu thích bài hát này">
+                            <svg id="kaiz-mp-icon-heart" width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-btn" id="kaiz-mp-btn-drawer" title="Danh sách hàng đợi & Playlist">
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
+                            </svg>
+                        </button>
+                        <div class="kaiz-mp-vol-wrap">
+                            <input type="range" min="0" max="1" step="0.01" value="0.8" class="kaiz-mp-vol-slider" id="kaiz-mp-vol-slider" title="Âm lượng">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Queue & Playlist Drawer -->
+            <div class="kaiz-mp-drawer" id="kaiz-mp-drawer">
+                <div class="kaiz-mp-drawer-tabs">
+                    <div class="kaiz-mp-tab-group">
+                        <button class="kaiz-mp-tab-btn is-active" id="kaiz-mp-tab-queue">Hàng đợi (<span id="kaiz-mp-queue-count">0</span>)</button>
+                        <button class="kaiz-mp-tab-btn" id="kaiz-mp-tab-playlists">Playlists</button>
+                    </div>
+                    <div class="kaiz-mp-drawer-actions">
+                        <button class="kaiz-mp-drawer-text-btn" id="kaiz-mp-drawer-action-btn">Lưu Playlist</button>
+                    </div>
+                </div>
+                <div class="kaiz-mp-drawer-list" id="kaiz-mp-drawer-list">
+                    <!-- Danh sách bài hát / playlists sẽ được render ở đây -->
+                </div>
+            </div>
+        `;
+          document.body.appendChild(div);
+          this.container = div;
+      }
+      formatTime(seconds) {
+          if (!seconds || isNaN(seconds) || seconds < 0)
+              return '0:00';
+          const mins = Math.floor(seconds / 60);
+          const secs = Math.floor(seconds % 60);
+          return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+      }
+      bindEvents() {
+          if (!this.container)
+              return;
+          // Click Pill để phóng to
+          const pill = this.container.querySelector('#kaiz-mp-pill');
+          if (pill) {
+              pill.addEventListener('click', () => {
+                  this.toggleMinimize(false);
+              });
+          }
+          // Thu gọn thành đĩa than mini
+          const minBtn = this.container.querySelector('#kaiz-mp-btn-minimize');
+          if (minBtn) {
+              minBtn.addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  this.toggleMinimize(true);
+              });
+          }
+          // Ẩn giao diện tạm thời (nhạc vẫn tiếp tục phát)
+          const hideBtn = this.container.querySelector('#kaiz-mp-btn-hide');
+          if (hideBtn) {
+              hideBtn.addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  this.hide();
+              });
+          }
+          // Đóng / Stop
+          const closeBtn = this.container.querySelector('#kaiz-mp-btn-close');
+          if (closeBtn) {
+              closeBtn.addEventListener('click', (e) => {
+                  e.stopPropagation();
+                  this.audioManager.stop();
+                  this.hide();
+              });
+          }
+          // Play / Pause
+          const playBtn = this.container.querySelector('#kaiz-mp-btn-play');
+          if (playBtn) {
+              playBtn.addEventListener('click', () => {
+                  this.audioManager.togglePlay();
+              });
+          }
+          // Prev & Next
+          const prevBtn = this.container.querySelector('#kaiz-mp-btn-prev');
+          if (prevBtn) {
+              prevBtn.addEventListener('click', () => {
+                  this.audioManager.playPrev();
+              });
+          }
+          const nextBtn = this.container.querySelector('#kaiz-mp-btn-next');
+          if (nextBtn) {
+              nextBtn.addEventListener('click', () => {
+                  this.audioManager.playNext();
+              });
+          }
+          // Shuffle Toggle
+          const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
+          if (shuffleBtn) {
+              shuffleBtn.addEventListener('click', () => {
+                  this.audioManager.toggleShuffleMode();
+              });
+          }
+          // Repeat Toggle
+          const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
+          if (repeatBtn) {
+              repeatBtn.addEventListener('click', () => {
+                  this.audioManager.toggleRepeatMode();
+              });
+          }
+          // Favorite Toggle
+          const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
+          if (favBtn) {
+              favBtn.addEventListener('click', () => {
+                  const current = this.audioManager.getState().currentSong;
+                  if (current) {
+                      this.audioManager.toggleFavorite(current);
+                  }
+              });
+          }
+          // Drawer Toggle
+          const drawerBtn = this.container.querySelector('#kaiz-mp-btn-drawer');
+          if (drawerBtn) {
+              drawerBtn.addEventListener('click', () => {
+                  this.toggleDrawer();
+              });
+          }
+          // Drawer Tabs
+          const tabQueue = this.container.querySelector('#kaiz-mp-tab-queue');
+          const tabPlaylists = this.container.querySelector('#kaiz-mp-tab-playlists');
+          if (tabQueue && tabPlaylists) {
+              tabQueue.addEventListener('click', () => {
+                  this.activeDrawerTab = 'queue';
+                  tabQueue.classList.add('is-active');
+                  tabPlaylists.classList.remove('is-active');
+                  this.updateDrawerContent();
+              });
+              tabPlaylists.addEventListener('click', () => {
+                  this.activeDrawerTab = 'playlists';
+                  tabPlaylists.classList.add('is-active');
+                  tabQueue.classList.remove('is-active');
+                  this.updateDrawerContent();
+              });
+          }
+          // Drawer Action Button ("Lưu Playlist" hoặc "Tạo mới")
+          const drawerActionBtn = this.container.querySelector('#kaiz-mp-drawer-action-btn');
+          if (drawerActionBtn) {
+              drawerActionBtn.addEventListener('click', () => {
+                  if (this.activeDrawerTab === 'queue') {
+                      const plName = prompt('Nhập tên danh sách phát để lưu hàng đợi hiện tại:');
+                      if (plName && plName.trim()) {
+                          this.audioManager.saveQueueAsPlaylist(plName.trim());
+                          this.activeDrawerTab = 'playlists';
+                          if (tabPlaylists && tabQueue) {
+                              tabPlaylists.classList.add('is-active');
+                              tabQueue.classList.remove('is-active');
+                          }
+                          this.updateDrawerContent();
+                      }
+                  }
+                  else {
+                      const plName = prompt('Nhập tên danh sách phát mới:');
+                      if (plName && plName.trim()) {
+                          this.audioManager.createPlaylist(plName.trim());
+                          this.updateDrawerContent();
+                      }
+                  }
+              });
+          }
+          // Tua nhạc trên progress bar
+          const progBar = this.container.querySelector('#kaiz-mp-progress-bar');
+          if (progBar) {
+              progBar.addEventListener('click', (e) => {
+                  const rect = progBar.getBoundingClientRect();
+                  const clickX = e.clientX - rect.left;
+                  const pct = Math.max(0, Math.min(100, (clickX / rect.width) * 100));
+                  this.audioManager.seekPercent(pct);
+              });
+          }
+          // Điều chỉnh âm lượng
+          const volSlider = this.container.querySelector('#kaiz-mp-vol-slider');
+          if (volSlider) {
+              volSlider.addEventListener('input', () => {
+                  const val = parseFloat(volSlider.value);
+                  this.audioManager.setVolume(val);
+              });
+          }
+          // Kéo thả di chuyển Widget
+          this.setupDragging();
+      }
+      setupDragging() {
+          const header = this.container?.querySelector('#kaiz-mp-drag-header');
+          if (!header || !this.container)
+              return;
+          let isDragging = false;
+          let startX = 0;
+          let startY = 0;
+          let origRight = 24;
+          let origBottom = 24;
+          header.addEventListener('mousedown', (e) => {
+              if (e.target.tagName === 'BUTTON')
+                  return;
+              isDragging = true;
+              startX = e.clientX;
+              startY = e.clientY;
+              const rect = this.container.getBoundingClientRect();
+              origRight = window.innerWidth - rect.right;
+              origBottom = window.innerHeight - rect.bottom;
+              header.style.cursor = 'grabbing';
+              e.preventDefault();
+          });
+          document.addEventListener('mousemove', (e) => {
+              if (!isDragging || !this.container)
+                  return;
+              const deltaX = e.clientX - startX;
+              const deltaY = e.clientY - startY;
+              const newRight = Math.max(10, Math.min(window.innerWidth - 80, origRight - deltaX));
+              const newBottom = Math.max(10, Math.min(window.innerHeight - 80, origBottom - deltaY));
+              this.container.style.right = `${newRight}px`;
+              this.container.style.bottom = `${newBottom}px`;
+          });
+          document.addEventListener('mouseup', () => {
+              if (isDragging) {
+                  isDragging = false;
+                  if (header)
+                      header.style.cursor = 'grab';
+              }
+          });
+      }
+      subscribeAudioEvents() {
+          // Đồng bộ trạng thái bài hát
+          this.audioManager.onStateChange((state) => {
+              if (!this.container)
+                  return;
+              if (state.currentSong) {
+                  this.show();
+                  const titleEl = this.container.querySelector('#kaiz-mp-title');
+                  const singerEl = this.container.querySelector('#kaiz-mp-singer');
+                  const sourceEl = this.container.querySelector('#kaiz-mp-source');
+                  const coverEl = this.container.querySelector('#kaiz-mp-cover');
+                  const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover');
+                  const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
+                  const dotEl = this.container.querySelector('#kaiz-mp-status-dot');
+                  if (titleEl)
+                      titleEl.textContent = state.currentSong.name;
+                  if (singerEl)
+                      singerEl.textContent = state.currentSong.singer;
+                  if (sourceEl)
+                      sourceEl.textContent = state.currentSong.source.toUpperCase();
+                  const coverSrc = state.currentSong.cover || DEFAULT_MUSIC_COVER;
+                  if (coverEl) {
+                      coverEl.src = coverSrc;
+                      if (state.isPlaying) {
+                          coverEl.classList.add('is-spinning');
+                      }
+                      else {
+                          coverEl.classList.remove('is-spinning');
+                      }
+                  }
+                  if (pillCoverEl) {
+                      pillCoverEl.src = coverSrc;
+                      if (state.isPlaying) {
+                          pillCoverEl.classList.add('is-spinning');
+                      }
+                      else {
+                          pillCoverEl.classList.remove('is-spinning');
+                      }
+                  }
+                  if (lyricEl)
+                      lyricEl.textContent = state.currentLyric || '♪ Sẵn sàng phát nhạc';
+                  if (dotEl) {
+                      if (state.isPlaying) {
+                          dotEl.classList.add('is-playing');
+                      }
+                      else {
+                          dotEl.classList.remove('is-playing');
+                      }
+                  }
+                  // Play / Pause Icon
+                  const playIcon = this.container.querySelector('#kaiz-mp-icon-play');
+                  const pauseIcon = this.container.querySelector('#kaiz-mp-icon-pause');
+                  if (playIcon && pauseIcon) {
+                      playIcon.style.display = state.isPlaying ? 'none' : 'block';
+                      pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
+                  }
+                  // Volume slider
+                  const volSlider = this.container.querySelector('#kaiz-mp-vol-slider');
+                  if (volSlider && document.activeElement !== volSlider) {
+                      volSlider.value = String(state.volume);
+                  }
+                  // Favorite Button
+                  const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
+                  const isFav = this.audioManager.isFavorite(state.currentSong.id);
+                  if (favBtn) {
+                      if (isFav) {
+                          favBtn.classList.add('is-favorite');
+                      }
+                      else {
+                          favBtn.classList.remove('is-favorite');
+                      }
+                  }
+                  // Repeat Mode Button
+                  const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
+                  const repeatBadge = this.container.querySelector('#kaiz-mp-repeat-badge');
+                  if (repeatBtn && repeatBadge) {
+                      if (state.repeatMode === 'one') {
+                          repeatBtn.classList.add('is-active');
+                          repeatBadge.style.display = 'flex';
+                      }
+                      else if (state.repeatMode === 'all') {
+                          repeatBtn.classList.add('is-active');
+                          repeatBadge.style.display = 'none';
+                      }
+                      else {
+                          repeatBtn.classList.remove('is-active');
+                          repeatBadge.style.display = 'none';
+                      }
+                  }
+                  // Shuffle Mode Button
+                  const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
+                  if (shuffleBtn) {
+                      if (state.shuffleMode) {
+                          shuffleBtn.classList.add('is-active');
+                      }
+                      else {
+                          shuffleBtn.classList.remove('is-active');
+                      }
+                  }
+                  // Queue Count in Drawer Tab
+                  const queueCountEl = this.container.querySelector('#kaiz-mp-queue-count');
+                  if (queueCountEl) {
+                      queueCountEl.textContent = String(state.queue.length);
+                  }
+                  if (this.isDrawerOpen) {
+                      this.updateDrawerContent();
+                  }
+              }
+              else {
+                  this.hide();
+              }
+          });
+          // Đồng bộ tiến độ thời gian & Lyric
+          this.audioManager.onTimeUpdate((curTime, duration, lyric) => {
+              if (!this.container)
+                  return;
+              const pct = duration > 0 ? (curTime / duration) * 100 : 0;
+              const fill = this.container.querySelector('#kaiz-mp-progress-fill');
+              if (fill)
+                  fill.style.width = `${pct}%`;
+              const curEl = this.container.querySelector('#kaiz-mp-time-cur');
+              const durEl = this.container.querySelector('#kaiz-mp-time-dur');
+              if (curEl)
+                  curEl.textContent = this.formatTime(curTime);
+              if (durEl)
+                  durEl.textContent = this.formatTime(duration);
+              const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
+              if (lyricEl && lyric && lyricEl.textContent !== lyric) {
+                  lyricEl.textContent = lyric;
+              }
+          });
+      }
+      toggleDrawer(open) {
+          this.isDrawerOpen = open !== undefined ? open : !this.isDrawerOpen;
+          const drawer = this.container?.querySelector('#kaiz-mp-drawer');
+          const drawerBtn = this.container?.querySelector('#kaiz-mp-btn-drawer');
+          if (drawer) {
+              if (this.isDrawerOpen) {
+                  drawer.classList.add('is-open');
+                  drawerBtn?.classList.add('is-active');
+                  this.updateDrawerContent();
+              }
+              else {
+                  drawer.classList.remove('is-open');
+                  drawerBtn?.classList.remove('is-active');
+              }
+          }
+      }
+      updateDrawerContent() {
+          if (!this.container)
+              return;
+          const listEl = this.container.querySelector('#kaiz-mp-drawer-list');
+          const actionBtn = this.container.querySelector('#kaiz-mp-drawer-action-btn');
+          if (!listEl)
+              return;
+          const state = this.audioManager.getState();
+          if (this.activeDrawerTab === 'queue') {
+              if (actionBtn)
+                  actionBtn.textContent = 'Lưu Playlist';
+              if (state.queue.length === 0) {
+                  listEl.innerHTML = `<div class="kaiz-mp-empty-drawer">Hàng đợi đang trống.</div>`;
+                  return;
+              }
+              listEl.innerHTML = '';
+              state.queue.forEach((song, idx) => {
+                  const isCurrent = state.currentSong?.id === song.id;
+                  const item = document.createElement('div');
+                  item.className = `kaiz-mp-list-item ${isCurrent ? 'is-current' : ''}`;
+                  item.innerHTML = `
+                    <div class="kaiz-mp-item-left">
+                        <span class="kaiz-mp-item-index">${idx + 1}</span>
+                        <div class="kaiz-mp-item-details">
+                            <span class="kaiz-mp-item-name">${song.name}</span>
+                            <span class="kaiz-mp-item-sub">${song.singer} · ${song.source.toUpperCase()}</span>
+                        </div>
+                    </div>
+                    <button class="kaiz-mp-item-del-btn" title="Xóa khỏi hàng đợi">✕</button>
+                `;
+                  // Click bài hát để phát
+                  item.querySelector('.kaiz-mp-item-left')?.addEventListener('click', () => {
+                      this.audioManager.playSong(song);
+                  });
+                  // Click nút xóa
+                  item.querySelector('.kaiz-mp-item-del-btn')?.addEventListener('click', (e) => {
+                      e.stopPropagation();
+                      this.audioManager.removeFromQueue(song.id);
+                  });
+                  listEl.appendChild(item);
+              });
+          }
+          else {
+              // Tab Playlists
+              if (actionBtn)
+                  actionBtn.textContent = '+ Tạo mới';
+              const playlists = this.audioManager.getPlaylists();
+              if (playlists.length === 0) {
+                  listEl.innerHTML = `<div class="kaiz-mp-empty-drawer">Chưa có playlist nào được lưu.</div>`;
+                  return;
+              }
+              listEl.innerHTML = '';
+              playlists.forEach((pl, idx) => {
+                  const item = document.createElement('div');
+                  item.className = 'kaiz-mp-list-item';
+                  item.innerHTML = `
+                    <div class="kaiz-mp-item-left">
+                        <span class="kaiz-mp-item-index">${idx + 1}</span>
+                        <div class="kaiz-mp-item-details">
+                            <span class="kaiz-mp-item-name">${pl.name}</span>
+                            <span class="kaiz-mp-item-sub">${pl.songs.length} bài hát</span>
+                        </div>
+                    </div>
+                    <button class="kaiz-mp-item-del-btn" title="Xóa playlist này">✕</button>
+                `;
+                  // Click để phát playlist
+                  item.querySelector('.kaiz-mp-item-left')?.addEventListener('click', () => {
+                      this.audioManager.playPlaylist(pl.id);
+                  });
+                  // Xóa playlist
+                  item.querySelector('.kaiz-mp-item-del-btn')?.addEventListener('click', (e) => {
+                      e.stopPropagation();
+                      if (confirm(`Bạn có chắc muốn xóa playlist "${pl.name}"?`)) {
+                          this.audioManager.deletePlaylist(pl.id);
+                          this.updateDrawerContent();
+                      }
+                  });
+                  listEl.appendChild(item);
+              });
+          }
+      }
+      isVisible() {
+          return !!this.container?.classList.contains('is-active');
+      }
+      toggle() {
+          if (this.isVisible()) {
+              this.hide();
+          }
+          else {
+              this.show();
+          }
+      }
+      show() {
+          if (this.container) {
+              this.container.classList.add('is-active');
+          }
+      }
+      hide() {
+          if (this.container) {
+              this.container.classList.remove('is-active');
+          }
+      }
+      toggleMinimize(minimized) {
+          this.isMinimized = minimized !== undefined ? minimized : !this.isMinimized;
+          if (this.container) {
+              if (this.isMinimized) {
+                  this.container.classList.add('is-minimized');
+              }
+              else {
+                  this.container.classList.remove('is-minimized');
+              }
+          }
+      }
+  }
+
+  /**
+   * Tool: manage_music
+   * Công cụ đa năng cho Agent: Tìm kiếm nhạc, duyệt danh sách (surf list), phát nhạc và điều khiển playback.
+   */
+  // Cache kết quả tìm kiếm gần nhất để Agent có thể chọn nhanh theo song_id
+  const searchCache = new Map();
+  const manageMusicTool = {
+      schema: {
+          name: 'manage_music',
+          description: 'CÔNG CỤ TÌM KIẾM VÀ PHÁT NHẠC ĐA NỀN TẢNG (Tencent, NetEase, KuGou, KuWo) KÈM AUTO-BYPASS VIP. ' +
+              'Dùng khi người dùng yêu cầu bật nhạc, tìm bài hát, đổi bài, chỉnh âm lượng hoặc xem lời bài hát. ' +
+              'Quy trình khuyến nghị: ' +
+              '1) Gọi action="search" với query để tìm danh sách bài hát (mặc định trả về 20 bài; AI có thể tùy chỉnh tham số "limit" từ 5-50 hoặc tăng "page" để mở rộng nếu chưa thấy bài mong muốn); ' +
+              '2) Đọc/lướt qua kết quả (surf list) để chọn bài đúng nhất, sau đó gọi action="play" với song_id của bài đó; ' +
+              '3) Hoặc nếu người dùng muốn nghe ngay, có thể gọi trực tiếp action="play" với query để phát bài đầu tiên tìm thấy.',
+          userDescription: 'Tìm kiếm và phát nhạc trực tuyến từ nhiều nền tảng với giao diện Mini Player nổi.',
+          parameters: {
+              type: 'object',
+              properties: {
+                  action: {
+                      type: 'string',
+                      description: 'Hành động cần thực hiện: "search" (tìm bài hát), "play" (phát nhạc), "control" (điều khiển playback), "get_status" (xem trạng thái hiện tại), "get_lyrics" (lấy lời bài hát), "playlist" (quản lý danh sách phát theo tên/chủ đề), "favorite" (quản lý danh sách bài hát yêu thích).',
+                      enum: ['search', 'play', 'control', 'get_status', 'get_lyrics', 'playlist', 'favorite'],
+                  },
+                  query: {
+                      type: 'string',
+                      description: 'Từ khóa tìm kiếm (Tên bài hát, ca sĩ, thể loại nhạc) khi dùng action="search" hoặc action="play".',
+                  },
+                  source: {
+                      type: 'string',
+                      description: 'Nền tảng tìm kiếm: "all" (quét tất cả các nguồn - khuyến nghị), "tencent" (QQ Music), "netease" (NetEase 163), "kugou", "kuwo". Mặc định là "all".',
+                      enum: ['all', 'tencent', 'netease', 'kugou', 'kuwo'],
+                  },
+                  song_id: {
+                      type: 'string',
+                      description: 'ID của bài hát (dùng với action="play", action="playlist" khi thêm/xóa bài, hoặc action="favorite" để thêm bài yêu thích).',
+                  },
+                  command: {
+                      type: 'string',
+                      description: 'Lệnh điều khiển khi dùng action="control": "pause" (tạm dừng), "resume" (tiếp tục), "stop" (dừng hẳn), "next" (bài tiếp theo), "prev" (bài trước), "volume" (chỉnh âm lượng), "seek" (tua nhạc), "repeat" (đổi chế độ lặp lại all/one/none), "shuffle" (bật/tắt phát ngẫu nhiên), "clear_queue" (xóa hàng đợi), "show_widget" (hiển thị Widget), "hide_widget" (ẩn Widget), "toggle_widget" (bật/tắt hiển thị Widget).',
+                      enum: [
+                          'pause',
+                          'resume',
+                          'stop',
+                          'next',
+                          'prev',
+                          'volume',
+                          'seek',
+                          'repeat',
+                          'shuffle',
+                          'clear_queue',
+                          'show_widget',
+                          'hide_widget',
+                          'toggle_widget',
+                      ],
+                  },
+                  mode: {
+                      type: 'string',
+                      description: 'Chế độ lặp lại khi dùng command="repeat": "all" (lặp cả danh sách), "one" (lặp 1 bài), "none" (không lặp lại, hết danh sách dừng). Mặc định là toggle.',
+                      enum: ['all', 'one', 'none'],
+                  },
+                  value: {
+                      type: 'number',
+                      description: 'Giá trị cho lệnh control: mức âm lượng từ 0.0 đến 1.0 (cho command="volume") hoặc số giây cần tua tới (cho command="seek").',
+                  },
+                  page: {
+                      type: 'number',
+                      description: 'Số thứ tự trang kết quả tìm kiếm (bắt đầu từ 1, mặc định 1). Nếu không tìm thấy hoặc muốn mở rộng thêm bài hát khác, AI có thể gọi lại với page=2, 3...',
+                  },
+                  limit: {
+                      type: 'number',
+                      description: 'Số lượng kết quả tối đa trả về cho AI (mặc định 20 bài, AI có thể tự quyết định điều chỉnh từ 5 đến 50 tùy theo nhu cầu hoặc độ bao quát).',
+                  },
+                  playlist_command: {
+                      type: 'string',
+                      description: 'Lệnh quản lý playlist khi dùng action="playlist": "create" (tạo mới), "add" (thêm bài hát vào playlist), "remove" (xóa bài khỏi playlist), "delete" (xóa cả playlist), "list" (liệt kê các playlist đã lưu), "play" (phát toàn bộ playlist), "save_queue" (lưu toàn bộ hàng đợi đang phát thành playlist mới).',
+                      enum: ['create', 'add', 'remove', 'delete', 'list', 'play', 'save_queue'],
+                  },
+                  playlist_name: {
+                      type: 'string',
+                      description: 'Tên danh sách phát (ví dụ: "Nhạc chill học bài", "Anime OST", "Nhạc cày code") khi dùng action="playlist".',
+                  },
+                  favorite_command: {
+                      type: 'string',
+                      description: 'Lệnh quản lý danh sách yêu thích khi dùng action="favorite": "toggle" (thêm hoặc xóa bài khỏi danh sách yêu thích), "list" (xem danh sách yêu thích), "play" (phát toàn bộ danh sách yêu thích).',
+                      enum: ['toggle', 'list', 'play'],
+                  },
+                  shuffle: {
+                      type: 'boolean',
+                      description: 'Bật chế độ phát ngẫu nhiên (trộn bài) khi phát playlist hoặc danh sách yêu thích. Mặc định là false.',
+                  },
+              },
+              required: ['action'],
+          },
+      },
+      execute: async (args) => {
+          try {
+              const action = args.action;
+              const audioManager = AudioManager.getInstance();
+              // Đảm bảo Widget Mini Player đã được khởi tạo
+              MusicPlayerWidget.getInstance().init();
+              // ==========================================
+              // 1. ACTION: SEARCH
+              // ==========================================
+              if (action === 'search') {
+                  const query = args.query;
+                  if (!query || typeof query !== 'string' || !query.trim()) {
+                      return {
+                          content: JSON.stringify({
+                              error: 'Tham số "query" là bắt buộc khi thực hiện action="search".',
+                          }),
+                          isError: true,
+                      };
+                  }
+                  const sourceFilter = args.source || 'all';
+                  const page = Math.max(1, typeof args.page === 'number' ? args.page : 1);
+                  const limit = Math.min(50, Math.max(1, typeof args.limit === 'number' ? args.limit : 20));
+                  const perSource = sourceFilter === 'all' ? Math.max(10, Math.ceil(limit / 2)) : limit;
+                  console.log(`[Tool: manage_music] Đang tìm kiếm: "${query}" (Nguồn: ${sourceFilter}, Trang: ${page}, Limit: ${limit})`);
+                  const songs = await MusicEngine.search(query.trim(), page, sourceFilter, perSource);
+                  if (!songs || songs.length === 0) {
+                      return {
+                          content: JSON.stringify({
+                              success: false,
+                              page,
+                              message: `Không tìm thấy bài hát nào ở trang ${page} với từ khóa "${query}". AI có thể thử đổi từ khóa, tìm theo tên ca sĩ khác hoặc thử trang khác.`,
+                              results: [],
+                          }),
+                          isError: false,
+                      };
+                  }
+                  // Lưu vào cache
+                  songs.forEach((song) => {
+                      searchCache.set(song.id, song);
+                  });
+                  // Rút gọn kết quả để gửi về cho LLM (tiết kiệm token)
+                  const formattedResults = songs.slice(0, limit).map((s, idx) => ({
+                      index: idx + 1,
+                      song_id: s.id,
+                      name: s.name,
+                      singer: s.singer,
+                      source: s.source,
+                  }));
+                  return {
+                      content: JSON.stringify({
+                          success: true,
+                          query: query.trim(),
+                          page,
+                          limit,
+                          total_found: formattedResults.length,
+                          message: `Tìm thấy ${formattedResults.length} bài hát (Trang ${page}). AI có thể duyệt danh sách và chọn bài phát theo song_id tương ứng. Nếu muốn mở rộng thêm kết quả, AI có thể gọi lại search với page=${page + 1}.`,
+                          results: formattedResults,
+                      }),
+                      isError: false,
+                  };
+              }
+              // ==========================================
+              // 2. ACTION: PLAY
+              // ==========================================
+              if (action === 'play') {
+                  let targetSong = null;
+                  // Trường hợp 1: Có song_id cụ thể từ kết quả tìm kiếm
+                  if (args.song_id) {
+                      const songId = String(args.song_id);
+                      targetSong = searchCache.get(songId) || null;
+                      // Nếu không có trong cache, thử tìm lại từ source
+                      if (!targetSong && args.query) {
+                          const fallbackList = await MusicEngine.search(args.query, 1, args.source || 'all', 5);
+                          targetSong = fallbackList.find((s) => s.id === songId) || null;
+                      }
+                  }
+                  // Trường hợp 2: Không có song_id nhưng có query tìm kiếm -> Tự động tìm và chọn bài đầu tiên
+                  if (!targetSong && args.query) {
+                      const searchResults = await MusicEngine.search(args.query, 1, args.source || 'all', 5);
+                      if (searchResults && searchResults.length > 0) {
+                          targetSong = searchResults[0];
+                          searchResults.forEach((s) => searchCache.set(s.id, s));
+                          audioManager.setQueue(searchResults);
+                      }
+                  }
+                  if (!targetSong) {
+                      return {
+                          content: JSON.stringify({
+                              error: 'Không xác định được bài hát cần phát. Vui lòng cung cấp "song_id" hợp lệ từ kết quả tìm kiếm hoặc cung cấp "query" để tìm bài mới.',
+                          }),
+                          isError: true,
+                      };
+                  }
+                  console.log(`[Tool: manage_music] Bắt đầu phát bài: ${targetSong.name} - ${targetSong.singer}`);
+                  const playResult = await audioManager.playSong(targetSong);
+                  if (!playResult.success) {
+                      return {
+                          content: JSON.stringify({
+                              success: false,
+                              error: playResult.message,
+                          }),
+                          isError: true,
+                      };
+                  }
+                  return {
+                      content: JSON.stringify({
+                          success: true,
+                          message: playResult.message,
+                          now_playing: {
+                              id: playResult.song?.id || targetSong.id,
+                              name: playResult.song?.name || targetSong.name,
+                              singer: playResult.song?.singer || targetSong.singer,
+                              source: playResult.song?.source || targetSong.source,
+                          },
+                      }),
+                      isError: false,
+                  };
+              }
+              // ==========================================
+              // 3. ACTION: CONTROL
+              // ==========================================
+              if (action === 'control') {
+                  const cmd = args.command;
+                  if (!cmd) {
+                      return {
+                          content: JSON.stringify({
+                              error: 'Tham số "command" là bắt buộc khi dùng action="control".',
+                          }),
+                          isError: true,
+                      };
+                  }
+                  switch (cmd) {
+                      case 'pause':
+                          audioManager.pause();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã tạm dừng phát nhạc.',
+                              }),
+                              isError: false,
+                          };
+                      case 'resume':
+                          audioManager.resume();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã tiếp tục phát nhạc.',
+                              }),
+                              isError: false,
+                          };
+                      case 'stop':
+                          audioManager.stop();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã dừng phát nhạc và đóng trình phát.',
+                              }),
+                              isError: false,
+                          };
+                      case 'next':
+                          audioManager.playNext();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã chuyển sang bài hát kế tiếp.',
+                              }),
+                              isError: false,
+                          };
+                      case 'prev':
+                          audioManager.playPrev();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã chuyển về bài hát trước đó.',
+                              }),
+                              isError: false,
+                          };
+                      case 'volume': {
+                          if (typeof args.value !== 'number') {
+                              return {
+                                  content: JSON.stringify({
+                                      error: 'Tham số "value" (từ 0.0 đến 1.0) là bắt buộc khi chỉnh âm lượng.',
+                                  }),
+                                  isError: true,
+                              };
+                          }
+                          audioManager.setVolume(args.value);
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: `Đã chỉnh âm lượng lên ${Math.round(args.value * 100)}%.`,
+                              }),
+                              isError: false,
+                          };
+                      }
+                      case 'seek': {
+                          if (typeof args.value !== 'number') {
+                              return {
+                                  content: JSON.stringify({
+                                      error: 'Tham số "value" (số giây) là bắt buộc khi tua bài hát.',
+                                  }),
+                                  isError: true,
+                              };
+                          }
+                          audioManager.seekTo(args.value);
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: `Đã tua bài hát tới mốc ${args.value} giây.`,
+                              }),
+                              isError: false,
+                          };
+                      }
+                      case 'show_widget': {
+                          MusicPlayerWidget.getInstance().show();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã hiển thị Mini Player Widget trên màn hình.',
+                              }),
+                              isError: false,
+                          };
+                      }
+                      case 'hide_widget': {
+                          MusicPlayerWidget.getInstance().hide();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã ẩn Mini Player Widget (nhạc vẫn tiếp tục phát trong nền).',
+                              }),
+                              isError: false,
+                          };
+                      }
+                      case 'toggle_widget': {
+                          MusicPlayerWidget.getInstance().toggle();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã bật/tắt hiển thị Mini Player Widget.',
+                              }),
+                              isError: false,
+                          };
+                      }
+                      case 'repeat': {
+                          if (args.mode && ['all', 'one', 'none'].includes(args.mode)) {
+                              audioManager.setRepeatMode(args.mode);
+                          }
+                          else {
+                              audioManager.toggleRepeatMode();
+                          }
+                          const curMode = audioManager.getState().repeatMode;
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  repeat_mode: curMode,
+                                  message: `Chế độ lặp lại: ${curMode === 'one' ? 'Lặp 1 bài (repeat-one)' : curMode === 'all' ? 'Lặp toàn bộ danh sách (repeat-all)' : 'Không lặp lại (off)'}.`,
+                              }),
+                              isError: false,
+                          };
+                      }
+                      case 'shuffle': {
+                          if (typeof args.shuffle === 'boolean') {
+                              audioManager.setShuffleMode(args.shuffle);
+                          }
+                          else {
+                              audioManager.toggleShuffleMode();
+                          }
+                          const isShuff = audioManager.getState().shuffleMode;
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  shuffle_mode: isShuff,
+                                  message: `Chế độ phát ngẫu nhiên (Shuffle): ${isShuff ? 'BẬT' : 'TẮT'}.`,
+                              }),
+                              isError: false,
+                          };
+                      }
+                      case 'clear_queue': {
+                          audioManager.clearQueue();
+                          return {
+                              content: JSON.stringify({
+                                  success: true,
+                                  message: 'Đã xóa toàn bộ hàng đợi phát nhạc.',
+                              }),
+                              isError: false,
+                          };
+                      }
+                      default:
+                          return {
+                              content: JSON.stringify({
+                                  error: `Lệnh control không hợp lệ: "${cmd}".`,
+                              }),
+                              isError: true,
+                          };
+                  }
+              }
+              // ==========================================
+              // 4. ACTION: GET_STATUS
+              // ==========================================
+              if (action === 'get_status') {
+                  const state = audioManager.getState();
+                  return {
+                      content: JSON.stringify({
+                          success: true,
+                          is_playing: state.isPlaying,
+                          current_song: state.currentSong
+                              ? {
+                                  name: state.currentSong.name,
+                                  singer: state.currentSong.singer,
+                                  source: state.currentSong.source,
+                              }
+                              : null,
+                          current_time_sec: Math.floor(state.currentTime),
+                          duration_sec: Math.floor(state.duration),
+                          volume_percent: Math.round(state.volume * 100),
+                          repeat_mode: state.repeatMode,
+                          shuffle_mode: state.shuffleMode,
+                          queue_count: state.queue.length,
+                          current_lyric: state.currentLyric || null,
+                      }),
+                      isError: false,
+                  };
+              }
+              // ==========================================
+              // 5. ACTION: GET_LYRICS
+              // ==========================================
+              if (action === 'get_lyrics') {
+                  const state = audioManager.getState();
+                  if (!state.currentSong) {
+                      return {
+                          content: JSON.stringify({
+                              success: false,
+                              message: 'Hiện không có bài hát nào đang được phát.',
+                          }),
+                          isError: false,
+                      };
+                  }
+                  const lyrics = audioManager.getLyrics();
+                  return {
+                      content: JSON.stringify({
+                          success: true,
+                          song: `${state.currentSong.name} - ${state.currentSong.singer}`,
+                          total_lines: lyrics.length,
+                          lyrics: lyrics.slice(0, 30), // Giới hạn 30 câu để tránh tràn token
+                      }),
+                      isError: false,
+                  };
+              }
+              // ==========================================
+              // 6. ACTION: PLAYLIST
+              // ==========================================
+              if (action === 'playlist') {
+                  const cmd = args.playlist_command;
+                  if (!cmd) {
+                      return {
+                          content: JSON.stringify({
+                              error: 'Tham số "playlist_command" là bắt buộc khi dùng action="playlist" (create, add, remove, delete, list, play).',
+                          }),
+                          isError: true,
+                      };
+                  }
+                  if (cmd === 'list') {
+                      const playlists = audioManager.getPlaylists();
+                      return {
+                          content: JSON.stringify({
+                              success: true,
+                              total_playlists: playlists.length,
+                              playlists: playlists.map((p) => ({
+                                  id: p.id,
+                                  name: p.name,
+                                  song_count: p.songs.length,
+                                  preview_songs: p.songs.slice(0, 5).map((s) => `${s.name} - ${s.singer}`),
+                              })),
+                          }),
+                          isError: false,
+                      };
+                  }
+                  if (cmd === 'create') {
+                      if (!args.playlist_name) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Tham số "playlist_name" là bắt buộc khi tạo playlist.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      const pl = audioManager.createPlaylist(args.playlist_name);
+                      return {
+                          content: JSON.stringify({
+                              success: true,
+                              message: `Đã tạo danh sách phát "${pl.name}".`,
+                              playlist: { id: pl.id, name: pl.name, song_count: pl.songs.length },
+                          }),
+                          isError: false,
+                      };
+                  }
+                  if (cmd === 'add') {
+                      if (!args.playlist_name) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Tham số "playlist_name" là bắt buộc khi thêm bài vào playlist.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      let songToAdd = null;
+                      if (args.song_id) {
+                          const sid = String(args.song_id);
+                          songToAdd =
+                              searchCache.get(sid) || audioManager.getState().queue.find((s) => s.id === sid) || null;
+                      }
+                      if (!songToAdd) {
+                          songToAdd = audioManager.getState().currentSong;
+                      }
+                      if (!songToAdd) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Không tìm thấy bài hát để thêm vào playlist. Vui lòng cung cấp "song_id" hợp lệ hoặc đang phát một bài hát.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      const res = audioManager.addSongToPlaylist(args.playlist_name, songToAdd);
+                      return {
+                          content: JSON.stringify(res),
+                          isError: !res.success,
+                      };
+                  }
+                  if (cmd === 'remove') {
+                      if (!args.playlist_name || !args.song_id) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Cần có "playlist_name" và "song_id" để xóa bài hát khỏi playlist.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      const res = audioManager.removeSongFromPlaylist(args.playlist_name, String(args.song_id));
+                      return {
+                          content: JSON.stringify(res),
+                          isError: !res.success,
+                      };
+                  }
+                  if (cmd === 'delete') {
+                      if (!args.playlist_name) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Cần có "playlist_name" để xóa playlist.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      const res = audioManager.deletePlaylist(args.playlist_name);
+                      return {
+                          content: JSON.stringify(res),
+                          isError: !res.success,
+                      };
+                  }
+                  if (cmd === 'play') {
+                      if (!args.playlist_name) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Cần có "playlist_name" để phát playlist.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      const shuffle = !!args.shuffle;
+                      const res = await audioManager.playPlaylist(args.playlist_name, shuffle);
+                      return {
+                          content: JSON.stringify(res),
+                          isError: !res.success,
+                      };
+                  }
+                  if (cmd === 'save_queue') {
+                      if (!args.playlist_name) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Cần có "playlist_name" để lưu hàng đợi thành playlist.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      const pl = audioManager.saveQueueAsPlaylist(args.playlist_name);
+                      return {
+                          content: JSON.stringify({
+                              success: true,
+                              message: `Đã lưu hàng đợi (${pl.songs.length} bài) thành playlist "${pl.name}".`,
+                              playlist: { id: pl.id, name: pl.name, song_count: pl.songs.length },
+                          }),
+                          isError: false,
+                      };
+                  }
+                  return {
+                      content: JSON.stringify({
+                          error: `Lệnh playlist_command "${cmd}" không hợp lệ. Chọn: create, add, remove, delete, list, play, save_queue.`,
+                      }),
+                      isError: true,
+                  };
+              }
+              // ==========================================
+              // 7. ACTION: FAVORITE
+              // ==========================================
+              if (action === 'favorite') {
+                  const cmd = args.favorite_command || 'list';
+                  if (cmd === 'list') {
+                      const favs = audioManager.getFavorites();
+                      return {
+                          content: JSON.stringify({
+                              success: true,
+                              total_favorites: favs.length,
+                              favorites: favs.map((s, idx) => ({
+                                  index: idx + 1,
+                                  song_id: s.id,
+                                  name: s.name,
+                                  singer: s.singer,
+                                  source: s.source,
+                              })),
+                          }),
+                          isError: false,
+                      };
+                  }
+                  if (cmd === 'toggle') {
+                      let songToFav = null;
+                      if (args.song_id) {
+                          const sid = String(args.song_id);
+                          songToFav =
+                              searchCache.get(sid) || audioManager.getState().queue.find((s) => s.id === sid) || null;
+                      }
+                      if (!songToFav) {
+                          songToFav = audioManager.getState().currentSong;
+                      }
+                      if (!songToFav) {
+                          return {
+                              content: JSON.stringify({
+                                  error: 'Không tìm thấy bài hát để đánh dấu yêu thích. Vui lòng cung cấp "song_id" hoặc đang phát một bài hát.',
+                              }),
+                              isError: true,
+                          };
+                      }
+                      const isFav = audioManager.toggleFavorite(songToFav);
+                      return {
+                          content: JSON.stringify({
+                              success: true,
+                              is_favorite: isFav,
+                              song: `${songToFav.name} - ${songToFav.singer}`,
+                              message: isFav
+                                  ? `Đã thêm "${songToFav.name}" vào danh sách Yêu thích.`
+                                  : `Đã bỏ "${songToFav.name}" khỏi danh sách Yêu thích.`,
+                          }),
+                          isError: false,
+                      };
+                  }
+                  if (cmd === 'play') {
+                      const shuffle = !!args.shuffle;
+                      const res = await audioManager.playFavorites(shuffle);
+                      return {
+                          content: JSON.stringify(res),
+                          isError: !res.success,
+                      };
+                  }
+                  return {
+                      content: JSON.stringify({
+                          error: `Lệnh favorite_command "${cmd}" không hợp lệ. Chọn: toggle, list, play.`,
+                      }),
+                      isError: true,
+                  };
+              }
+              return {
+                  content: JSON.stringify({
+                      error: `Action "${action}" không được hỗ trợ. Hãy chọn: search, play, control, get_status, get_lyrics, playlist, favorite.`,
+                  }),
+                  isError: true,
+              };
+          }
+          catch (err) {
+              console.error('[Tool: manage_music] Lỗi thực thi:', err);
+              return {
+                  content: JSON.stringify({
+                      error: err.message || 'Lỗi không xác định khi thực hiện công cụ phát nhạc.',
+                  }),
+                  isError: true,
+              };
+          }
+      },
+  };
+
+  /**
    * Đăng ký tất cả các tools mặc định vào Registry
    */
   function registerDefaultTools(registry) {
@@ -20708,6 +23415,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       registry.registerTool(mutateMvuSchemaTool);
       registry.registerTool(scaffoldMvuCardTool);
       registry.registerTool(mvuInstructTool);
+      registry.registerTool(manageMusicTool);
   }
 
   /**
@@ -33747,6 +36455,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               ChatWindowUI.init(loop, stateManager, registry);
               ToolCheckerUI.init(registry, adapter);
               BrowserWindowUI.init();
+              MusicPlayerWidget.getInstance().init();
               new AutoTaskModal(stateManager, autoTaskScheduler, registry);
               // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
               await stateManager.init();
@@ -33947,6 +36656,63 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           return `[Error] ${e.message}`;
                       }
                   }, [], '<ghi_chú_tùy_chọn>', 'Tự động đọc tin nhắn mới nhất, dùng API của Agent tạo prompt chi tiết và vẽ ảnh minh họa', true);
+                  // Slash Command /music: Điều khiển nhanh trình phát nhạc Kaiz
+                  ctx.registerSlashCommand('music', async (_args, value) => {
+                      const widget = MusicPlayerWidget.getInstance();
+                      const audioMgr = AudioManager.getInstance();
+                      const val = (value || '').trim();
+                      if (!val || val === 'toggle') {
+                          widget.toggle();
+                          return '';
+                      }
+                      if (val === 'hide') {
+                          widget.hide();
+                          return '';
+                      }
+                      if (val === 'show') {
+                          widget.show();
+                          return '';
+                      }
+                      if (val === 'stop') {
+                          audioMgr.stop();
+                          widget.hide();
+                          return '';
+                      }
+                      if (val === 'pause') {
+                          audioMgr.pause();
+                          return '';
+                      }
+                      if (val === 'resume') {
+                          audioMgr.resume();
+                          return '';
+                      }
+                      if (val === 'next') {
+                          audioMgr.playNext();
+                          return '';
+                      }
+                      // Nếu nhập tên bài hát: /music Sơn Tùng
+                      if (typeof toastr !== 'undefined') {
+                          toastr.info(`Đang tìm kiếm bài hát "${val}"...`);
+                      }
+                      try {
+                          const searchResults = await MusicEngine.search(val, 1, 'all', 5);
+                          if (searchResults && searchResults.length > 0) {
+                              const res = await audioMgr.playSong(searchResults[0], searchResults);
+                              if (res.success && typeof toastr !== 'undefined') {
+                                  toastr.success(`Đang phát: ${searchResults[0].name} - ${searchResults[0].singer}`);
+                              }
+                          }
+                          else if (typeof toastr !== 'undefined') {
+                              toastr.warning(`Không tìm thấy bài hát: ${val}`);
+                          }
+                      }
+                      catch (err) {
+                          if (typeof toastr !== 'undefined') {
+                              toastr.error(`Lỗi phát nhạc: ${err.message || String(err)}`);
+                          }
+                      }
+                      return '';
+                  }, ['toggle', 'show', 'hide', 'pause', 'resume', 'stop', 'next'], '[tên_bài_hát hoặc toggle/hide/show/stop/pause/resume/next]', 'Điều khiển hoặc phát nhạc nhanh bằng Kaiz Music Player', true);
               }
           }
           else {
