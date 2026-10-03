@@ -1199,7 +1199,11 @@ export class SillyTavernAdapter {
 
             const cardData = cardObj.data || cardObj;
             const characters = ctx.characters || [];
-            const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar) || entry.avatarUrl;
+            const rawAvatar =
+                entry.avatarUrl && !entry.avatarUrl.startsWith('data:') && !entry.avatarUrl.startsWith('http')
+                    ? entry.avatarUrl.replace(/^\/characters\//, '').split('?')[0]
+                    : undefined;
+            const backupAvatar = cardObj.avatar || (cardObj.data && cardObj.data.avatar) || rawAvatar;
             const backupName = cardData.name || entry.name;
 
             // 1. Tìm kiếm xem nhân vật đã có trong ST hay chưa
@@ -1304,7 +1308,7 @@ export class SillyTavernAdapter {
             }
 
             // TRƯỜNG HỢP 2: Thẻ không có trong ST (đã bị xóa) -> Import lại như 1 card mới
-            const safeName = (cardData.name || entry.name || 'Restored_Character').replace(/[/\\:*?"<>|]/g, '_');
+            const safeName = (cardData.name || entry.name || 'Restored_Character').replace(/[/\\:*?"<>|]/g, '_').trim();
             const format = isPng ? 'png' : 'json';
             const formData = new FormData();
 
@@ -1313,11 +1317,11 @@ export class SillyTavernAdapter {
                 const bin = window.atob(b64);
                 const bytes = new Uint8Array(bin.length);
                 for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                const blob = new Blob([bytes], { type: 'image/png' });
-                formData.append('avatar', blob, `${safeName}.png`);
+                const file = new File([bytes], `${safeName}.png`, { type: 'image/png' });
+                formData.append('avatar', file);
             } else {
-                const blob = new Blob([entry.data], { type: 'application/json' });
-                formData.append('avatar', blob, `${safeName}.json`);
+                const file = new File([entry.data], `${safeName}.json`, { type: 'application/json' });
+                formData.append('avatar', file);
             }
 
             formData.append('file_type', format);
@@ -1325,15 +1329,22 @@ export class SillyTavernAdapter {
                 formData.append('user_name', ctx.name1);
             }
 
-            // Bảo toàn tên file gốc nếu có trong metadata backup
-            const cleanPreservedName = entry.avatarUrl
-                ? entry.avatarUrl
-                      .split('?')[0]
-                      .replace(/\.[^/.]+$/, '')
-                      .replace(/[/\\:*?"<>|]/g, '_')
-                : safeName;
-            if (cleanPreservedName) {
-                formData.append('preserved_name', cleanPreservedName);
+            // Tên định danh file thẻ (chỉ dùng chuỗi tên ngắn hợp lệ, tuyệt đối không dùng Data URL)
+            let preservedName = safeName;
+            if (entry.avatarUrl && !entry.avatarUrl.startsWith('data:') && !entry.avatarUrl.startsWith('http')) {
+                const clean = entry.avatarUrl
+                    .replace(/^\/characters\//, '')
+                    .split('?')[0]
+                    .replace(/\.[^/.]+$/, '')
+                    .replace(/[/\\:*?"<>|]/g, '_')
+                    .trim();
+                if (clean && clean.length > 0 && clean.length < 150) {
+                    preservedName = clean;
+                }
+            }
+
+            if (preservedName && preservedName.length > 0 && preservedName.length < 150) {
+                formData.append('preserved_name', preservedName);
             }
 
             const headers = (ctx.getRequestHeaders ? ctx.getRequestHeaders({ omitContentType: true }) : {}) || {};
