@@ -22431,18 +22431,20 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               if (ST_WorldInfo && typeof ST_WorldInfo.updateWorldInfoList === 'function') {
                   await ST_WorldInfo.updateWorldInfoList();
               }
-              // 4. Đồng bộ và render lại World Info Editor UI (cho cả trường hợp WB vẫn còn lẫn vừa phục hồi)
-              const allBooks = ST_WorldInfo?.world_names || window.world_names || [];
-              const bookIndex = allBooks.indexOf(bookName);
-              const $ = window.$;
-              if ($ && bookIndex >= 0) {
-                  $('#world_editor_select').val(bookIndex).trigger('change');
-              }
+              // 4. Đồng bộ và render lại World Info Editor UI duy nhất 1 lần (tránh double trigger gây dup render)
               if (ST_WorldInfo && typeof ST_WorldInfo.reloadEditor === 'function') {
                   ST_WorldInfo.reloadEditor(bookName, true);
               }
-              else if (ST_WorldInfo && typeof ST_WorldInfo.showWorldEditor === 'function') {
-                  await ST_WorldInfo.showWorldEditor(bookName);
+              else {
+                  const allBooks = ST_WorldInfo?.world_names || window.world_names || [];
+                  const bookIndex = allBooks.indexOf(bookName);
+                  const $ = window.$;
+                  if ($ && bookIndex >= 0) {
+                      $('#world_editor_select').val(bookIndex).trigger('change');
+                  }
+                  else if (ST_WorldInfo && typeof ST_WorldInfo.showWorldEditor === 'function') {
+                      await ST_WorldInfo.showWorldEditor(bookName);
+                  }
               }
               // 5. Cập nhật trạng thái nút World Info gắn với nhân vật hiện tại (nếu có)
               if (ST_WorldInfo &&
@@ -22454,7 +22456,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               const es = ctx.eventSource || window.eventSource;
               const et = ctx.eventTypes || ctx.event_types || window.event_types;
               if (es && et) {
-                  if (et.WORLDINFO_UPDATED) {
+                  // saveWorldInfo đã tự emit WORLDINFO_UPDATED bên trong _save, chỉ emit nếu dùng fallback
+                  if (!ST_WorldInfo?.saveWorldInfo && et.WORLDINFO_UPDATED) {
                       es.emit(et.WORLDINFO_UPDATED, bookName, bookData);
                   }
                   if (et.WORLDINFO_SETTINGS_UPDATED) {
