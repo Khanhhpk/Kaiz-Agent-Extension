@@ -22471,6 +22471,23 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       bindEvents() {
           if (!this.container)
               return;
+          // Tự động chuyển về ảnh bìa cơ bản nếu ảnh bài hát bị lỗi mạng / 404 / CORS
+          const coverEl = this.container.querySelector('#kaiz-mp-cover');
+          const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover');
+          if (coverEl) {
+              coverEl.addEventListener('error', () => {
+                  if (coverEl.src !== DEFAULT_MUSIC_COVER) {
+                      coverEl.src = DEFAULT_MUSIC_COVER;
+                  }
+              });
+          }
+          if (pillCoverEl) {
+              pillCoverEl.addEventListener('error', () => {
+                  if (pillCoverEl.src !== DEFAULT_MUSIC_COVER) {
+                      pillCoverEl.src = DEFAULT_MUSIC_COVER;
+                  }
+              });
+          }
           // Click Pill để phóng to (bỏ qua nếu vừa thực hiện kéo thả)
           const pill = this.container.querySelector('#kaiz-mp-pill');
           if (pill) {
@@ -22830,7 +22847,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       singerEl.textContent = state.currentSong.singer;
                   if (sourceEl)
                       sourceEl.textContent = state.currentSong.source.toUpperCase();
-                  const coverSrc = state.currentSong.cover || DEFAULT_MUSIC_COVER;
+                  const rawCover = state.currentSong.cover ? state.currentSong.cover.trim() : '';
+                  const coverSrc = rawCover || DEFAULT_MUSIC_COVER;
                   if (coverEl) {
                       coverEl.src = coverSrc;
                       if (state.isPlaying)
