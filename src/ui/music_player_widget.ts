@@ -21,6 +21,7 @@ export class MusicPlayerWidget {
 
     private readonly WIDGET_ID = 'kaiz-music-player-widget';
     private readonly STYLE_ID = 'kaiz-music-player-style';
+    private readonly STORAGE_KEY = 'kaiz_mp_widget_state';
 
     private constructor() {
         this.audioManager = AudioManager.getInstance();
@@ -944,6 +945,7 @@ export class MusicPlayerWidget {
 
         document.body.appendChild(div);
         this.container = div;
+        this.restorePosition();
     }
 
     private formatTime(seconds: number): string {
@@ -1288,6 +1290,7 @@ export class MusicPlayerWidget {
                 }
                 if (hasMoved) {
                     this.justDragged = true;
+                    this.savePosition();
                     setTimeout(() => {
                         this.justDragged = false;
                     }, 150);
@@ -1310,30 +1313,46 @@ export class MusicPlayerWidget {
             const maxRight = Math.max(10, window.innerWidth - w - 10);
             const maxBottom = Math.max(10, window.innerHeight - h - 10);
 
+            let adjusted = false;
             if (currentRight > maxRight) {
                 this.container.style.right = `${maxRight}px`;
+                adjusted = true;
             }
             if (currentBottom > maxBottom) {
                 this.container.style.bottom = `${maxBottom}px`;
+                adjusted = true;
+            }
+            if (adjusted) {
+                this.savePosition();
             }
         });
     }
 
     private subscribeAudioEvents(): void {
-        // Đồng bộ trạng thái bài hát
+        // Đồng bộ trạng thái bài hát & UI một cách toàn diện
         this.audioManager.onStateChange((state: AudioState) => {
             if (!this.container) return;
 
-            if (state.currentSong) {
-                this.show();
-                const titleEl = this.container.querySelector('#kaiz-mp-title');
-                const singerEl = this.container.querySelector('#kaiz-mp-singer');
-                const sourceEl = this.container.querySelector('#kaiz-mp-source');
-                const coverEl = this.container.querySelector('#kaiz-mp-cover') as HTMLImageElement | null;
-                const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover') as HTMLImageElement | null;
-                const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
-                const dotEl = this.container.querySelector('#kaiz-mp-status-dot');
+            const titleEl = this.container.querySelector('#kaiz-mp-title');
+            const singerEl = this.container.querySelector('#kaiz-mp-singer');
+            const sourceEl = this.container.querySelector('#kaiz-mp-source');
+            const coverEl = this.container.querySelector('#kaiz-mp-cover') as HTMLImageElement | null;
+            const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover') as HTMLImageElement | null;
+            const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
+            const dotEl = this.container.querySelector('#kaiz-mp-status-dot');
+            const playIcon = this.container.querySelector('#kaiz-mp-icon-play') as HTMLElement | null;
+            const pauseIcon = this.container.querySelector('#kaiz-mp-icon-pause') as HTMLElement | null;
+            const fill = this.container.querySelector('#kaiz-mp-progress-fill') as HTMLElement | null;
+            const curEl = this.container.querySelector('#kaiz-mp-time-cur');
+            const durEl = this.container.querySelector('#kaiz-mp-time-dur');
+            const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
+            const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
+            const repeatBadge = this.container.querySelector('#kaiz-mp-repeat-badge') as HTMLElement | null;
+            const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
+            const queueCountEl = this.container.querySelector('#kaiz-mp-queue-count');
+            const volSlider = this.container.querySelector('#kaiz-mp-vol-slider') as HTMLInputElement | null;
 
+            if (state.currentSong) {
                 if (titleEl) titleEl.textContent = state.currentSong.name;
                 if (singerEl) singerEl.textContent = state.currentSong.singer;
                 if (sourceEl) sourceEl.textContent = state.currentSong.source.toUpperCase();
@@ -1341,92 +1360,83 @@ export class MusicPlayerWidget {
                 const coverSrc = state.currentSong.cover || DEFAULT_MUSIC_COVER;
                 if (coverEl) {
                     coverEl.src = coverSrc;
-                    if (state.isPlaying) {
-                        coverEl.classList.add('is-spinning');
-                    } else {
-                        coverEl.classList.remove('is-spinning');
-                    }
+                    if (state.isPlaying) coverEl.classList.add('is-spinning');
+                    else coverEl.classList.remove('is-spinning');
                 }
                 if (pillCoverEl) {
                     pillCoverEl.src = coverSrc;
-                    if (state.isPlaying) {
-                        pillCoverEl.classList.add('is-spinning');
-                    } else {
-                        pillCoverEl.classList.remove('is-spinning');
-                    }
+                    if (state.isPlaying) pillCoverEl.classList.add('is-spinning');
+                    else pillCoverEl.classList.remove('is-spinning');
                 }
                 if (lyricEl) lyricEl.textContent = state.currentLyric || '♪ Sẵn sàng phát nhạc';
 
-                if (dotEl) {
-                    if (state.isPlaying) {
-                        dotEl.classList.add('is-playing');
-                    } else {
-                        dotEl.classList.remove('is-playing');
-                    }
-                }
-
-                // Play / Pause Icon
-                const playIcon = this.container.querySelector('#kaiz-mp-icon-play') as HTMLElement;
-                const pauseIcon = this.container.querySelector('#kaiz-mp-icon-pause') as HTMLElement;
-                if (playIcon && pauseIcon) {
-                    playIcon.style.display = state.isPlaying ? 'none' : 'block';
-                    pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
-                }
-
-                // Volume slider
-                const volSlider = this.container.querySelector('#kaiz-mp-vol-slider') as HTMLInputElement | null;
-                if (volSlider && document.activeElement !== volSlider) {
-                    volSlider.value = String(state.volume);
-                }
-
-                // Favorite Button
-                const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
-                const isFav = this.audioManager.isFavorite(state.currentSong.id);
                 if (favBtn) {
-                    if (isFav) {
-                        favBtn.classList.add('is-favorite');
-                    } else {
-                        favBtn.classList.remove('is-favorite');
-                    }
-                }
-
-                // Repeat Mode Button
-                const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
-                const repeatBadge = this.container.querySelector('#kaiz-mp-repeat-badge') as HTMLElement | null;
-                if (repeatBtn && repeatBadge) {
-                    if (state.repeatMode === 'one') {
-                        repeatBtn.classList.add('is-active');
-                        repeatBadge.style.display = 'flex';
-                    } else if (state.repeatMode === 'all') {
-                        repeatBtn.classList.add('is-active');
-                        repeatBadge.style.display = 'none';
-                    } else {
-                        repeatBtn.classList.remove('is-active');
-                        repeatBadge.style.display = 'none';
-                    }
-                }
-
-                // Shuffle Mode Button
-                const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
-                if (shuffleBtn) {
-                    if (state.shuffleMode) {
-                        shuffleBtn.classList.add('is-active');
-                    } else {
-                        shuffleBtn.classList.remove('is-active');
-                    }
-                }
-
-                // Queue Count in Drawer Tab
-                const queueCountEl = this.container.querySelector('#kaiz-mp-queue-count');
-                if (queueCountEl) {
-                    queueCountEl.textContent = String(state.queue.length);
-                }
-
-                if (this.isDrawerOpen) {
-                    this.updateDrawerContent();
+                    const isFav = this.audioManager.isFavorite(state.currentSong.id);
+                    if (isFav) favBtn.classList.add('is-favorite');
+                    else favBtn.classList.remove('is-favorite');
                 }
             } else {
-                this.hide();
+                // ĐÃ RESET HOẶC CHƯA CÓ BÀI HÁT: Khôi phục toàn bộ về trạng thái mặc định sạch sẽ
+                if (titleEl) titleEl.textContent = 'Chưa có bài hát';
+                if (singerEl) singerEl.textContent = 'Kaiz Music';
+                if (sourceEl) sourceEl.textContent = 'STREAM';
+                if (coverEl) {
+                    coverEl.src = DEFAULT_MUSIC_COVER;
+                    coverEl.classList.remove('is-spinning');
+                }
+                if (pillCoverEl) {
+                    pillCoverEl.src = DEFAULT_MUSIC_COVER;
+                    pillCoverEl.classList.remove('is-spinning');
+                }
+                if (lyricEl) lyricEl.textContent = '♪ Sẵn sàng phát nhạc';
+                if (fill) fill.style.width = '0%';
+                if (curEl) curEl.textContent = '0:00';
+                if (durEl) durEl.textContent = '0:00';
+                if (favBtn) favBtn.classList.remove('is-favorite');
+            }
+
+            // Đồng bộ trạng thái chơi nhạc & icon
+            if (dotEl) {
+                if (state.isPlaying) dotEl.classList.add('is-playing');
+                else dotEl.classList.remove('is-playing');
+            }
+
+            if (playIcon && pauseIcon) {
+                playIcon.style.display = state.isPlaying ? 'none' : 'block';
+                pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
+            }
+
+            if (volSlider && document.activeElement !== volSlider) {
+                volSlider.value = String(state.volume);
+            }
+
+            // Repeat Mode Button
+            if (repeatBtn && repeatBadge) {
+                if (state.repeatMode === 'one') {
+                    repeatBtn.classList.add('is-active');
+                    repeatBadge.style.display = 'flex';
+                } else if (state.repeatMode === 'all') {
+                    repeatBtn.classList.add('is-active');
+                    repeatBadge.style.display = 'none';
+                } else {
+                    repeatBtn.classList.remove('is-active');
+                    repeatBadge.style.display = 'none';
+                }
+            }
+
+            // Shuffle Mode Button
+            if (shuffleBtn) {
+                if (state.shuffleMode) shuffleBtn.classList.add('is-active');
+                else shuffleBtn.classList.remove('is-active');
+            }
+
+            // Queue Count in Drawer Tab: Luôn cập nhật chính xác độ dài hàng đợi (0 khi xóa sạch)
+            if (queueCountEl) {
+                queueCountEl.textContent = String(state.queue.length);
+            }
+
+            if (this.isDrawerOpen) {
+                this.updateDrawerContent();
             }
         });
 
@@ -1642,6 +1652,7 @@ export class MusicPlayerWidget {
             this.container.style.height = `${pillSize}px`;
             this.container.style.right = `${safeRight}px`;
             this.container.style.bottom = `${safeBottom}px`;
+            this.savePosition();
         } else {
             // Đang từ PILL -> MỞ RỘNG RA FULL CARD (Mở ra 4 hướng từ giữa tâm)
             const curRight = parseFloat(this.container.style.right || '24');
@@ -1670,6 +1681,7 @@ export class MusicPlayerWidget {
             this.container.style.height = `${targetH}px`;
             this.container.style.right = `${safeRight}px`;
             this.container.style.bottom = `${safeBottom}px`;
+            this.savePosition();
 
             // Sau khi animation hoàn tất (300ms), trả height về auto để co giãn tự nhiên nếu mở drawer
             setTimeout(() => {
@@ -1680,9 +1692,65 @@ export class MusicPlayerWidget {
         }
     }
 
+    public getIsMinimized(): boolean {
+        return this.isMinimized;
+    }
+
+    private savePosition(): void {
+        if (!this.container) return;
+        try {
+            const right = parseFloat(this.container.style.right || '24');
+            const bottom = parseFloat(this.container.style.bottom || '24');
+            localStorage.setItem(
+                this.STORAGE_KEY,
+                JSON.stringify({
+                    right,
+                    bottom,
+                    isMinimized: this.isMinimized,
+                }),
+            );
+        } catch (e) {
+            console.warn('[MusicPlayerWidget] Không thể lưu vị trí widget:', e);
+        }
+    }
+
+    private restorePosition(): void {
+        if (!this.container) return;
+        try {
+            const raw = localStorage.getItem(this.STORAGE_KEY);
+            if (!raw) return;
+            const data = JSON.parse(raw);
+            if (typeof data.right === 'number' && typeof data.bottom === 'number') {
+                const isMin = !!data.isMinimized;
+                const w = isMin ? 56 : Math.min(380, window.innerWidth - 20);
+                const h = isMin ? 56 : 185;
+
+                const maxRight = Math.max(10, window.innerWidth - w - 10);
+                const maxBottom = Math.max(10, window.innerHeight - h - 10);
+                const safeRight = Math.max(10, Math.min(maxRight, data.right));
+                const safeBottom = Math.max(10, Math.min(maxBottom, data.bottom));
+
+                this.container.style.right = `${safeRight}px`;
+                this.container.style.bottom = `${safeBottom}px`;
+
+                if (isMin) {
+                    this.isMinimized = true;
+                    this.container.classList.add('is-minimized');
+                    this.container.style.width = '56px';
+                    this.container.style.height = '56px';
+                }
+            }
+        } catch (e) {
+            console.warn('[MusicPlayerWidget] Không thể khôi phục vị trí widget:', e);
+        }
+    }
+
     public shutdownAndClear(): void {
         this.audioManager.stop();
         this.audioManager.clearQueue();
+        if (this.isDrawerOpen) {
+            this.toggleDrawer(false);
+        }
         this.hide();
         if (typeof toastr !== 'undefined') {
             toastr.success('Đã tắt trình phát nhạc và xóa toàn bộ hàng đợi.', 'Kaiz Hi-Fi');

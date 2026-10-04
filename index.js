@@ -21542,6 +21542,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       justDragged = false;
       WIDGET_ID = 'kaiz-music-player-widget';
       STYLE_ID = 'kaiz-music-player-style';
+      STORAGE_KEY = 'kaiz_mp_widget_state';
       constructor() {
           this.audioManager = AudioManager.getInstance();
       }
@@ -22458,6 +22459,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
         `;
           document.body.appendChild(div);
           this.container = div;
+          this.restorePosition();
       }
       formatTime(seconds) {
           if (!seconds || isNaN(seconds) || seconds < 0)
@@ -22764,6 +22766,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   }
                   if (hasMoved) {
                       this.justDragged = true;
+                      this.savePosition();
                       setTimeout(() => {
                           this.justDragged = false;
                       }, 150);
@@ -22783,28 +22786,44 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               const currentBottom = parseFloat(this.container.style.bottom || '24');
               const maxRight = Math.max(10, window.innerWidth - w - 10);
               const maxBottom = Math.max(10, window.innerHeight - h - 10);
+              let adjusted = false;
               if (currentRight > maxRight) {
                   this.container.style.right = `${maxRight}px`;
+                  adjusted = true;
               }
               if (currentBottom > maxBottom) {
                   this.container.style.bottom = `${maxBottom}px`;
+                  adjusted = true;
+              }
+              if (adjusted) {
+                  this.savePosition();
               }
           });
       }
       subscribeAudioEvents() {
-          // Đồng bộ trạng thái bài hát
+          // Đồng bộ trạng thái bài hát & UI một cách toàn diện
           this.audioManager.onStateChange((state) => {
               if (!this.container)
                   return;
+              const titleEl = this.container.querySelector('#kaiz-mp-title');
+              const singerEl = this.container.querySelector('#kaiz-mp-singer');
+              const sourceEl = this.container.querySelector('#kaiz-mp-source');
+              const coverEl = this.container.querySelector('#kaiz-mp-cover');
+              const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover');
+              const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
+              const dotEl = this.container.querySelector('#kaiz-mp-status-dot');
+              const playIcon = this.container.querySelector('#kaiz-mp-icon-play');
+              const pauseIcon = this.container.querySelector('#kaiz-mp-icon-pause');
+              const fill = this.container.querySelector('#kaiz-mp-progress-fill');
+              const curEl = this.container.querySelector('#kaiz-mp-time-cur');
+              const durEl = this.container.querySelector('#kaiz-mp-time-dur');
+              const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
+              const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
+              const repeatBadge = this.container.querySelector('#kaiz-mp-repeat-badge');
+              const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
+              const queueCountEl = this.container.querySelector('#kaiz-mp-queue-count');
+              const volSlider = this.container.querySelector('#kaiz-mp-vol-slider');
               if (state.currentSong) {
-                  this.show();
-                  const titleEl = this.container.querySelector('#kaiz-mp-title');
-                  const singerEl = this.container.querySelector('#kaiz-mp-singer');
-                  const sourceEl = this.container.querySelector('#kaiz-mp-source');
-                  const coverEl = this.container.querySelector('#kaiz-mp-cover');
-                  const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover');
-                  const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
-                  const dotEl = this.container.querySelector('#kaiz-mp-status-dot');
                   if (titleEl)
                       titleEl.textContent = state.currentSong.name;
                   if (singerEl)
@@ -22814,93 +22833,97 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   const coverSrc = state.currentSong.cover || DEFAULT_MUSIC_COVER;
                   if (coverEl) {
                       coverEl.src = coverSrc;
-                      if (state.isPlaying) {
+                      if (state.isPlaying)
                           coverEl.classList.add('is-spinning');
-                      }
-                      else {
+                      else
                           coverEl.classList.remove('is-spinning');
-                      }
                   }
                   if (pillCoverEl) {
                       pillCoverEl.src = coverSrc;
-                      if (state.isPlaying) {
+                      if (state.isPlaying)
                           pillCoverEl.classList.add('is-spinning');
-                      }
-                      else {
+                      else
                           pillCoverEl.classList.remove('is-spinning');
-                      }
                   }
                   if (lyricEl)
                       lyricEl.textContent = state.currentLyric || '♪ Sẵn sàng phát nhạc';
-                  if (dotEl) {
-                      if (state.isPlaying) {
-                          dotEl.classList.add('is-playing');
-                      }
-                      else {
-                          dotEl.classList.remove('is-playing');
-                      }
-                  }
-                  // Play / Pause Icon
-                  const playIcon = this.container.querySelector('#kaiz-mp-icon-play');
-                  const pauseIcon = this.container.querySelector('#kaiz-mp-icon-pause');
-                  if (playIcon && pauseIcon) {
-                      playIcon.style.display = state.isPlaying ? 'none' : 'block';
-                      pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
-                  }
-                  // Volume slider
-                  const volSlider = this.container.querySelector('#kaiz-mp-vol-slider');
-                  if (volSlider && document.activeElement !== volSlider) {
-                      volSlider.value = String(state.volume);
-                  }
-                  // Favorite Button
-                  const favBtn = this.container.querySelector('#kaiz-mp-btn-fav');
-                  const isFav = this.audioManager.isFavorite(state.currentSong.id);
                   if (favBtn) {
-                      if (isFav) {
+                      const isFav = this.audioManager.isFavorite(state.currentSong.id);
+                      if (isFav)
                           favBtn.classList.add('is-favorite');
-                      }
-                      else {
+                      else
                           favBtn.classList.remove('is-favorite');
-                      }
-                  }
-                  // Repeat Mode Button
-                  const repeatBtn = this.container.querySelector('#kaiz-mp-btn-repeat');
-                  const repeatBadge = this.container.querySelector('#kaiz-mp-repeat-badge');
-                  if (repeatBtn && repeatBadge) {
-                      if (state.repeatMode === 'one') {
-                          repeatBtn.classList.add('is-active');
-                          repeatBadge.style.display = 'flex';
-                      }
-                      else if (state.repeatMode === 'all') {
-                          repeatBtn.classList.add('is-active');
-                          repeatBadge.style.display = 'none';
-                      }
-                      else {
-                          repeatBtn.classList.remove('is-active');
-                          repeatBadge.style.display = 'none';
-                      }
-                  }
-                  // Shuffle Mode Button
-                  const shuffleBtn = this.container.querySelector('#kaiz-mp-btn-shuffle');
-                  if (shuffleBtn) {
-                      if (state.shuffleMode) {
-                          shuffleBtn.classList.add('is-active');
-                      }
-                      else {
-                          shuffleBtn.classList.remove('is-active');
-                      }
-                  }
-                  // Queue Count in Drawer Tab
-                  const queueCountEl = this.container.querySelector('#kaiz-mp-queue-count');
-                  if (queueCountEl) {
-                      queueCountEl.textContent = String(state.queue.length);
-                  }
-                  if (this.isDrawerOpen) {
-                      this.updateDrawerContent();
                   }
               }
               else {
-                  this.hide();
+                  // ĐÃ RESET HOẶC CHƯA CÓ BÀI HÁT: Khôi phục toàn bộ về trạng thái mặc định sạch sẽ
+                  if (titleEl)
+                      titleEl.textContent = 'Chưa có bài hát';
+                  if (singerEl)
+                      singerEl.textContent = 'Kaiz Music';
+                  if (sourceEl)
+                      sourceEl.textContent = 'STREAM';
+                  if (coverEl) {
+                      coverEl.src = DEFAULT_MUSIC_COVER;
+                      coverEl.classList.remove('is-spinning');
+                  }
+                  if (pillCoverEl) {
+                      pillCoverEl.src = DEFAULT_MUSIC_COVER;
+                      pillCoverEl.classList.remove('is-spinning');
+                  }
+                  if (lyricEl)
+                      lyricEl.textContent = '♪ Sẵn sàng phát nhạc';
+                  if (fill)
+                      fill.style.width = '0%';
+                  if (curEl)
+                      curEl.textContent = '0:00';
+                  if (durEl)
+                      durEl.textContent = '0:00';
+                  if (favBtn)
+                      favBtn.classList.remove('is-favorite');
+              }
+              // Đồng bộ trạng thái chơi nhạc & icon
+              if (dotEl) {
+                  if (state.isPlaying)
+                      dotEl.classList.add('is-playing');
+                  else
+                      dotEl.classList.remove('is-playing');
+              }
+              if (playIcon && pauseIcon) {
+                  playIcon.style.display = state.isPlaying ? 'none' : 'block';
+                  pauseIcon.style.display = state.isPlaying ? 'block' : 'none';
+              }
+              if (volSlider && document.activeElement !== volSlider) {
+                  volSlider.value = String(state.volume);
+              }
+              // Repeat Mode Button
+              if (repeatBtn && repeatBadge) {
+                  if (state.repeatMode === 'one') {
+                      repeatBtn.classList.add('is-active');
+                      repeatBadge.style.display = 'flex';
+                  }
+                  else if (state.repeatMode === 'all') {
+                      repeatBtn.classList.add('is-active');
+                      repeatBadge.style.display = 'none';
+                  }
+                  else {
+                      repeatBtn.classList.remove('is-active');
+                      repeatBadge.style.display = 'none';
+                  }
+              }
+              // Shuffle Mode Button
+              if (shuffleBtn) {
+                  if (state.shuffleMode)
+                      shuffleBtn.classList.add('is-active');
+                  else
+                      shuffleBtn.classList.remove('is-active');
+              }
+              // Queue Count in Drawer Tab: Luôn cập nhật chính xác độ dài hàng đợi (0 khi xóa sạch)
+              if (queueCountEl) {
+                  queueCountEl.textContent = String(state.queue.length);
+              }
+              if (this.isDrawerOpen) {
+                  this.updateDrawerContent();
               }
           });
           // Đồng bộ tiến độ thời gian & Lyric (Tối ưu hóa DOM cache & bỏ qua khi thu gọn)
@@ -23098,6 +23121,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               this.container.style.height = `${pillSize}px`;
               this.container.style.right = `${safeRight}px`;
               this.container.style.bottom = `${safeBottom}px`;
+              this.savePosition();
           }
           else {
               // Đang từ PILL -> MỞ RỘNG RA FULL CARD (Mở ra 4 hướng từ giữa tâm)
@@ -23122,6 +23146,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               this.container.style.height = `${targetH}px`;
               this.container.style.right = `${safeRight}px`;
               this.container.style.bottom = `${safeBottom}px`;
+              this.savePosition();
               // Sau khi animation hoàn tất (300ms), trả height về auto để co giãn tự nhiên nếu mở drawer
               setTimeout(() => {
                   if (!this.isMinimized && this.container) {
@@ -23130,9 +23155,61 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }, 300);
           }
       }
+      getIsMinimized() {
+          return this.isMinimized;
+      }
+      savePosition() {
+          if (!this.container)
+              return;
+          try {
+              const right = parseFloat(this.container.style.right || '24');
+              const bottom = parseFloat(this.container.style.bottom || '24');
+              localStorage.setItem(this.STORAGE_KEY, JSON.stringify({
+                  right,
+                  bottom,
+                  isMinimized: this.isMinimized,
+              }));
+          }
+          catch (e) {
+              console.warn('[MusicPlayerWidget] Không thể lưu vị trí widget:', e);
+          }
+      }
+      restorePosition() {
+          if (!this.container)
+              return;
+          try {
+              const raw = localStorage.getItem(this.STORAGE_KEY);
+              if (!raw)
+                  return;
+              const data = JSON.parse(raw);
+              if (typeof data.right === 'number' && typeof data.bottom === 'number') {
+                  const isMin = !!data.isMinimized;
+                  const w = isMin ? 56 : Math.min(380, window.innerWidth - 20);
+                  const h = isMin ? 56 : 185;
+                  const maxRight = Math.max(10, window.innerWidth - w - 10);
+                  const maxBottom = Math.max(10, window.innerHeight - h - 10);
+                  const safeRight = Math.max(10, Math.min(maxRight, data.right));
+                  const safeBottom = Math.max(10, Math.min(maxBottom, data.bottom));
+                  this.container.style.right = `${safeRight}px`;
+                  this.container.style.bottom = `${safeBottom}px`;
+                  if (isMin) {
+                      this.isMinimized = true;
+                      this.container.classList.add('is-minimized');
+                      this.container.style.width = '56px';
+                      this.container.style.height = '56px';
+                  }
+              }
+          }
+          catch (e) {
+              console.warn('[MusicPlayerWidget] Không thể khôi phục vị trí widget:', e);
+          }
+      }
       shutdownAndClear() {
           this.audioManager.stop();
           this.audioManager.clearQueue();
+          if (this.isDrawerOpen) {
+              this.toggleDrawer(false);
+          }
           this.hide();
           if (typeof toastr !== 'undefined') {
               toastr.success('Đã tắt trình phát nhạc và xóa toàn bộ hàng đợi.', 'Kaiz Hi-Fi');
@@ -30018,6 +30095,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const modal = $('#kaiz-persona-memory-modal')[0];
               if (modal)
                   modal.close();
+          });
+          $('#kaiz-chat-music-player-btn').on('click', () => {
+              const widget = MusicPlayerWidget.getInstance();
+              widget.show();
+              if (widget.getIsMinimized()) {
+                  widget.toggleMinimize(false);
+              }
           });
           const backupModal = new BackupModal(stateManager.db);
           backupBtn.on('click', () => {
