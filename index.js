@@ -21590,7 +21590,13 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 color: #e2e8f0;
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
                 user-select: none;
-                transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, width 0.25s ease, height 0.25s ease;
+                transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                            height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                            right 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                            bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                            border-radius 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                            box-shadow 0.28s ease,
+                            opacity 0.2s ease;
                 display: none;
                 flex-direction: column;
                 overflow: hidden;
@@ -21600,11 +21606,16 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 display: flex;
             }
 
+            /* Tắt hoàn toàn transition khi đang kéo thả để đạt độ mượt 60fps tức thì */
+            #${this.WIDGET_ID}.is-dragging {
+                transition: none !important;
+            }
+
             /* Chế độ thu gọn thành Đĩa than Mini (Pill Mode) */
             #${this.WIDGET_ID}.is-minimized {
-                width: 56px;
-                height: 56px;
-                border-radius: 28px;
+                width: 56px !important;
+                height: 56px !important;
+                border-radius: 28px !important;
                 padding: 0;
                 cursor: grab;
                 border: 1px solid rgba(245, 158, 11, 0.4);
@@ -21615,12 +21626,13 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 cursor: grabbing;
             }
 
-            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card,
             #${this.WIDGET_ID}.is-minimized .kaiz-mp-drawer {
                 display: none !important;
             }
 
-            #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card {
+            .kaiz-mp-pill-card {
+                position: absolute;
+                inset: 0;
                 display: flex;
                 width: 100%;
                 height: 100%;
@@ -21629,21 +21641,42 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 background: #181a20;
                 border-radius: 28px;
                 cursor: grab;
-                position: relative;
+                user-select: none;
+                -webkit-user-select: none;
+                opacity: 0;
+                pointer-events: none;
+                transform: scale(0.72);
+                transition: opacity 0.2s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+                z-index: 5;
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card {
+                opacity: 1;
+                pointer-events: auto;
+                transform: scale(1);
             }
 
             #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card:active {
                 cursor: grabbing;
             }
 
-            .kaiz-mp-pill-card {
-                display: none;
-                position: relative;
-                width: 100%;
-                height: 100%;
-                cursor: grab;
-                user-select: none;
-                -webkit-user-select: none;
+            .kaiz-mp-main-card {
+                padding: 14px 16px 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 11px;
+                opacity: 1;
+                transform: scale(1);
+                transform-origin: center center;
+                transition: opacity 0.22s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card {
+                opacity: 0;
+                pointer-events: none;
+                transform: scale(0.92);
+                visibility: hidden;
+                transition: opacity 0.15s ease, transform 0.2s ease, visibility 0s 0.2s;
             }
 
             .kaiz-mp-pill-cover {
@@ -22657,6 +22690,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               origRight = window.innerWidth - rect.right;
               origBottom = window.innerHeight - rect.bottom;
               handle.style.cursor = 'grabbing';
+              this.container.classList.add('is-dragging');
               e.preventDefault();
           };
           const onTouchStart = (e, handle) => {
@@ -22674,6 +22708,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               origRight = window.innerWidth - rect.right;
               origBottom = window.innerHeight - rect.bottom;
               handle.style.cursor = 'grabbing';
+              this.container.classList.add('is-dragging');
           };
           if (header) {
               header.addEventListener('mousedown', (e) => onMouseDown(e, header));
@@ -22722,6 +22757,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           const handleDragEnd = () => {
               if (isDragging) {
                   isDragging = false;
+                  this.container?.classList.remove('is-dragging');
                   if (activeHandle) {
                       activeHandle.style.cursor = 'grab';
                       activeHandle = null;
@@ -22904,6 +22940,18 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   drawer.classList.add('is-open');
                   drawerBtn?.classList.add('is-active');
                   this.updateDrawerContent();
+                  // Kiểm tra an toàn mép trên màn hình: nếu mở drawer làm header bị tràn mép trên, tự động hạ widget xuống
+                  setTimeout(() => {
+                      if (!this.container)
+                          return;
+                      const rect = this.container.getBoundingClientRect();
+                      if (rect.top < 10) {
+                          const overflowTop = 10 - rect.top;
+                          const curBottom = parseFloat(this.container.style.bottom || '24');
+                          const newBottom = Math.max(10, curBottom - overflowTop);
+                          this.container.style.bottom = `${newBottom}px`;
+                      }
+                  }, 40);
               }
               else {
                   drawer.classList.remove('is-open');
@@ -23014,24 +23062,72 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           }
       }
       toggleMinimize(minimized) {
-          this.isMinimized = minimized !== undefined ? minimized : !this.isMinimized;
-          if (this.container) {
-              if (this.isMinimized) {
-                  this.container.classList.add('is-minimized');
-                  // Tự động đóng drawer nếu đang mở dở khi thu gọn để tránh xung đột layout
-                  if (this.isDrawerOpen) {
-                      this.toggleDrawer(false);
-                  }
+          const nextState = minimized !== undefined ? minimized : !this.isMinimized;
+          if (this.isMinimized === nextState && this.container)
+              return;
+          this.isMinimized = nextState;
+          if (!this.container)
+              return;
+          const pillSize = 56;
+          const targetW = Math.min(380, window.innerWidth - 20);
+          if (this.isMinimized) {
+              // Đang từ FULL CARD -> THU VỀ PILL (Thu cả 4 góc về giữa tâm)
+              if (this.isDrawerOpen) {
+                  this.toggleDrawer(false);
               }
-              else {
-                  this.container.classList.remove('is-minimized');
-                  // Đảm bảo không bị tràn mép trái màn hình khi phóng to ra 380px
-                  const currentRight = parseFloat(this.container.style.right || '24');
-                  const maxRightAllowed = window.innerWidth - 390;
-                  if (currentRight > maxRightAllowed) {
-                      this.container.style.right = `${Math.max(10, maxRightAllowed)}px`;
+              const curW = this.container.offsetWidth || targetW;
+              const curH = this.container.offsetHeight || 185;
+              const curRight = parseFloat(this.container.style.right || '24');
+              const curBottom = parseFloat(this.container.style.bottom || '24');
+              // Tính toán tâm của card hiện tại
+              const centerX = curRight + curW / 2;
+              const centerY = curBottom + curH / 2;
+              // Đặt pill có cùng tâm để cả 4 góc co đều về giữa
+              const targetRight = centerX - pillSize / 2;
+              const targetBottom = centerY - pillSize / 2;
+              const maxRight = Math.max(10, window.innerWidth - pillSize - 10);
+              const maxBottom = Math.max(10, window.innerHeight - pillSize - 10);
+              const safeRight = Math.max(10, Math.min(maxRight, targetRight));
+              const safeBottom = Math.max(10, Math.min(maxBottom, targetBottom));
+              // Khóa chiều cao hiện tại để kích hoạt transition CSS mượt mà
+              this.container.style.width = `${curW}px`;
+              this.container.style.height = `${curH}px`;
+              void this.container.offsetHeight; // force reflow
+              this.container.classList.add('is-minimized');
+              this.container.style.width = `${pillSize}px`;
+              this.container.style.height = `${pillSize}px`;
+              this.container.style.right = `${safeRight}px`;
+              this.container.style.bottom = `${safeBottom}px`;
+          }
+          else {
+              // Đang từ PILL -> MỞ RỘNG RA FULL CARD (Mở ra 4 hướng từ giữa tâm)
+              const curRight = parseFloat(this.container.style.right || '24');
+              const curBottom = parseFloat(this.container.style.bottom || '24');
+              // Tâm của đĩa than mini hiện tại
+              const centerX = curRight + pillSize / 2;
+              const centerY = curBottom + pillSize / 2;
+              // Đo chiều cao thực tế của main card để mở mượt mà
+              const mainCard = this.container.querySelector('.kaiz-mp-main-card');
+              const targetH = mainCard && mainCard.scrollHeight > 100 ? mainCard.scrollHeight : 185;
+              // Tính toán vị trí mở ra 4 hướng từ tâm
+              const targetRight = centerX - targetW / 2;
+              const targetBottom = centerY - targetH / 2;
+              // Kẹp an toàn trong viewport: ngăn tuyệt đối việc bị cắt chèn mép trên hoặc tràn mép trái/phải
+              const maxRight = Math.max(10, window.innerWidth - targetW - 10);
+              const maxBottom = Math.max(10, window.innerHeight - targetH - 10);
+              const safeRight = Math.max(10, Math.min(maxRight, targetRight));
+              const safeBottom = Math.max(10, Math.min(maxBottom, targetBottom));
+              this.container.classList.remove('is-minimized');
+              this.container.style.width = `${targetW}px`;
+              this.container.style.height = `${targetH}px`;
+              this.container.style.right = `${safeRight}px`;
+              this.container.style.bottom = `${safeBottom}px`;
+              // Sau khi animation hoàn tất (300ms), trả height về auto để co giãn tự nhiên nếu mở drawer
+              setTimeout(() => {
+                  if (!this.isMinimized && this.container) {
+                      this.container.style.height = '';
                   }
-              }
+              }, 300);
           }
       }
       shutdownAndClear() {
