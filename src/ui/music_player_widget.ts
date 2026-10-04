@@ -963,14 +963,14 @@ export class MusicPlayerWidget {
         const pillCoverEl = this.container.querySelector('#kaiz-mp-pill-cover') as HTMLImageElement | null;
         if (coverEl) {
             coverEl.addEventListener('error', () => {
-                if (coverEl.src !== DEFAULT_MUSIC_COVER) {
+                if (!coverEl.src.startsWith('data:image/svg+xml') && coverEl.src !== DEFAULT_MUSIC_COVER) {
                     coverEl.src = DEFAULT_MUSIC_COVER;
                 }
             });
         }
         if (pillCoverEl) {
             pillCoverEl.addEventListener('error', () => {
-                if (pillCoverEl.src !== DEFAULT_MUSIC_COVER) {
+                if (!pillCoverEl.src.startsWith('data:image/svg+xml') && pillCoverEl.src !== DEFAULT_MUSIC_COVER) {
                     pillCoverEl.src = DEFAULT_MUSIC_COVER;
                 }
             });
@@ -1145,6 +1145,15 @@ export class MusicPlayerWidget {
         if (drawerActionBtn) {
             drawerActionBtn.addEventListener('click', () => {
                 if (this.activeDrawerTab === 'queue') {
+                    if (this.audioManager.getState().queue.length === 0) {
+                        if (typeof toastr !== 'undefined') {
+                            toastr.warning(
+                                'Hàng đợi đang trống, hãy thêm bài hát trước khi lưu danh sách phát.',
+                                'Kaiz Hi-Fi',
+                            );
+                        }
+                        return;
+                    }
                     const plName = prompt('Nhập tên danh sách phát để lưu hàng đợi hiện tại:');
                     if (plName && plName.trim()) {
                         this.audioManager.saveQueueAsPlaylist(plName.trim());
@@ -1322,27 +1331,7 @@ export class MusicPlayerWidget {
 
         // Tự động giữ widget nằm trong vùng nhìn thấy khi xoay màn hình hoặc co giãn cửa sổ
         window.addEventListener('resize', () => {
-            if (!this.container) return;
-            const w = this.container.offsetWidth || 56;
-            const h = this.container.offsetHeight || 56;
-            const currentRight = parseFloat(this.container.style.right || '24');
-            const currentBottom = parseFloat(this.container.style.bottom || '24');
-
-            const maxRight = Math.max(10, window.innerWidth - w - 10);
-            const maxBottom = Math.max(10, window.innerHeight - h - 10);
-
-            let adjusted = false;
-            if (currentRight > maxRight) {
-                this.container.style.right = `${maxRight}px`;
-                adjusted = true;
-            }
-            if (currentBottom > maxBottom) {
-                this.container.style.bottom = `${maxBottom}px`;
-                adjusted = true;
-            }
-            if (adjusted) {
-                this.savePosition();
-            }
+            this.clampToViewport();
         });
     }
 
@@ -1618,6 +1607,7 @@ export class MusicPlayerWidget {
     public show(): void {
         if (this.container) {
             this.container.classList.add('is-active');
+            this.clampToViewport();
         }
     }
 
@@ -1702,6 +1692,16 @@ export class MusicPlayerWidget {
             this.container.style.bottom = `${safeBottom}px`;
             this.savePosition();
 
+            // Đồng bộ ngay tiến độ thời gian & fill bar khi vừa mở lại card
+            const curState = this.audioManager.getState();
+            const pct = curState.duration > 0 ? (curState.currentTime / curState.duration) * 100 : 0;
+            const fill = this.container.querySelector('#kaiz-mp-progress-fill') as HTMLElement | null;
+            const curEl = this.container.querySelector('#kaiz-mp-time-cur');
+            const durEl = this.container.querySelector('#kaiz-mp-time-dur');
+            if (fill) fill.style.width = `${pct}%`;
+            if (curEl) curEl.textContent = this.formatTime(curState.currentTime);
+            if (durEl) durEl.textContent = this.formatTime(curState.duration);
+
             // Sau khi animation hoàn tất (300ms), trả height về auto để co giãn tự nhiên nếu mở drawer
             setTimeout(() => {
                 if (!this.isMinimized && this.container) {
@@ -1713,6 +1713,26 @@ export class MusicPlayerWidget {
 
     public getIsMinimized(): boolean {
         return this.isMinimized;
+    }
+
+    public clampToViewport(): void {
+        if (!this.container) return;
+        const w = this.container.offsetWidth || (this.isMinimized ? 56 : Math.min(380, window.innerWidth - 20));
+        const h = this.container.offsetHeight || (this.isMinimized ? 56 : 185);
+        const currentRight = parseFloat(this.container.style.right || '24');
+        const currentBottom = parseFloat(this.container.style.bottom || '24');
+
+        const maxRight = Math.max(10, window.innerWidth - w - 10);
+        const maxBottom = Math.max(10, window.innerHeight - h - 10);
+
+        const safeRight = Math.max(10, Math.min(maxRight, currentRight));
+        const safeBottom = Math.max(10, Math.min(maxBottom, currentBottom));
+
+        if (safeRight !== currentRight || safeBottom !== currentBottom) {
+            this.container.style.right = `${safeRight}px`;
+            this.container.style.bottom = `${safeBottom}px`;
+            this.savePosition();
+        }
     }
 
     private savePosition(): void {
