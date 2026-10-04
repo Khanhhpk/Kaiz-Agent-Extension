@@ -47,6 +47,7 @@ export class AudioManager {
     private playlists: Playlist[] = [];
     private repeatMode: RepeatMode = 'all';
     private shuffleMode: boolean = false;
+    private playRequestId: number = 0;
 
     private stateListeners: Set<StateChangeListener> = new Set();
     private timeListeners: Set<TimeUpdateListener> = new Set();
@@ -203,6 +204,7 @@ export class AudioManager {
         song: SongItem,
         queueContext?: SongItem[],
     ): Promise<{ success: boolean; message: string; song?: SongItem }> {
+        const requestId = ++this.playRequestId;
         try {
             this.currentSong = song;
             this.currentLyric = 'Đang tải thông tin bài hát...';
@@ -220,6 +222,11 @@ export class AudioManager {
 
             // 1. Phân giải link phát
             const resolved = await MusicEngine.resolvePlayableSong(song);
+            if (this.playRequestId !== requestId) {
+                console.log(`[AudioManager] Hủy request phát bài #${requestId} (${song.name}) do có bài mới hơn.`);
+                return { success: false, message: 'Đã chuyển sang bài hát khác.' };
+            }
+
             if (!resolved || !resolved.url) {
                 this.currentLyric = 'Không tìm thấy link phát nhạc (Bản quyền).';
                 this.notifyStateChange();
@@ -235,6 +242,7 @@ export class AudioManager {
             // 2. Tải lời bài hát song song
             MusicEngine.getRawLyric(playableSong)
                 .then((rawLrc) => {
+                    if (this.playRequestId !== requestId) return;
                     if (rawLrc) {
                         this.lyrics = MusicEngine.parseLyrics(rawLrc);
                         if (this.lyrics.length > 0) {
@@ -248,6 +256,7 @@ export class AudioManager {
                     this.notifyStateChange();
                 })
                 .catch(() => {
+                    if (this.playRequestId !== requestId) return;
                     this.currentLyric = '♪ Không có lời bài hát';
                     this.notifyStateChange();
                 });
@@ -258,6 +267,10 @@ export class AudioManager {
             this.audio.volume = this.volume;
 
             await this.audio.play();
+            if (this.playRequestId !== requestId) {
+                this.audio.pause();
+                return { success: false, message: 'Đã chuyển sang bài hát khác.' };
+            }
             this.isPlaying = true;
             this.notifyStateChange();
 

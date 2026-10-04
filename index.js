@@ -20971,6 +20971,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       playlists = [];
       repeatMode = 'all';
       shuffleMode = false;
+      playRequestId = 0;
       stateListeners = new Set();
       timeListeners = new Set();
       AUDIO_ELEMENT_ID = 'kaiz-agent-audio-player';
@@ -21107,6 +21108,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
        * Bắt đầu phát bài hát
        */
       async playSong(song, queueContext) {
+          const requestId = ++this.playRequestId;
           try {
               this.currentSong = song;
               this.currentLyric = 'Đang tải thông tin bài hát...';
@@ -21121,6 +21123,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               this.saveSettings();
               // 1. Phân giải link phát
               const resolved = await MusicEngine.resolvePlayableSong(song);
+              if (this.playRequestId !== requestId) {
+                  console.log(`[AudioManager] Hủy request phát bài #${requestId} (${song.name}) do có bài mới hơn.`);
+                  return { success: false, message: 'Đã chuyển sang bài hát khác.' };
+              }
               if (!resolved || !resolved.url) {
                   this.currentLyric = 'Không tìm thấy link phát nhạc (Bản quyền).';
                   this.notifyStateChange();
@@ -21134,6 +21140,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               // 2. Tải lời bài hát song song
               MusicEngine.getRawLyric(playableSong)
                   .then((rawLrc) => {
+                  if (this.playRequestId !== requestId)
+                      return;
                   if (rawLrc) {
                       this.lyrics = MusicEngine.parseLyrics(rawLrc);
                       if (this.lyrics.length > 0) {
@@ -21149,6 +21157,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   this.notifyStateChange();
               })
                   .catch(() => {
+                  if (this.playRequestId !== requestId)
+                      return;
                   this.currentLyric = '♪ Không có lời bài hát';
                   this.notifyStateChange();
               });
@@ -21157,6 +21167,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               this.audio.currentTime = 0;
               this.audio.volume = this.volume;
               await this.audio.play();
+              if (this.playRequestId !== requestId) {
+                  this.audio.pause();
+                  return { success: false, message: 'Đã chuyển sang bài hát khác.' };
+              }
               this.isPlaying = true;
               this.notifyStateChange();
               return {
@@ -21601,8 +21615,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 cursor: grabbing;
             }
 
-            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card {
-                display: none;
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card,
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-drawer {
+                display: none !important;
             }
 
             #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card {
@@ -21645,6 +21660,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 -webkit-user-select: none;
                 -webkit-user-drag: none;
                 pointer-events: none; /* Tránh hoàn toàn việc kéo thả bị bắt nhầm vào ảnh */
+                animation: kaiz-vinyl-rotate 16s linear infinite;
+                animation-play-state: paused;
+                will-change: transform;
             }
 
             /* Trục tâm của đĩa than thu gọn (Spindle Hole) */
@@ -21823,6 +21841,9 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 -webkit-user-select: none;
                 -webkit-user-drag: none;
                 pointer-events: none;
+                animation: kaiz-vinyl-rotate 16s linear infinite;
+                animation-play-state: paused;
+                will-change: transform;
             }
 
             .kaiz-mp-cover-groove {
@@ -21849,7 +21870,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
 
             .kaiz-mp-cover.is-spinning,
             .kaiz-mp-pill-cover.is-spinning {
-                animation: kaiz-vinyl-rotate 16s linear infinite;
+                animation-play-state: running;
             }
 
             @keyframes kaiz-vinyl-rotate {
@@ -22245,6 +22266,28 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 color: #64748b;
                 font-size: 11.5px;
             }
+
+            /* Tối ưu hóa giao diện cho Mobile & Màn hình hẹp */
+            @media (max-width: 440px) {
+                #${this.WIDGET_ID} {
+                    width: calc(100vw - 20px) !important;
+                    right: 10px !important;
+                    bottom: 16px !important;
+                }
+                #${this.WIDGET_ID}.is-minimized {
+                    width: 56px !important;
+                    height: 56px !important;
+                    right: 16px !important;
+                    bottom: 16px !important;
+                }
+                .kaiz-mp-title {
+                    font-size: 13px !important;
+                }
+                .kaiz-mp-btn {
+                    width: 32px !important;
+                    height: 32px !important;
+                }
+            }
         `;
           document.head.appendChild(style);
       }
@@ -22616,19 +22659,37 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               handle.style.cursor = 'grabbing';
               e.preventDefault();
           };
+          const onTouchStart = (e, handle) => {
+              if (e.target.tagName === 'BUTTON')
+                  return;
+              if (e.touches.length !== 1)
+                  return;
+              const touch = e.touches[0];
+              isDragging = true;
+              hasMoved = false;
+              activeHandle = handle;
+              startX = touch.clientX;
+              startY = touch.clientY;
+              const rect = this.container.getBoundingClientRect();
+              origRight = window.innerWidth - rect.right;
+              origBottom = window.innerHeight - rect.bottom;
+              handle.style.cursor = 'grabbing';
+          };
           if (header) {
               header.addEventListener('mousedown', (e) => onMouseDown(e, header));
+              header.addEventListener('touchstart', (e) => onTouchStart(e, header), { passive: true });
           }
           if (pill) {
               pill.addEventListener('mousedown', (e) => onMouseDown(e, pill));
+              pill.addEventListener('touchstart', (e) => onTouchStart(e, pill), { passive: true });
           }
-          document.addEventListener('mousemove', (e) => {
+          const handleMove = (clientX, clientY, preventScrollFn) => {
               if (!isDragging || !this.container)
                   return;
-              const deltaX = e.clientX - startX;
-              const deltaY = e.clientY - startY;
+              const deltaX = clientX - startX;
+              const deltaY = clientY - startY;
               if (!hasMoved) {
-                  if (Math.hypot(deltaX, deltaY) > 4) {
+                  if (Math.hypot(deltaX, deltaY) > 5) {
                       hasMoved = true;
                       this.justDragged = true;
                   }
@@ -22636,6 +22697,8 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       return;
                   }
               }
+              if (preventScrollFn)
+                  preventScrollFn();
               const w = this.container.offsetWidth || 56;
               const h = this.container.offsetHeight || 56;
               const maxRight = Math.max(10, window.innerWidth - w - 10);
@@ -22644,8 +22707,19 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               const newBottom = Math.max(10, Math.min(maxBottom, origBottom - deltaY));
               this.container.style.right = `${newRight}px`;
               this.container.style.bottom = `${newBottom}px`;
+          };
+          document.addEventListener('mousemove', (e) => {
+              handleMove(e.clientX, e.clientY);
           });
-          document.addEventListener('mouseup', () => {
+          document.addEventListener('touchmove', (e) => {
+              if (e.touches.length !== 1)
+                  return;
+              handleMove(e.touches[0].clientX, e.touches[0].clientY, () => {
+                  if (e.cancelable)
+                      e.preventDefault();
+              });
+          }, { passive: false });
+          const handleDragEnd = () => {
               if (isDragging) {
                   isDragging = false;
                   if (activeHandle) {
@@ -22656,8 +22730,28 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                       this.justDragged = true;
                       setTimeout(() => {
                           this.justDragged = false;
-                      }, 120);
+                      }, 150);
                   }
+              }
+          };
+          document.addEventListener('mouseup', handleDragEnd);
+          document.addEventListener('touchend', handleDragEnd);
+          document.addEventListener('touchcancel', handleDragEnd);
+          // Tự động giữ widget nằm trong vùng nhìn thấy khi xoay màn hình hoặc co giãn cửa sổ
+          window.addEventListener('resize', () => {
+              if (!this.container)
+                  return;
+              const w = this.container.offsetWidth || 56;
+              const h = this.container.offsetHeight || 56;
+              const currentRight = parseFloat(this.container.style.right || '24');
+              const currentBottom = parseFloat(this.container.style.bottom || '24');
+              const maxRight = Math.max(10, window.innerWidth - w - 10);
+              const maxBottom = Math.max(10, window.innerHeight - h - 10);
+              if (currentRight > maxRight) {
+                  this.container.style.right = `${maxRight}px`;
+              }
+              if (currentBottom > maxBottom) {
+                  this.container.style.bottom = `${maxBottom}px`;
               }
           });
       }
@@ -22773,23 +22867,31 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   this.hide();
               }
           });
-          // Đồng bộ tiến độ thời gian & Lyric
+          // Đồng bộ tiến độ thời gian & Lyric (Tối ưu hóa DOM cache & bỏ qua khi thu gọn)
+          let cachedFill = null;
+          let cachedCurTime = null;
+          let cachedDurTime = null;
+          let cachedLyric = null;
           this.audioManager.onTimeUpdate((curTime, duration, lyric) => {
-              if (!this.container)
+              if (!this.container || !this.isVisible() || this.isMinimized)
                   return;
+              if (!cachedFill)
+                  cachedFill = this.container.querySelector('#kaiz-mp-progress-fill');
+              if (!cachedCurTime)
+                  cachedCurTime = this.container.querySelector('#kaiz-mp-time-cur');
+              if (!cachedDurTime)
+                  cachedDurTime = this.container.querySelector('#kaiz-mp-time-dur');
+              if (!cachedLyric)
+                  cachedLyric = this.container.querySelector('#kaiz-mp-lyric');
               const pct = duration > 0 ? (curTime / duration) * 100 : 0;
-              const fill = this.container.querySelector('#kaiz-mp-progress-fill');
-              if (fill)
-                  fill.style.width = `${pct}%`;
-              const curEl = this.container.querySelector('#kaiz-mp-time-cur');
-              const durEl = this.container.querySelector('#kaiz-mp-time-dur');
-              if (curEl)
-                  curEl.textContent = this.formatTime(curTime);
-              if (durEl)
-                  durEl.textContent = this.formatTime(duration);
-              const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
-              if (lyricEl && lyric && lyricEl.textContent !== lyric) {
-                  lyricEl.textContent = lyric;
+              if (cachedFill)
+                  cachedFill.style.width = `${pct}%`;
+              if (cachedCurTime)
+                  cachedCurTime.textContent = this.formatTime(curTime);
+              if (cachedDurTime)
+                  cachedDurTime.textContent = this.formatTime(duration);
+              if (cachedLyric && lyric && cachedLyric.textContent !== lyric) {
+                  cachedLyric.textContent = lyric;
               }
           });
       }
@@ -22916,6 +23018,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           if (this.container) {
               if (this.isMinimized) {
                   this.container.classList.add('is-minimized');
+                  // Tự động đóng drawer nếu đang mở dở khi thu gọn để tránh xung đột layout
+                  if (this.isDrawerOpen) {
+                      this.toggleDrawer(false);
+                  }
               }
               else {
                   this.container.classList.remove('is-minimized');

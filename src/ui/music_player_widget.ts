@@ -98,8 +98,9 @@ export class MusicPlayerWidget {
                 cursor: grabbing;
             }
 
-            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card {
-                display: none;
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card,
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-drawer {
+                display: none !important;
             }
 
             #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card {
@@ -142,6 +143,9 @@ export class MusicPlayerWidget {
                 -webkit-user-select: none;
                 -webkit-user-drag: none;
                 pointer-events: none; /* Tránh hoàn toàn việc kéo thả bị bắt nhầm vào ảnh */
+                animation: kaiz-vinyl-rotate 16s linear infinite;
+                animation-play-state: paused;
+                will-change: transform;
             }
 
             /* Trục tâm của đĩa than thu gọn (Spindle Hole) */
@@ -320,6 +324,9 @@ export class MusicPlayerWidget {
                 -webkit-user-select: none;
                 -webkit-user-drag: none;
                 pointer-events: none;
+                animation: kaiz-vinyl-rotate 16s linear infinite;
+                animation-play-state: paused;
+                will-change: transform;
             }
 
             .kaiz-mp-cover-groove {
@@ -346,7 +353,7 @@ export class MusicPlayerWidget {
 
             .kaiz-mp-cover.is-spinning,
             .kaiz-mp-pill-cover.is-spinning {
-                animation: kaiz-vinyl-rotate 16s linear infinite;
+                animation-play-state: running;
             }
 
             @keyframes kaiz-vinyl-rotate {
@@ -741,6 +748,28 @@ export class MusicPlayerWidget {
                 text-align: center;
                 color: #64748b;
                 font-size: 11.5px;
+            }
+
+            /* Tối ưu hóa giao diện cho Mobile & Màn hình hẹp */
+            @media (max-width: 440px) {
+                #${this.WIDGET_ID} {
+                    width: calc(100vw - 20px) !important;
+                    right: 10px !important;
+                    bottom: 16px !important;
+                }
+                #${this.WIDGET_ID}.is-minimized {
+                    width: 56px !important;
+                    height: 56px !important;
+                    right: 16px !important;
+                    bottom: 16px !important;
+                }
+                .kaiz-mp-title {
+                    font-size: 13px !important;
+                }
+                .kaiz-mp-btn {
+                    width: 32px !important;
+                    height: 32px !important;
+                }
             }
         `;
         document.head.appendChild(style);
@@ -1143,28 +1172,49 @@ export class MusicPlayerWidget {
             e.preventDefault();
         };
 
+        const onTouchStart = (e: TouchEvent, handle: HTMLElement) => {
+            if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+            if (e.touches.length !== 1) return;
+            const touch = e.touches[0];
+
+            isDragging = true;
+            hasMoved = false;
+            activeHandle = handle;
+            startX = touch.clientX;
+            startY = touch.clientY;
+
+            const rect = this.container!.getBoundingClientRect();
+            origRight = window.innerWidth - rect.right;
+            origBottom = window.innerHeight - rect.bottom;
+            handle.style.cursor = 'grabbing';
+        };
+
         if (header) {
             header.addEventListener('mousedown', (e) => onMouseDown(e, header));
+            header.addEventListener('touchstart', (e) => onTouchStart(e, header), { passive: true });
         }
 
         if (pill) {
             pill.addEventListener('mousedown', (e) => onMouseDown(e, pill));
+            pill.addEventListener('touchstart', (e) => onTouchStart(e, pill), { passive: true });
         }
 
-        document.addEventListener('mousemove', (e: MouseEvent) => {
+        const handleMove = (clientX: number, clientY: number, preventScrollFn?: () => void) => {
             if (!isDragging || !this.container) return;
 
-            const deltaX = e.clientX - startX;
-            const deltaY = e.clientY - startY;
+            const deltaX = clientX - startX;
+            const deltaY = clientY - startY;
 
             if (!hasMoved) {
-                if (Math.hypot(deltaX, deltaY) > 4) {
+                if (Math.hypot(deltaX, deltaY) > 5) {
                     hasMoved = true;
                     this.justDragged = true;
                 } else {
                     return;
                 }
             }
+
+            if (preventScrollFn) preventScrollFn();
 
             const w = this.container.offsetWidth || 56;
             const h = this.container.offsetHeight || 56;
@@ -1176,9 +1226,24 @@ export class MusicPlayerWidget {
 
             this.container.style.right = `${newRight}px`;
             this.container.style.bottom = `${newBottom}px`;
+        };
+
+        document.addEventListener('mousemove', (e: MouseEvent) => {
+            handleMove(e.clientX, e.clientY);
         });
 
-        document.addEventListener('mouseup', () => {
+        document.addEventListener(
+            'touchmove',
+            (e: TouchEvent) => {
+                if (e.touches.length !== 1) return;
+                handleMove(e.touches[0].clientX, e.touches[0].clientY, () => {
+                    if (e.cancelable) e.preventDefault();
+                });
+            },
+            { passive: false },
+        );
+
+        const handleDragEnd = () => {
             if (isDragging) {
                 isDragging = false;
                 if (activeHandle) {
@@ -1189,8 +1254,31 @@ export class MusicPlayerWidget {
                     this.justDragged = true;
                     setTimeout(() => {
                         this.justDragged = false;
-                    }, 120);
+                    }, 150);
                 }
+            }
+        };
+
+        document.addEventListener('mouseup', handleDragEnd);
+        document.addEventListener('touchend', handleDragEnd);
+        document.addEventListener('touchcancel', handleDragEnd);
+
+        // Tự động giữ widget nằm trong vùng nhìn thấy khi xoay màn hình hoặc co giãn cửa sổ
+        window.addEventListener('resize', () => {
+            if (!this.container) return;
+            const w = this.container.offsetWidth || 56;
+            const h = this.container.offsetHeight || 56;
+            const currentRight = parseFloat(this.container.style.right || '24');
+            const currentBottom = parseFloat(this.container.style.bottom || '24');
+
+            const maxRight = Math.max(10, window.innerWidth - w - 10);
+            const maxBottom = Math.max(10, window.innerHeight - h - 10);
+
+            if (currentRight > maxRight) {
+                this.container.style.right = `${maxRight}px`;
+            }
+            if (currentBottom > maxBottom) {
+                this.container.style.bottom = `${maxBottom}px`;
             }
         });
     }
@@ -1306,22 +1394,26 @@ export class MusicPlayerWidget {
             }
         });
 
-        // Đồng bộ tiến độ thời gian & Lyric
+        // Đồng bộ tiến độ thời gian & Lyric (Tối ưu hóa DOM cache & bỏ qua khi thu gọn)
+        let cachedFill: HTMLElement | null = null;
+        let cachedCurTime: HTMLElement | null = null;
+        let cachedDurTime: HTMLElement | null = null;
+        let cachedLyric: HTMLElement | null = null;
+
         this.audioManager.onTimeUpdate((curTime: number, duration: number, lyric: string) => {
-            if (!this.container) return;
+            if (!this.container || !this.isVisible() || this.isMinimized) return;
+
+            if (!cachedFill) cachedFill = this.container.querySelector('#kaiz-mp-progress-fill');
+            if (!cachedCurTime) cachedCurTime = this.container.querySelector('#kaiz-mp-time-cur');
+            if (!cachedDurTime) cachedDurTime = this.container.querySelector('#kaiz-mp-time-dur');
+            if (!cachedLyric) cachedLyric = this.container.querySelector('#kaiz-mp-lyric');
 
             const pct = duration > 0 ? (curTime / duration) * 100 : 0;
-            const fill = this.container.querySelector('#kaiz-mp-progress-fill') as HTMLElement | null;
-            if (fill) fill.style.width = `${pct}%`;
-
-            const curEl = this.container.querySelector('#kaiz-mp-time-cur');
-            const durEl = this.container.querySelector('#kaiz-mp-time-dur');
-            if (curEl) curEl.textContent = this.formatTime(curTime);
-            if (durEl) durEl.textContent = this.formatTime(duration);
-
-            const lyricEl = this.container.querySelector('#kaiz-mp-lyric');
-            if (lyricEl && lyric && lyricEl.textContent !== lyric) {
-                lyricEl.textContent = lyric;
+            if (cachedFill) cachedFill.style.width = `${pct}%`;
+            if (cachedCurTime) cachedCurTime.textContent = this.formatTime(curTime);
+            if (cachedDurTime) cachedDurTime.textContent = this.formatTime(duration);
+            if (cachedLyric && lyric && cachedLyric.textContent !== lyric) {
+                cachedLyric.textContent = lyric;
             }
         });
     }
@@ -1463,6 +1555,10 @@ export class MusicPlayerWidget {
         if (this.container) {
             if (this.isMinimized) {
                 this.container.classList.add('is-minimized');
+                // Tự động đóng drawer nếu đang mở dở khi thu gọn để tránh xung đột layout
+                if (this.isDrawerOpen) {
+                    this.toggleDrawer(false);
+                }
             } else {
                 this.container.classList.remove('is-minimized');
                 // Đảm bảo không bị tràn mép trái màn hình khi phóng to ra 380px
