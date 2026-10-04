@@ -4,6 +4,7 @@ import { StateManager } from '../core/state';
 import { ToolRegistry } from '../core/tool_registry';
 import { BackupModal } from './backup_modal';
 import { AppIconManager } from '../core/app_icon_manager';
+import { MusicPlayerWidget } from './music_player_widget';
 
 declare const jQuery: any;
 
@@ -104,6 +105,14 @@ export class ChatWindowUI {
         $('#kaiz-persona-memory-close').on('click', () => {
             const modal = $('#kaiz-persona-memory-modal')[0] as HTMLDialogElement;
             if (modal) modal.close();
+        });
+
+        $('#kaiz-chat-music-player-btn').on('click', () => {
+            const widget = MusicPlayerWidget.getInstance();
+            widget.show();
+            if (widget.getIsMinimized()) {
+                widget.toggleMinimize(false);
+            }
         });
 
         const backupModal = new BackupModal(stateManager.db);

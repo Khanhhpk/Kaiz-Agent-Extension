@@ -21,6 +21,9 @@ import { PresetGitModal } from './ui/preset_git_modal';
 import { MvuDashboardModal } from './ui/mvu_dashboard_modal';
 import { MascotManager } from './core/mascot_manager';
 import { AppIconManager } from './core/app_icon_manager';
+import { MusicPlayerWidget } from './ui/music_player_widget';
+import { AudioManager } from './core/music/audio_manager';
+import { MusicEngine } from './core/music/music_engine';
 import { DEFAULT_VIEW_SYSTEM_PROMPT } from './core/defaults';
 
 const EXT_NAME = 'kaiz_agent';
@@ -247,6 +250,7 @@ jQuery(async () => {
             ChatWindowUI.init(loop, stateManager, registry);
             ToolCheckerUI.init(registry, adapter);
             BrowserWindowUI.init();
+            MusicPlayerWidget.getInstance().init();
             new AutoTaskModal(stateManager, autoTaskScheduler, registry);
 
             // Tải DB và danh sách chat (callbacks sẽ tự động được gọi)
@@ -494,6 +498,71 @@ jQuery(async () => {
                     [],
                     '<ghi_chú_tùy_chọn>',
                     'Tự động đọc tin nhắn mới nhất, dùng API của Agent tạo prompt chi tiết và vẽ ảnh minh họa',
+                    true,
+                );
+
+                // Slash Command /music: Điều khiển nhanh trình phát nhạc Kaiz
+                ctx.registerSlashCommand(
+                    'music',
+                    async (_args: any, value: string) => {
+                        const widget = MusicPlayerWidget.getInstance();
+                        const audioMgr = AudioManager.getInstance();
+                        const val = (value || '').trim();
+
+                        if (!val || val === 'toggle') {
+                            widget.toggle();
+                            return '';
+                        }
+                        if (val === 'hide') {
+                            widget.hide();
+                            return '';
+                        }
+                        if (val === 'show') {
+                            widget.show();
+                            return '';
+                        }
+                        if (val === 'stop') {
+                            audioMgr.stop();
+                            widget.hide();
+                            return '';
+                        }
+                        if (val === 'pause') {
+                            audioMgr.pause();
+                            return '';
+                        }
+                        if (val === 'resume') {
+                            audioMgr.resume();
+                            return '';
+                        }
+                        if (val === 'next') {
+                            audioMgr.playNext();
+                            return '';
+                        }
+
+                        // Nếu nhập tên bài hát: /music Sơn Tùng
+                        if (typeof toastr !== 'undefined') {
+                            toastr.info(`Đang tìm kiếm bài hát "${val}"...`);
+                        }
+                        try {
+                            const searchResults = await MusicEngine.search(val, 1, 'all', 5);
+                            if (searchResults && searchResults.length > 0) {
+                                const res = await audioMgr.playSong(searchResults[0], searchResults);
+                                if (res.success && typeof toastr !== 'undefined') {
+                                    toastr.success(`Đang phát: ${searchResults[0].name} - ${searchResults[0].singer}`);
+                                }
+                            } else if (typeof toastr !== 'undefined') {
+                                toastr.warning(`Không tìm thấy bài hát: ${val}`);
+                            }
+                        } catch (err: any) {
+                            if (typeof toastr !== 'undefined') {
+                                toastr.error(`Lỗi phát nhạc: ${err.message || String(err)}`);
+                            }
+                        }
+                        return '';
+                    },
+                    ['toggle', 'show', 'hide', 'pause', 'resume', 'stop', 'next'],
+                    '[tên_bài_hát hoặc toggle/hide/show/stop/pause/resume/next]',
+                    'Điều khiển hoặc phát nhạc nhanh bằng Kaiz Music Player',
                     true,
                 );
             }

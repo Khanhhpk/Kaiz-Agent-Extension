@@ -49,6 +49,7 @@ import { setMvuVariableTool } from './set_mvu_variable';
 import { mutateMvuSchemaTool } from './mutate_mvu_schema';
 import { scaffoldMvuCardTool } from './scaffold_mvu_card';
 import { mvuInstructTool } from './mvu_instruct';
+import { manageMusicTool } from './manage_music';
 import { ToolRegistry } from '../tool_registry';
 
 /**
@@ -106,6 +107,14 @@ export function registerDefaultTools(registry: ToolRegistry) {
     registry.registerTool(mutateMvuSchemaTool);
     registry.registerTool(scaffoldMvuCardTool);
     registry.registerTool(mvuInstructTool);
+    registry.registerTool(manageMusicTool);
 }
 
-export { inspectMvuTool, setMvuVariableTool, mutateMvuSchemaTool, scaffoldMvuCardTool, mvuInstructTool };
+export {
+    inspectMvuTool,
+    setMvuVariableTool,
+    mutateMvuSchemaTool,
+    scaffoldMvuCardTool,
+    mvuInstructTool,
+    manageMusicTool,
+};
