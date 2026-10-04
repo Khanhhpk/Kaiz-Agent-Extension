@@ -63,10 +63,14 @@ export class MusicPlayerWidget {
             /* Container chính: Phong cách Classic Hi-Fi Charcoal */
             #${this.WIDGET_ID} {
                 position: fixed;
+                top: auto;
+                left: auto;
                 bottom: 24px;
                 right: 24px;
                 z-index: 99998;
                 width: 380px;
+                max-width: calc(100vw - 20px);
+                max-height: calc(100vh - 20px);
                 background: #181a20;
                 border: 1px solid rgba(255, 255, 255, 0.09);
                 border-radius: 16px;
@@ -76,8 +80,8 @@ export class MusicPlayerWidget {
                 user-select: none;
                 transition: width 0.28s cubic-bezier(0.16, 1, 0.3, 1),
                             height 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-                            right 0.28s cubic-bezier(0.16, 1, 0.3, 1),
-                            bottom 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                            left 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+                            top 0.28s cubic-bezier(0.16, 1, 0.3, 1),
                             border-radius 0.28s cubic-bezier(0.16, 1, 0.3, 1),
                             box-shadow 0.28s ease,
                             opacity 0.2s ease;
@@ -785,17 +789,9 @@ export class MusicPlayerWidget {
             }
 
             /* Tối ưu hóa giao diện cho Mobile & Màn hình hẹp */
-            @media (max-width: 440px) {
+            @media (max-width: 480px) {
                 #${this.WIDGET_ID} {
-                    width: calc(100vw - 20px) !important;
-                    right: 10px !important;
-                    bottom: 16px !important;
-                }
-                #${this.WIDGET_ID}.is-minimized {
-                    width: 56px !important;
-                    height: 56px !important;
-                    right: 16px !important;
-                    bottom: 16px !important;
+                    max-width: calc(100vw - 20px) !important;
                 }
                 .kaiz-mp-title {
                     font-size: 13px !important;
@@ -1213,8 +1209,8 @@ export class MusicPlayerWidget {
         let hasMoved = false;
         let startX = 0;
         let startY = 0;
-        let origRight = 24;
-        let origBottom = 24;
+        let origLeft = 0;
+        let origTop = 0;
         let activeHandle: HTMLElement | null = null;
 
         const onMouseDown = (e: MouseEvent, handle: HTMLElement) => {
@@ -1228,8 +1224,8 @@ export class MusicPlayerWidget {
             startY = e.clientY;
 
             const rect = this.container!.getBoundingClientRect();
-            origRight = window.innerWidth - rect.right;
-            origBottom = window.innerHeight - rect.bottom;
+            origLeft = rect.left;
+            origTop = rect.top;
             handle.style.cursor = 'grabbing';
             this.container!.classList.add('is-dragging');
             e.preventDefault();
@@ -1247,8 +1243,8 @@ export class MusicPlayerWidget {
             startY = touch.clientY;
 
             const rect = this.container!.getBoundingClientRect();
-            origRight = window.innerWidth - rect.right;
-            origBottom = window.innerHeight - rect.bottom;
+            origLeft = rect.left;
+            origTop = rect.top;
             handle.style.cursor = 'grabbing';
             this.container!.classList.add('is-dragging');
         };
@@ -1280,16 +1276,19 @@ export class MusicPlayerWidget {
 
             if (preventScrollFn) preventScrollFn();
 
-            const w = this.container.offsetWidth || 56;
-            const h = this.container.offsetHeight || 56;
-            const maxRight = Math.max(10, window.innerWidth - w - 10);
-            const maxBottom = Math.max(10, window.innerHeight - h - 10);
+            const rect = this.container.getBoundingClientRect();
+            const w = rect.width || (this.isMinimized ? 56 : 380);
+            const h = rect.height || (this.isMinimized ? 56 : 185);
+            const maxLeft = Math.max(10, window.innerWidth - w - 10);
+            const maxTop = Math.max(10, window.innerHeight - h - 10);
 
-            const newRight = Math.max(10, Math.min(maxRight, origRight - deltaX));
-            const newBottom = Math.max(10, Math.min(maxBottom, origBottom - deltaY));
+            const newLeft = Math.max(10, Math.min(maxLeft, origLeft + deltaX));
+            const newTop = Math.max(10, Math.min(maxTop, origTop + deltaY));
 
-            this.container.style.right = `${newRight}px`;
-            this.container.style.bottom = `${newBottom}px`;
+            this.container.style.left = `${newLeft}px`;
+            this.container.style.top = `${newTop}px`;
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
         };
 
         document.addEventListener('mousemove', (e: MouseEvent) => {
@@ -1330,8 +1329,12 @@ export class MusicPlayerWidget {
         document.addEventListener('touchcancel', handleDragEnd);
 
         // Tự động giữ widget nằm trong vùng nhìn thấy khi xoay màn hình hoặc co giãn cửa sổ
+        let resizeTimeout: any = null;
         window.addEventListener('resize', () => {
-            this.clampToViewport();
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                this.clampToViewport();
+            }, 50);
         });
     }
 
@@ -1486,13 +1489,7 @@ export class MusicPlayerWidget {
                 // Kiểm tra an toàn mép trên màn hình: nếu mở drawer làm header bị tràn mép trên, tự động hạ widget xuống
                 setTimeout(() => {
                     if (!this.container) return;
-                    const rect = this.container.getBoundingClientRect();
-                    if (rect.top < 10) {
-                        const overflowTop = 10 - rect.top;
-                        const curBottom = parseFloat(this.container.style.bottom || '24');
-                        const newBottom = Math.max(10, curBottom - overflowTop);
-                        this.container.style.bottom = `${newBottom}px`;
-                    }
+                    this.clampToViewport();
                 }, 40);
             } else {
                 drawer.classList.remove('is-open');
@@ -1626,6 +1623,7 @@ export class MusicPlayerWidget {
 
         const pillSize = 56;
         const targetW = Math.min(380, window.innerWidth - 20);
+        const rect = this.container.getBoundingClientRect();
 
         if (this.isMinimized) {
             // Đang từ FULL CARD -> THU VỀ PILL (Thu cả 4 góc về giữa tâm)
@@ -1633,23 +1631,23 @@ export class MusicPlayerWidget {
                 this.toggleDrawer(false);
             }
 
-            const curW = this.container.offsetWidth || targetW;
-            const curH = this.container.offsetHeight || 185;
-            const curRight = parseFloat(this.container.style.right || '24');
-            const curBottom = parseFloat(this.container.style.bottom || '24');
+            const curW = rect.width || targetW;
+            const curH = rect.height || 185;
+            const curLeft = rect.left;
+            const curTop = rect.top;
 
             // Tính toán tâm của card hiện tại
-            const centerX = curRight + curW / 2;
-            const centerY = curBottom + curH / 2;
+            const centerX = curLeft + curW / 2;
+            const centerY = curTop + curH / 2;
 
             // Đặt pill có cùng tâm để cả 4 góc co đều về giữa
-            const targetRight = centerX - pillSize / 2;
-            const targetBottom = centerY - pillSize / 2;
+            const targetLeft = centerX - pillSize / 2;
+            const targetTop = centerY - pillSize / 2;
 
-            const maxRight = Math.max(10, window.innerWidth - pillSize - 10);
-            const maxBottom = Math.max(10, window.innerHeight - pillSize - 10);
-            const safeRight = Math.max(10, Math.min(maxRight, targetRight));
-            const safeBottom = Math.max(10, Math.min(maxBottom, targetBottom));
+            const maxLeft = Math.max(10, window.innerWidth - pillSize - 10);
+            const maxTop = Math.max(10, window.innerHeight - pillSize - 10);
+            const safeLeft = Math.max(10, Math.min(maxLeft, targetLeft));
+            const safeTop = Math.max(10, Math.min(maxTop, targetTop));
 
             // Khóa chiều cao hiện tại để kích hoạt transition CSS mượt mà
             this.container.style.width = `${curW}px`;
@@ -1659,37 +1657,41 @@ export class MusicPlayerWidget {
             this.container.classList.add('is-minimized');
             this.container.style.width = `${pillSize}px`;
             this.container.style.height = `${pillSize}px`;
-            this.container.style.right = `${safeRight}px`;
-            this.container.style.bottom = `${safeBottom}px`;
+            this.container.style.left = `${safeLeft}px`;
+            this.container.style.top = `${safeTop}px`;
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
             this.savePosition();
         } else {
             // Đang từ PILL -> MỞ RỘNG RA FULL CARD (Mở ra 4 hướng từ giữa tâm)
-            const curRight = parseFloat(this.container.style.right || '24');
-            const curBottom = parseFloat(this.container.style.bottom || '24');
+            const curLeft = rect.left;
+            const curTop = rect.top;
 
             // Tâm của đĩa than mini hiện tại
-            const centerX = curRight + pillSize / 2;
-            const centerY = curBottom + pillSize / 2;
+            const centerX = curLeft + pillSize / 2;
+            const centerY = curTop + pillSize / 2;
 
             // Đo chiều cao thực tế của main card để mở mượt mà
             const mainCard = this.container.querySelector('.kaiz-mp-main-card') as HTMLElement | null;
             const targetH = mainCard && mainCard.scrollHeight > 100 ? mainCard.scrollHeight : 185;
 
             // Tính toán vị trí mở ra 4 hướng từ tâm
-            const targetRight = centerX - targetW / 2;
-            const targetBottom = centerY - targetH / 2;
+            const targetLeft = centerX - targetW / 2;
+            const targetTop = centerY - targetH / 2;
 
             // Kẹp an toàn trong viewport: ngăn tuyệt đối việc bị cắt chèn mép trên hoặc tràn mép trái/phải
-            const maxRight = Math.max(10, window.innerWidth - targetW - 10);
-            const maxBottom = Math.max(10, window.innerHeight - targetH - 10);
-            const safeRight = Math.max(10, Math.min(maxRight, targetRight));
-            const safeBottom = Math.max(10, Math.min(maxBottom, targetBottom));
+            const maxLeft = Math.max(10, window.innerWidth - targetW - 10);
+            const maxTop = Math.max(10, window.innerHeight - targetH - 10);
+            const safeLeft = Math.max(10, Math.min(maxLeft, targetLeft));
+            const safeTop = Math.max(10, Math.min(maxTop, targetTop));
 
             this.container.classList.remove('is-minimized');
             this.container.style.width = `${targetW}px`;
             this.container.style.height = `${targetH}px`;
-            this.container.style.right = `${safeRight}px`;
-            this.container.style.bottom = `${safeBottom}px`;
+            this.container.style.left = `${safeLeft}px`;
+            this.container.style.top = `${safeTop}px`;
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
             this.savePosition();
 
             // Đồng bộ ngay tiến độ thời gian & fill bar khi vừa mở lại card
@@ -1717,34 +1719,41 @@ export class MusicPlayerWidget {
 
     public clampToViewport(): void {
         if (!this.container) return;
-        const w = this.container.offsetWidth || (this.isMinimized ? 56 : Math.min(380, window.innerWidth - 20));
-        const h = this.container.offsetHeight || (this.isMinimized ? 56 : 185);
-        const currentRight = parseFloat(this.container.style.right || '24');
-        const currentBottom = parseFloat(this.container.style.bottom || '24');
+        const rect = this.container.getBoundingClientRect();
+        const isMin = this.isMinimized;
+        const targetW = isMin ? 56 : Math.min(380, window.innerWidth - 20);
+        const w = isMin ? 56 : targetW;
+        const h = isMin ? 56 : this.isDrawerOpen ? Math.min(rect.height || 185, window.innerHeight - 20) : 185;
 
-        const maxRight = Math.max(10, window.innerWidth - w - 10);
-        const maxBottom = Math.max(10, window.innerHeight - h - 10);
-
-        const safeRight = Math.max(10, Math.min(maxRight, currentRight));
-        const safeBottom = Math.max(10, Math.min(maxBottom, currentBottom));
-
-        if (safeRight !== currentRight || safeBottom !== currentBottom) {
-            this.container.style.right = `${safeRight}px`;
-            this.container.style.bottom = `${safeBottom}px`;
-            this.savePosition();
+        if (!isMin) {
+            this.container.style.width = `${w}px`;
         }
+
+        const maxLeft = Math.max(10, window.innerWidth - w - 10);
+        const maxTop = Math.max(10, window.innerHeight - h - 10);
+
+        const curLeft = rect.left > 0 ? rect.left : parseFloat(this.container.style.left || '10');
+        const curTop = rect.top > 0 ? rect.top : parseFloat(this.container.style.top || '10');
+
+        const safeLeft = Math.max(10, Math.min(maxLeft, curLeft));
+        const safeTop = Math.max(10, Math.min(maxTop, curTop));
+
+        this.container.style.left = `${safeLeft}px`;
+        this.container.style.top = `${safeTop}px`;
+        this.container.style.right = 'auto';
+        this.container.style.bottom = 'auto';
+        this.savePosition();
     }
 
     private savePosition(): void {
         if (!this.container) return;
         try {
-            const right = parseFloat(this.container.style.right || '24');
-            const bottom = parseFloat(this.container.style.bottom || '24');
+            const rect = this.container.getBoundingClientRect();
             localStorage.setItem(
                 this.STORAGE_KEY,
                 JSON.stringify({
-                    right,
-                    bottom,
+                    left: rect.left,
+                    top: rect.top,
                     isMinimized: this.isMinimized,
                 }),
             );
@@ -1757,28 +1766,56 @@ export class MusicPlayerWidget {
         if (!this.container) return;
         try {
             const raw = localStorage.getItem(this.STORAGE_KEY);
-            if (!raw) return;
-            const data = JSON.parse(raw);
-            if (typeof data.right === 'number' && typeof data.bottom === 'number') {
-                const isMin = !!data.isMinimized;
-                const w = isMin ? 56 : Math.min(380, window.innerWidth - 20);
-                const h = isMin ? 56 : 185;
+            const isMin = this.isMinimized;
+            const w = isMin ? 56 : Math.min(380, window.innerWidth - 20);
+            const h = isMin ? 56 : 185;
+            const maxLeft = Math.max(10, window.innerWidth - w - 10);
+            const maxTop = Math.max(10, window.innerHeight - h - 10);
 
-                const maxRight = Math.max(10, window.innerWidth - w - 10);
-                const maxBottom = Math.max(10, window.innerHeight - h - 10);
-                const safeRight = Math.max(10, Math.min(maxRight, data.right));
-                const safeBottom = Math.max(10, Math.min(maxBottom, data.bottom));
-
-                this.container.style.right = `${safeRight}px`;
-                this.container.style.bottom = `${safeBottom}px`;
-
-                if (isMin) {
-                    this.isMinimized = true;
-                    this.container.classList.add('is-minimized');
-                    this.container.style.width = '56px';
-                    this.container.style.height = '56px';
+            if (raw) {
+                const data = JSON.parse(raw);
+                if (typeof data.left === 'number' && typeof data.top === 'number') {
+                    const safeLeft = Math.max(10, Math.min(maxLeft, data.left));
+                    const safeTop = Math.max(10, Math.min(maxTop, data.top));
+                    this.container.style.left = `${safeLeft}px`;
+                    this.container.style.top = `${safeTop}px`;
+                    this.container.style.right = 'auto';
+                    this.container.style.bottom = 'auto';
+                    if (data.isMinimized) {
+                        this.isMinimized = true;
+                        this.container.classList.add('is-minimized');
+                        this.container.style.width = '56px';
+                        this.container.style.height = '56px';
+                    }
+                    return;
+                }
+                // Hỗ trợ backwards compatibility nếu trước đó lưu right/bottom
+                if (typeof data.right === 'number' && typeof data.bottom === 'number') {
+                    const targetLeft = window.innerWidth - w - data.right;
+                    const targetTop = window.innerHeight - h - data.bottom;
+                    const safeLeft = Math.max(10, Math.min(maxLeft, targetLeft));
+                    const safeTop = Math.max(10, Math.min(maxTop, targetTop));
+                    this.container.style.left = `${safeLeft}px`;
+                    this.container.style.top = `${safeTop}px`;
+                    this.container.style.right = 'auto';
+                    this.container.style.bottom = 'auto';
+                    if (data.isMinimized) {
+                        this.isMinimized = true;
+                        this.container.classList.add('is-minimized');
+                        this.container.style.width = '56px';
+                        this.container.style.height = '56px';
+                    }
+                    return;
                 }
             }
+
+            // Mặc định ở góc dưới bên phải nếu chưa từng lưu
+            const defaultLeft = Math.max(10, window.innerWidth - w - 24);
+            const defaultTop = Math.max(10, window.innerHeight - h - 24);
+            this.container.style.left = `${defaultLeft}px`;
+            this.container.style.top = `${defaultTop}px`;
+            this.container.style.right = 'auto';
+            this.container.style.bottom = 'auto';
         } catch (e) {
             console.warn('[MusicPlayerWidget] Không thể khôi phục vị trí widget:', e);
         }
