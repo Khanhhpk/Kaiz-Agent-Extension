@@ -21540,6 +21540,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       activeDrawerTab = 'queue';
       audioManager;
       justDragged = false;
+      unsubscribeState = null;
+      unsubscribeTime = null;
+      resizeHandler = null;
+      resizeTimeout = null;
       WIDGET_ID = 'kaiz-music-player-widget';
       STYLE_ID = 'kaiz-music-player-style';
       STORAGE_KEY = 'kaiz_mp_widget_state';
@@ -22697,6 +22701,53 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           let origLeft = 0;
           let origTop = 0;
           let activeHandle = null;
+          let onMouseMove = null;
+          let onTouchMove = null;
+          let onDragEnd = null;
+          const handleDragEnd = () => {
+              if (isDragging) {
+                  isDragging = false;
+                  this.container?.classList.remove('is-dragging');
+                  if (activeHandle) {
+                      activeHandle.style.cursor = 'grab';
+                      activeHandle = null;
+                  }
+                  // Gỡ bỏ toàn bộ event listener toàn cục ngay khi kết thúc kéo thả
+                  if (onMouseMove)
+                      document.removeEventListener('mousemove', onMouseMove);
+                  if (onTouchMove)
+                      document.removeEventListener('touchmove', onTouchMove);
+                  if (onDragEnd) {
+                      document.removeEventListener('mouseup', onDragEnd);
+                      document.removeEventListener('touchend', onDragEnd);
+                      document.removeEventListener('touchcancel', onDragEnd);
+                  }
+                  if (hasMoved) {
+                      this.justDragged = true;
+                      this.savePosition();
+                      setTimeout(() => {
+                          this.justDragged = false;
+                      }, 150);
+                  }
+              }
+          };
+          const attachDragListeners = () => {
+              onMouseMove = (e) => handleMove(e.clientX, e.clientY);
+              onTouchMove = (e) => {
+                  if (e.touches.length !== 1)
+                      return;
+                  handleMove(e.touches[0].clientX, e.touches[0].clientY, () => {
+                      if (e.cancelable)
+                          e.preventDefault();
+                  });
+              };
+              onDragEnd = handleDragEnd;
+              document.addEventListener('mousemove', onMouseMove);
+              document.addEventListener('touchmove', onTouchMove, { passive: false });
+              document.addEventListener('mouseup', onDragEnd);
+              document.addEventListener('touchend', onDragEnd);
+              document.addEventListener('touchcancel', onDragEnd);
+          };
           const onMouseDown = (e, handle) => {
               if (e.target.tagName === 'BUTTON')
                   return;
@@ -22712,6 +22763,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               origTop = rect.top;
               handle.style.cursor = 'grabbing';
               this.container.classList.add('is-dragging');
+              attachDragListeners();
               e.preventDefault();
           };
           const onTouchStart = (e, handle) => {
@@ -22730,6 +22782,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               origTop = rect.top;
               handle.style.cursor = 'grabbing';
               this.container.classList.add('is-dragging');
+              attachDragListeners();
           };
           if (header) {
               header.addEventListener('mousedown', (e) => onMouseDown(e, header));
@@ -22767,49 +22820,20 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               this.container.style.right = 'auto';
               this.container.style.bottom = 'auto';
           };
-          document.addEventListener('mousemove', (e) => {
-              handleMove(e.clientX, e.clientY);
-          });
-          document.addEventListener('touchmove', (e) => {
-              if (e.touches.length !== 1)
-                  return;
-              handleMove(e.touches[0].clientX, e.touches[0].clientY, () => {
-                  if (e.cancelable)
-                      e.preventDefault();
-              });
-          }, { passive: false });
-          const handleDragEnd = () => {
-              if (isDragging) {
-                  isDragging = false;
-                  this.container?.classList.remove('is-dragging');
-                  if (activeHandle) {
-                      activeHandle.style.cursor = 'grab';
-                      activeHandle = null;
-                  }
-                  if (hasMoved) {
-                      this.justDragged = true;
-                      this.savePosition();
-                      setTimeout(() => {
-                          this.justDragged = false;
-                      }, 150);
-                  }
-              }
-          };
-          document.addEventListener('mouseup', handleDragEnd);
-          document.addEventListener('touchend', handleDragEnd);
-          document.addEventListener('touchcancel', handleDragEnd);
           // Tự động giữ widget nằm trong vùng nhìn thấy khi xoay màn hình hoặc co giãn cửa sổ
-          let resizeTimeout = null;
-          window.addEventListener('resize', () => {
-              clearTimeout(resizeTimeout);
-              resizeTimeout = setTimeout(() => {
+          this.resizeHandler = () => {
+              if (this.resizeTimeout) {
+                  clearTimeout(this.resizeTimeout);
+              }
+              this.resizeTimeout = setTimeout(() => {
                   this.clampToViewport();
               }, 50);
-          });
+          };
+          window.addEventListener('resize', this.resizeHandler);
       }
       subscribeAudioEvents() {
           // Đồng bộ trạng thái bài hát & UI một cách toàn diện
-          this.audioManager.onStateChange((state) => {
+          this.unsubscribeState = this.audioManager.onStateChange((state) => {
               if (!this.container)
                   return;
               const titleEl = this.container.querySelector('#kaiz-mp-title');
@@ -22934,12 +22958,15 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   this.updateDrawerContent();
               }
           });
-          // Đồng bộ tiến độ thời gian & Lyric (Tối ưu hóa DOM cache & bỏ qua khi thu gọn)
+          // Đồng bộ tiến độ thời gian & Lyric (Tối ưu hóa DOM cache, throttle DOM mutations & bỏ qua khi thu gọn)
           let cachedFill = null;
           let cachedCurTime = null;
           let cachedDurTime = null;
           let cachedLyric = null;
-          this.audioManager.onTimeUpdate((curTime, duration, lyric) => {
+          let lastCurSec = -1;
+          let lastDurSec = -1;
+          let lastFillPct = -1;
+          this.unsubscribeTime = this.audioManager.onTimeUpdate((curTime, duration, lyric) => {
               if (!this.container || !this.isVisible() || this.isMinimized)
                   return;
               if (!cachedFill)
@@ -22950,13 +22977,22 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   cachedDurTime = this.container.querySelector('#kaiz-mp-time-dur');
               if (!cachedLyric)
                   cachedLyric = this.container.querySelector('#kaiz-mp-lyric');
-              const pct = duration > 0 ? (curTime / duration) * 100 : 0;
-              if (cachedFill)
-                  cachedFill.style.width = `${pct}%`;
-              if (cachedCurTime)
+              const curSec = Math.floor(curTime);
+              if (curSec !== lastCurSec && cachedCurTime) {
+                  lastCurSec = curSec;
                   cachedCurTime.textContent = this.formatTime(curTime);
-              if (cachedDurTime)
+              }
+              const durSec = Math.floor(duration);
+              if (durSec !== lastDurSec && cachedDurTime) {
+                  lastDurSec = durSec;
                   cachedDurTime.textContent = this.formatTime(duration);
+              }
+              const pct = duration > 0 ? (curTime / duration) * 100 : 0;
+              // Chỉ cập nhật DOM progress fill nếu thay đổi >= 0.25% để giảm tải reflow
+              if (Math.abs(pct - lastFillPct) >= 0.25 && cachedFill) {
+                  lastFillPct = pct;
+                  cachedFill.style.width = `${pct}%`;
+              }
               if (cachedLyric && lyric && cachedLyric.textContent !== lyric) {
                   cachedLyric.textContent = lyric;
               }
@@ -23284,6 +23320,28 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           this.hide();
           if (typeof toastr !== 'undefined') {
               toastr.success('Đã tắt trình phát nhạc và xóa toàn bộ hàng đợi.', 'Kaiz Hi-Fi');
+          }
+      }
+      destroy() {
+          if (this.resizeTimeout) {
+              clearTimeout(this.resizeTimeout);
+              this.resizeTimeout = null;
+          }
+          if (this.resizeHandler) {
+              window.removeEventListener('resize', this.resizeHandler);
+              this.resizeHandler = null;
+          }
+          if (this.unsubscribeState) {
+              this.unsubscribeState();
+              this.unsubscribeState = null;
+          }
+          if (this.unsubscribeTime) {
+              this.unsubscribeTime();
+              this.unsubscribeTime = null;
+          }
+          if (this.container) {
+              this.container.remove();
+              this.container = null;
           }
       }
   }
