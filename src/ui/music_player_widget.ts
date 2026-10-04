@@ -65,8 +65,8 @@ export class MusicPlayerWidget {
                 position: fixed;
                 top: auto;
                 left: auto;
-                bottom: 24px;
-                right: 24px;
+                bottom: auto;
+                right: auto;
                 z-index: 99998;
                 width: 380px;
                 max-width: calc(100vw - 20px);
@@ -1723,7 +1723,8 @@ export class MusicPlayerWidget {
         const isMin = this.isMinimized;
         const targetW = isMin ? 56 : Math.min(380, window.innerWidth - 20);
         const w = isMin ? 56 : targetW;
-        const h = isMin ? 56 : this.isDrawerOpen ? Math.min(rect.height || 185, window.innerHeight - 20) : 185;
+        const actualH = rect.height && rect.height > 50 ? rect.height : 185;
+        const h = isMin ? 56 : this.isDrawerOpen ? Math.min(actualH, window.innerHeight - 20) : actualH;
 
         if (!isMin) {
             this.container.style.width = `${w}px`;
@@ -1732,11 +1733,11 @@ export class MusicPlayerWidget {
         const maxLeft = Math.max(10, window.innerWidth - w - 10);
         const maxTop = Math.max(10, window.innerHeight - h - 10);
 
-        const curLeft = rect.left > 0 ? rect.left : parseFloat(this.container.style.left || '10');
-        const curTop = rect.top > 0 ? rect.top : parseFloat(this.container.style.top || '10');
+        const curLeft = this.isVisible() && rect.left !== 0 ? rect.left : parseFloat(this.container.style.left || '10');
+        const curTop = this.isVisible() && rect.top !== 0 ? rect.top : parseFloat(this.container.style.top || '10');
 
-        const safeLeft = Math.max(10, Math.min(maxLeft, curLeft));
-        const safeTop = Math.max(10, Math.min(maxTop, curTop));
+        const safeLeft = Math.max(10, Math.min(maxLeft, isNaN(curLeft) ? 10 : curLeft));
+        const safeTop = Math.max(10, Math.min(maxTop, isNaN(curTop) ? 10 : curTop));
 
         this.container.style.left = `${safeLeft}px`;
         this.container.style.top = `${safeTop}px`;
