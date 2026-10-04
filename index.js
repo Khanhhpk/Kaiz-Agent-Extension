@@ -20658,7 +20658,26 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
    * Trích xuất và hiện đại hóa từ app_music.js (Kaiz Collection v6.9)
    * Hỗ trợ tìm kiếm, phân giải URL stream từ Tencent, NetEase, KuGou, KuWo kèm Auto-Bypass VIP.
    */
-  const DEFAULT_MUSIC_COVER = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9IiM3Nzc3NzciIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiMyMjIyMjI7Ij48cGF0aCBkPSJNMTIgM3YxMC41NWMtLjU5LS4zNC0xLjI3LS41NS0yLS41NS0yLjIxIDAtNCAxLjc5LTQgNHMxLjc5IDQgNCA0IDQtMS43OSA0LTRWN2g0VjNoLTZ6Ii8+PC9zdmc+';
+  const DEFAULT_MUSIC_COVER = 'data:image/svg+xml;utf8,' +
+      encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">' +
+          '<circle cx="100" cy="100" r="100" fill="#14161b"/>' +
+          '<circle cx="100" cy="100" r="91" fill="none" stroke="#242732" stroke-width="1.5" opacity="0.6"/>' +
+          '<circle cx="100" cy="100" r="82" fill="none" stroke="#1c1e26" stroke-width="1.2" opacity="0.5"/>' +
+          '<circle cx="100" cy="100" r="73" fill="none" stroke="#242732" stroke-width="1.2" opacity="0.6"/>' +
+          '<circle cx="100" cy="100" r="64" fill="none" stroke="#1c1e26" stroke-width="1" opacity="0.5"/>' +
+          '<circle cx="100" cy="100" r="55" fill="none" stroke="#242732" stroke-width="1" opacity="0.6"/>' +
+          '<circle cx="100" cy="100" r="41" fill="#1e2129" stroke="#d97706" stroke-width="2.5"/>' +
+          '<circle cx="100" cy="100" r="37" fill="none" stroke="rgba(245,158,11,0.25)" stroke-width="1"/>' +
+          '<g fill="#f59e0b">' +
+          '<circle cx="93" cy="107" r="5"/>' +
+          '<circle cx="107" cy="107" r="5"/>' +
+          '<rect x="96" y="87" width="2.5" height="20" rx="1"/>' +
+          '<rect x="110" y="87" width="2.5" height="20" rx="1"/>' +
+          '<rect x="96" y="87" width="16.5" height="4" rx="1"/>' +
+          '</g>' +
+          '<circle cx="100" cy="100" r="8" fill="#0f1013" stroke="#333742" stroke-width="1.5"/>' +
+          '<circle cx="100" cy="100" r="2.5" fill="#ffffff" opacity="0.3"/>' +
+          '</svg>');
   function normalizeStr(str) {
       return str ? str.trim().toLowerCase() : '';
   }
@@ -21506,6 +21525,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       isDrawerOpen = false;
       activeDrawerTab = 'queue';
       audioManager;
+      justDragged = false;
       WIDGET_ID = 'kaiz-music-player-widget';
       STYLE_ID = 'kaiz-music-player-style';
       constructor() {
@@ -21534,6 +21554,14 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           const style = document.createElement('style');
           style.id = this.STYLE_ID;
           style.textContent = `
+            /* Reset box-sizing toàn bộ widget để tránh lệch tâm giao diện */
+            #${this.WIDGET_ID},
+            #${this.WIDGET_ID} *,
+            #${this.WIDGET_ID} *::before,
+            #${this.WIDGET_ID} *::after {
+                box-sizing: border-box;
+            }
+
             /* Container chính: Phong cách Classic Hi-Fi Charcoal */
             #${this.WIDGET_ID} {
                 position: fixed;
@@ -21564,9 +21592,13 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 height: 56px;
                 border-radius: 28px;
                 padding: 0;
-                cursor: pointer;
-                border: 1px solid rgba(245, 158, 11, 0.35);
+                cursor: grab;
+                border: 1px solid rgba(245, 158, 11, 0.4);
                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            }
+
+            #${this.WIDGET_ID}.is-minimized:active {
+                cursor: grabbing;
             }
 
             #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card {
@@ -21581,11 +21613,22 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 justify-content: center;
                 background: #181a20;
                 border-radius: 28px;
+                cursor: grab;
+                position: relative;
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card:active {
+                cursor: grabbing;
             }
 
             .kaiz-mp-pill-card {
                 display: none;
                 position: relative;
+                width: 100%;
+                height: 100%;
+                cursor: grab;
+                user-select: none;
+                -webkit-user-select: none;
             }
 
             .kaiz-mp-pill-cover {
@@ -21594,6 +21637,30 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 border-radius: 50%;
                 object-fit: cover;
                 border: 2px solid #d97706;
+                display: block;
+                flex-shrink: 0;
+                margin: 0;
+                transform-origin: center center;
+                user-select: none;
+                -webkit-user-select: none;
+                -webkit-user-drag: none;
+                pointer-events: none; /* Tránh hoàn toàn việc kéo thả bị bắt nhầm vào ảnh */
+            }
+
+            /* Trục tâm của đĩa than thu gọn (Spindle Hole) */
+            .kaiz-mp-pill-spindle {
+                position: absolute;
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: #14161b;
+                border: 1.5px solid #f59e0b;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                pointer-events: none;
+                z-index: 2;
+                box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
             }
 
             .kaiz-mp-main-card {
@@ -21644,7 +21711,7 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
             .kaiz-mp-actions {
                 display: flex;
                 align-items: center;
-                gap: 4px;
+                gap: 2px;
             }
 
             .kaiz-mp-header-btn {
@@ -21652,24 +21719,80 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 border: none;
                 color: #64748b;
                 cursor: pointer;
-                padding: 4px 6px;
+                width: 24px;
+                height: 24px;
+                padding: 0;
                 border-radius: 6px;
-                font-size: 12px;
-                line-height: 1;
                 transition: all 0.15s ease;
-                display: flex;
+                display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
 
+            .kaiz-mp-header-btn svg {
+                display: block;
+                transition: transform 0.15s ease, stroke 0.15s ease;
+            }
+
             .kaiz-mp-header-btn:hover {
                 color: #e2e8f0;
-                background: rgba(255, 255, 255, 0.06);
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .kaiz-mp-header-btn:active {
+                transform: scale(0.92);
+            }
+
+            .kaiz-mp-header-btn.btn-close {
+                position: relative;
+            }
+
+            .kaiz-mp-close-ring {
+                position: absolute;
+                inset: 0;
+                width: 24px;
+                height: 24px;
+                transform: rotate(-90deg);
+                pointer-events: none;
+                display: none;
+            }
+
+            .kaiz-mp-header-btn.btn-close:hover .kaiz-mp-close-ring,
+            .kaiz-mp-header-btn.btn-close.is-holding .kaiz-mp-close-ring {
+                display: block;
+            }
+
+            .kaiz-mp-ring-fill {
+                stroke-dasharray: 56.55;
+                stroke-dashoffset: 56.55;
+                transition: stroke-dashoffset 0.15s ease-out;
+            }
+
+            .kaiz-mp-header-btn.btn-close.is-holding .kaiz-mp-ring-fill {
+                stroke-dashoffset: 0;
+                transition: stroke-dashoffset 1.2s linear;
+            }
+
+            .kaiz-mp-header-btn.btn-close.is-holding {
+                background: rgba(239, 68, 68, 0.22);
+                color: #f87171;
+                transform: scale(0.95);
+            }
+
+            .kaiz-mp-header-btn.btn-close.is-shake {
+                animation: kaiz-btn-shake 0.3s ease;
+            }
+
+            @keyframes kaiz-btn-shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-3px); }
+                50% { transform: translateX(3px); }
+                75% { transform: translateX(-2px); }
             }
 
             .kaiz-mp-header-btn.btn-close:hover {
                 color: #f87171;
-                background: rgba(239, 68, 68, 0.12);
+                background: rgba(239, 68, 68, 0.14);
             }
 
             /* Body: Đĩa than & Thông tin bài hát */
@@ -21693,6 +21816,13 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 object-fit: cover;
                 border: 2px solid rgba(255, 255, 255, 0.1);
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+                display: block;
+                flex-shrink: 0;
+                transform-origin: center center;
+                user-select: none;
+                -webkit-user-select: none;
+                -webkit-user-drag: none;
+                pointer-events: none;
             }
 
             .kaiz-mp-cover-groove {
@@ -21701,6 +21831,20 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                 border-radius: 50%;
                 box-shadow: inset 0 0 0 3px rgba(0,0,0,0.5), inset 0 0 0 8px rgba(255,255,255,0.04);
                 pointer-events: none;
+            }
+
+            .kaiz-mp-cover-groove::after {
+                content: '';
+                position: absolute;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #14161b;
+                border: 1.5px solid #f59e0b;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
             }
 
             .kaiz-mp-cover.is-spinning,
@@ -22108,9 +22252,10 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
           const div = document.createElement('div');
           div.id = this.WIDGET_ID;
           div.innerHTML = `
-            <!-- Pill Mode khi thu gọn -->
-            <div class="kaiz-mp-pill-card" id="kaiz-mp-pill" title="Mở rộng trình phát nhạc Kaiz">
-                <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-pill-cover" id="kaiz-mp-pill-cover" alt="cover">
+            <!-- Pill Mode khi thu gọn: hỗ trợ vừa click mở rộng vừa kéo thả di chuyển -->
+            <div class="kaiz-mp-pill-card" id="kaiz-mp-pill" title="Mở rộng hoặc kéo di chuyển trình phát nhạc">
+                <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-pill-cover" id="kaiz-mp-pill-cover" alt="cover" draggable="false">
+                <div class="kaiz-mp-pill-spindle"></div>
             </div>
 
             <!-- Main Full Card -->
@@ -22122,16 +22267,34 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                         <span>Kaiz Hi-Fi</span>
                     </div>
                     <div class="kaiz-mp-actions">
-                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-minimize" title="Thu gọn thành đĩa than mini">─</button>
-                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-hide" title="Ẩn giao diện (nhạc vẫn tiếp tục phát)">⌄</button>
-                        <button class="kaiz-mp-header-btn btn-close" id="kaiz-mp-btn-close" title="Tắt nhạc và đóng">✕</button>
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-minimize" title="Thu gọn thành đĩa than mini">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-hide" title="Ẩn giao diện (nhạc vẫn tiếp tục phát)">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-header-btn btn-close" id="kaiz-mp-btn-close" title="Nhấn giữ 1.2s để tắt nhạc và xóa hàng đợi">
+                            <svg class="kaiz-mp-close-ring" width="24" height="24" viewBox="0 0 24 24">
+                                <circle class="kaiz-mp-ring-bg" cx="12" cy="12" r="9" fill="none" stroke="rgba(255, 255, 255, 0.12)" stroke-width="2"/>
+                                <circle class="kaiz-mp-ring-fill" cx="12" cy="12" r="9" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"
+                                    stroke-dasharray="56.55" stroke-dashoffset="56.55"/>
+                            </svg>
+                            <svg class="kaiz-mp-close-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
                 <!-- Body: Vinyl & Info -->
                 <div class="kaiz-mp-body">
                     <div class="kaiz-mp-cover-wrap">
-                        <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-cover" id="kaiz-mp-cover" alt="album cover">
+                        <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-cover" id="kaiz-mp-cover" alt="album cover" draggable="false">
                         <div class="kaiz-mp-cover-groove"></div>
                     </div>
                     <div class="kaiz-mp-info">
@@ -22230,10 +22393,15 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       bindEvents() {
           if (!this.container)
               return;
-          // Click Pill để phóng to
+          // Click Pill để phóng to (bỏ qua nếu vừa thực hiện kéo thả)
           const pill = this.container.querySelector('#kaiz-mp-pill');
           if (pill) {
-              pill.addEventListener('click', () => {
+              pill.addEventListener('click', (e) => {
+                  if (this.justDragged) {
+                      this.justDragged = false;
+                      e.stopPropagation();
+                      return;
+                  }
                   this.toggleMinimize(false);
               });
           }
@@ -22253,13 +22421,52 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
                   this.hide();
               });
           }
-          // Đóng / Stop
+          // Nút Đóng: Bấm giữ 1.2s để shutdown hoàn toàn & clear queue (tránh bấm nhầm khi đang nghe nhạc)
           const closeBtn = this.container.querySelector('#kaiz-mp-btn-close');
           if (closeBtn) {
+              let holdTimer = null;
+              let isHoldComplete = false;
+              let holdStartTime = 0;
+              const startHold = (e) => {
+                  if (e.button !== undefined && e.button !== 0)
+                      return;
+                  e.stopPropagation();
+                  isHoldComplete = false;
+                  holdStartTime = Date.now();
+                  closeBtn.classList.add('is-holding');
+                  holdTimer = window.setTimeout(() => {
+                      isHoldComplete = true;
+                      closeBtn.classList.remove('is-holding');
+                      this.shutdownAndClear();
+                  }, 1200);
+              };
+              const cancelHold = () => {
+                  if (holdTimer !== null) {
+                      clearTimeout(holdTimer);
+                      holdTimer = null;
+                  }
+                  const elapsed = Date.now() - holdStartTime;
+                  closeBtn.classList.remove('is-holding');
+                  // Nếu người dùng chỉ click nhanh (< 350ms) thay vì nhấn giữ
+                  if (!isHoldComplete && elapsed < 350 && elapsed > 20) {
+                      closeBtn.classList.add('is-shake');
+                      setTimeout(() => closeBtn.classList.remove('is-shake'), 400);
+                      // Hiển thị gợi ý thân thiện
+                      if (typeof toastr !== 'undefined') {
+                          toastr.info('Nhấn giữ nút ✕ (1.2 giây) để tắt nhạc hoàn toàn và xóa hàng đợi.', 'Kaiz Hi-Fi');
+                      }
+                  }
+                  isHoldComplete = false;
+              };
+              closeBtn.addEventListener('mousedown', startHold);
+              closeBtn.addEventListener('touchstart', startHold, { passive: true });
+              closeBtn.addEventListener('mouseup', cancelHold);
+              closeBtn.addEventListener('mouseleave', cancelHold);
+              closeBtn.addEventListener('touchend', cancelHold);
+              closeBtn.addEventListener('touchcancel', cancelHold);
               closeBtn.addEventListener('click', (e) => {
                   e.stopPropagation();
-                  this.audioManager.stop();
-                  this.hide();
+                  e.preventDefault();
               });
           }
           // Play / Pause
@@ -22378,40 +22585,79 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
       }
       setupDragging() {
           const header = this.container?.querySelector('#kaiz-mp-drag-header');
-          if (!header || !this.container)
+          const pill = this.container?.querySelector('#kaiz-mp-pill');
+          if (!this.container)
               return;
+          // Ngăn chặn hoàn toàn sự kiện native drag của trình duyệt trên toàn bộ widget
+          this.container.addEventListener('dragstart', (e) => {
+              e.preventDefault();
+              return false;
+          });
           let isDragging = false;
+          let hasMoved = false;
           let startX = 0;
           let startY = 0;
           let origRight = 24;
           let origBottom = 24;
-          header.addEventListener('mousedown', (e) => {
+          let activeHandle = null;
+          const onMouseDown = (e, handle) => {
               if (e.target.tagName === 'BUTTON')
                   return;
+              if (e.button !== 0)
+                  return; // Chỉ nhận chuột trái
               isDragging = true;
+              hasMoved = false;
+              activeHandle = handle;
               startX = e.clientX;
               startY = e.clientY;
               const rect = this.container.getBoundingClientRect();
               origRight = window.innerWidth - rect.right;
               origBottom = window.innerHeight - rect.bottom;
-              header.style.cursor = 'grabbing';
+              handle.style.cursor = 'grabbing';
               e.preventDefault();
-          });
+          };
+          if (header) {
+              header.addEventListener('mousedown', (e) => onMouseDown(e, header));
+          }
+          if (pill) {
+              pill.addEventListener('mousedown', (e) => onMouseDown(e, pill));
+          }
           document.addEventListener('mousemove', (e) => {
               if (!isDragging || !this.container)
                   return;
               const deltaX = e.clientX - startX;
               const deltaY = e.clientY - startY;
-              const newRight = Math.max(10, Math.min(window.innerWidth - 80, origRight - deltaX));
-              const newBottom = Math.max(10, Math.min(window.innerHeight - 80, origBottom - deltaY));
+              if (!hasMoved) {
+                  if (Math.hypot(deltaX, deltaY) > 4) {
+                      hasMoved = true;
+                      this.justDragged = true;
+                  }
+                  else {
+                      return;
+                  }
+              }
+              const w = this.container.offsetWidth || 56;
+              const h = this.container.offsetHeight || 56;
+              const maxRight = Math.max(10, window.innerWidth - w - 10);
+              const maxBottom = Math.max(10, window.innerHeight - h - 10);
+              const newRight = Math.max(10, Math.min(maxRight, origRight - deltaX));
+              const newBottom = Math.max(10, Math.min(maxBottom, origBottom - deltaY));
               this.container.style.right = `${newRight}px`;
               this.container.style.bottom = `${newBottom}px`;
           });
           document.addEventListener('mouseup', () => {
               if (isDragging) {
                   isDragging = false;
-                  if (header)
-                      header.style.cursor = 'grab';
+                  if (activeHandle) {
+                      activeHandle.style.cursor = 'grab';
+                      activeHandle = null;
+                  }
+                  if (hasMoved) {
+                      this.justDragged = true;
+                      setTimeout(() => {
+                          this.justDragged = false;
+                      }, 120);
+                  }
               }
           });
       }
@@ -22673,7 +22919,21 @@ Phía trên khung nhập liệu của SillyTavern có nút **Bật/Tắt templat
               }
               else {
                   this.container.classList.remove('is-minimized');
+                  // Đảm bảo không bị tràn mép trái màn hình khi phóng to ra 380px
+                  const currentRight = parseFloat(this.container.style.right || '24');
+                  const maxRightAllowed = window.innerWidth - 390;
+                  if (currentRight > maxRightAllowed) {
+                      this.container.style.right = `${Math.max(10, maxRightAllowed)}px`;
+                  }
               }
+          }
+      }
+      shutdownAndClear() {
+          this.audioManager.stop();
+          this.audioManager.clearQueue();
+          this.hide();
+          if (typeof toastr !== 'undefined') {
+              toastr.success('Đã tắt trình phát nhạc và xóa toàn bộ hàng đợi.', 'Kaiz Hi-Fi');
           }
       }
   }

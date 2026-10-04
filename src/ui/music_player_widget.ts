@@ -8,6 +8,8 @@
 import { AudioManager, AudioState } from '../core/music/audio_manager';
 import { DEFAULT_MUSIC_COVER } from '../core/music/music_engine';
 
+declare const toastr: any;
+
 export class MusicPlayerWidget {
     private static instance: MusicPlayerWidget;
     private container: HTMLElement | null = null;
@@ -15,6 +17,7 @@ export class MusicPlayerWidget {
     private isDrawerOpen: boolean = false;
     private activeDrawerTab: 'queue' | 'playlists' = 'queue';
     private audioManager: AudioManager;
+    private justDragged: boolean = false;
 
     private readonly WIDGET_ID = 'kaiz-music-player-widget';
     private readonly STYLE_ID = 'kaiz-music-player-style';
@@ -48,6 +51,14 @@ export class MusicPlayerWidget {
         const style = document.createElement('style');
         style.id = this.STYLE_ID;
         style.textContent = `
+            /* Reset box-sizing toàn bộ widget để tránh lệch tâm giao diện */
+            #${this.WIDGET_ID},
+            #${this.WIDGET_ID} *,
+            #${this.WIDGET_ID} *::before,
+            #${this.WIDGET_ID} *::after {
+                box-sizing: border-box;
+            }
+
             /* Container chính: Phong cách Classic Hi-Fi Charcoal */
             #${this.WIDGET_ID} {
                 position: fixed;
@@ -78,9 +89,13 @@ export class MusicPlayerWidget {
                 height: 56px;
                 border-radius: 28px;
                 padding: 0;
-                cursor: pointer;
-                border: 1px solid rgba(245, 158, 11, 0.35);
+                cursor: grab;
+                border: 1px solid rgba(245, 158, 11, 0.4);
                 box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+            }
+
+            #${this.WIDGET_ID}.is-minimized:active {
+                cursor: grabbing;
             }
 
             #${this.WIDGET_ID}.is-minimized .kaiz-mp-main-card {
@@ -95,11 +110,22 @@ export class MusicPlayerWidget {
                 justify-content: center;
                 background: #181a20;
                 border-radius: 28px;
+                cursor: grab;
+                position: relative;
+            }
+
+            #${this.WIDGET_ID}.is-minimized .kaiz-mp-pill-card:active {
+                cursor: grabbing;
             }
 
             .kaiz-mp-pill-card {
                 display: none;
                 position: relative;
+                width: 100%;
+                height: 100%;
+                cursor: grab;
+                user-select: none;
+                -webkit-user-select: none;
             }
 
             .kaiz-mp-pill-cover {
@@ -108,6 +134,30 @@ export class MusicPlayerWidget {
                 border-radius: 50%;
                 object-fit: cover;
                 border: 2px solid #d97706;
+                display: block;
+                flex-shrink: 0;
+                margin: 0;
+                transform-origin: center center;
+                user-select: none;
+                -webkit-user-select: none;
+                -webkit-user-drag: none;
+                pointer-events: none; /* Tránh hoàn toàn việc kéo thả bị bắt nhầm vào ảnh */
+            }
+
+            /* Trục tâm của đĩa than thu gọn (Spindle Hole) */
+            .kaiz-mp-pill-spindle {
+                position: absolute;
+                width: 6px;
+                height: 6px;
+                border-radius: 50%;
+                background: #14161b;
+                border: 1.5px solid #f59e0b;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                pointer-events: none;
+                z-index: 2;
+                box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
             }
 
             .kaiz-mp-main-card {
@@ -158,7 +208,7 @@ export class MusicPlayerWidget {
             .kaiz-mp-actions {
                 display: flex;
                 align-items: center;
-                gap: 4px;
+                gap: 2px;
             }
 
             .kaiz-mp-header-btn {
@@ -166,24 +216,80 @@ export class MusicPlayerWidget {
                 border: none;
                 color: #64748b;
                 cursor: pointer;
-                padding: 4px 6px;
+                width: 24px;
+                height: 24px;
+                padding: 0;
                 border-radius: 6px;
-                font-size: 12px;
-                line-height: 1;
                 transition: all 0.15s ease;
-                display: flex;
+                display: inline-flex;
                 align-items: center;
                 justify-content: center;
             }
 
+            .kaiz-mp-header-btn svg {
+                display: block;
+                transition: transform 0.15s ease, stroke 0.15s ease;
+            }
+
             .kaiz-mp-header-btn:hover {
                 color: #e2e8f0;
-                background: rgba(255, 255, 255, 0.06);
+                background: rgba(255, 255, 255, 0.08);
+            }
+
+            .kaiz-mp-header-btn:active {
+                transform: scale(0.92);
+            }
+
+            .kaiz-mp-header-btn.btn-close {
+                position: relative;
+            }
+
+            .kaiz-mp-close-ring {
+                position: absolute;
+                inset: 0;
+                width: 24px;
+                height: 24px;
+                transform: rotate(-90deg);
+                pointer-events: none;
+                display: none;
+            }
+
+            .kaiz-mp-header-btn.btn-close:hover .kaiz-mp-close-ring,
+            .kaiz-mp-header-btn.btn-close.is-holding .kaiz-mp-close-ring {
+                display: block;
+            }
+
+            .kaiz-mp-ring-fill {
+                stroke-dasharray: 56.55;
+                stroke-dashoffset: 56.55;
+                transition: stroke-dashoffset 0.15s ease-out;
+            }
+
+            .kaiz-mp-header-btn.btn-close.is-holding .kaiz-mp-ring-fill {
+                stroke-dashoffset: 0;
+                transition: stroke-dashoffset 1.2s linear;
+            }
+
+            .kaiz-mp-header-btn.btn-close.is-holding {
+                background: rgba(239, 68, 68, 0.22);
+                color: #f87171;
+                transform: scale(0.95);
+            }
+
+            .kaiz-mp-header-btn.btn-close.is-shake {
+                animation: kaiz-btn-shake 0.3s ease;
+            }
+
+            @keyframes kaiz-btn-shake {
+                0%, 100% { transform: translateX(0); }
+                25% { transform: translateX(-3px); }
+                50% { transform: translateX(3px); }
+                75% { transform: translateX(-2px); }
             }
 
             .kaiz-mp-header-btn.btn-close:hover {
                 color: #f87171;
-                background: rgba(239, 68, 68, 0.12);
+                background: rgba(239, 68, 68, 0.14);
             }
 
             /* Body: Đĩa than & Thông tin bài hát */
@@ -207,6 +313,13 @@ export class MusicPlayerWidget {
                 object-fit: cover;
                 border: 2px solid rgba(255, 255, 255, 0.1);
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+                display: block;
+                flex-shrink: 0;
+                transform-origin: center center;
+                user-select: none;
+                -webkit-user-select: none;
+                -webkit-user-drag: none;
+                pointer-events: none;
             }
 
             .kaiz-mp-cover-groove {
@@ -215,6 +328,20 @@ export class MusicPlayerWidget {
                 border-radius: 50%;
                 box-shadow: inset 0 0 0 3px rgba(0,0,0,0.5), inset 0 0 0 8px rgba(255,255,255,0.04);
                 pointer-events: none;
+            }
+
+            .kaiz-mp-cover-groove::after {
+                content: '';
+                position: absolute;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #14161b;
+                border: 1.5px solid #f59e0b;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                box-shadow: 0 0 3px rgba(0, 0, 0, 0.8);
             }
 
             .kaiz-mp-cover.is-spinning,
@@ -624,9 +751,10 @@ export class MusicPlayerWidget {
         div.id = this.WIDGET_ID;
 
         div.innerHTML = `
-            <!-- Pill Mode khi thu gọn -->
-            <div class="kaiz-mp-pill-card" id="kaiz-mp-pill" title="Mở rộng trình phát nhạc Kaiz">
-                <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-pill-cover" id="kaiz-mp-pill-cover" alt="cover">
+            <!-- Pill Mode khi thu gọn: hỗ trợ vừa click mở rộng vừa kéo thả di chuyển -->
+            <div class="kaiz-mp-pill-card" id="kaiz-mp-pill" title="Mở rộng hoặc kéo di chuyển trình phát nhạc">
+                <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-pill-cover" id="kaiz-mp-pill-cover" alt="cover" draggable="false">
+                <div class="kaiz-mp-pill-spindle"></div>
             </div>
 
             <!-- Main Full Card -->
@@ -638,16 +766,34 @@ export class MusicPlayerWidget {
                         <span>Kaiz Hi-Fi</span>
                     </div>
                     <div class="kaiz-mp-actions">
-                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-minimize" title="Thu gọn thành đĩa than mini">─</button>
-                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-hide" title="Ẩn giao diện (nhạc vẫn tiếp tục phát)">⌄</button>
-                        <button class="kaiz-mp-header-btn btn-close" id="kaiz-mp-btn-close" title="Tắt nhạc và đóng">✕</button>
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-minimize" title="Thu gọn thành đĩa than mini">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-header-btn" id="kaiz-mp-btn-hide" title="Ẩn giao diện (nhạc vẫn tiếp tục phát)">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"></polyline>
+                            </svg>
+                        </button>
+                        <button class="kaiz-mp-header-btn btn-close" id="kaiz-mp-btn-close" title="Nhấn giữ 1.2s để tắt nhạc và xóa hàng đợi">
+                            <svg class="kaiz-mp-close-ring" width="24" height="24" viewBox="0 0 24 24">
+                                <circle class="kaiz-mp-ring-bg" cx="12" cy="12" r="9" fill="none" stroke="rgba(255, 255, 255, 0.12)" stroke-width="2"/>
+                                <circle class="kaiz-mp-ring-fill" cx="12" cy="12" r="9" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round"
+                                    stroke-dasharray="56.55" stroke-dashoffset="56.55"/>
+                            </svg>
+                            <svg class="kaiz-mp-close-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
                     </div>
                 </div>
 
                 <!-- Body: Vinyl & Info -->
                 <div class="kaiz-mp-body">
                     <div class="kaiz-mp-cover-wrap">
-                        <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-cover" id="kaiz-mp-cover" alt="album cover">
+                        <img src="${DEFAULT_MUSIC_COVER}" class="kaiz-mp-cover" id="kaiz-mp-cover" alt="album cover" draggable="false">
                         <div class="kaiz-mp-cover-groove"></div>
                     </div>
                     <div class="kaiz-mp-info">
@@ -748,10 +894,15 @@ export class MusicPlayerWidget {
     private bindEvents(): void {
         if (!this.container) return;
 
-        // Click Pill để phóng to
+        // Click Pill để phóng to (bỏ qua nếu vừa thực hiện kéo thả)
         const pill = this.container.querySelector('#kaiz-mp-pill');
         if (pill) {
-            pill.addEventListener('click', () => {
+            pill.addEventListener('click', (e) => {
+                if (this.justDragged) {
+                    this.justDragged = false;
+                    e.stopPropagation();
+                    return;
+                }
                 this.toggleMinimize(false);
             });
         }
@@ -774,13 +925,59 @@ export class MusicPlayerWidget {
             });
         }
 
-        // Đóng / Stop
-        const closeBtn = this.container.querySelector('#kaiz-mp-btn-close');
+        // Nút Đóng: Bấm giữ 1.2s để shutdown hoàn toàn & clear queue (tránh bấm nhầm khi đang nghe nhạc)
+        const closeBtn = this.container.querySelector('#kaiz-mp-btn-close') as HTMLElement | null;
         if (closeBtn) {
+            let holdTimer: number | null = null;
+            let isHoldComplete = false;
+            let holdStartTime = 0;
+
+            const startHold = (e: Event) => {
+                if ((e as MouseEvent).button !== undefined && (e as MouseEvent).button !== 0) return;
+                e.stopPropagation();
+                isHoldComplete = false;
+                holdStartTime = Date.now();
+                closeBtn.classList.add('is-holding');
+
+                holdTimer = window.setTimeout(() => {
+                    isHoldComplete = true;
+                    closeBtn.classList.remove('is-holding');
+                    this.shutdownAndClear();
+                }, 1200);
+            };
+
+            const cancelHold = () => {
+                if (holdTimer !== null) {
+                    clearTimeout(holdTimer);
+                    holdTimer = null;
+                }
+                const elapsed = Date.now() - holdStartTime;
+                closeBtn.classList.remove('is-holding');
+
+                // Nếu người dùng chỉ click nhanh (< 350ms) thay vì nhấn giữ
+                if (!isHoldComplete && elapsed < 350 && elapsed > 20) {
+                    closeBtn.classList.add('is-shake');
+                    setTimeout(() => closeBtn.classList.remove('is-shake'), 400);
+
+                    // Hiển thị gợi ý thân thiện
+                    if (typeof toastr !== 'undefined') {
+                        toastr.info('Nhấn giữ nút ✕ (1.2 giây) để tắt nhạc hoàn toàn và xóa hàng đợi.', 'Kaiz Hi-Fi');
+                    }
+                }
+                isHoldComplete = false;
+            };
+
+            closeBtn.addEventListener('mousedown', startHold);
+            closeBtn.addEventListener('touchstart', startHold, { passive: true });
+
+            closeBtn.addEventListener('mouseup', cancelHold);
+            closeBtn.addEventListener('mouseleave', cancelHold);
+            closeBtn.addEventListener('touchend', cancelHold);
+            closeBtn.addEventListener('touchcancel', cancelHold);
+
             closeBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                this.audioManager.stop();
-                this.hide();
+                e.preventDefault();
             });
         }
 
@@ -912,34 +1109,70 @@ export class MusicPlayerWidget {
 
     private setupDragging(): void {
         const header = this.container?.querySelector('#kaiz-mp-drag-header') as HTMLElement | null;
-        if (!header || !this.container) return;
+        const pill = this.container?.querySelector('#kaiz-mp-pill') as HTMLElement | null;
+        if (!this.container) return;
+
+        // Ngăn chặn hoàn toàn sự kiện native drag của trình duyệt trên toàn bộ widget
+        this.container.addEventListener('dragstart', (e) => {
+            e.preventDefault();
+            return false;
+        });
 
         let isDragging = false;
+        let hasMoved = false;
         let startX = 0;
         let startY = 0;
         let origRight = 24;
         let origBottom = 24;
+        let activeHandle: HTMLElement | null = null;
 
-        header.addEventListener('mousedown', (e: MouseEvent) => {
+        const onMouseDown = (e: MouseEvent, handle: HTMLElement) => {
             if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+            if (e.button !== 0) return; // Chỉ nhận chuột trái
+
             isDragging = true;
+            hasMoved = false;
+            activeHandle = handle;
             startX = e.clientX;
             startY = e.clientY;
 
             const rect = this.container!.getBoundingClientRect();
             origRight = window.innerWidth - rect.right;
             origBottom = window.innerHeight - rect.bottom;
-            header.style.cursor = 'grabbing';
+            handle.style.cursor = 'grabbing';
             e.preventDefault();
-        });
+        };
+
+        if (header) {
+            header.addEventListener('mousedown', (e) => onMouseDown(e, header));
+        }
+
+        if (pill) {
+            pill.addEventListener('mousedown', (e) => onMouseDown(e, pill));
+        }
 
         document.addEventListener('mousemove', (e: MouseEvent) => {
             if (!isDragging || !this.container) return;
+
             const deltaX = e.clientX - startX;
             const deltaY = e.clientY - startY;
 
-            const newRight = Math.max(10, Math.min(window.innerWidth - 80, origRight - deltaX));
-            const newBottom = Math.max(10, Math.min(window.innerHeight - 80, origBottom - deltaY));
+            if (!hasMoved) {
+                if (Math.hypot(deltaX, deltaY) > 4) {
+                    hasMoved = true;
+                    this.justDragged = true;
+                } else {
+                    return;
+                }
+            }
+
+            const w = this.container.offsetWidth || 56;
+            const h = this.container.offsetHeight || 56;
+            const maxRight = Math.max(10, window.innerWidth - w - 10);
+            const maxBottom = Math.max(10, window.innerHeight - h - 10);
+
+            const newRight = Math.max(10, Math.min(maxRight, origRight - deltaX));
+            const newBottom = Math.max(10, Math.min(maxBottom, origBottom - deltaY));
 
             this.container.style.right = `${newRight}px`;
             this.container.style.bottom = `${newBottom}px`;
@@ -948,7 +1181,16 @@ export class MusicPlayerWidget {
         document.addEventListener('mouseup', () => {
             if (isDragging) {
                 isDragging = false;
-                if (header) header.style.cursor = 'grab';
+                if (activeHandle) {
+                    activeHandle.style.cursor = 'grab';
+                    activeHandle = null;
+                }
+                if (hasMoved) {
+                    this.justDragged = true;
+                    setTimeout(() => {
+                        this.justDragged = false;
+                    }, 120);
+                }
             }
         });
     }
@@ -1223,7 +1465,22 @@ export class MusicPlayerWidget {
                 this.container.classList.add('is-minimized');
             } else {
                 this.container.classList.remove('is-minimized');
+                // Đảm bảo không bị tràn mép trái màn hình khi phóng to ra 380px
+                const currentRight = parseFloat(this.container.style.right || '24');
+                const maxRightAllowed = window.innerWidth - 390;
+                if (currentRight > maxRightAllowed) {
+                    this.container.style.right = `${Math.max(10, maxRightAllowed)}px`;
+                }
             }
+        }
+    }
+
+    public shutdownAndClear(): void {
+        this.audioManager.stop();
+        this.audioManager.clearQueue();
+        this.hide();
+        if (typeof toastr !== 'undefined') {
+            toastr.success('Đã tắt trình phát nhạc và xóa toàn bộ hàng đợi.', 'Kaiz Hi-Fi');
         }
     }
 }

@@ -21,7 +21,28 @@ export interface LyricLine {
 }
 
 export const DEFAULT_MUSIC_COVER =
-    'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiB2aWV3Qm94PSIwIDAgMjQgMjQiIGZpbGw9IiM3Nzc3NzciIHN0eWxlPSJiYWNrZ3JvdW5kLWNvbG9yOiMyMjIyMjI7Ij48cGF0aCBkPSJNMTIgM3YxMC41NWMtLjU5LS4zNC0xLjI3LS41NS0yLS41NS0yLjIxIDAtNCAxLjc5LTQgNHMxLjc5IDQgNCA0IDQtMS43OSA0LTRWN2g0VjNoLTZ6Ii8+PC9zdmc+';
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">' +
+            '<circle cx="100" cy="100" r="100" fill="#14161b"/>' +
+            '<circle cx="100" cy="100" r="91" fill="none" stroke="#242732" stroke-width="1.5" opacity="0.6"/>' +
+            '<circle cx="100" cy="100" r="82" fill="none" stroke="#1c1e26" stroke-width="1.2" opacity="0.5"/>' +
+            '<circle cx="100" cy="100" r="73" fill="none" stroke="#242732" stroke-width="1.2" opacity="0.6"/>' +
+            '<circle cx="100" cy="100" r="64" fill="none" stroke="#1c1e26" stroke-width="1" opacity="0.5"/>' +
+            '<circle cx="100" cy="100" r="55" fill="none" stroke="#242732" stroke-width="1" opacity="0.6"/>' +
+            '<circle cx="100" cy="100" r="41" fill="#1e2129" stroke="#d97706" stroke-width="2.5"/>' +
+            '<circle cx="100" cy="100" r="37" fill="none" stroke="rgba(245,158,11,0.25)" stroke-width="1"/>' +
+            '<g fill="#f59e0b">' +
+            '<circle cx="93" cy="107" r="5"/>' +
+            '<circle cx="107" cy="107" r="5"/>' +
+            '<rect x="96" y="87" width="2.5" height="20" rx="1"/>' +
+            '<rect x="110" y="87" width="2.5" height="20" rx="1"/>' +
+            '<rect x="96" y="87" width="16.5" height="4" rx="1"/>' +
+            '</g>' +
+            '<circle cx="100" cy="100" r="8" fill="#0f1013" stroke="#333742" stroke-width="1.5"/>' +
+            '<circle cx="100" cy="100" r="2.5" fill="#ffffff" opacity="0.3"/>' +
+            '</svg>',
+    );
 
 function normalizeStr(str: string): string {
     return str ? str.trim().toLowerCase() : '';
