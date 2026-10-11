@@ -512,7 +512,9 @@ jQuery(async () => {
 
                     // Kiểm tra nếu người dùng đã vô hiệu hóa tool manage_music trong Tools Manager
                     if (extSettings.disabledTools?.['manage_music']) {
-                        console.warn('[KaizAgent] Lệnh /kaiz-music bị bỏ qua do công cụ manage_music đang bị vô hiệu hóa.');
+                        console.warn(
+                            '[KaizAgent] Lệnh /kaiz-music bị bỏ qua do công cụ manage_music đang bị vô hiệu hóa.',
+                        );
                         if (typeof toastr !== 'undefined') {
                             toastr.warning(
                                 'Công cụ âm nhạc (manage_music) hiện đang bị tắt trong cài đặt Tools Manager của Kaiz Agent.',

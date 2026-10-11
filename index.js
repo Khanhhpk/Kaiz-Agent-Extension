@@ -30888,9 +30888,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   return;
               originalEv.preventDefault?.();
               originalEv.stopPropagation?.();
-              const clientY = originalEv.clientY !== undefined
-                  ? originalEv.clientY
-                  : originalEv.touches?.[0]?.clientY || 0;
+              const clientY = originalEv.clientY !== undefined ? originalEv.clientY : originalEv.touches?.[0]?.clientY || 0;
               dragStartY = clientY;
               hasMovedDrag = false;
               isScrubbingMilestones = false;

@@ -816,9 +816,8 @@ export class ChatWindowUI {
             originalEv.preventDefault?.();
             originalEv.stopPropagation?.();
 
-            const clientY = originalEv.clientY !== undefined
-                ? originalEv.clientY
-                : originalEv.touches?.[0]?.clientY || 0;
+            const clientY =
+                originalEv.clientY !== undefined ? originalEv.clientY : originalEv.touches?.[0]?.clientY || 0;
 
             dragStartY = clientY;
             hasMovedDrag = false;
