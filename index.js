@@ -667,73 +667,104 @@ CÁC CÔNG CỤ HIỆN CÓ:
                           if (this._forceAborted)
                               throw new Error('FORCE_ABORT');
                           const call = toolCalls[i];
-                          // --- SAFE MODE CHECK ---
-                          const ctx = window.SillyTavern.getContext();
-                          const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
-                          const safeMode = extSettings.safeMode;
-                          const safeModeBlacklist = extSettings.safeModeBlacklist || {};
-                          if (safeMode && safeModeBlacklist[call.name]) {
-                              let confirmResult = false;
-                              try {
-                                  confirmResult = await Promise.race([
-                                      new Promise((resolve) => {
-                                          onEvent({
-                                              type: 'tool_confirm',
-                                              data: { call, resolve },
-                                          });
-                                      }),
-                                      new Promise((_, reject) => {
-                                          this._safeModeReject = reject;
-                                      }),
-                                  ]);
-                                  this._safeModeReject = null;
-                              }
-                              catch (e) {
-                                  this._safeModeReject = null;
-                                  if (e.message === 'FORCE_ABORT')
-                                      throw e;
-                                  console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
-                                  const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
-                                  await onEvent({ type: 'error', text: msg });
-                                  break;
-                              }
-                              if (!confirmResult) {
-                                  const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
-                                  await onEvent({ type: 'error', text: msg });
-                                  throw new Error('SAFE_MODE_REJECTED');
+                          // --- 1. TOOLS PERMISSION CHECK (Kiểm tra quyền 3 tầng độc lập) ---
+                          let isToolDisabled = false;
+                          let disabledReason = '';
+                          if (toolsConfigOverride) {
+                              // Nhánh 1: Auto Task -> chỉ cho phép tool có trong toolsConfigOverride
+                              if (toolsConfigOverride[call.name] !== true) {
+                                  isToolDisabled = true;
+                                  disabledReason = `Công cụ '${call.name}' không được kích hoạt trong cấu hình của Tác vụ tự động (Auto Task) này. Vui lòng không sử dụng công cụ này.`;
                               }
                           }
-                          // --- END SAFE MODE CHECK ---
-                          await onEvent({ type: 'tool_call', data: call });
+                          else if (this.stateManager.currentWorkspace) {
+                              // Nhánh 2: Workspace -> chỉ cho phép tool có trong wsConfig
+                              const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
+                              if (wsConfig[call.name] !== true) {
+                                  isToolDisabled = true;
+                                  disabledReason = `Công cụ '${call.name}' không được kích hoạt trong Workspace hiện tại ("${this.stateManager.currentWorkspace.name}"). Vui lòng không sử dụng công cụ này.`;
+                              }
+                          }
+                          else {
+                              // Nhánh 3: Default Chat -> kiểm tra disabledTools trong Tools Manager toàn cục
+                              const ctx = window.SillyTavern?.getContext?.();
+                              const settings = ctx?.extensionSettings?.kaiz_agent || {};
+                              const disabledTools = settings.disabledTools || {};
+                              if (disabledTools[call.name]) {
+                                  isToolDisabled = true;
+                                  disabledReason = `Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt Tools Manager. Vui lòng không sử dụng công cụ này.`;
+                              }
+                          }
                           let result;
-                          // --- TOOLS CONFIG CHECK (Chặn tool bị tắt) ---
-                          if (toolsConfigOverride && toolsConfigOverride[call.name] === false) {
+                          if (isToolDisabled) {
+                              // Chặn ngay tại cửa thực thi, không làm phiền người dùng bằng Safe Mode
+                              await onEvent({ type: 'tool_call', data: call });
                               result = {
-                                  content: `Error: Permission denied. Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt của tiến trình này. Vui lòng thử cách khác.`,
+                                  content: `Error: Permission denied. ${disabledReason}`,
                                   isError: true,
                               };
                           }
-                          else if (call.parseError) {
-                              // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
-                              result = { content: call.parseError, isError: true };
-                          }
                           else {
-                              try {
-                                  this._currentAbortController = new AbortController();
-                                  result = await Promise.race([
-                                      this.toolRegistry.executeTool(call.name, call.args, {
-                                          adapter: this.adapter,
-                                          stateManager: this.stateManager,
-                                          abortSignal: this._currentAbortController.signal,
-                                      }),
-                                      new Promise((_, reject) => {
-                                          this._forceAbortReject = reject;
-                                      }),
-                                  ]);
+                              // --- 2. SAFE MODE CHECK (Chỉ hỏi xác nhận nếu tool ĐƯỢC PHÉP và nằm trong blacklist) ---
+                              const ctx = window.SillyTavern.getContext();
+                              const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                              const safeMode = extSettings.safeMode;
+                              const safeModeBlacklist = extSettings.safeModeBlacklist || {};
+                              if (safeMode && safeModeBlacklist[call.name]) {
+                                  let confirmResult = false;
+                                  try {
+                                      confirmResult = await Promise.race([
+                                          new Promise((resolve) => {
+                                              onEvent({
+                                                  type: 'tool_confirm',
+                                                  data: { call, resolve },
+                                              });
+                                          }),
+                                          new Promise((_, reject) => {
+                                              this._safeModeReject = reject;
+                                          }),
+                                      ]);
+                                      this._safeModeReject = null;
+                                  }
+                                  catch (e) {
+                                      this._safeModeReject = null;
+                                      if (e.message === 'FORCE_ABORT')
+                                          throw e;
+                                      console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
+                                      const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
+                                      await onEvent({ type: 'error', text: msg });
+                                      break;
+                                  }
+                                  if (!confirmResult) {
+                                      const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                      await onEvent({ type: 'error', text: msg });
+                                      throw new Error('SAFE_MODE_REJECTED');
+                                  }
                               }
-                              finally {
-                                  this._forceAbortReject = null;
-                                  this._currentAbortController = null;
+                              // --- END SAFE MODE CHECK ---
+                              await onEvent({ type: 'tool_call', data: call });
+                              if (call.parseError) {
+                                  // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
+                                  result = { content: call.parseError, isError: true };
+                              }
+                              else {
+                                  try {
+                                      this._currentAbortController = new AbortController();
+                                      result = await Promise.race([
+                                          this.toolRegistry.executeTool(call.name, call.args, {
+                                              adapter: this.adapter,
+                                              stateManager: this.stateManager,
+                                              abortSignal: this._currentAbortController.signal,
+                                          }),
+                                          new Promise((_, reject) => {
+                                              this._forceAbortReject = reject;
+                                          }),
+                                      ]);
+                                  }
+                                  finally {
+                                      this._forceAbortReject = null;
+                                      this._currentAbortController = null;
+                                  }
                               }
                           }
                           if (this._forceAborted)
