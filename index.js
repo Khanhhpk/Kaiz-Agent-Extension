@@ -667,73 +667,104 @@ CÁC CÔNG CỤ HIỆN CÓ:
                           if (this._forceAborted)
                               throw new Error('FORCE_ABORT');
                           const call = toolCalls[i];
-                          // --- SAFE MODE CHECK ---
-                          const ctx = window.SillyTavern.getContext();
-                          const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
-                          const safeMode = extSettings.safeMode;
-                          const safeModeBlacklist = extSettings.safeModeBlacklist || {};
-                          if (safeMode && safeModeBlacklist[call.name]) {
-                              let confirmResult = false;
-                              try {
-                                  confirmResult = await Promise.race([
-                                      new Promise((resolve) => {
-                                          onEvent({
-                                              type: 'tool_confirm',
-                                              data: { call, resolve },
-                                          });
-                                      }),
-                                      new Promise((_, reject) => {
-                                          this._safeModeReject = reject;
-                                      }),
-                                  ]);
-                                  this._safeModeReject = null;
-                              }
-                              catch (e) {
-                                  this._safeModeReject = null;
-                                  if (e.message === 'FORCE_ABORT')
-                                      throw e;
-                                  console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
-                                  const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
-                                  await onEvent({ type: 'error', text: msg });
-                                  break;
-                              }
-                              if (!confirmResult) {
-                                  const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
-                                  await onEvent({ type: 'error', text: msg });
-                                  throw new Error('SAFE_MODE_REJECTED');
+                          // --- 1. TOOLS PERMISSION CHECK (Kiểm tra quyền 3 tầng độc lập) ---
+                          let isToolDisabled = false;
+                          let disabledReason = '';
+                          if (toolsConfigOverride) {
+                              // Nhánh 1: Auto Task -> chỉ cho phép tool có trong toolsConfigOverride
+                              if (toolsConfigOverride[call.name] !== true) {
+                                  isToolDisabled = true;
+                                  disabledReason = `Công cụ '${call.name}' không được kích hoạt trong cấu hình của Tác vụ tự động (Auto Task) này. Vui lòng không sử dụng công cụ này.`;
                               }
                           }
-                          // --- END SAFE MODE CHECK ---
-                          await onEvent({ type: 'tool_call', data: call });
+                          else if (this.stateManager.currentWorkspace) {
+                              // Nhánh 2: Workspace -> chỉ cho phép tool có trong wsConfig
+                              const wsConfig = this.stateManager.currentWorkspace.toolsConfig || {};
+                              if (wsConfig[call.name] !== true) {
+                                  isToolDisabled = true;
+                                  disabledReason = `Công cụ '${call.name}' không được kích hoạt trong Workspace hiện tại ("${this.stateManager.currentWorkspace.name}"). Vui lòng không sử dụng công cụ này.`;
+                              }
+                          }
+                          else {
+                              // Nhánh 3: Default Chat -> kiểm tra disabledTools trong Tools Manager toàn cục
+                              const ctx = window.SillyTavern?.getContext?.();
+                              const settings = ctx?.extensionSettings?.kaiz_agent || {};
+                              const disabledTools = settings.disabledTools || {};
+                              if (disabledTools[call.name]) {
+                                  isToolDisabled = true;
+                                  disabledReason = `Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt Tools Manager. Vui lòng không sử dụng công cụ này.`;
+                              }
+                          }
                           let result;
-                          // --- TOOLS CONFIG CHECK (Chặn tool bị tắt) ---
-                          if (toolsConfigOverride && toolsConfigOverride[call.name] === false) {
+                          if (isToolDisabled) {
+                              // Chặn ngay tại cửa thực thi, không làm phiền người dùng bằng Safe Mode
+                              await onEvent({ type: 'tool_call', data: call });
                               result = {
-                                  content: `Error: Permission denied. Công cụ '${call.name}' đã bị người dùng vô hiệu hóa trong cài đặt của tiến trình này. Vui lòng thử cách khác.`,
+                                  content: `Error: Permission denied. ${disabledReason}`,
                                   isError: true,
                               };
                           }
-                          else if (call.parseError) {
-                              // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
-                              result = { content: call.parseError, isError: true };
-                          }
                           else {
-                              try {
-                                  this._currentAbortController = new AbortController();
-                                  result = await Promise.race([
-                                      this.toolRegistry.executeTool(call.name, call.args, {
-                                          adapter: this.adapter,
-                                          stateManager: this.stateManager,
-                                          abortSignal: this._currentAbortController.signal,
-                                      }),
-                                      new Promise((_, reject) => {
-                                          this._forceAbortReject = reject;
-                                      }),
-                                  ]);
+                              // --- 2. SAFE MODE CHECK (Chỉ hỏi xác nhận nếu tool ĐƯỢC PHÉP và nằm trong blacklist) ---
+                              const ctx = window.SillyTavern.getContext();
+                              const extSettings = ctx.extensionSettings['kaiz_agent'] || {};
+                              const safeMode = extSettings.safeMode;
+                              const safeModeBlacklist = extSettings.safeModeBlacklist || {};
+                              if (safeMode && safeModeBlacklist[call.name]) {
+                                  let confirmResult = false;
+                                  try {
+                                      confirmResult = await Promise.race([
+                                          new Promise((resolve) => {
+                                              onEvent({
+                                                  type: 'tool_confirm',
+                                                  data: { call, resolve },
+                                              });
+                                          }),
+                                          new Promise((_, reject) => {
+                                              this._safeModeReject = reject;
+                                          }),
+                                      ]);
+                                      this._safeModeReject = null;
+                                  }
+                                  catch (e) {
+                                      this._safeModeReject = null;
+                                      if (e.message === 'FORCE_ABORT')
+                                          throw e;
+                                      console.error('[KaizAgent] Lỗi khi tạo tool_confirm event:', e);
+                                      const msg = `[SAFE MODE] Lỗi hệ thống khi xác nhận công cụ: ${call.name}. Tiến trình bị hủy.`;
+                                      await onEvent({ type: 'error', text: msg });
+                                      break;
+                                  }
+                                  if (!confirmResult) {
+                                      const msg = `[SAFE MODE] Người dùng đã từ chối thực thi công cụ: ${call.name}. Tiến trình Agent đã bị tạm ngưng theo yêu cầu.`;
+                                      await onEvent({ type: 'error', text: msg });
+                                      throw new Error('SAFE_MODE_REJECTED');
+                                  }
                               }
-                              finally {
-                                  this._forceAbortReject = null;
-                                  this._currentAbortController = null;
+                              // --- END SAFE MODE CHECK ---
+                              await onEvent({ type: 'tool_call', data: call });
+                              if (call.parseError) {
+                                  // JSON parse lỗi → trả lỗi cho LLM tự sửa thay vì thực thi
+                                  result = { content: call.parseError, isError: true };
+                              }
+                              else {
+                                  try {
+                                      this._currentAbortController = new AbortController();
+                                      result = await Promise.race([
+                                          this.toolRegistry.executeTool(call.name, call.args, {
+                                              adapter: this.adapter,
+                                              stateManager: this.stateManager,
+                                              abortSignal: this._currentAbortController.signal,
+                                          }),
+                                          new Promise((_, reject) => {
+                                              this._forceAbortReject = reject;
+                                          }),
+                                      ]);
+                                  }
+                                  finally {
+                                      this._forceAbortReject = null;
+                                      this._currentAbortController = null;
+                                  }
                               }
                           }
                           if (this._forceAborted)
@@ -30615,11 +30646,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const currentScroll = hEl.scrollTop;
               const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
               const scrollPercent = Math.max(0, Math.min(100, (currentScroll / maxScroll) * 100));
-              // Cập nhật vị trí thumb theo tỉ lệ cuộn thực tế của viewport
-              milestoneActiveThumb.css({
-                  top: `${scrollPercent.toFixed(2)}%`,
-                  display: 'block',
-              });
+              // Cập nhật vị trí thumb theo tỉ lệ cuộn thực tế của viewport (khi người dùng không chủ động kéo thumb)
+              if (!isScrubbingMilestones) {
+                  milestoneActiveThumb.css({
+                      top: `${scrollPercent.toFixed(2)}%`,
+                      display: 'block',
+                  });
+              }
               if (currentMilestones.length === 0)
                   return;
               let bestIndex = 0;
@@ -30716,10 +30749,12 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               clearTimeout(milestoneDebounceTimer);
               milestoneDebounceTimer = setTimeout(updateMilestones, 120);
           };
-          // --- CƠ CHẾ CUỘN VÀ KÉO TRƯỢT THEO TỈ LỆ (CHUẨN SCROLLBAR) ---
+          // --- CƠ CHẾ CUỘN VÀ KÉO TRƯỢT THEO TỈ LỆ (CHUẨN SCROLLBAR - PC & MOBILE) ---
           let dragStartY = 0;
           let hasMovedDrag = false;
           let clickedMarkerIndex = null;
+          let activePointerId = null;
+          let cachedMaxScroll = 0;
           const performScrollToRatio = (clientY) => {
               const hEl = history[0];
               const trackEl = milestoneTrack[0];
@@ -30728,12 +30763,13 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               const trackRect = cachedTrackRect || trackEl.getBoundingClientRect();
               const clickY = clientY - trackRect.top;
               const ratio = Math.max(0, Math.min(1, clickY / Math.max(trackRect.height, 1)));
-              const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
+              const maxScroll = cachedMaxScroll > 0 ? cachedMaxScroll : Math.max(1, hEl.scrollHeight - hEl.clientHeight);
               hEl.scrollTop = ratio * maxScroll;
-              milestoneActiveThumb.css({
-                  top: `${(ratio * 100).toFixed(2)}%`,
-                  display: 'block',
-              });
+              const thumbEl = milestoneActiveThumb[0];
+              if (thumbEl) {
+                  thumbEl.style.top = `${(ratio * 100).toFixed(2)}%`;
+                  thumbEl.style.display = 'block';
+              }
           };
           const handleScrubMove = (clientY) => {
               if (!hasMovedDrag) {
@@ -30742,6 +30778,10 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                       isScrubbingMilestones = true;
                       milestoneRail.addClass('is-scrubbing');
                       hideMilestoneHUD();
+                      const hEl = history[0];
+                      if (hEl) {
+                          hEl.style.scrollBehavior = 'auto';
+                      }
                   }
                   else {
                       return;
@@ -30750,22 +30790,62 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               performScrollToRatio(clientY);
           };
           const handleScrubEnd = (clientY) => {
+              window.removeEventListener('pointermove', onPointerMove);
+              window.removeEventListener('pointerup', onPointerUp);
+              window.removeEventListener('pointercancel', onPointerCancel);
               $(document).off('.kaiz_milestone_scrub');
-              cachedTrackRect = null;
-              cachedRailRect = null;
-              milestoneRail.removeClass('is-scrubbing');
+              if (activePointerId !== null) {
+                  try {
+                      milestoneRail[0]?.releasePointerCapture(activePointerId);
+                  }
+                  catch {
+                      // Bỏ qua lỗi release capture nếu pointer đã kết thúc
+                  }
+                  activePointerId = null;
+              }
               const wasDragging = hasMovedDrag;
+              const markerIdx = clickedMarkerIndex;
               isScrubbingMilestones = false;
               hasMovedDrag = false;
+              clickedMarkerIndex = null;
+              cachedTrackRect = null;
+              cachedRailRect = null;
+              cachedMaxScroll = 0;
+              milestoneRail.removeClass('is-scrubbing');
+              const hEl = history[0];
+              if (hEl) {
+                  hEl.style.scrollBehavior = '';
+              }
               if (wasDragging) {
-                  // Đang kéo như thanh cuộn bình thường: KHÔNG tự dính vào milestone nào
+                  // Đang kéo như thanh cuộn bình thường: đã ở vị trí chính xác trong thời gian thực
                   requestUpdateActiveMilestone();
                   return;
               }
-              // Nếu là click (không kéo):
-              if (clickedMarkerIndex !== null && currentMilestones[clickedMarkerIndex]) {
+              // Nếu là click / tap (không kéo):
+              let targetMarkerIdx = markerIdx;
+              // Nếu tap không trúng marker nhưng rất gần marker (dung sai 14px trên màn cảm ứng)
+              if (targetMarkerIdx === null && currentMilestones.length > 0 && milestoneTrack[0]) {
+                  const trackRect = milestoneTrack[0].getBoundingClientRect();
+                  if (trackRect.height > 0) {
+                      const clickY = clientY - trackRect.top;
+                      let closestIdx = -1;
+                      let minDistance = Infinity;
+                      for (let i = 0; i < currentMilestones.length; i++) {
+                          const markerY = (currentMilestones[i].posPercent / 100) * trackRect.height;
+                          const dist = Math.abs(markerY - clickY);
+                          if (dist <= 14 && dist < minDistance) {
+                              minDistance = dist;
+                              closestIdx = i;
+                          }
+                      }
+                      if (closestIdx >= 0) {
+                          targetMarkerIdx = closestIdx;
+                      }
+                  }
+              }
+              if (targetMarkerIdx !== null && currentMilestones[targetMarkerIdx]) {
                   // Nhấp trực tiếp vào milestone -> Dịch chuyển tới milestone đó + nhấp nháy highlight
-                  const target = currentMilestones[clickedMarkerIndex];
+                  const target = currentMilestones[targetMarkerIdx];
                   scrollToMilestone(target, true);
                   $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
                   void target.msgEl.offsetWidth;
@@ -30778,22 +30858,48 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                   // Nhấp vào track trống -> Dịch chuyển tỉ lệ theo vị trí click
                   performScrollToRatio(clientY);
               }
-              clickedMarkerIndex = null;
               requestUpdateActiveMilestone();
           };
-          const startScrubbing = (e) => {
-              if (e.type === 'mousedown' && e.button !== 0)
+          const onPointerMove = (moveEv) => {
+              if (activePointerId !== null && moveEv.pointerId !== activePointerId)
                   return;
-              e.preventDefault();
-              e.stopPropagation();
-              const clientY = e.type.startsWith('touch') ? e.originalEvent.touches[0].clientY : e.clientY;
+              moveEv.preventDefault();
+              handleScrubMove(moveEv.clientY);
+          };
+          const onPointerUp = (upEv) => {
+              if (activePointerId !== null && upEv.pointerId !== activePointerId)
+                  return;
+              upEv.preventDefault();
+              handleScrubEnd(upEv.clientY);
+          };
+          const onPointerCancel = (cancelEv) => {
+              if (activePointerId !== null && cancelEv.pointerId !== activePointerId)
+                  return;
+              handleScrubEnd(cancelEv.clientY);
+          };
+          const startScrubbing = (e) => {
+              const originalEv = e.originalEvent || e;
+              // Chỉ chấp nhận nút chuột trái hoặc chạm cảm ứng
+              if (originalEv.button && originalEv.button !== 0 && originalEv.pointerType === 'mouse')
+                  return;
+              // Bỏ qua nếu bấm vào nút điều hướng Top/Bottom
+              const targetEl = originalEv.target;
+              if (targetEl?.closest?.('.kaiz-milestone-quick-btn'))
+                  return;
+              originalEv.preventDefault?.();
+              originalEv.stopPropagation?.();
+              const clientY = originalEv.clientY !== undefined ? originalEv.clientY : originalEv.touches?.[0]?.clientY || 0;
               dragStartY = clientY;
               hasMovedDrag = false;
               isScrubbingMilestones = false;
               cachedTrackRect = milestoneTrack[0]?.getBoundingClientRect() || null;
               cachedRailRect = milestoneRail[0]?.getBoundingClientRect() || null;
-              // Kiểm tra xem vị trí mousedown/touchstart có nằm trên marker không
-              const targetEl = e.target;
+              const hEl = history[0];
+              cachedMaxScroll = hEl ? Math.max(1, hEl.scrollHeight - hEl.clientHeight) : 1;
+              if (hEl) {
+                  hEl.style.scrollBehavior = 'auto';
+              }
+              // Kiểm tra xem vị trí mousedown/pointerdown có nằm trên marker không
               const markerEl = targetEl?.closest?.('.kaiz-milestone-marker');
               if (markerEl) {
                   const idx = parseInt(markerEl.getAttribute('data-index') || '-1', 10);
@@ -30802,29 +30908,46 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
               else {
                   clickedMarkerIndex = null;
               }
-              $(document)
-                  .off('.kaiz_milestone_scrub')
-                  .on('mousemove.kaiz_milestone_scrub', (moveEv) => {
-                  handleScrubMove(moveEv.clientY);
-              })
-                  .on('touchmove.kaiz_milestone_scrub', (moveEv) => {
-                  if (!moveEv.originalEvent.touches[0])
-                      return;
-                  handleScrubMove(moveEv.originalEvent.touches[0].clientY);
-              })
-                  .on('mouseup.kaiz_milestone_scrub', (upEv) => {
-                  handleScrubEnd(upEv.clientY);
-              })
-                  .on('touchend.kaiz_milestone_scrub touchcancel.kaiz_milestone_scrub', (upEv) => {
-                  const endY = upEv.originalEvent.changedTouches?.[0]?.clientY || clientY;
-                  handleScrubEnd(endY);
-              });
+              if (originalEv.pointerId !== undefined && milestoneRail[0]) {
+                  activePointerId = originalEv.pointerId;
+                  try {
+                      milestoneRail[0].setPointerCapture(activePointerId);
+                  }
+                  catch {
+                      // Fallback sẽ bắt qua window listeners
+                  }
+                  window.addEventListener('pointermove', onPointerMove, { passive: false });
+                  window.addEventListener('pointerup', onPointerUp);
+                  window.addEventListener('pointercancel', onPointerCancel);
+              }
+              else {
+                  // Fallback cho môi trường không hỗ trợ Pointer Events đầy đủ
+                  $(document)
+                      .off('.kaiz_milestone_scrub')
+                      .on('mousemove.kaiz_milestone_scrub', (moveEv) => {
+                      handleScrubMove(moveEv.clientY);
+                  })
+                      .on('touchmove.kaiz_milestone_scrub', (moveEv) => {
+                      if (!moveEv.originalEvent.touches[0])
+                          return;
+                      moveEv.preventDefault?.();
+                      handleScrubMove(moveEv.originalEvent.touches[0].clientY);
+                  })
+                      .on('mouseup.kaiz_milestone_scrub', (upEv) => {
+                      handleScrubEnd(upEv.clientY);
+                  })
+                      .on('touchend.kaiz_milestone_scrub touchcancel.kaiz_milestone_scrub', (upEv) => {
+                      const endY = upEv.originalEvent.changedTouches?.[0]?.clientY || clientY;
+                      handleScrubEnd(endY);
+                  });
+              }
           };
-          // Gắn sự kiện mousedown và touchstart lên toàn bộ milestoneTrack
-          milestoneTrack.on('mousedown', (e) => {
-              startScrubbing(e);
-          });
-          milestoneTrack.on('touchstart', (e) => {
+          // Gắn sự kiện pointerdown lên toàn bộ milestoneRail (bao gồm cả milestoneTrack và hit-zone mở rộng)
+          milestoneRail[0]?.addEventListener('pointerdown', startScrubbing, { passive: false });
+          // Fallback mousedown / touchstart
+          milestoneRail.on('mousedown touchstart', (e) => {
+              if (window.PointerEvent && e.type === 'touchstart')
+                  return; // Tránh trùng lặp với PointerEvent
               startScrubbing(e);
           });
           // Event delegation trên milestoneTrack cho hover hiển thị HUD
@@ -37331,8 +37454,20 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           return `[Error] ${e.message}`;
                       }
                   }, [], '<ghi_chú_tùy_chọn>', 'Tự động đọc tin nhắn mới nhất, dùng API của Agent tạo prompt chi tiết và vẽ ảnh minh họa', true);
-                  // Slash Command /music: Điều khiển nhanh trình phát nhạc Kaiz
-                  ctx.registerSlashCommand('music', async (_args, value) => {
+                  // Slash Command /kaiz-music (và alias /kmusic): Điều khiển nhanh trình phát nhạc Kaiz
+                  const handleMusicSlashCommand = async (_args, value) => {
+                      const liveCtx = typeof globalThis.SillyTavern !== 'undefined'
+                          ? globalThis.SillyTavern.getContext()
+                          : globalThis.window?.SillyTavern?.getContext?.() || ctx;
+                      const extSettings = liveCtx?.extensionSettings?.[EXT_NAME] || ctx.extensionSettings?.[EXT_NAME] || {};
+                      // Kiểm tra nếu người dùng đã vô hiệu hóa tool manage_music trong Tools Manager
+                      if (extSettings.disabledTools?.['manage_music']) {
+                          console.warn('[KaizAgent] Lệnh /kaiz-music bị bỏ qua do công cụ manage_music đang bị vô hiệu hóa.');
+                          if (typeof toastr !== 'undefined') {
+                              toastr.warning('Công cụ âm nhạc (manage_music) hiện đang bị tắt trong cài đặt Tools Manager của Kaiz Agent.', 'Kaiz Music');
+                          }
+                          return '';
+                      }
                       const widget = MusicPlayerWidget.getInstance();
                       const audioMgr = AudioManager.getInstance();
                       const val = (value || '').trim();
@@ -37365,7 +37500,7 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           audioMgr.playNext();
                           return '';
                       }
-                      // Nếu nhập tên bài hát: /music Sơn Tùng
+                      // Nếu nhập tên bài hát: /kaiz-music Sơn Tùng
                       if (typeof toastr !== 'undefined') {
                           toastr.info(`Đang tìm kiếm bài hát "${val}"...`);
                       }
@@ -37387,7 +37522,9 @@ Please report this to https://github.com/markedjs/marked.`,e){let s="<p>An error
                           }
                       }
                       return '';
-                  }, ['toggle', 'show', 'hide', 'pause', 'resume', 'stop', 'next'], '[tên_bài_hát hoặc toggle/hide/show/stop/pause/resume/next]', 'Điều khiển hoặc phát nhạc nhanh bằng Kaiz Music Player', true);
+                  };
+                  ctx.registerSlashCommand('kaiz-music', handleMusicSlashCommand, ['toggle', 'show', 'hide', 'pause', 'resume', 'stop', 'next'], '[tên_bài_hát hoặc toggle/hide/show/stop/pause/resume/next]', 'Điều khiển hoặc phát nhạc nhanh bằng Kaiz Music Player', true);
+                  ctx.registerSlashCommand('kmusic', handleMusicSlashCommand, ['toggle', 'show', 'hide', 'pause', 'resume', 'stop', 'next'], '[tên_bài_hát hoặc toggle/hide/show/stop/pause/resume/next]', 'Điều khiển hoặc phát nhạc nhanh bằng Kaiz Music Player (viết tắt)', true);
               }
           }
           else {
