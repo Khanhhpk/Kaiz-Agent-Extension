@@ -550,7 +550,9 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-    scroll-behavior: smooth;
+    scroll-behavior: auto !important;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
     outline: none;
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -597,6 +599,7 @@
     right: 0;
     width: 36px;
     pointer-events: auto;
+    touch-action: none;
     z-index: -1;
 }
 
@@ -646,6 +649,9 @@
     width: 100%;
     min-height: 0;
     cursor: pointer;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 /* Center guide hairline */
@@ -681,6 +687,7 @@
     box-shadow: 0 0 10px rgba(0, 201, 255, 0.35);
     transition: top 0.08s ease-out;
     z-index: 5;
+    touch-action: none;
 }
 
 .kaiz-milestone-rail.is-scrubbing .kaiz-milestone-active-thumb {
@@ -713,6 +720,9 @@
     transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 0 4px rgba(0, 201, 255, 0.4);
     z-index: 6;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .kaiz-milestone-marker::before {
@@ -856,21 +866,38 @@
 }
 
 .kaiz-chat-window.kaiz-phone-mode .kaiz-milestone-rail {
-    width: 20px;
+    width: 22px;
 }
 
 .kaiz-chat-window.kaiz-phone-mode .kaiz-milestone-rail::before {
-    width: 44px;
+    width: 48px;
 }
 
 .kaiz-chat-window.kaiz-phone-mode .kaiz-milestone-quick-btn {
-    height: 24px;
+    height: 26px;
     font-size: 11px;
 }
 
 .kaiz-chat-window.kaiz-phone-mode .kaiz-milestone-tooltip {
     max-width: min(230px, 70vw);
     right: calc(100% + 8px);
+}
+
+/* Touchscreens / Coarse Pointer Devices (Mobile & Tablets) */
+@media (pointer: coarse) {
+    .kaiz-chat-history {
+        padding-right: 26px;
+    }
+    .kaiz-milestone-rail {
+        width: 20px;
+    }
+    .kaiz-milestone-rail::before {
+        width: 44px;
+    }
+    .kaiz-milestone-quick-btn {
+        height: 24px;
+        font-size: 11px;
+    }
 }
 
 /* User Message Highlight Pulse */

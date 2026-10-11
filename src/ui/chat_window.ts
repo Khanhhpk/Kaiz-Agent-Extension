@@ -550,11 +550,13 @@ export class ChatWindowUI {
             const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
             const scrollPercent = Math.max(0, Math.min(100, (currentScroll / maxScroll) * 100));
 
-            // Cập nhật vị trí thumb theo tỉ lệ cuộn thực tế của viewport
-            milestoneActiveThumb.css({
-                top: `${scrollPercent.toFixed(2)}%`,
-                display: 'block',
-            });
+            // Cập nhật vị trí thumb theo tỉ lệ cuộn thực tế của viewport (khi người dùng không chủ động kéo thumb)
+            if (!isScrubbingMilestones) {
+                milestoneActiveThumb.css({
+                    top: `${scrollPercent.toFixed(2)}%`,
+                    display: 'block',
+                });
+            }
 
             if (currentMilestones.length === 0) return;
 
@@ -662,10 +664,12 @@ export class ChatWindowUI {
             milestoneDebounceTimer = setTimeout(updateMilestones, 120);
         };
 
-        // --- CƠ CHẾ CUỘN VÀ KÉO TRƯỢT THEO TỈ LỆ (CHUẨN SCROLLBAR) ---
+        // --- CƠ CHẾ CUỘN VÀ KÉO TRƯỢT THEO TỈ LỆ (CHUẨN SCROLLBAR - PC & MOBILE) ---
         let dragStartY = 0;
         let hasMovedDrag = false;
         let clickedMarkerIndex: number | null = null;
+        let activePointerId: number | null = null;
+        let cachedMaxScroll = 0;
 
         const performScrollToRatio = (clientY: number) => {
             const hEl = history[0];
@@ -675,13 +679,14 @@ export class ChatWindowUI {
             const trackRect = cachedTrackRect || trackEl.getBoundingClientRect();
             const clickY = clientY - trackRect.top;
             const ratio = Math.max(0, Math.min(1, clickY / Math.max(trackRect.height, 1)));
-            const maxScroll = Math.max(1, hEl.scrollHeight - hEl.clientHeight);
+            const maxScroll = cachedMaxScroll > 0 ? cachedMaxScroll : Math.max(1, hEl.scrollHeight - hEl.clientHeight);
 
             hEl.scrollTop = ratio * maxScroll;
-            milestoneActiveThumb.css({
-                top: `${(ratio * 100).toFixed(2)}%`,
-                display: 'block',
-            });
+            const thumbEl = milestoneActiveThumb[0];
+            if (thumbEl) {
+                thumbEl.style.top = `${(ratio * 100).toFixed(2)}%`;
+                thumbEl.style.display = 'block';
+            }
         };
 
         const handleScrubMove = (clientY: number) => {
@@ -691,6 +696,10 @@ export class ChatWindowUI {
                     isScrubbingMilestones = true;
                     milestoneRail.addClass('is-scrubbing');
                     hideMilestoneHUD();
+                    const hEl = history[0];
+                    if (hEl) {
+                        hEl.style.scrollBehavior = 'auto';
+                    }
                 } else {
                     return;
                 }
@@ -700,25 +709,69 @@ export class ChatWindowUI {
         };
 
         const handleScrubEnd = (clientY: number) => {
+            window.removeEventListener('pointermove', onPointerMove);
+            window.removeEventListener('pointerup', onPointerUp);
+            window.removeEventListener('pointercancel', onPointerCancel);
             $(document).off('.kaiz_milestone_scrub');
-            cachedTrackRect = null;
-            cachedRailRect = null;
-            milestoneRail.removeClass('is-scrubbing');
+
+            if (activePointerId !== null) {
+                try {
+                    milestoneRail[0]?.releasePointerCapture(activePointerId);
+                } catch {
+                    // Bỏ qua lỗi release capture nếu pointer đã kết thúc
+                }
+                activePointerId = null;
+            }
 
             const wasDragging = hasMovedDrag;
+            const markerIdx = clickedMarkerIndex;
+
             isScrubbingMilestones = false;
             hasMovedDrag = false;
+            clickedMarkerIndex = null;
+            cachedTrackRect = null;
+            cachedRailRect = null;
+            cachedMaxScroll = 0;
+
+            milestoneRail.removeClass('is-scrubbing');
+            const hEl = history[0];
+            if (hEl) {
+                hEl.style.scrollBehavior = '';
+            }
 
             if (wasDragging) {
-                // Đang kéo như thanh cuộn bình thường: KHÔNG tự dính vào milestone nào
+                // Đang kéo như thanh cuộn bình thường: đã ở vị trí chính xác trong thời gian thực
                 requestUpdateActiveMilestone();
                 return;
             }
 
-            // Nếu là click (không kéo):
-            if (clickedMarkerIndex !== null && currentMilestones[clickedMarkerIndex]) {
+            // Nếu là click / tap (không kéo):
+            let targetMarkerIdx = markerIdx;
+
+            // Nếu tap không trúng marker nhưng rất gần marker (dung sai 14px trên màn cảm ứng)
+            if (targetMarkerIdx === null && currentMilestones.length > 0 && milestoneTrack[0]) {
+                const trackRect = milestoneTrack[0].getBoundingClientRect();
+                if (trackRect.height > 0) {
+                    const clickY = clientY - trackRect.top;
+                    let closestIdx = -1;
+                    let minDistance = Infinity;
+                    for (let i = 0; i < currentMilestones.length; i++) {
+                        const markerY = (currentMilestones[i].posPercent / 100) * trackRect.height;
+                        const dist = Math.abs(markerY - clickY);
+                        if (dist <= 14 && dist < minDistance) {
+                            minDistance = dist;
+                            closestIdx = i;
+                        }
+                    }
+                    if (closestIdx >= 0) {
+                        targetMarkerIdx = closestIdx;
+                    }
+                }
+            }
+
+            if (targetMarkerIdx !== null && currentMilestones[targetMarkerIdx]) {
                 // Nhấp trực tiếp vào milestone -> Dịch chuyển tới milestone đó + nhấp nháy highlight
-                const target = currentMilestones[clickedMarkerIndex];
+                const target = currentMilestones[targetMarkerIdx];
                 scrollToMilestone(target, true);
                 $(target.msgEl).removeClass('kaiz-msg-highlight-pulse');
                 void target.msgEl.offsetWidth;
@@ -731,25 +784,56 @@ export class ChatWindowUI {
                 performScrollToRatio(clientY);
             }
 
-            clickedMarkerIndex = null;
             requestUpdateActiveMilestone();
         };
 
-        const startScrubbing = (e: any) => {
-            if (e.type === 'mousedown' && e.button !== 0) return;
-            e.preventDefault();
-            e.stopPropagation();
+        const onPointerMove = (moveEv: PointerEvent) => {
+            if (activePointerId !== null && moveEv.pointerId !== activePointerId) return;
+            moveEv.preventDefault();
+            handleScrubMove(moveEv.clientY);
+        };
 
-            const clientY = e.type.startsWith('touch') ? e.originalEvent.touches[0].clientY : e.clientY;
+        const onPointerUp = (upEv: PointerEvent) => {
+            if (activePointerId !== null && upEv.pointerId !== activePointerId) return;
+            upEv.preventDefault();
+            handleScrubEnd(upEv.clientY);
+        };
+
+        const onPointerCancel = (cancelEv: PointerEvent) => {
+            if (activePointerId !== null && cancelEv.pointerId !== activePointerId) return;
+            handleScrubEnd(cancelEv.clientY);
+        };
+
+        const startScrubbing = (e: any) => {
+            const originalEv = e.originalEvent || e;
+            // Chỉ chấp nhận nút chuột trái hoặc chạm cảm ứng
+            if (originalEv.button && originalEv.button !== 0 && originalEv.pointerType === 'mouse') return;
+
+            // Bỏ qua nếu bấm vào nút điều hướng Top/Bottom
+            const targetEl = originalEv.target as HTMLElement;
+            if (targetEl?.closest?.('.kaiz-milestone-quick-btn')) return;
+
+            originalEv.preventDefault?.();
+            originalEv.stopPropagation?.();
+
+            const clientY = originalEv.clientY !== undefined
+                ? originalEv.clientY
+                : originalEv.touches?.[0]?.clientY || 0;
+
             dragStartY = clientY;
             hasMovedDrag = false;
             isScrubbingMilestones = false;
 
             cachedTrackRect = milestoneTrack[0]?.getBoundingClientRect() || null;
             cachedRailRect = milestoneRail[0]?.getBoundingClientRect() || null;
+            const hEl = history[0];
+            cachedMaxScroll = hEl ? Math.max(1, hEl.scrollHeight - hEl.clientHeight) : 1;
 
-            // Kiểm tra xem vị trí mousedown/touchstart có nằm trên marker không
-            const targetEl = e.target as HTMLElement;
+            if (hEl) {
+                hEl.style.scrollBehavior = 'auto';
+            }
+
+            // Kiểm tra xem vị trí mousedown/pointerdown có nằm trên marker không
             const markerEl = targetEl?.closest?.('.kaiz-milestone-marker') as HTMLElement;
             if (markerEl) {
                 const idx = parseInt(markerEl.getAttribute('data-index') || '-1', 10);
@@ -758,30 +842,43 @@ export class ChatWindowUI {
                 clickedMarkerIndex = null;
             }
 
-            $(document)
-                .off('.kaiz_milestone_scrub')
-                .on('mousemove.kaiz_milestone_scrub', (moveEv: any) => {
-                    handleScrubMove(moveEv.clientY);
-                })
-                .on('touchmove.kaiz_milestone_scrub', (moveEv: any) => {
-                    if (!moveEv.originalEvent.touches[0]) return;
-                    handleScrubMove(moveEv.originalEvent.touches[0].clientY);
-                })
-                .on('mouseup.kaiz_milestone_scrub', (upEv: any) => {
-                    handleScrubEnd(upEv.clientY);
-                })
-                .on('touchend.kaiz_milestone_scrub touchcancel.kaiz_milestone_scrub', (upEv: any) => {
-                    const endY = upEv.originalEvent.changedTouches?.[0]?.clientY || clientY;
-                    handleScrubEnd(endY);
-                });
+            if (originalEv.pointerId !== undefined && milestoneRail[0]) {
+                activePointerId = originalEv.pointerId;
+                try {
+                    milestoneRail[0].setPointerCapture(activePointerId);
+                } catch {
+                    // Fallback sẽ bắt qua window listeners
+                }
+                window.addEventListener('pointermove', onPointerMove, { passive: false });
+                window.addEventListener('pointerup', onPointerUp);
+                window.addEventListener('pointercancel', onPointerCancel);
+            } else {
+                // Fallback cho môi trường không hỗ trợ Pointer Events đầy đủ
+                $(document)
+                    .off('.kaiz_milestone_scrub')
+                    .on('mousemove.kaiz_milestone_scrub', (moveEv: any) => {
+                        handleScrubMove(moveEv.clientY);
+                    })
+                    .on('touchmove.kaiz_milestone_scrub', (moveEv: any) => {
+                        if (!moveEv.originalEvent.touches[0]) return;
+                        moveEv.preventDefault?.();
+                        handleScrubMove(moveEv.originalEvent.touches[0].clientY);
+                    })
+                    .on('mouseup.kaiz_milestone_scrub', (upEv: any) => {
+                        handleScrubEnd(upEv.clientY);
+                    })
+                    .on('touchend.kaiz_milestone_scrub touchcancel.kaiz_milestone_scrub', (upEv: any) => {
+                        const endY = upEv.originalEvent.changedTouches?.[0]?.clientY || clientY;
+                        handleScrubEnd(endY);
+                    });
+            }
         };
 
-        // Gắn sự kiện mousedown và touchstart lên toàn bộ milestoneTrack
-        milestoneTrack.on('mousedown', (e: any) => {
-            startScrubbing(e);
-        });
-
-        milestoneTrack.on('touchstart', (e: any) => {
+        // Gắn sự kiện pointerdown lên toàn bộ milestoneRail (bao gồm cả milestoneTrack và hit-zone mở rộng)
+        milestoneRail[0]?.addEventListener('pointerdown', startScrubbing, { passive: false });
+        // Fallback mousedown / touchstart
+        milestoneRail.on('mousedown touchstart', (e: any) => {
+            if (window.PointerEvent && e.type === 'touchstart') return; // Tránh trùng lặp với PointerEvent
             startScrubbing(e);
         });
 
